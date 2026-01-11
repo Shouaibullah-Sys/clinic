@@ -17,7 +17,7 @@ export default function LoginPage() {
           <div className="inline-block bg-blue-100 dark:bg-gray-800  rounded-lg">
             <Image
               src="/logo.png"
-              alt="Najam Clinic Logo"
+              alt="Taylor Logo"
               width={200}
               height={200}
               className="w-28 h-28 object-contain"
@@ -37,7 +37,7 @@ export default function LoginPage() {
         {/* Footer */}
         <div className="text-center mt-6 text-sm text-gray-500 dark:text-gray-400">
           <p>
-            © {new Date().getFullYear()} Glass Management System. All rights
+            © {new Date().getFullYear()} Taylor Management System. All rights
             reserved.
           </p>
         </div>

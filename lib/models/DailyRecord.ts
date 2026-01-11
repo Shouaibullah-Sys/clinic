@@ -29,20 +29,18 @@ export interface IDailyRecord {
 
 const dailyRecordSchema = new Schema<IDailyRecord>(
   {
-    customerName: { type: String, required: true, index: true },
-    serviceType: { 
-      type: String, 
-      required: true, 
-      index: true,
+    customerName: { type: String, required: true },
+    serviceType: {
+      type: String,
+      required: true,
       enum: ["stitching", "alteration", "repair", "dry_cleaning", "other"]
     },
-    clothingType: { 
-      type: String, 
-      required: true, 
-      index: true,
+    clothingType: {
+      type: String,
+      required: true,
       enum: ["shirt", "pant", "suit", "dress", "blouse", "skirt", "jacket", "other"]
     },
-    phoneNumber: { type: String, required: true, index: true },
+    phoneNumber: { type: String, required: true },
     invoiceNumber: { type: String, required: true, unique: true },
     amountCharged: { type: Number, required: true, min: 0 },
     amountPaid: { type: Number, required: true, min: 0 },
@@ -51,16 +49,14 @@ const dailyRecordSchema = new Schema<IDailyRecord>(
       type: String,
       enum: ["paid", "unpaid", "partial"],
       default: "unpaid",
-      index: true,
     },
     orderStatus: {
       type: String,
       enum: ["pending", "in_progress", "completed", "delivered"],
       default: "pending",
-      index: true,
     },
-    deliveryDate: { type: Date, required: true, index: true },
-    date: { type: Date, default: Date.now, index: true },
+    deliveryDate: { type: Date, required: true },
+    date: { type: Date, default: Date.now },
     measurements: {
       type: Map,
       of: Schema.Types.Mixed,
