@@ -20,8 +20,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Najam Clinic",
-  description: "Dr. Najmuddin",
+  title: "Taylor",
+  description: "Nothing",
 };
 
 export default function RootLayout({

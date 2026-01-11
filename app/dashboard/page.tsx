@@ -1,19 +1,17 @@
+// app/dashboard/page.tsx - Fixed version
 "use client";
 
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/useAuthStore";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import AdminDashboard from "./components/admin/AdminCeoDashboard";
 import StaffDashboard from "@/components/staff/StaffDashboard";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  Warehouse,
-  ShoppingCart,
   DollarSign,
   Users,
   FileText,
-  Eye,
   TrendingUp,
   Package,
   Clock,
@@ -22,6 +20,13 @@ import {
   BarChart3,
   Calendar,
   RefreshCw,
+  Receipt,
+  Scissors,
+  Shirt,
+  TrendingDown,
+  Calculator,
+  Wallet,
+  CreditCard,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -40,42 +45,70 @@ import {
   Cell,
 } from "recharts";
 import useSWR from "swr";
+import { format, subDays, startOfMonth, endOfMonth } from "date-fns";
+import { Badge } from "@/components/ui/badge";
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
-interface DashboardStats {
-  todaysRevenue: number;
-  todaysExpenses: number;
-  todaysOphthalmologyRevenue: number;
-  pendingOrders: number;
-  totalStockValue: number;
-  totalStockQuantity: number;
-  lowStockItemsCount: number;
-  todaysOrdersCount: number;
-  todaysConsultations: number;
-  stats: {
-    revenue: { today: number; change: string };
-    orders: { today: number; pending: number; change: string };
-    stock: {
-      totalItems: number;
-      totalQuantity: number;
-      totalValue: number;
-      lowStock: number;
+interface CombinedStats {
+  daily: {
+    tailor: {
+      totalCharged: number;
+      totalPaid: number;
+      totalDiscount: number;
+      totalBalance: number;
+      totalRecords: number;
+      pendingOrders: number;
+      completedOrders: number;
+      deliveredOrders: number;
     };
-    ophthalmology: { today: number; revenue: number; change: string };
+    expenses: {
+      totalExpenses: number;
+      totalAmount: number;
+      pendingCount: number;
+      approvedCount: number;
+      paidCount: number;
+      rejectedCount: number;
+      byCategory: Record<string, number>;
+      byPaymentMethod: Record<string, number>;
+    };
+    netProfit: number;
   };
-}
-
-interface QuickStats {
-  weeklyData: Array<{ date: string; orders: number; revenue: number }>;
-  weeklyRevenue: number;
-  glassTypeData: Array<{ name: string; value: number; color: string }>;
+  monthly: {
+    tailor: {
+      totalCharged: number;
+      totalPaid: number;
+      totalDiscount: number;
+      totalBalance: number;
+      totalRecords: number;
+    };
+    expenses: {
+      totalExpenses: number;
+      totalAmount: number;
+    };
+    netProfit: number;
+  };
+  quickStats: {
+    totalOrders: number;
+    totalExpenses: number;
+    pendingOrders: number;
+    pendingExpenses: number;
+    upcomingDeliveries: number;
+    revenueGrowth: number;
+    expenseGrowth: number;
+  };
+  charts: {
+    weeklyRevenue: Array<{ date: string; revenue: number; expenses: number }>;
+    expenseByCategory: Array<{ name: string; value: number; color: string }>;
+    orderVsExpense: Array<{ month: string; orders: number; expenses: number }>;
+  };
   recentActivities: Array<{
     id: string;
-    type: string;
+    type: "order" | "expense";
     description: string;
     amount: number;
-    time: string;
+    status: string;
+    date: string;
     icon: string;
   }>;
 }
@@ -84,23 +117,27 @@ export default function Dashboard() {
   const router = useRouter();
   const { user, isAuthenticated, isLoading: authLoading } = useAuthStore();
   const [initialized, setInitialized] = useState(false);
+  const [timeRange, setTimeRange] = useState<"today" | "week" | "month">("today");
 
-  // Fetch dashboard data
-  const { data: stats, isLoading: statsLoading } = useSWR<DashboardStats>(
-    "/api/dashboard/stats",
+  // Fetch combined dashboard data
+  const { data: stats, isLoading: statsLoading, mutate } = useSWR<CombinedStats>(
+    "/api/dashboard/combined-stats",
     fetcher,
     { refreshInterval: 300000 } // Refresh every 5 minutes
   );
 
-  const { data: quickStats, isLoading: quickStatsLoading } = useSWR<QuickStats>(
-    "/api/dashboard/quick-stats",
-    fetcher
-  );
+  // Calculate derived stats - MUST be before any conditional returns
+  const netProfitMargin = useMemo(() => {
+    if (!stats?.daily.tailor.totalPaid) return "0";
+    return ((stats.daily.netProfit / stats.daily.tailor.totalPaid) * 100).toFixed(1);
+  }, [stats]);
 
-  const { data: lowStockItems, isLoading: lowStockLoading } = useSWR(
-    "/api/dashboard/low-stock",
-    fetcher
-  );
+  const expenseToRevenueRatio = useMemo(() => {
+    if (!stats?.daily.tailor.totalPaid) return "0";
+    return ((stats.daily.expenses.totalAmount / stats.daily.tailor.totalPaid) * 100).toFixed(1);
+  }, [stats]);
+
+  const isLoading = authLoading || statsLoading;
 
   useEffect(() => {
     if (!authLoading && !initialized) {
@@ -111,9 +148,48 @@ export default function Dashboard() {
     }
   }, [isAuthenticated, authLoading, router, initialized]);
 
-  const isLoading =
-    authLoading || statsLoading || quickStatsLoading || lowStockLoading;
+  // Format date - Regular function, not a Hook
+  const formatDate = (dateString: string) => {
+    try {
+      const date = new Date(dateString);
+      return format(date, "MMM d, h:mm a");
+    } catch {
+      return "Invalid date";
+    }
+  };
 
+  // Get icon for activity type - Regular function, not a Hook
+  const getIconForType = (type: string) => {
+    switch (type) {
+      case "order":
+        return <Package className="h-4 w-4" />;
+      case "expense":
+        return <Receipt className="h-4 w-4" />;
+      default:
+        return <FileText className="h-4 w-4" />;
+    }
+  };
+
+  // Get status color - Regular function, not a Hook
+  const getStatusColor = (status: string) => {
+    switch (status.toLowerCase()) {
+      case "completed":
+      case "approved":
+      case "paid":
+        return "bg-green-100 text-green-800";
+      case "pending":
+      case "in_progress":
+        return "bg-yellow-100 text-yellow-800";
+      case "delivered":
+        return "bg-purple-100 text-purple-800";
+      case "rejected":
+        return "bg-red-100 text-red-800";
+      default:
+        return "bg-gray-100 text-gray-800";
+    }
+  };
+
+  // Loading state
   if (isLoading || !initialized) {
     return (
       <div className="container mx-auto p-4 sm:p-6 md:p-8">
@@ -131,69 +207,14 @@ export default function Dashboard() {
     );
   }
 
+  // Authentication check
   if (!isAuthenticated) return null;
 
-  const getIconForType = (type: string) => {
-    switch (type) {
-      case "order":
-        return <ShoppingCart className="h-4 w-4" />;
-      case "expense":
-        return <FileText className="h-4 w-4" />;
-      case "record":
-        return <Eye className="h-4 w-4" />;
-      default:
-        return <Clock className="h-4 w-4" />;
-    }
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "completed":
-      case "paid":
-        return "bg-green-100 text-green-800";
-      case "processing":
-        return "bg-blue-100 text-blue-800";
-      case "pending":
-        return "bg-yellow-100 text-yellow-800";
-      default:
-        return "bg-gray-100 text-gray-800";
-    }
-  };
-
-  // Format date safely
-  const formatDate = (date: Date, formatType: "long" | "short" = "long") => {
-    try {
-      if (formatType === "long") {
-        return date.toLocaleDateString("en-US", {
-          weekday: "long",
-          year: "numeric",
-          month: "long",
-          day: "numeric",
-        });
-      } else {
-        return date.toLocaleDateString("en-US", {
-          month: "short",
-          day: "2-digit",
-          year: "numeric",
-        });
-      }
-    } catch (error) {
-      console.error("Date formatting error:", error);
-      return "Invalid date";
-    }
-  };
-
-  const formatTime = (dateString: string) => {
-    try {
-      const date = new Date(dateString);
-      return date.toLocaleTimeString("en-US", {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-    } catch (error) {
-      return "Invalid time";
-    }
-  };
+  // Custom colors for charts
+  const COLORS = [
+    "#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884D8", 
+    "#82CA9D", "#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4"
+  ];
 
   return (
     <div className="container mx-auto p-4 sm:p-6 md:p-8">
@@ -202,7 +223,7 @@ export default function Dashboard() {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-              Dashboard
+              Business Dashboard
             </h1>
             <p className="text-gray-600 dark:text-gray-300 mt-2">
               Welcome back,{" "}
@@ -214,24 +235,43 @@ export default function Dashboard() {
               </span>
             </p>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              {formatDate(new Date(), "long")}
+              {format(new Date(), "EEEE, MMMM d, yyyy")}
             </p>
           </div>
           <div className="flex gap-2">
+            <div className="flex border rounded-lg">
+              <Button
+                variant={timeRange === "today" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setTimeRange("today")}
+                className="rounded-r-none"
+              >
+                Today
+              </Button>
+              <Button
+                variant={timeRange === "week" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setTimeRange("week")}
+                className="rounded-none"
+              >
+                Week
+              </Button>
+              <Button
+                variant={timeRange === "month" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setTimeRange("month")}
+                className="rounded-l-none"
+              >
+                Month
+              </Button>
+            </div>
             <Button
               variant="outline"
               size="sm"
-              onClick={() => {
-                // Refresh data
-                window.location.reload();
-              }}
+              onClick={() => mutate()}
             >
               <RefreshCw className="h-4 w-4 mr-2" />
               Refresh
-            </Button>
-            <Button variant="outline" size="sm">
-              <Calendar className="h-4 w-4 mr-2" />
-              {formatDate(new Date(), "short")}
             </Button>
           </div>
         </div>
@@ -241,9 +281,10 @@ export default function Dashboard() {
       {user?.role === "admin" && <AdminDashboard />}
       {user?.role === "staff" && <StaffDashboard />}
 
-      {/* Quick Stats */}
+      {/* Quick Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <Card>
+        {/* Today's Revenue */}
+        <Card className="hover:shadow-lg transition-shadow border-l-4 border-l-green-500">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
@@ -251,13 +292,11 @@ export default function Dashboard() {
                   Today's Revenue
                 </p>
                 <p className="text-2xl font-bold mt-2">
-                  ${stats?.todaysRevenue?.toLocaleString() || "0"}
+                  AFN {stats?.daily.tailor.totalPaid?.toLocaleString() || "0"}
                 </p>
                 <div className="flex items-center text-xs text-green-600 mt-1">
                   <TrendingUp className="h-3 w-3 mr-1" />
-                  <span>
-                    +{stats?.stats.revenue.change || "12.5%"} from yesterday
-                  </span>
+                  <span>+{stats?.quickStats.revenueGrowth || "0"}% growth</span>
                 </div>
               </div>
               <div className="p-3 bg-green-100 rounded-lg">
@@ -267,68 +306,68 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card>
+        {/* Today's Expenses */}
+        <Card className="hover:shadow-lg transition-shadow border-l-4 border-l-red-500">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-500">
-                  Total Stock Value
+                  Today's Expenses
                 </p>
                 <p className="text-2xl font-bold mt-2">
-                  ${stats?.totalStockValue?.toLocaleString() || "0"}
+                  AFN {stats?.daily.expenses.totalAmount?.toLocaleString() || "0"}
+                </p>
+                <div className="flex items-center text-xs text-red-600 mt-1">
+                  <TrendingDown className="h-3 w-3 mr-1" />
+                  <span>+{stats?.quickStats.expenseGrowth || "0"}% increase</span>
+                </div>
+              </div>
+              <div className="p-3 bg-red-100 rounded-lg">
+                <Receipt className="h-6 w-6 text-red-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Net Profit */}
+        <Card className="hover:shadow-lg transition-shadow border-l-4 border-l-blue-500">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-500">
+                  Net Profit
+                </p>
+                <p className="text-2xl font-bold mt-2">
+                  AFN {stats?.daily.netProfit?.toLocaleString() || "0"}
                 </p>
                 <p className="text-xs text-gray-500 mt-1">
-                  {stats?.totalStockQuantity?.toLocaleString() || "0"} sqm
+                  {netProfitMargin}% profit margin
                 </p>
               </div>
               <div className="p-3 bg-blue-100 rounded-lg">
-                <Warehouse className="h-6 w-6 text-blue-600" />
+                <Calculator className="h-6 w-6 text-blue-600" />
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        {/* Pending Items */}
+        <Card className="hover:shadow-lg transition-shadow border-l-4 border-l-orange-500">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-500">
-                  Pending Orders
+                  Pending Items
                 </p>
                 <p className="text-2xl font-bold mt-2">
-                  {stats?.pendingOrders || 0}
+                  {stats?.quickStats.pendingOrders || 0} orders
                 </p>
-                <div className="flex items-center text-xs mt-1">
-                  <AlertCircle className="h-3 w-3 mr-1 text-orange-500" />
-                  <span className="text-orange-600">
-                    {stats?.lowStockItemsCount || 0} low stock items
-                  </span>
-                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  {stats?.quickStats.pendingExpenses || 0} expenses pending
+                </p>
               </div>
               <div className="p-3 bg-orange-100 rounded-lg">
-                <ShoppingCart className="h-6 w-6 text-orange-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-500">
-                  Today's Consultations
-                </p>
-                <p className="text-2xl font-bold mt-2">
-                  {stats?.todaysConsultations || 0}
-                </p>
-                <div className="flex items-center text-xs text-green-600 mt-1">
-                  <TrendingUp className="h-3 w-3 mr-1" />
-                  <span>+{stats?.stats.ophthalmology.change || "15.3%"}</span>
-                </div>
-              </div>
-              <div className="p-3 bg-purple-100 rounded-lg">
-                <Eye className="h-6 w-6 text-purple-600" />
+                <Clock className="h-6 w-6 text-orange-600" />
               </div>
             </div>
           </CardContent>
@@ -337,31 +376,44 @@ export default function Dashboard() {
 
       {/* Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-        {/* Weekly Performance Chart */}
+        {/* Revenue vs Expenses Trend */}
         <Card>
           <CardHeader>
-            <CardTitle>Weekly Performance</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5" />
+              Revenue vs Expenses Trend
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="h-80">
-              {quickStats?.weeklyData && quickStats.weeklyData.length > 0 ? (
+              {stats?.charts.weeklyRevenue && stats.charts.weeklyRevenue.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart
-                    data={quickStats.weeklyData}
+                    data={stats.charts.weeklyRevenue}
                     margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="date" />
                     <YAxis />
-                    <Tooltip />
+                    <Tooltip 
+                      formatter={(value) => [`AFN ${value}`, ""]}
+                    />
                     <Legend />
                     <Line
                       type="monotone"
-                      dataKey="orders"
-                      stroke="#8884d8"
+                      dataKey="revenue"
+                      stroke="#10b981"
+                      strokeWidth={2}
                       activeDot={{ r: 8 }}
+                      name="Revenue"
                     />
-                    <Line type="monotone" dataKey="revenue" stroke="#82ca9d" />
+                    <Line
+                      type="monotone"
+                      dataKey="expenses"
+                      stroke="#ef4444"
+                      strokeWidth={2}
+                      name="Expenses"
+                    />
                   </LineChart>
                 </ResponsiveContainer>
               ) : (
@@ -373,39 +425,41 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* Glass Type Distribution */}
+        {/* Expenses by Category */}
         <Card>
           <CardHeader>
-            <CardTitle>Glass Type Distribution</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <PieChart className="h-5 w-5" />
+              Expenses by Category
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="h-80">
-              {quickStats?.glassTypeData &&
-              quickStats.glassTypeData.length > 0 ? (
+              {stats?.charts.expenseByCategory && stats.charts.expenseByCategory.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
-                      data={quickStats.glassTypeData}
+                      data={stats.charts.expenseByCategory}
                       cx="50%"
                       cy="50%"
                       labelLine={false}
-                      label={({ name, percent }) =>
+                      label={({ name, percent }) => 
                         `${name}: ${(percent * 100).toFixed(0)}%`
                       }
                       outerRadius={80}
                       fill="#8884d8"
                       dataKey="value"
                     >
-                      {quickStats.glassTypeData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      {stats.charts.expenseByCategory.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color || COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>
-                    <Tooltip />
+                    <Tooltip formatter={(value) => [`AFN ${value}`, ""]} />
                   </PieChart>
                 </ResponsiveContainer>
               ) : (
                 <div className="flex items-center justify-center h-full text-gray-500">
-                  No glass type data available
+                  No expense data available
                 </div>
               )}
             </div>
@@ -413,7 +467,153 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* Recent Activities & Low Stock */}
+      {/* Orders & Expenses Overview */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+        {/* Orders Summary */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <Shirt className="h-5 w-5" />
+                Tailor Orders Overview
+              </CardTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => router.push("/admin/records")}
+              >
+                View All
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-6">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="text-center">
+                  <p className="text-sm text-gray-500">Total Charged</p>
+                  <p className="text-2xl font-bold">
+                    AFN {stats?.daily.tailor.totalCharged?.toFixed(2) || "0"}
+                  </p>
+                </div>
+                <div className="text-center">
+                  <p className="text-sm text-gray-500">Total Received</p>
+                  <p className="text-2xl font-bold text-green-600">
+                    AFN {stats?.daily.tailor.totalPaid?.toFixed(2) || "0"}
+                  </p>
+                </div>
+                <div className="text-center">
+                  <p className="text-sm text-gray-500">Balance Due</p>
+                  <p className="text-2xl font-bold text-red-600">
+                    AFN {stats?.daily.tailor.totalBalance?.toFixed(2) || "0"}
+                  </p>
+                </div>
+                <div className="text-center">
+                  <p className="text-sm text-gray-500">Discount</p>
+                  <p className="text-2xl font-bold text-purple-600">
+                    AFN {stats?.daily.tailor.totalDiscount?.toFixed(2) || "0"}
+                  </p>
+                </div>
+              </div>
+              
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Status Distribution</span>
+                  <span>{stats?.daily.tailor.totalRecords || 0} total orders</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="text-center p-3 bg-yellow-50 rounded-lg">
+                    <p className="text-xl font-bold">{stats?.daily.tailor.pendingOrders || 0}</p>
+                    <p className="text-xs text-yellow-600">Pending</p>
+                  </div>
+                  <div className="text-center p-3 bg-green-50 rounded-lg">
+                    <p className="text-xl font-bold">{stats?.daily.tailor.completedOrders || 0}</p>
+                    <p className="text-xs text-green-600">Completed</p>
+                  </div>
+                  <div className="text-center p-3 bg-purple-50 rounded-lg">
+                    <p className="text-xl font-bold">{stats?.daily.tailor.deliveredOrders || 0}</p>
+                    <p className="text-xs text-purple-600">Delivered</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Expenses Summary */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <CreditCard className="h-5 w-5" />
+                Expenses Overview
+              </CardTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => router.push("/finance/expenses")}
+              >
+                View All
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-6">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="text-center">
+                  <p className="text-sm text-gray-500">Total Expenses</p>
+                  <p className="text-2xl font-bold text-red-600">
+                    AFN {stats?.daily.expenses.totalAmount?.toFixed(2) || "0"}
+                  </p>
+                </div>
+                <div className="text-center">
+                  <p className="text-sm text-gray-500">Expense Ratio</p>
+                  <p className="text-2xl font-bold">
+                    {expenseToRevenueRatio}%
+                  </p>
+                </div>
+                <div className="text-center">
+                  <p className="text-sm text-gray-500">Pending</p>
+                  <p className="text-2xl font-bold text-yellow-600">
+                    {stats?.daily.expenses.pendingCount || 0}
+                  </p>
+                </div>
+                <div className="text-center">
+                  <p className="text-sm text-gray-500">Paid</p>
+                  <p className="text-2xl font-bold text-green-600">
+                    {stats?.daily.expenses.paidCount || 0}
+                  </p>
+                </div>
+              </div>
+              
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Payment Methods</span>
+                  <span>Distribution</span>
+                </div>
+                {Object.entries(stats?.daily.expenses.byPaymentMethod || {}).map(([method, amount], index) => (
+                  <div key={method} className="space-y-1">
+                    <div className="flex justify-between text-sm">
+                      <span className="capitalize">{method.replace('_', ' ')}</span>
+                      <span>AFN {amount.toFixed(2)}</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div
+                        className="h-2 rounded-full"
+                        style={{
+                          width: `${(amount / (stats?.daily.expenses.totalAmount || 1)) * 100}%`,
+                          backgroundColor: COLORS[index % COLORS.length]
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Recent Activities & Quick Actions */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Recent Activities */}
         <Card>
@@ -427,14 +627,15 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {quickStats?.recentActivities &&
-              quickStats.recentActivities.length > 0 ? (
-                quickStats.recentActivities.map((activity) => (
+              {stats?.recentActivities && stats.recentActivities.length > 0 ? (
+                stats.recentActivities.map((activity) => (
                   <div
                     key={activity.id}
                     className="flex items-center space-x-4 p-3 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors"
                   >
-                    <div className="shrink-0 p-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                    <div className={`shrink-0 p-2 rounded-lg ${
+                      activity.type === "order" ? "bg-blue-100 dark:bg-blue-900" : "bg-red-100 dark:bg-red-900"
+                    }`}>
                       {getIconForType(activity.type)}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -442,15 +643,18 @@ export default function Dashboard() {
                         {activity.description}
                       </p>
                       <p className="text-xs text-gray-500 dark:text-gray-400">
-                        {formatTime(activity.time)}
+                        {formatDate(activity.date)}
                       </p>
                     </div>
                     <div className="text-right">
-                      {activity.amount && (
-                        <p className="text-sm font-semibold">
-                          ${activity.amount.toLocaleString()}
-                        </p>
-                      )}
+                      <p className={`text-sm font-semibold ${
+                        activity.type === "order" ? "text-green-600" : "text-red-600"
+                      }`}>
+                        {activity.type === "order" ? "+" : "-"}AFN {activity.amount?.toFixed(2)}
+                      </p>
+                      <Badge className={`mt-1 ${getStatusColor(activity.status)} text-xs`}>
+                        {activity.status}
+                      </Badge>
                     </div>
                   </div>
                 ))
@@ -463,66 +667,65 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* Low Stock Items */}
-        <Card className="border-l-4 border-l-orange-500">
+        {/* Quick Actions */}
+        <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
-                <AlertCircle className="h-5 w-5 text-orange-500" />
-                Low Stock Alerts
-              </CardTitle>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => router.push("/glass/stock")}
-              >
-                View All
-              </Button>
-            </div>
+            <CardTitle>Quick Actions</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {lowStockItems?.lowStockItems &&
-              lowStockItems.lowStockItems.length > 0 ? (
-                lowStockItems.lowStockItems.map((item: any) => (
-                  <div key={item._id} className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-gray-900 dark:text-white">
-                          {item.name}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {item.glassType}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm font-medium">
-                          {item.current} sqm
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          ${item.unitPrice}/sqm
-                        </p>
-                      </div>
-                    </div>
-                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                      <div
-                        className={`h-2 rounded-full ${
-                          item.percentage < 10
-                            ? "bg-red-500"
-                            : item.percentage < 20
-                            ? "bg-orange-500"
-                            : "bg-yellow-500"
-                        }`}
-                        style={{ width: `${item.percentage}%` }}
-                      />
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="text-center py-8 text-gray-500">
-                  No low stock items
+            <div className="grid grid-cols-2 gap-4">
+              <Button
+                variant="outline"
+                className="h-auto py-6 flex flex-col items-center justify-center gap-2"
+                onClick={() => router.push("/admin/records")}
+              >
+                <PlusIcon className="h-8 w-8 text-blue-600" />
+                <span>New Order</span>
+              </Button>
+              <Button
+                variant="outline"
+                className="h-auto py-6 flex flex-col items-center justify-center gap-2"
+                onClick={() => router.push("/admin/expenses")}
+              >
+                <Receipt className="h-8 w-8 text-red-600" />
+                <span>Add Expense</span>
+              </Button>
+              <Button
+                variant="outline"
+                className="h-auto py-6 flex flex-col items-center justify-center gap-2"
+                onClick={() => router.push("/admin/expenses")}
+              >
+                <Clock className="h-8 w-8 text-yellow-600" />
+                <span>Pending Orders</span>
+                {stats?.quickStats.pendingOrders && (
+                  <Badge className="ml-2">{stats.quickStats.pendingOrders}</Badge>
+                )}
+              </Button>
+              <Button
+                variant="outline"
+                className="h-auto py-6 flex flex-col items-center justify-center gap-2"
+                onClick={() => router.push("/admin/expenses")}
+              >
+                <AlertCircle className="h-8 w-8 text-orange-600" />
+                <span>Pending Expenses</span>
+                {stats?.quickStats.pendingExpenses && (
+                  <Badge className="ml-2">{stats.quickStats.pendingExpenses}</Badge>
+                )}
+              </Button>
+            </div>
+            <div className="mt-6 p-4 bg-blue-50 rounded-lg">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-blue-900">Business Health</p>
+                  <p className="text-2xl font-bold text-blue-700">{netProfitMargin}%</p>
+                  <p className="text-xs text-blue-600">Net Profit Margin</p>
                 </div>
-              )}
+                <div className="text-right">
+                  <p className="text-sm text-blue-900">Expense Ratio</p>
+                  <p className="text-2xl font-bold text-blue-700">{expenseToRevenueRatio}%</p>
+                  <p className="text-xs text-blue-600">of Revenue</p>
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -530,3 +733,22 @@ export default function Dashboard() {
     </div>
   );
 }
+
+// Add missing icon import
+const PlusIcon = ({ className }: { className?: string }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="24"
+    height="24"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+  >
+    <path d="M5 12h14" />
+    <path d="M12 5v14" />
+  </svg>
+);

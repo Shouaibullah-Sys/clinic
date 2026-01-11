@@ -67,7 +67,6 @@ const userSchema = new Schema<IUser>(
 );
 
 // Indexes for efficient querying
-userSchema.index({ email: 1 });
 userSchema.index({ role: 1 });
 userSchema.index({ approved: 1 });
 userSchema.index({ active: 1 });

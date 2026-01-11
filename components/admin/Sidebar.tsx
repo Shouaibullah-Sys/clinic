@@ -82,51 +82,25 @@ export function AdminSidebar() {
       icon: <LayoutDashboard className="h-5 w-5" />,
       roles: ["admin", "staff"],
     },
-    {
-      title: "Glass Business",
-      icon: <Warehouse className="h-5 w-5" />,
-      roles: ["admin", "staff"],
-      children: [
-        {
-          title: "Glass Stock",
-          href: "/staff/glass/stock",
-          icon: <Package className="h-4 w-4" />,
-          roles: ["admin", "staff"],
-          badge: user?.role === "staff" ? "3" : undefined,
-        },
-        {
-          title: "Orders",
-          href: "/staff/glass/orders",
-          icon: <ShoppingCart className="h-4 w-4" />,
-          roles: ["admin", "staff"],
-          badge: "12",
-        },
-      ],
-    },
-    {
-      title: "Ophthalmology",
+
+             {
+      title: "Daily Records",
       icon: <Eye className="h-5 w-5" />,
       roles: ["admin"],
       children: [
         {
           title: "Daily Records",
-          href: "/ophthalmology/records",
+          href: "/admin/records",
           icon: <FileText className="h-4 w-4" />,
           roles: ["admin"],
         },
-      ],
-    },
-    {
-      title: "Finance",
-      icon: <DollarSign className="h-5 w-5" />,
-      roles: ["admin", "staff"],
-      children: [
-        {
+            {
           title: "Daily Expenses",
-          href: "/staff/expenses",
+          href: "/admin/expenses",
           icon: <CreditCard className="h-4 w-4" />,
           roles: ["admin", "staff"],
         },
+
       ],
     },
     {
