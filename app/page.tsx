@@ -27,6 +27,10 @@ import {
   Calculator,
   Eye,
   DollarSign,
+  Shirt,
+  Ruler,
+  Clock3,
+  Target,
 } from "lucide-react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
@@ -55,7 +59,7 @@ export default function LandingPage() {
       // Redirect to appropriate dashboard based on role
       switch (user.role) {
         case "admin":
-          router.push("/admin/dashboard");
+          router.push("/dashboard");
           break;
         case "staff":
           router.push("/dashboard");
@@ -175,59 +179,59 @@ export default function LandingPage() {
 
   const features = [
     {
-      icon: <Warehouse className="h-8 w-8" />,
-      title: "Glass Inventory Management",
+      icon: <Shirt className="h-8 w-8" />,
+      title: "Tailor Order Management",
       description:
-        "Track glass stock, types, thickness, and dimensions with real-time inventory updates and alerts.",
+        "Track customer orders, measurements, delivery dates, and order status with real-time updates and alerts.",
       color: "text-blue-600",
     },
     {
       icon: <ShoppingCart className="h-8 w-8" />,
-      title: "Order Processing",
+      title: "Customer & Sales Management",
       description:
-        "Streamline order management from quotation to delivery with custom cut-to-size options.",
+        "Manage customer profiles, track sales, handle payments, and maintain customer relationship history.",
       color: "text-green-600",
     },
     {
       icon: <BarChart3 className="h-8 w-8" />,
-      title: "Sales Analytics",
+      title: "Financial Analytics",
       description:
-        "Comprehensive sales reports, profit analysis, and performance metrics for informed decisions.",
+        "Comprehensive financial reports, profit analysis, expense tracking, and business performance metrics.",
       color: "text-purple-600",
     },
     {
       icon: <FileText className="h-8 w-8" />,
       title: "Daily Records & Expenses",
       description:
-        "Track daily ophthalmologist consultations, operations, and business expenses in one place.",
+        "Track daily tailoring operations, material expenses, labor costs, and business expenses in one place.",
       color: "text-orange-600",
     },
     {
       icon: <Shield className="h-8 w-8" />,
       title: "Secure & Role-Based",
       description:
-        "Enterprise-grade security with role-based access control for admin and staff members.",
+        "Enterprise-grade security with role-based access control for admin, tailors, and staff members.",
       color: "text-pink-600",
     },
     {
       icon: <Zap className="h-8 w-8" />,
       title: "Fast & Efficient",
       description:
-        "Optimized performance with quick search, barcode scanning, and real-time data synchronization.",
+        "Optimized performance with quick order search, measurement tracking, and real-time data synchronization.",
       color: "text-yellow-600",
     },
   ];
 
   const stats = [
     {
-      number: 250,
-      label: "Glass Businesses Trust Us",
+      number: 500,
+      label: "Tailor Businesses Trust Us",
       icon: <Building className="h-6 w-6" />,
     },
     {
-      number: 50000,
-      label: "Square Meters Managed",
-      icon: <Home className="h-6 w-6" />,
+      number: 100000,
+      label: "Orders Processed",
+      icon: <Shirt className="h-6 w-6" />,
     },
     {
       number: 99.9,
@@ -268,8 +272,8 @@ export default function LandingPage() {
           <div className="absolute top-40 left-40 w-80 h-80 bg-sky-200 dark:bg-sky-900 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-pulse"></div>
         </div>
 
-        {/* Floating Glass Icons */}
-        <Home
+        {/* Floating Tailor Icons */}
+        <Shirt
           className="absolute top-20 left-20 text-blue-300 dark:text-blue-700 floating-icon"
           size={40}
         />
@@ -277,11 +281,11 @@ export default function LandingPage() {
           className="absolute top-32 right-32 text-green-300 dark:text-green-700 floating-icon"
           size={35}
         />
-        <Package
+        <Ruler
           className="absolute bottom-40 left-32 text-purple-300 dark:text-purple-700 floating-icon"
           size={30}
         />
-        <Warehouse
+        <Target
           className="absolute bottom-20 right-20 text-cyan-300 dark:text-cyan-700 floating-icon"
           size={45}
         />
@@ -290,7 +294,7 @@ export default function LandingPage() {
           <div className="mb-8">
             <div className="inline-flex items-center px-4 py-2 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-sm font-medium mb-6">
               <Zap className="h-4 w-4 mr-2" />
-              Trusted by 250+ glass businesses
+              Trusted by 500+ tailor businesses
             </div>
           </div>
 
@@ -298,7 +302,7 @@ export default function LandingPage() {
             ref={titleRef}
             className="text-5xl md:text-7xl font-bold text-gray-900 dark:text-white mb-6"
           >
-            Glass Business
+            Tailor Business
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-cyan-600">
               {" "}
               Management System
@@ -309,9 +313,9 @@ export default function LandingPage() {
             ref={subtitleRef}
             className="text-xl md:text-2xl text-gray-600 dark:text-gray-300 mb-8 max-w-3xl mx-auto leading-relaxed"
           >
-            Streamline your glass business operations with our all-in-one
-            platform. Manage inventory, process orders, track sales, and handle
-            ophthalmologist records efficiently.
+            Streamline your tailoring business operations with our all-in-one
+            platform. Manage orders, track measurements, handle customer payments, and 
+            monitor business performance efficiently.
           </p>
 
           <div
@@ -346,7 +350,7 @@ export default function LandingPage() {
               </span>
             </div>
             <div className="flex items-center">
-              <Clock className="h-5 w-5 text-blue-500 mr-2" />
+              <Clock3 className="h-5 w-5 text-blue-500 mr-2" />
               <span className="text-sm dark:text-gray-300">
                 Setup in 5 minutes
               </span>
@@ -395,11 +399,11 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <h2 className="text-4xl md:text-5xl font-bold text-gray-900 dark:text-white mb-4">
-              Comprehensive Glass Business Solution
+              Complete Tailor Business Solution
             </h2>
             <p className="text-xl text-gray-600 dark:text-gray-300 max-w-3xl mx-auto">
-              From inventory tracking to ophthalmologist record keeping, our
-              platform covers all aspects of modern glass business management.
+              From order management to financial tracking, our platform covers all aspects 
+              of modern tailor business operations.
             </p>
           </div>
 
@@ -438,116 +442,115 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <h2 className="text-4xl md:text-5xl font-bold text-gray-900 dark:text-white mb-4">
-              Designed for Your Business Needs
+              Designed for Your Tailoring Business
             </h2>
             <p className="text-xl text-gray-600 dark:text-gray-300 max-w-3xl mx-auto">
-              Customized tools and dashboards for both glass business management
-              and ophthalmologist practice.
+              Customized tools and dashboards for different roles in your tailoring business.
             </p>
           </div>
 
-          <Tabs defaultValue="glass" className="w-full">
+          <Tabs defaultValue="owner" className="w-full">
             <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="glass" className="flex items-center gap-2">
-                <Warehouse className="h-4 w-4" />
-                Glass Business
+              <TabsTrigger value="owner" className="flex items-center gap-2">
+                <DollarSign className="h-4 w-4" />
+                Business Owner
               </TabsTrigger>
               <TabsTrigger
-                value="ophthalmologist"
+                value="tailor"
                 className="flex items-center gap-2"
               >
-                <Eye className="h-4 w-4" />
-                Ophthalmologist
+                <Scissors className="h-4 w-4" />
+                Tailor/Staff
               </TabsTrigger>
             </TabsList>
 
-            <TabsContent value="glass" className="p-6">
+            <TabsContent value="owner" className="p-6">
               <div className="grid md:grid-cols-2 gap-8 items-center">
                 <div>
                   <h3 className="text-2xl font-bold mb-4 dark:text-white">
-                    Glass Business Management
+                    Business Owner Dashboard
                   </h3>
                   <ul className="space-y-3">
                     <li className="flex items-center dark:text-gray-300">
                       <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />{" "}
-                      Inventory Management
+                      Financial Overview & Reports
                     </li>
                     <li className="flex items-center dark:text-gray-300">
                       <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />{" "}
-                      Order Processing & Invoicing
+                      Customer Management & Analytics
                     </li>
                     <li className="flex items-center dark:text-gray-300">
                       <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />{" "}
-                      Customer Management
+                      Expense Tracking & Profit Analysis
                     </li>
                     <li className="flex items-center dark:text-gray-300">
                       <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />{" "}
-                      Supplier & Purchase Orders
+                      Staff Performance Monitoring
                     </li>
                     <li className="flex items-center dark:text-gray-300">
                       <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />{" "}
-                      Sales Analytics & Reports
+                      Business Growth Insights
                     </li>
                     <li className="flex items-center dark:text-gray-300">
                       <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />{" "}
-                      Glass Cut-to-Size Calculations
+                      Inventory & Material Management
                     </li>
                   </ul>
                 </div>
                 <div className="bg-gradient-to-br from-blue-500 to-cyan-600 rounded-lg p-8 text-white">
-                  <Warehouse className="h-16 w-16 mb-4" />
+                  <DollarSign className="h-16 w-16 mb-4" />
                   <h4 className="text-xl font-bold mb-2">
-                    Complete Glass Business Solution
+                    Complete Business Control
                   </h4>
                   <p>
-                    Manage your entire glass business from inventory to sales
-                    with our comprehensive platform.
+                    Monitor your tailoring business performance, track profits, 
+                    and make data-driven decisions with our comprehensive owner dashboard.
                   </p>
                 </div>
               </div>
             </TabsContent>
 
-            <TabsContent value="ophthalmologist" className="p-6">
+            <TabsContent value="tailor" className="p-6">
               <div className="grid md:grid-cols-2 gap-8 items-center">
                 <div>
                   <h3 className="text-2xl font-bold mb-4 dark:text-white">
-                    Ophthalmologist Practice
+                    Tailor/Staff Dashboard
                   </h3>
                   <ul className="space-y-3">
                     <li className="flex items-center dark:text-gray-300">
                       <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />{" "}
-                      Daily Consultation Records
+                      Order Management & Assignment
                     </li>
                     <li className="flex items-center dark:text-gray-300">
                       <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />{" "}
-                      Operation & Procedure Tracking
+                      Customer Measurement Tracking
                     </li>
                     <li className="flex items-center dark:text-gray-300">
                       <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />{" "}
-                      Expense Management
+                      Work Progress Updates
                     </li>
                     <li className="flex items-center dark:text-gray-300">
                       <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />{" "}
-                      Patient Billing & Payments
+                      Material Usage Recording
                     </li>
                     <li className="flex items-center dark:text-gray-300">
                       <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />{" "}
-                      Financial Reports
+                      Delivery Status Updates
                     </li>
                     <li className="flex items-center dark:text-gray-300">
                       <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />{" "}
-                      Practice Analytics
+                      Daily Task Management
                     </li>
                   </ul>
                 </div>
                 <div className="bg-gradient-to-br from-purple-500 to-pink-600 rounded-lg p-8 text-white">
-                  <Eye className="h-16 w-16 mb-4" />
+                  <Scissors className="h-16 w-16 mb-4" />
                   <h4 className="text-xl font-bold mb-2">
-                    Ophthalmologist Practice Management
+                    Efficient Work Management
                   </h4>
                   <p>
-                    Streamline your ophthalmology practice with comprehensive
-                    patient and financial management tools.
+                    Streamline your tailoring work with easy order management, 
+                    measurement tracking, and progress updates.
                   </p>
                 </div>
               </div>
@@ -564,7 +567,7 @@ export default function LandingPage() {
               Simple, Transparent Pricing
             </h2>
             <p className="text-xl text-gray-600 dark:text-gray-300 max-w-3xl mx-auto">
-              Choose the plan that fits your business needs. No hidden fees, no
+              Choose the plan that fits your tailoring business needs. No hidden fees, no
               surprises.
             </p>
           </div>
@@ -577,7 +580,7 @@ export default function LandingPage() {
                   Basic
                 </CardTitle>
                 <div className="text-4xl font-bold dark:text-white">
-                  $49
+                  $29
                   <span className="text-lg text-gray-500 dark:text-gray-400">
                     /month
                   </span>
@@ -587,11 +590,11 @@ export default function LandingPage() {
                 <ul className="space-y-3 mb-6">
                   <li className="flex items-center dark:text-gray-300">
                     <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />
-                    Basic Inventory Management
+                    Basic Order Management
                   </li>
                   <li className="flex items-center dark:text-gray-300">
                     <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />
-                    Order Processing
+                    Customer Management
                   </li>
                   <li className="flex items-center dark:text-gray-300">
                     <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />1
@@ -620,7 +623,7 @@ export default function LandingPage() {
                   Professional
                 </CardTitle>
                 <div className="text-4xl font-bold dark:text-white">
-                  $99
+                  $59
                   <span className="text-lg text-gray-500 dark:text-gray-400">
                     /month
                   </span>
@@ -630,15 +633,15 @@ export default function LandingPage() {
                 <ul className="space-y-3 mb-6">
                   <li className="flex items-center dark:text-gray-300">
                     <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />
-                    Advanced Inventory Management
+                    Advanced Order Management
                   </li>
                   <li className="flex items-center dark:text-gray-300">
                     <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />
-                    Full Order & CRM System
+                    Full Customer & Inventory System
                   </li>
                   <li className="flex items-center dark:text-gray-300">
                     <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />
-                    Ophthalmologist Module
+                    Financial Reports & Analytics
                   </li>
                   <li className="flex items-center dark:text-gray-300">
                     <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />
@@ -650,7 +653,7 @@ export default function LandingPage() {
                   </li>
                   <li className="flex items-center dark:text-gray-300">
                     <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />
-                    Advanced Analytics
+                    Advanced Measurement Tracking
                   </li>
                 </ul>
                 <Button className="w-full bg-gradient-to-r from-blue-600 to-cyan-600">
@@ -666,7 +669,7 @@ export default function LandingPage() {
                   Enterprise
                 </CardTitle>
                 <div className="text-4xl font-bold dark:text-white">
-                  $199
+                  $129
                   <span className="text-lg text-gray-500 dark:text-gray-400">
                     /month
                   </span>
@@ -680,7 +683,7 @@ export default function LandingPage() {
                   </li>
                   <li className="flex items-center dark:text-gray-300">
                     <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />
-                    Custom Development
+                    Custom Features Development
                   </li>
                   <li className="flex items-center dark:text-gray-300">
                     <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />
@@ -715,11 +718,10 @@ export default function LandingPage() {
       >
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-4xl md:text-5xl font-bold mb-6">
-            Ready to Transform Your Glass Business?
+            Ready to Transform Your Tailoring Business?
           </h2>
           <p className="text-xl mb-8 opacity-90">
-            Join hundreds of glass businesses and ophthalmologists who trust our
-            platform to streamline their operations.
+            Join hundreds of tailoring businesses who trust our platform to streamline their operations.
           </p>
           <Button
             size="lg"
@@ -742,20 +744,20 @@ export default function LandingPage() {
           <div className="grid md:grid-cols-4 gap-8">
             <div>
               <h3 className="text-xl font-bold mb-4">
-                Glass Management System
+                Tailor Management System
               </h3>
               <p className="text-gray-400">
-                Comprehensive solution for glass businesses and ophthalmologist
-                practices.
+                Comprehensive solution for tailoring businesses to manage orders, 
+                customers, and finances efficiently.
               </p>
             </div>
             <div>
               <h4 className="font-semibold mb-4">Features</h4>
               <ul className="space-y-2 text-gray-400">
-                <li>Glass Inventory</li>
                 <li>Order Management</li>
-                <li>Daily Records</li>
-                <li>Expense Tracking</li>
+                <li>Customer Management</li>
+                <li>Measurement Tracking</li>
+                <li>Financial Tracking</li>
               </ul>
             </div>
             <div>
@@ -770,7 +772,7 @@ export default function LandingPage() {
             <div>
               <h4 className="font-semibold mb-4">Contact</h4>
               <ul className="space-y-2 text-gray-400">
-                <li>support@glassmanagement.com</li>
+                <li>support@tailormanagement.com</li>
                 <li>+1 (555) 123-4567</li>
                 <li>24/7 Support Available</li>
               </ul>
@@ -778,7 +780,7 @@ export default function LandingPage() {
           </div>
           <div className="border-t border-gray-800 mt-8 pt-8 text-center text-gray-400">
             <p>
-              © {new Date().getFullYear()} Glass Management System. All rights
+              © {new Date().getFullYear()} Tailor Management System. All rights
               reserved.
             </p>
           </div>

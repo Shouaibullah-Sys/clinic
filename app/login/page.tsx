@@ -4,8 +4,8 @@ import { Metadata } from "next";
 import Image from "next/image";
 
 export const metadata: Metadata = {
-  title: "Login - Najam Clinic",
-  description: "Login to access the Najam Clinic management system",
+  title: "Login - Taylor ",
+  description: "Login to access the  Taylor management system",
 };
 
 export default function LoginPage() {
@@ -14,7 +14,7 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         {/* Logo/Header */}
         <div className="text-center mb-8">
-          <div className="inline-block bg-blue-100 dark:bg-gray-800 rounded-lg">
+          <div className="inline-block bg-blue-100 dark:bg-gray-800  rounded-lg">
             <Image
               src="/logo.png"
               alt="Najam Clinic Logo"
@@ -24,10 +24,10 @@ export default function LoginPage() {
             />
           </div>
           <h1 className="text-3xl font-bold text-gray-800 dark:text-white">
-            Najam Clinic
+            Taylor Pro
           </h1>
           <p className="text-gray-600 dark:text-gray-300 mt-2">
-            Manage your glass business efficiently
+            Manage your Taylor business efficiently
           </p>
         </div>
         {/* Auth Tabs */}

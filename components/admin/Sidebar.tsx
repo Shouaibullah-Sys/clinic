@@ -155,7 +155,7 @@ export function AdminSidebar() {
               </div>
               <div>
                 <span className="text-lg font-bold text-gray-900 dark:text-white">
-                  GlassPro
+                  Taylor Pro
                 </span>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
                   Management System
