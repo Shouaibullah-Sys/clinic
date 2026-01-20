@@ -59,7 +59,6 @@ interface NavItem {
 export function AdminSidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
-    glass: false,
     ophthalmology: false,
     finance: false,
   });

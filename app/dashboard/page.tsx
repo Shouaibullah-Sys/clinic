@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useEffect, useState, useMemo } from "react";
 import AdminDashboard from "./components/admin/AdminCeoDashboard";
-import StaffDashboard from "@/components/staff/StaffDashboard";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -279,7 +278,6 @@ export default function Dashboard() {
 
       {/* Role-based Dashboard */}
       {user?.role === "admin" && <AdminDashboard />}
-      {user?.role === "staff" && <StaffDashboard />}
 
       {/* Quick Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">

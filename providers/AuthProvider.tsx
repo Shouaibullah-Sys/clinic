@@ -33,7 +33,13 @@ export default function AuthProvider({
     if (!isAuthenticated) return;
 
     let timeoutId: NodeJS.Timeout;
-    let intervalId: NodeJS.Timeout;
+    const intervalId = setInterval(() => {
+      if (isAuthenticated) {
+        refreshAccessToken().catch(() => {
+          console.warn("Periodic token refresh failed");
+        });
+      }
+    }, 30 * 60 * 1000);
 
     const scheduleTokenRefresh = async () => {
       try {
@@ -58,15 +64,6 @@ export default function AuthProvider({
 
     // Schedule first refresh
     scheduleTokenRefresh();
-
-    // Also set up a health check interval every 30 minutes
-    intervalId = setInterval(() => {
-      if (isAuthenticated) {
-        refreshAccessToken().catch(() => {
-          console.warn("Periodic token refresh failed");
-        });
-      }
-    }, 30 * 60 * 1000);
 
     return () => {
       if (timeoutId) clearTimeout(timeoutId);

@@ -13,24 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  BarChart3,
-  Users,
-  DollarSign,
-  TrendingUp,
-  TrendingDown,
-  ShoppingCart,
-  Warehouse,
-  FileText,
-  Eye,
-  Shield,
-  CheckCircle2,
-  Clock,
-  AlertCircle,
-  PieChart as PieChartIcon,
-  Download,
-  Filter,
-} from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   LineChart,
   Line,
@@ -48,75 +31,132 @@ import {
   Pie,
   Cell,
 } from "recharts";
+import {
+  Activity,
+  Ambulance,
+  Bed,
+  Calendar,
+  Clock,
+  Download,
+  Eye,
+  FileText,
+  Filter,
+  HeartPulse,
+  Hospital,
+  LayoutDashboard,
+  Pill,
+  Scan,
+  Shield,
+  Stethoscope,
+  TrendingDown,
+  TrendingUp,
+  Users,
+  DollarSign,
+  AlertTriangle,
+  PieChart as PieChartIcon,
+  CheckCircle2,
+  UserCheck,
+  Syringe,
+  Thermometer,
+} from "lucide-react";
 
-interface AdminStats {
+interface HospitalStats {
+  totalPatients: number;
+  activeAdmissions: number;
+  dailyOPD: number;
+  emergencyCases: number;
   monthlyRevenue: number;
   monthlyExpenses: number;
-  monthlyOrders: number;
-  glassStockValue: number;
-  activeUsers: number;
-  pendingApprovals: number;
-  profit: number;
-  todayCash: any;
-  weeklySales: any[];
+  occupancyRate: number;
+  staffCount: number;
+  pendingAppointments: number;
+  labTestsPending: number;
+  imagingPending: number;
+  prescriptionsPending: number;
 }
 
-interface UserStat {
-  _id: string;
+interface ServiceStats {
+  service: string;
   count: number;
-  active: number;
-  approved: number;
+  revenue: number;
+  growth: number;
+}
+
+interface DepartmentStats {
+  department: string;
+  patients: number;
+  occupancy: number;
+  doctors: number;
 }
 
 interface RevenueTrend {
-  revenueTrend: any[];
-  orderTrend: any[];
-  expenseTrend: any[];
+  date: string;
+  revenue: number;
+  expenses: number;
+  patients: number;
 }
 
 export default function AdminDashboard() {
   const router = useRouter();
-  const [stats, setStats] = useState<AdminStats | null>(null);
-  const [userStats, setUserStats] = useState<UserStat[]>([]);
-  const [revenueTrend, setRevenueTrend] = useState<RevenueTrend | null>(null);
+  const [stats, setStats] = useState<HospitalStats | null>(null);
+  const [serviceStats, setServiceStats] = useState<ServiceStats[]>([]);
+  const [departmentStats, setDepartmentStats] = useState<DepartmentStats[]>([]);
+  const [revenueTrend, setRevenueTrend] = useState<RevenueTrend[]>([]);
   const [loading, setLoading] = useState(true);
   const [timeRange, setTimeRange] = useState("month");
 
   useEffect(() => {
-    fetchAdminData();
-    fetchUserStats();
+    fetchHospitalData();
+    fetchServiceStats();
+    fetchDepartmentStats();
     fetchRevenueTrend();
   }, [timeRange]);
 
-  const fetchAdminData = async () => {
+  const fetchHospitalData = async () => {
     try {
-      const response = await fetch("/api/dashboard/admin/stats");
+      const response = await fetch("/api/dashboard/admin/hospital-stats");
       if (response.ok) {
         const data = await response.json();
         setStats(data);
       }
     } catch (error) {
-      console.error("Error fetching admin data:", error);
+      console.error("Error fetching hospital data:", error);
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchUserStats = async () => {
+  const fetchServiceStats = async () => {
     try {
-      const response = await fetch("/api/dashboard/admin/user-stats");
+      const response = await fetch("/api/dashboard/admin/service-stats");
       if (response.ok) {
         const data = await response.json();
-        setUserStats(data.userStats);
+        setServiceStats(data);
       }
     } catch (error) {
-      console.error("Error fetching user stats:", error);
+      console.error("Error fetching service stats:", error);
+    }
+  };
+
+  const fetchDepartmentStats = async () => {
+    try {
+      const response = await fetch("/api/dashboard/admin/department-stats");
+      if (response.ok) {
+        const data = await response.json();
+        setDepartmentStats(data);
+      }
+    } catch (error) {
+      console.error("Error fetching department stats:", error);
     }
   };
 
   const fetchRevenueTrend = async () => {
     try {
-      const response = await fetch("/api/dashboard/admin/revenue-trend");
+      const response = await fetch("/api/dashboard/admin/revenue-trend", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ timeRange }),
+      });
       if (response.ok) {
         const data = await response.json();
         setRevenueTrend(data);
@@ -135,18 +175,6 @@ export default function AdminDashboard() {
     }).format(amount);
   };
 
-  const getRevenueGrowth = () => {
-    if (!revenueTrend?.revenueTrend || revenueTrend.revenueTrend.length < 2)
-      return 0;
-
-    const recent = revenueTrend.revenueTrend.slice(-2);
-    const current = recent[1]?.total || 0;
-    const previous = recent[0]?.total || 0;
-
-    if (previous === 0) return 100;
-    return ((current - previous) / previous) * 100;
-  };
-
   if (loading) {
     return (
       <div className="space-y-6">
@@ -160,82 +188,146 @@ export default function AdminDashboard() {
     );
   }
 
-  const revenueData =
-    revenueTrend?.revenueTrend.map((item) => ({
-      date: item._id,
-      revenue: item.total,
-      consultations: item.count,
-    })) || [];
+  // Service distribution data for pie chart
+  const serviceDistribution = serviceStats.map((service) => ({
+    name: service.service,
+    value: service.count,
+    color: getServiceColor(service.service),
+  }));
 
-  const expenseData =
-    revenueTrend?.expenseTrend.map((item) => ({
-      date: item._id,
-      expenses: item.total,
-    })) || [];
+  // Top performing services for bar chart
+  const topServices = [...serviceStats]
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 5);
 
-  const userDistribution = [
-    {
-      name: "Admin",
-      value: userStats.find((s) => s._id === "admin")?.count || 0,
-      color: "#3B82F6",
-    },
-    {
-      name: "Staff",
-      value: userStats.find((s) => s._id === "staff")?.count || 0,
-      color: "#10B981",
-    },
-  ];
+  const getServiceColor = (service: string): string => {
+    const colors: Record<string, string> = {
+      emergency: "#EF4444",
+      opd: "#3B82F6",
+      laboratory: "#10B981",
+      imaging: "#8B5CF6",
+      pharmacy: "#F59E0B",
+      dental: "#EC4899",
+      ecg: "#06B6D4",
+      ambulance: "#F97316",
+      ot: "#6366F1",
+      indo: "#14B8A6",
+      endoscopy: "#84CC16",
+      lithotripsy: "#8B5CF6",
+    };
+    return colors[service] || "#6B7280";
+  };
 
-  const monthlyComparison = [
-    { month: "Jan", revenue: 42000, expenses: 28000 },
-    { month: "Feb", revenue: 45000, expenses: 29000 },
-    { month: "Mar", revenue: 48000, expenses: 31000 },
-    { month: "Apr", revenue: 52000, expenses: 33000 },
-    { month: "May", revenue: 55000, expenses: 35000 },
-    { month: "Jun", revenue: 58000, expenses: 37000 },
-  ];
+  const getServiceIcon = (service: string) => {
+    const icons: Record<string, JSX.Element> = {
+      emergency: <Ambulance className="h-5 w-5" />,
+      opd: <Stethoscope className="h-5 w-5" />,
+      laboratory: <Thermometer className="h-5 w-5" />,
+      imaging: <Scan className="h-5 w-5" />,
+      pharmacy: <Pill className="h-5 w-5" />,
+      dental: <HeartPulse className="h-5 w-5" />,
+      ecg: <Activity className="h-5 w-5" />,
+      ambulance: <Ambulance className="h-5 w-5" />,
+      ot: <Hospital className="h-5 w-5" />,
+      indo: <Bed className="h-5 w-5" />,
+      endoscopy: <Syringe className="h-5 w-5" />,
+    };
+    return icons[service] || <Activity className="h-5 w-5" />;
+  };
+
+  const getServiceDisplayName = (service: string): string => {
+    const names: Record<string, string> = {
+      emergency: "Emergency",
+      opd: "OPD",
+      laboratory: "Laboratory",
+      imaging: "Imaging",
+      pharmacy: "Pharmacy",
+      dental: "Dental",
+      ecg: "ECG",
+      ambulance: "Ambulance",
+      ot: "Operation Theatre",
+      indo: "Indoor Patient",
+      endoscopy: "Endoscopy",
+      lithotripsy: "Lithotripsy",
+    };
+    return names[service] || service;
+  };
 
   return (
     <div className="space-y-6">
-      {/* Header with Filters */}
+      {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h2 className="text-2xl font-bold">Business Overview</h2>
+          <h2 className="text-2xl font-bold">Hospital Management Dashboard</h2>
           <p className="text-gray-500">
-            Comprehensive analysis of your glass business
+            Comprehensive overview of hospital operations and services
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setTimeRange("week")}
-          >
-            Week
-          </Button>
-          <Button
-            variant={timeRange === "month" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setTimeRange("month")}
-          >
-            Month
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setTimeRange("year")}
-          >
-            Year
-          </Button>
+          <Tabs value={timeRange} onValueChange={setTimeRange} className="w-auto">
+            <TabsList>
+              <TabsTrigger value="week">Week</TabsTrigger>
+              <TabsTrigger value="month">Month</TabsTrigger>
+              <TabsTrigger value="quarter">Quarter</TabsTrigger>
+              <TabsTrigger value="year">Year</TabsTrigger>
+            </TabsList>
+          </Tabs>
           <Button variant="outline" size="sm">
             <Download className="h-4 w-4 mr-2" />
-            Export
+            Export Report
           </Button>
         </div>
       </div>
 
-      {/* Key Metrics */}
+      {/* Key Metrics Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Total Patients */}
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-500">
+                  Total Patients
+                </p>
+                <p className="text-3xl font-bold mt-2">
+                  {stats?.totalPatients?.toLocaleString() || "0"}
+                </p>
+                <div className="flex items-center mt-1 text-sm">
+                  <TrendingUp className="h-4 w-4 text-green-500 mr-1" />
+                  <span className="text-green-600">12.5%</span>
+                  <span className="text-gray-500 ml-2">from last month</span>
+                </div>
+              </div>
+              <div className="p-3 bg-blue-100 rounded-lg">
+                <Users className="h-6 w-6 text-blue-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Active Admissions */}
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-500">
+                  Active Admissions
+                </p>
+                <p className="text-3xl font-bold mt-2">
+                  {stats?.activeAdmissions || "0"}
+                </p>
+                <p className="text-sm text-gray-500 mt-1">
+                  Occupancy: {stats?.occupancyRate || "0"}%
+                </p>
+              </div>
+              <div className="p-3 bg-green-100 rounded-lg">
+                <Bed className="h-6 w-6 text-green-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Monthly Revenue */}
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
@@ -243,121 +335,137 @@ export default function AdminDashboard() {
                 <p className="text-sm font-medium text-gray-500">
                   Monthly Revenue
                 </p>
-                <p className="text-2xl font-bold mt-2">
+                <p className="text-3xl font-bold mt-2">
                   {formatCurrency(stats?.monthlyRevenue || 0)}
                 </p>
                 <div className="flex items-center mt-1 text-sm">
-                  {getRevenueGrowth() >= 0 ? (
-                    <TrendingUp className="h-4 w-4 text-green-500 mr-1" />
-                  ) : (
-                    <TrendingDown className="h-4 w-4 text-red-500 mr-1" />
-                  )}
-                  <span
-                    className={
-                      getRevenueGrowth() >= 0
-                        ? "text-green-600"
-                        : "text-red-600"
-                    }
-                  >
-                    {Math.abs(getRevenueGrowth()).toFixed(1)}%
-                  </span>
-                  <span className="text-gray-500 ml-2">from last month</span>
-                </div>
-              </div>
-              <div className="p-3 bg-green-100 rounded-lg">
-                <DollarSign className="h-6 w-6 text-green-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-500">
-                  Monthly Profit
-                </p>
-                <p className="text-2xl font-bold mt-2">
-                  {formatCurrency(stats?.profit || 0)}
-                </p>
-                <p className="text-xs text-gray-500 mt-1">
-                  Revenue: {formatCurrency(stats?.monthlyRevenue || 0)}
-                </p>
-              </div>
-              <div className="p-3 bg-blue-100 rounded-lg">
-                <BarChart3 className="h-6 w-6 text-blue-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-500">
-                  Glass Stock Value
-                </p>
-                <p className="text-2xl font-bold mt-2">
-                  {formatCurrency(stats?.glassStockValue || 0)}
-                </p>
-                <p className="text-xs text-gray-500 mt-1">
-                  {stats?.monthlyOrders} orders this month
-                </p>
-              </div>
-              <div className="p-3 bg-orange-100 rounded-lg">
-                <Warehouse className="h-6 w-6 text-orange-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-500">
-                  Active Users
-                </p>
-                <p className="text-2xl font-bold mt-2">{stats?.activeUsers}</p>
-                <div className="flex items-center mt-1">
-                  <Badge variant="destructive" className="text-xs">
-                    {stats?.pendingApprovals} pending
-                  </Badge>
-                  <span className="text-xs text-gray-500 ml-2">approvals</span>
+                  <TrendingUp className="h-4 w-4 text-green-500 mr-1" />
+                  <span className="text-green-600">8.2%</span>
+                  <span className="text-gray-500 ml-2">growth</span>
                 </div>
               </div>
               <div className="p-3 bg-purple-100 rounded-lg">
-                <Users className="h-6 w-6 text-purple-600" />
+                <DollarSign className="h-6 w-6 text-purple-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Emergency Cases */}
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-500">
+                  Emergency Cases
+                </p>
+                <p className="text-3xl font-bold mt-2">
+                  {stats?.emergencyCases || "0"}
+                </p>
+                <p className="text-sm text-gray-500 mt-1">
+                  Today: {Math.floor((stats?.emergencyCases || 0) / 30)} cases
+                </p>
+              </div>
+              <div className="p-3 bg-red-100 rounded-lg">
+                <AlertTriangle className="h-6 w-6 text-red-600" />
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Charts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Revenue vs Expenses */}
+      {/* Service Performance Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Service Revenue */}
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle>Revenue vs Expenses</CardTitle>
-            <CardDescription>Monthly comparison</CardDescription>
+            <CardTitle>Service Performance</CardTitle>
+            <CardDescription>Top 5 services by revenue</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={monthlyComparison}>
+                <BarChart data={topServices}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis dataKey="month" stroke="#6b7280" />
+                  <XAxis 
+                    dataKey="service" 
+                    stroke="#6b7280"
+                    tickFormatter={getServiceDisplayName}
+                  />
                   <YAxis stroke="#6b7280" />
                   <Tooltip
-                    contentStyle={{
-                      backgroundColor: "white",
-                      border: "1px solid #e5e7eb",
-                      borderRadius: "0.5rem",
+                    formatter={(value) => [formatCurrency(Number(value)), "Revenue"]}
+                    labelFormatter={getServiceDisplayName}
+                  />
+                  <Bar dataKey="revenue" fill="#3B82F6" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Service Distribution */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Service Distribution</CardTitle>
+            <CardDescription>Cases by service type</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={serviceDistribution}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    label={({ name, percent }) => 
+                      `${getServiceDisplayName(name)}: ${(percent * 100).toFixed(0)}%`
+                    }
+                    outerRadius={70}
+                    fill="#8884d8"
+                    dataKey="value"
+                  >
+                    {serviceDistribution.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value, name) => [
+                    value, 
+                    getServiceDisplayName(String(name))
+                  ]} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Revenue Trend & Department Stats */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Revenue Trend */}
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle>Revenue Trend</CardTitle>
+            <CardDescription>Revenue vs Expenses over time</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={revenueTrend}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis 
+                    dataKey="date" 
+                    stroke="#6b7280"
+                    tickFormatter={(value) => {
+                      if (timeRange === "week") return value.split('-')[2];
+                      if (timeRange === "month") return value;
+                      return value.substring(0, 7);
                     }}
-                    formatter={(value) => [`$${value}`, "Amount"]}
+                  />
+                  <YAxis stroke="#6b7280" />
+                  <Tooltip
+                    formatter={(value) => [formatCurrency(Number(value)), "Amount"]}
                   />
                   <Legend />
                   <Area
@@ -384,154 +492,140 @@ export default function AdminDashboard() {
           </CardContent>
         </Card>
 
-        {/* Daily Revenue Trend */}
+        {/* Department Stats */}
         <Card>
           <CardHeader>
-            <CardTitle>Daily Revenue Trend</CardTitle>
-            <CardDescription>Last 30 days</CardDescription>
+            <CardTitle>Department Overview</CardTitle>
+            <CardDescription>Current status</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={revenueData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis
-                    dataKey="date"
-                    stroke="#6b7280"
-                    tickFormatter={(value) =>
-                      value.split("-").slice(1).join("/")
-                    }
-                  />
-                  <YAxis stroke="#6b7280" />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "white",
-                      border: "1px solid #e5e7eb",
-                      borderRadius: "0.5rem",
-                    }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="revenue"
-                    stroke="#3B82F6"
-                    strokeWidth={2}
-                    dot={{ r: 2 }}
-                    activeDot={{ r: 4 }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* User Distribution */}
-        <Card>
-          <CardHeader>
-            <CardTitle>User Distribution</CardTitle>
-            <CardDescription>By role and status</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={userDistribution}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    label={({ name, percent }) =>
-                      `${name}: ${(percent * 100).toFixed(0)}%`
-                    }
-                    outerRadius={70}
-                    fill="#8884d8"
-                    dataKey="value"
-                  >
-                    {userDistribution.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="grid grid-cols-2 gap-4 mt-4">
-              <div className="text-center">
-                <p className="text-sm font-medium">Active Users</p>
-                <p className="text-2xl font-bold">{stats?.activeUsers}</p>
-              </div>
-              <div className="text-center">
-                <p className="text-sm font-medium">Pending Approvals</p>
-                <p className="text-2xl font-bold text-red-600">
-                  {stats?.pendingApprovals}
-                </p>
-              </div>
+            <div className="space-y-4">
+              {departmentStats.slice(0, 5).map((dept) => (
+                <div key={dept.department} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div className="flex items-center space-x-3">
+                    <div className={`p-2 rounded-lg ${
+                      dept.occupancy > 80 ? 'bg-red-100 text-red-600' :
+                      dept.occupancy > 60 ? 'bg-yellow-100 text-yellow-600' :
+                      'bg-green-100 text-green-600'
+                    }`}>
+                      <Hospital className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <p className="font-medium">{dept.department}</p>
+                      <p className="text-sm text-gray-500">
+                        {dept.patients} patients • {dept.doctors} doctors
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className={`font-semibold ${
+                      dept.occupancy > 80 ? 'text-red-600' :
+                      dept.occupancy > 60 ? 'text-yellow-600' :
+                      'text-green-600'
+                    }`}>
+                      {dept.occupancy}%
+                    </p>
+                    <p className="text-xs text-gray-500">Occupancy</p>
+                  </div>
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Quick Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {/* Cash Status */}
-        <Card>
+      {/* Service Quick Stats */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Service Quick Stats</CardTitle>
+          <CardDescription>Pending tasks and activities</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+            <div className="text-center p-4 bg-blue-50 rounded-lg">
+              <div className="inline-flex items-center justify-center w-12 h-12 bg-blue-100 rounded-full mb-2">
+                <Calendar className="h-6 w-6 text-blue-600" />
+              </div>
+              <p className="text-sm font-medium text-gray-600">Appointments</p>
+              <p className="text-2xl font-bold mt-1">{stats?.pendingAppointments || 0}</p>
+              <p className="text-xs text-gray-500">Pending</p>
+            </div>
+
+            <div className="text-center p-4 bg-green-50 rounded-lg">
+              <div className="inline-flex items-center justify-center w-12 h-12 bg-green-100 rounded-full mb-2">
+                <Thermometer className="h-6 w-6 text-green-600" />
+              </div>
+              <p className="text-sm font-medium text-gray-600">Lab Tests</p>
+              <p className="text-2xl font-bold mt-1">{stats?.labTestsPending || 0}</p>
+              <p className="text-xs text-gray-500">Awaiting Results</p>
+            </div>
+
+            <div className="text-center p-4 bg-purple-50 rounded-lg">
+              <div className="inline-flex items-center justify-center w-12 h-12 bg-purple-100 rounded-full mb-2">
+                <Scan className="h-6 w-6 text-purple-600" />
+              </div>
+              <p className="text-sm font-medium text-gray-600">Imaging</p>
+              <p className="text-2xl font-bold mt-1">{stats?.imagingPending || 0}</p>
+              <p className="text-xs text-gray-500">Pending Review</p>
+            </div>
+
+            <div className="text-center p-4 bg-orange-50 rounded-lg">
+              <div className="inline-flex items-center justify-center w-12 h-12 bg-orange-100 rounded-full mb-2">
+                <Pill className="h-6 w-6 text-orange-600" />
+              </div>
+              <p className="text-sm font-medium text-gray-600">Pharmacy</p>
+              <p className="text-2xl font-bold mt-1">{stats?.prescriptionsPending || 0}</p>
+              <p className="text-xs text-gray-500">To Dispense</p>
+            </div>
+
+            <div className="text-center p-4 bg-red-50 rounded-lg">
+              <div className="inline-flex items-center justify-center w-12 h-12 bg-red-100 rounded-full mb-2">
+                <Ambulance className="h-6 w-6 text-red-600" />
+              </div>
+              <p className="text-sm font-medium text-gray-600">Emergency</p>
+              <p className="text-2xl font-bold mt-1">{stats?.emergencyCases || 0}</p>
+              <p className="text-xs text-gray-500">Active Cases</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Alerts and Quick Actions */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Critical Alerts */}
+        <Card className="border-l-4 border-l-red-500">
           <CardHeader>
-            <CardTitle className="flex items-center">
-              <DollarSign className="h-5 w-5 mr-2 text-green-600" />
-              Today's Cash Status
+            <CardTitle className="flex items-center text-red-700">
+              <AlertTriangle className="h-5 w-5 mr-2" />
+              Critical Alerts
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600">Opening Balance</span>
-                <span className="font-semibold">
-                  ${stats?.todayCash?.openingBalance || "0"}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600">Cash Sales</span>
-                <span className="font-semibold text-green-600">
-                  ${stats?.todayCash?.cashSales || "0"}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600">Expenses</span>
-                <span className="font-semibold text-red-600">
-                  ${stats?.todayCash?.expenses || "0"}
-                </span>
-              </div>
-              <div className="border-t pt-4">
-                <div className="flex justify-between items-center font-bold">
-                  <span>Closing Balance</span>
-                  <span>${stats?.todayCash?.closingBalance || "0"}</span>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between p-3 bg-red-50 rounded-lg">
+                <div className="flex items-center space-x-3">
+                  <AlertTriangle className="h-5 w-5 text-red-600" />
+                  <div>
+                    <p className="font-medium">ICU Bed Shortage</p>
+                    <p className="text-sm text-gray-600">
+                      Only 2 ICU beds available
+                    </p>
+                  </div>
                 </div>
+                <Badge variant="destructive">Urgent</Badge>
               </div>
-            </div>
-          </CardContent>
-        </Card>
 
-        {/* Performance Metrics */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Performance Metrics</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600">Order Fulfillment Rate</span>
-                <span className="font-semibold text-green-600">94.5%</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600">Customer Satisfaction</span>
-                <span className="font-semibold text-blue-600">4.8/5</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600">Stock Turnover</span>
-                <span className="font-semibold text-orange-600">2.3x</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600">Average Order Value</span>
-                <span className="font-semibold text-purple-600">$850</span>
+              <div className="flex items-center justify-between p-3 bg-yellow-50 rounded-lg">
+                <div className="flex items-center space-x-3">
+                  <Clock className="h-5 w-5 text-yellow-600" />
+                  <div>
+                    <p className="font-medium">MRI Maintenance</p>
+                    <p className="text-sm text-gray-600">
+                      Scheduled for tomorrow
+                    </p>
+                  </div>
+                </div>
+                <Badge variant="outline">Scheduled</Badge>
               </div>
             </div>
           </CardContent>
@@ -540,27 +634,11 @@ export default function AdminDashboard() {
         {/* Quick Actions */}
         <Card>
           <CardHeader>
-            <CardTitle>Admin Actions</CardTitle>
+            <CardTitle>Quick Actions</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
               <Button
-                className="w-full justify-start"
-                onClick={() => router.push("/admin/users")}
-              >
-                <Users className="h-4 w-4 mr-2" />
-                Manage Users
-              </Button>
-              <Button
-                variant="outline"
-                className="w-full justify-start"
-                onClick={() => router.push("/admin/settings")}
-              >
-                <Shield className="h-4 w-4 mr-2" />
-                System Settings
-              </Button>
-              <Button
-                variant="outline"
                 className="w-full justify-start"
                 onClick={() => router.push("/admin/reports")}
               >
@@ -570,68 +648,134 @@ export default function AdminDashboard() {
               <Button
                 variant="outline"
                 className="w-full justify-start"
-                onClick={() => router.push("/admin/audit")}
+                onClick={() => router.push("/admin/staff")}
               >
-                <Clock className="h-4 w-4 mr-2" />
-                View Audit Log
+                <UserCheck className="h-4 w-4 mr-2" />
+                Manage Staff
               </Button>
+              <Button
+                variant="outline"
+                className="w-full justify-start"
+                onClick={() => router.push("/admin/inventory")}
+              >
+                <LayoutDashboard className="h-4 w-4 mr-2" />
+                View Inventory
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full justify-start"
+                onClick={() => router.push("/admin/billing")}
+              >
+                <DollarSign className="h-4 w-4 mr-2" />
+                Billing Overview
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* System Status */}
+        <Card>
+          <CardHeader>
+            <CardTitle>System Status</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+                  <span className="font-medium">EMR System</span>
+                </div>
+                <Badge variant="outline">Operational</Badge>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+                  <span className="font-medium">Lab System</span>
+                </div>
+                <Badge variant="outline">Operational</Badge>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+                  <span className="font-medium">Imaging System</span>
+                </div>
+                <Badge variant="outline">Operational</Badge>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="w-3 h-3 bg-yellow-500 rounded-full animate-pulse"></div>
+                  <span className="font-medium">Pharmacy System</span>
+                </div>
+                <Badge variant="outline">Maintenance</Badge>
+              </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Alerts and Notifications */}
-      <Card className="border-l-4 border-l-yellow-500">
+      {/* Service Performance Details */}
+      <Card>
         <CardHeader>
-          <CardTitle className="flex items-center">
-            <AlertCircle className="h-5 w-5 text-yellow-500 mr-2" />
-            Important Alerts
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Service Performance Details</CardTitle>
+              <CardDescription>Revenue and growth by service</CardDescription>
+            </div>
+            <Button variant="outline" size="sm">
+              <Eye className="h-4 w-4 mr-2" />
+              View Details
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between p-3 bg-yellow-50 rounded-lg">
-              <div className="flex items-center space-x-3">
-                <AlertCircle className="h-5 w-5 text-yellow-600" />
-                <div>
-                  <p className="font-medium">System Backup Required</p>
-                  <p className="text-sm text-gray-600">
-                    Last backup was 6 days ago
-                  </p>
-                </div>
-              </div>
-              <Button size="sm">Backup Now</Button>
-            </div>
-
-            <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
-              <div className="flex items-center space-x-3">
-                <Clock className="h-5 w-5 text-blue-600" />
-                <div>
-                  <p className="font-medium">Monthly Reports Due</p>
-                  <p className="text-sm text-gray-600">
-                    Generate monthly financial reports
-                  </p>
-                </div>
-              </div>
-              <Button size="sm" variant="outline">
-                Generate
-              </Button>
-            </div>
-
-            <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
-              <div className="flex items-center space-x-3">
-                <CheckCircle2 className="h-5 w-5 text-green-600" />
-                <div>
-                  <p className="font-medium">Software Update Available</p>
-                  <p className="text-sm text-gray-600">
-                    Version 2.1.0 ready to install
-                  </p>
-                </div>
-              </div>
-              <Button size="sm" variant="outline">
-                Update
-              </Button>
-            </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b">
+                  <th className="text-left py-3 px-4 font-medium">Service</th>
+                  <th className="text-left py-3 px-4 font-medium">Cases</th>
+                  <th className="text-left py-3 px-4 font-medium">Revenue</th>
+                  <th className="text-left py-3 px-4 font-medium">Growth</th>
+                  <th className="text-left py-3 px-4 font-medium">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {serviceStats.map((service) => (
+                  <tr key={service.service} className="border-b hover:bg-gray-50">
+                    <td className="py-3 px-4">
+                      <div className="flex items-center space-x-3">
+                        <div className="p-2 rounded-lg" style={{ backgroundColor: getServiceColor(service.service) + '20' }}>
+                          {getServiceIcon(service.service)}
+                        </div>
+                        <span className="font-medium">{getServiceDisplayName(service.service)}</span>
+                      </div>
+                    </td>
+                    <td className="py-3 px-4">{service.count.toLocaleString()}</td>
+                    <td className="py-3 px-4 font-medium">{formatCurrency(service.revenue)}</td>
+                    <td className="py-3 px-4">
+                      <div className="flex items-center">
+                        {service.growth >= 0 ? (
+                          <TrendingUp className="h-4 w-4 text-green-500 mr-1" />
+                        ) : (
+                          <TrendingDown className="h-4 w-4 text-red-500 mr-1" />
+                        )}
+                        <span className={service.growth >= 0 ? "text-green-600" : "text-red-600"}>
+                          {Math.abs(service.growth).toFixed(1)}%
+                        </span>
+                      </div>
+                    </td>
+                    <td className="py-3 px-4">
+                      <Badge variant={service.growth >= 10 ? "default" : "outline"}>
+                        {service.growth >= 10 ? "High Growth" : "Stable"}
+                      </Badge>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </CardContent>
       </Card>

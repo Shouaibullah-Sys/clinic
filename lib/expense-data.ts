@@ -9,7 +9,7 @@ export async function getExpensesSummary(
 ) {
   await dbConnect();
 
-  let query: any = {};
+  const query: Record<string, any> = {};
 
   if (date) {
     const startOfDay = new Date(date.setHours(0, 0, 0, 0));
@@ -49,7 +49,7 @@ export async function getExpensesSummary(
 export async function getExpensesByCategory(month?: number, year?: number) {
   await dbConnect();
   
-  let query: any = {};
+  const query: Record<string, any> = {};
   if (month && year) {
     const startDate = new Date(year, month - 1, 1);
     const endDate = new Date(year, month, 0, 23, 59, 59, 999);

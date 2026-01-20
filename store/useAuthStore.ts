@@ -54,23 +54,8 @@ export const useAuthStore = create<AuthState>()(
       error: null,
 
       login: (user, accessToken, refreshToken) => {
-        const accessTokenExpiry = 15 * 60; // 15 minutes
-        const refreshTokenExpiry = 7 * 24 * 60 * 60; // 7 days
-
-        cookies.set("accessToken", accessToken, {
-          path: "/",
-          maxAge: accessTokenExpiry,
-          sameSite: "lax",
-          secure: process.env.NODE_ENV === "production",
-        });
-
-        cookies.set("refreshToken", refreshToken, {
-          path: "/",
-          maxAge: refreshTokenExpiry,
-          sameSite: "lax",
-          secure: process.env.NODE_ENV === "production",
-        });
-
+        // Note: Cookies are now handled server-side in the login API route
+        // The server sets HTTP-only cookies for security
         set({
           user,
           accessToken,
@@ -161,12 +146,8 @@ export const useAuthStore = create<AuthState>()(
             };
             const { accessToken, user } = data;
 
-            cookies.set("accessToken", accessToken, {
-              path: "/",
-              maxAge: 15 * 60,
-              sameSite: "lax",
-              secure: process.env.NODE_ENV === "production",
-            });
+            // Note: Access token cookie is now handled server-side in the refresh API route
+            // The server sets HTTP-only cookies for security
 
             set({
               user,

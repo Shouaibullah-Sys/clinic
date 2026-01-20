@@ -6,9 +6,10 @@ import { z } from 'zod';
 
 const JwtPayloadSchema = z.object({
   id: z.string(),
-  role: z.enum(['admin', 'ceo', 'laboratory', 'pharmacy']),
+  role: z.enum(['admin', 'doctor', 'nurse', 'staff', 'receptionist']),
   name: z.string().optional(),
   email: z.string().email().optional(),
+  employeeId: z.string().optional(),
 });
 
 export type JwtPayload = z.infer<typeof JwtPayloadSchema>;

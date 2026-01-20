@@ -1,49 +1,57 @@
 // app/api/auth/logout/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import dbConnect from "@/lib/dbConnect";
 import { User } from "@/lib/models/User";
-import jwt, { JwtPayload } from "jsonwebtoken";
+import jwt from "jsonwebtoken";
 
 export async function POST(request: NextRequest) {
-  if (!process.env.JWT_SECRET) {
-    return NextResponse.json(
-      { error: "Server configuration error" },
-      { status: 500 }
-    );
-  }
-
   try {
-    const cookieStore = await cookies();
-    const refreshToken = cookieStore.get("refreshToken")?.value;
-
+    const refreshToken = request.cookies.get("refreshToken")?.value;
+    
     if (refreshToken) {
+      await dbConnect();
+      
+      // Verify token to get user ID
       try {
-        // Decode token to get user ID
-        const decoded = jwt.decode(refreshToken) as JwtPayload;
-
-        if (decoded?.id) {
-          await dbConnect();
-
-          // Remove the refresh token from user's list
-          await User.findByIdAndUpdate(decoded.id, {
-            $pull: { refreshTokens: refreshToken },
-          });
+        const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET!) as any;
+        
+        if (decoded.id) {
+          const user = await User.findById(decoded.id);
+          
+          if (user) {
+            // Remove this refresh token from user's tokens
+            user.refreshTokens = user.refreshTokens.filter(
+              (token: string) => token !== refreshToken
+            );
+            await user.save();
+          }
         }
       } catch (error) {
-        console.error("Error removing refresh token:", error);
-        // Continue with logout even if token removal fails
+        // Token is invalid, but we still want to clear cookies
+        console.log("Invalid token during logout");
       }
     }
 
     const response = NextResponse.json({
-      success: true,
       message: "Logged out successfully",
     });
 
-    // Clear cookies
-    response.cookies.delete("accessToken");
-    response.cookies.delete("refreshToken");
+    // Clear authentication cookies
+    response.cookies.set("accessToken", "", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 0,
+      path: "/",
+    });
+
+    response.cookies.set("refreshToken", "", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 0,
+      path: "/",
+    });
 
     return response;
   } catch (error) {

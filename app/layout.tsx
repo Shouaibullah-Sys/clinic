@@ -7,7 +7,6 @@ import { ThemeProvider } from "@/providers/ThemeProvider";
 import AuthProvider from "@/providers/AuthProvider";
 import SessionChecker from "@/components/SessionChecker";
 import ReactQueryProvider from "@/providers/RectQueryProvider";
-import GlassStoreProvider from "@/providers/GlassStoreProvider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -43,7 +42,7 @@ export default function RootLayout({
               disableTransitionOnChange
             >
               <SessionChecker />
-              <GlassStoreProvider>{children}</GlassStoreProvider>
+              {children}
             </ThemeProvider>
           </ReactQueryProvider>
         </AuthProvider>
