@@ -1,58 +1,104 @@
 // lib/schemas/userSchema.ts
 import { z } from "zod";
 
-export const UserRoleEnum = ["admin", "staff"] as const;
-export type UserRole = (typeof UserRoleEnum)[number];
+// Available roles
+export const UserRoleEnum = [
+  "admin",
+  "doctor",
+  "nurse",
+  "staff",
+  "receptionist",
+  "pharmacist",
+  "lab_technician",
+  "radiologist",
+] as const;
 
-// Base schema with common fields
-const BaseUserSchema = z.object({
-  name: z
-    .string()
-    .min(2, "Name must be at least 2 characters")
-    .max(100, "Name is too long"),
-  email: z.string().email("Invalid email address").toLowerCase(),
-  phone: z
-    .string()
-    .min(10, "Phone number must be at least 10 digits")
-    .max(15, "Phone number is too long")
-    .regex(/^[0-9+()\- ]+$/, "Invalid phone number format"),
+// Base user schema for validation
+export const BaseUserSchema = z.object({
+  name: z.string().min(2, "Name must be at least 2 characters").max(100),
+  email: z.string().email("Invalid email address"),
+  phone: z.string().min(10, "Phone number must be at least 10 digits").max(15),
   role: z.enum(UserRoleEnum),
+  department: z.string().min(1, "Department is required"),
+  designation: z.string().min(1, "Designation is required"),
+  specialization: z.string().optional(),
+  licenseNumber: z.string().optional(),
   approved: z.boolean().default(false),
   active: z.boolean().default(true),
+  address: z.string().optional(),
+  gender: z.enum(["male", "female", "other"]).optional(),
+  joiningDate: z.string().or(z.date()).optional(),
+  avatar: z.string().optional(),
 });
 
-// Schema for creating users (password required)
+// Schema for creating a new user
 export const CreateUserSchema = BaseUserSchema.extend({
   password: z
     .string()
     .min(8, "Password must be at least 8 characters")
-    .regex(/[A-Z]/, "Must contain at least one uppercase letter")
-    .regex(/[0-9]/, "Must contain at least one number")
-    .regex(/[!@#$%^&*]/, "Must contain at least one special character"),
+    .regex(
+      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/,
+      "Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character"
+    ),
 });
 
-// Schema for updating users (password optional)
+// Schema for updating a user (password optional)
 export const UpdateUserSchema = BaseUserSchema.extend({
   password: z
     .string()
-    .min(8, "Password must be at least 8 characters")
-    .regex(/[A-Z]/, "Must contain at least one uppercase letter")
-    .regex(/[0-9]/, "Must contain at least one number")
-    .regex(/[!@#$%^&*]/, "Must contain at least one special character")
     .optional()
-    .or(z.literal("").transform(() => undefined)),
+    .refine(
+      (val) => !val || val.length >= 8,
+      "Password must be at least 8 characters"
+    )
+    .refine(
+      (val) =>
+        !val ||
+        /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/.test(
+          val
+        ),
+      "Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character"
+    ),
 });
 
-// Schema for user login
-export const LoginUserSchema = z.object({
-  email: z.email("Invalid email address").toLowerCase(),
-  password: z.string().min(1, "Password is required"),
-});
+// Department options
+export const DepartmentOptions = [
+  "Administration",
+  "Emergency",
+  "ICU",
+  "General Ward",
+  "Pediatrics",
+  "Orthopedics",
+  "Cardiology",
+  "Neurology",
+  "Radiology",
+  "Laboratory",
+  "Pharmacy",
+  "OPD",
+  "Dental",
+  "ENT",
+  "Gynecology",
+  "Dermatology",
+  "Physiotherapy",
+  "Ambulance",
+] as const;
 
-// Keep the original for backward compatibility
-export const UserSchema = CreateUserSchema;
-
-export type UserFormValues = z.infer<typeof UserSchema>;
-export type CreateUserFormValues = z.infer<typeof CreateUserSchema>;
-export type UpdateUserFormValues = z.infer<typeof UpdateUserSchema>;
-export type LoginFormValues = z.infer<typeof LoginUserSchema>;
+// Designation options
+export const DesignationOptions = [
+  "Administrator",
+  "Senior Doctor",
+  "Junior Doctor",
+  "Consultant",
+  "Specialist",
+  "Senior Nurse",
+  "Staff Nurse",
+  "Pharmacist",
+  "Lab Technician",
+  "Radiologist",
+  "Receptionist",
+  "Clerk",
+  "Accountant",
+  "IT Support",
+  "Cleaner",
+  "Driver",
+] as const;

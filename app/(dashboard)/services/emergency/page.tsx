@@ -197,7 +197,7 @@ export default function EmergencyServicesPage() {
                     <SelectValue placeholder="Triage Level" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Levels</SelectItem>
+                    <SelectItem value="all-levels">All Levels</SelectItem>
                     <SelectItem value="resuscitation">Resuscitation</SelectItem>
                     <SelectItem value="emergent">Emergent</SelectItem>
                     <SelectItem value="urgent">Urgent</SelectItem>

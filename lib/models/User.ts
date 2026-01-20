@@ -2,25 +2,29 @@
 import mongoose, { Schema, model, models, Document } from "mongoose";
 import bcrypt from "bcryptjs";
 
-// Simple User Document
+// Extended User Document with all roles
 export interface IUser extends Document {
+  _id: mongoose.Types.ObjectId;
   employeeId: string;
   name: string;
   email: string;
   password: string;
   phone: string;
-  role: "admin" | "doctor" | "nurse" | "staff" | "receptionist";
+  role: "admin" | "doctor" | "nurse" | "staff" | "receptionist" | "pharmacist" | "lab_technician" | "radiologist";
   department: string;
   designation: string;
+  specialization?: string;
+  licenseNumber?: string;
   approved: boolean;
   avatar?: string;
   active: boolean;
   address?: string;
   gender: "male" | "female" | "other";
   joiningDate: Date;
-  refreshTokens: string[]; // Add this line
+  refreshTokens: string[];
   createdAt: Date;
   updatedAt: Date;
+  permissions: string[];
   
   // Method
   comparePassword(candidatePassword: string): Promise<boolean>;
@@ -56,7 +60,7 @@ const userSchema = new Schema<IUser>(
     },
     role: {
       type: String,
-      enum: ["admin", "doctor", "nurse", "staff", "receptionist"],
+      enum: ["admin", "doctor", "nurse", "staff", "receptionist", "pharmacist", "lab_technician", "radiologist"],
       default: "staff",
       required: true,
     },
@@ -67,6 +71,12 @@ const userSchema = new Schema<IUser>(
     designation: {
       type: String,
       required: true,
+    },
+    specialization: {
+      type: String,
+    },
+    licenseNumber: {
+      type: String,
     },
     approved: {
       type: Boolean,
@@ -86,10 +96,14 @@ const userSchema = new Schema<IUser>(
       type: String,
       enum: ["male", "female", "other"],
     },
-    refreshTokens: { // Add this field
+    refreshTokens: {
       type: [String],
       default: [],
-      select: false, // Don't include in queries by default
+      select: false,
+    },
+    permissions: {
+      type: [String],
+      default: [],
     },
     joiningDate: {
       type: Date,
@@ -104,6 +118,8 @@ const userSchema = new Schema<IUser>(
 // Indexes
 userSchema.index({ role: 1 });
 userSchema.index({ approved: 1, active: 1 });
+userSchema.index({ email: 1 }, { unique: true });
+userSchema.index({ employeeId: 1 }, { unique: true });
 
 // Hash password before saving
 userSchema.pre("save", async function (next) {
@@ -128,7 +144,8 @@ userSchema.pre("save", function (next) {
   if (!this.employeeId) {
     const random = Math.floor(1000 + Math.random() * 9000);
     const year = new Date().getFullYear().toString().slice(-2);
-    this.employeeId = `EMP${year}${random}`;
+    const month = (new Date().getMonth() + 1).toString().padStart(2, '0');
+    this.employeeId = `EMP${year}${month}${random}`;
   }
   next();
 });
@@ -144,11 +161,58 @@ interface UserModel extends mongoose.Model<IUser> {
 
 export const User = (models.User || model<IUser, UserModel>("User", userSchema)) as UserModel;
 
-// Basic role permissions
+// Role permissions mapping
 export const RolePermissions = {
   admin: ["all"],
-  doctor: ["read:patients", "write:patients", "read:appointments", "write:prescriptions"],
-  nurse: ["read:patients", "update:patients", "read:medications"],
-  receptionist: ["create:patients", "read:appointments", "update:appointments"],
-  staff: ["read:patients"],
+  doctor: [
+    "view_patients",
+    "manage_patients",
+    "view_admissions",
+    "manage_admissions",
+    "view_prescriptions",
+    "manage_prescriptions",
+    "view_medical_records",
+    "manage_medical_records"
+  ],
+  nurse: [
+    "view_patients",
+    "update_patients",
+    "view_admissions",
+    "update_admissions",
+    "view_medications",
+    "administer_medications",
+    "view_vital_signs",
+    "record_vital_signs"
+  ],
+  receptionist: [
+    "create_patients",
+    "view_patients",
+    "create_admissions",
+    "view_admissions",
+    "manage_appointments",
+    "view_appointments",
+    "manage_billing"
+  ],
+  pharmacist: [
+    "view_prescriptions",
+    "manage_prescriptions",
+    "view_inventory",
+    "manage_inventory",
+    "dispense_medications"
+  ],
+  lab_technician: [
+    "view_lab_tests",
+    "manage_lab_tests",
+    "view_lab_results",
+    "manage_lab_results",
+    "generate_reports"
+  ],
+  radiologist: [
+    "view_imaging",
+    "manage_imaging",
+    "view_radiology_reports",
+    "manage_radiology_reports",
+    "generate_reports"
+  ],
+  staff: ["view_patients", "view_admissions"],
 };

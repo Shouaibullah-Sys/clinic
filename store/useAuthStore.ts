@@ -1,10 +1,8 @@
 // store/useAuthStore.ts
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import Cookies from "universal-cookie";
-import { jwtDecode } from "jwt-decode";
 
-export type UserRole = "admin" | "staff";
+export type UserRole = "admin" | "staff" | "doctor" | "nurse" | "receptionist" | "pharmacist" | "lab_technician" | "radiologist";
 
 export interface User {
   _id: string;
@@ -16,7 +14,10 @@ export interface User {
   approved: boolean;
   active: boolean;
   department?: string;
+  specialization?: string;
+  licenseNumber?: string;
   joiningDate?: string;
+  permissions: string[];
 }
 
 interface AuthState {
@@ -32,16 +33,8 @@ interface AuthState {
   refreshAccessToken: () => Promise<void>;
   clearError: () => void;
   updateUser: (userData: Partial<User>) => void;
+  setAccessToken: (token: string) => void;
 }
-
-interface TokenPayload {
-  exp: number;
-  userId: string;
-  role: UserRole;
-  [key: string]: unknown;
-}
-
-const cookies = new Cookies();
 
 export const useAuthStore = create<AuthState>()(
   persist(
@@ -54,8 +47,7 @@ export const useAuthStore = create<AuthState>()(
       error: null,
 
       login: (user, accessToken, refreshToken) => {
-        // Note: Cookies are now handled server-side in the login API route
-        // The server sets HTTP-only cookies for security
+        // Set HTTP-only cookies via API call (handled by server)
         set({
           user,
           accessToken,
@@ -66,10 +58,22 @@ export const useAuthStore = create<AuthState>()(
         });
       },
 
-      logout: () => {
-        cookies.remove("accessToken", { path: "/" });
-        cookies.remove("refreshToken", { path: "/" });
+      setAccessToken: (token) => {
+        set({ accessToken: token });
+      },
 
+      logout: async () => {
+        try {
+          // Call logout API to clear server-side cookies
+          await fetch("/api/auth/logout", {
+            method: "POST",
+            credentials: "include",
+          });
+        } catch (error) {
+          console.error("Logout API call failed:", error);
+        }
+
+        // Clear client-side state
         set({
           user: null,
           accessToken: null,
@@ -81,51 +85,54 @@ export const useAuthStore = create<AuthState>()(
       },
 
       initialize: async () => {
-        const accessToken = cookies.get<string>("accessToken");
-        const refreshToken = cookies.get<string>("refreshToken");
-
-        if (accessToken) {
-          try {
-            const decoded = jwtDecode<TokenPayload>(accessToken);
-            if (decoded.exp * 1000 > Date.now()) {
+        try {
+          // Check if we have a token in localStorage
+          const storedToken = localStorage.getItem("auth-storage");
+          if (storedToken) {
+            const parsed = JSON.parse(storedToken);
+            if (parsed.state.accessToken) {
+              // Verify token is still valid by calling /api/auth/me
               const response = await fetch("/api/auth/me", {
                 headers: {
-                  Authorization: `Bearer ${accessToken}`,
-                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${parsed.state.accessToken}`,
                 },
+                credentials: "include",
               });
 
               if (response.ok) {
-                const user = (await response.json()) as User;
+                const user = await response.json();
                 set({
                   user,
-                  accessToken,
-                  refreshToken,
+                  accessToken: parsed.state.accessToken,
                   isAuthenticated: true,
                   isLoading: false,
                 });
                 return;
               }
             }
-          } catch (error) {
-            console.error("Access token verification failed:", error);
           }
-        }
 
-        if (refreshToken) {
-          try {
-            await get().refreshAccessToken();
-          } catch (error) {
-            console.error("Token refresh failed during initialization:", error);
+          // If no valid token, try to refresh
+          const refreshToken = get().refreshToken;
+          if (refreshToken) {
+            try {
+              await get().refreshAccessToken();
+            } catch (error) {
+              console.error("Token refresh failed:", error);
+              set({ isLoading: false });
+            }
+          } else {
             set({ isLoading: false });
           }
-        } else {
+        } catch (error) {
+          console.error("Initialization error:", error);
           set({ isLoading: false });
         }
       },
 
       refreshAccessToken: async () => {
-        const refreshToken = cookies.get<string>("refreshToken");
+        const refreshToken = get().refreshToken;
+        
         if (!refreshToken) {
           throw new Error("No refresh token available");
         }
@@ -137,17 +144,12 @@ export const useAuthStore = create<AuthState>()(
               "Content-Type": "application/json",
               Authorization: `Bearer ${refreshToken}`,
             },
+            credentials: "include",
           });
 
           if (response.ok) {
-            const data = (await response.json()) as {
-              accessToken: string;
-              user: User;
-            };
+            const data = await response.json();
             const { accessToken, user } = data;
-
-            // Note: Access token cookie is now handled server-side in the refresh API route
-            // The server sets HTTP-only cookies for security
 
             set({
               user,
@@ -157,8 +159,7 @@ export const useAuthStore = create<AuthState>()(
               error: null,
             });
           } else {
-            const errorData = (await response.json()) as { error?: string };
-            throw new Error(errorData.error || "Failed to refresh token");
+            throw new Error("Failed to refresh token");
           }
         } catch (error) {
           get().logout();
@@ -175,23 +176,12 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: "auth-storage",
+      partialize: (state) => ({
+        user: state.user,
+        accessToken: state.accessToken,
+        refreshToken: state.refreshToken,
+        isAuthenticated: state.isAuthenticated,
+      }),
     }
   )
 );
-
-// Utility functions for auth
-export const isAdmin = (user: User | null): boolean => {
-  return user?.role === "admin";
-};
-
-export const isStaff = (user: User | null): boolean => {
-  return user?.role === "staff";
-};
-
-export const isApproved = (user: User | null): boolean => {
-  return user?.approved === true;
-};
-
-export const isActive = (user: User | null): boolean => {
-  return user?.active === true;
-};

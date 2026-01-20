@@ -1,41 +1,79 @@
-//app/admin/users/users.ts
-
+// app/admin/users/users.ts
 import { IUser } from "@/lib/models/User";
 
-const API_BASE_URL = "/api/admin/users";
-
-export const getUsers = async (): Promise<IUser[]> => {
-  const response = await fetch(API_BASE_URL);
-  if (!response.ok) throw new Error("Failed to fetch users");
-  return response.json();
+export const getUsers = async (accessToken: string): Promise<IUser[]> => {
+  const response = await fetch("/api/admin/users", {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+    credentials: "include",
+  });
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || "Failed to fetch users");
+  }
+  
+  const data = await response.json();
+  return data.data || [];
 };
 
-export const createUser = async (data: FormData): Promise<IUser> => {
-  const response = await fetch(API_BASE_URL, {
+export const createUser = async (
+  data: Partial<IUser>,
+  accessToken: string
+): Promise<IUser> => {
+  const response = await fetch("/api/admin/users", {
     method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
     body: JSON.stringify(data),
-    headers: { "Content-Type": "application/json" },
   });
-  if (!response.ok) throw new Error("Failed to create user");
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || "Failed to create user");
+  }
+  
   return response.json();
 };
 
 export const updateUser = async (
   id: string,
-  data: FormData
+  data: Partial<IUser>,
+  accessToken: string
 ): Promise<IUser> => {
-  const response = await fetch(`${API_BASE_URL}/${id}`, {
+  const response = await fetch(`/api/admin/users/${id}`, {
     method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
     body: JSON.stringify(data),
-    headers: { "Content-Type": "application/json" },
   });
-  if (!response.ok) throw new Error("Failed to update user");
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || "Failed to update user");
+  }
+  
   return response.json();
 };
 
-export const deleteUser = async (id: string): Promise<void> => {
-  const response = await fetch(`${API_BASE_URL}/${id}`, {
+export const deleteUser = async (
+  id: string,
+  accessToken: string
+): Promise<void> => {
+  const response = await fetch(`/api/admin/users/${id}`, {
     method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
   });
-  if (!response.ok) throw new Error("Failed to delete user");
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || "Failed to delete user");
+  }
 };

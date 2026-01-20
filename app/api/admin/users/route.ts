@@ -5,7 +5,7 @@ import dbConnect from "@/lib/dbConnect";
 import { CreateUserSchema } from "@/lib/schemas/userSchema";
 import bcrypt from "bcryptjs";
 import { cookies } from "next/headers";
-import { jwtDecode } from "jwt-decode";
+import jwt from "jsonwebtoken";
 
 // Define types for JWT payload
 interface JwtPayload {
@@ -20,6 +20,7 @@ type SafeUserData = Omit<
 >;
 
 export async function GET(req: NextRequest) {
+  console.log("GET /api/admin/users called");
   await dbConnect();
 
   try {
@@ -27,20 +28,27 @@ export async function GET(req: NextRequest) {
     const cookieStore = cookies();
     const accessToken = (await cookieStore).get("accessToken")?.value;
 
+    console.log("Access token present:", !!accessToken);
     if (!accessToken) {
+      console.log("No access token, returning 401");
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const decoded: JwtPayload = jwtDecode(accessToken);
+    // Use jwt.verify instead of jwtDecode for proper verification
+    const decoded: JwtPayload = jwt.verify(accessToken, process.env.JWT_SECRET!) as JwtPayload;
+    console.log("Decoded token role:", decoded.role);
     if (decoded.role !== "admin") {
+      console.log("User not admin, returning 403");
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
+    console.log("Querying users from database");
     const users: SafeUserData[] = await User.find(
       {},
       "-password -refreshTokens"
     );
-    return NextResponse.json(users);
+    console.log("Found users count:", users.length);
+    return NextResponse.json({ data: users });
   } catch (error: unknown) {
     console.error("Failed to fetch users:", error);
     const errorMessage =
@@ -61,7 +69,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const decoded: JwtPayload = jwtDecode(accessToken);
+    const decoded: JwtPayload = jwt.verify(accessToken, process.env.JWT_SECRET!) as JwtPayload;
     if (decoded.role !== "admin") {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
