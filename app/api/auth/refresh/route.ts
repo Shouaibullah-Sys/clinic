@@ -13,8 +13,16 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const refreshToken = request.cookies.get("refreshToken")?.value;
-    
+    let refreshToken = request.cookies.get("refreshToken")?.value;
+
+    // If no cookie, check Authorization header
+    if (!refreshToken) {
+      const authHeader = request.headers.get("authorization");
+      if (authHeader && authHeader.startsWith("Bearer ")) {
+        refreshToken = authHeader.substring(7);
+      }
+    }
+
     if (!refreshToken) {
       return NextResponse.json(
         { error: "No refresh token provided" },

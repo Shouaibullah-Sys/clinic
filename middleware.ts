@@ -130,7 +130,7 @@ export async function middleware(request: NextRequest) {
     // Verify JWT token
     const secret = new TextEncoder().encode(JWT_SECRET);
     const { payload } = await jwtVerify(token, secret);
-    
+
     const userId = payload.id as string;
     const userRole = payload.role as string;
 

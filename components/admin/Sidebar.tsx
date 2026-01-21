@@ -83,13 +83,13 @@ export function AdminSidebar() {
     },
 
              {
-      title: "Daily Records",
+      title: "Doctor Management",
       icon: <Eye className="h-5 w-5" />,
       roles: ["admin"],
       children: [
         {
-          title: "Daily Records",
-          href: "/admin/records",
+          title: "Create Doctor Profile",
+          href: "/admin/doctors",
           icon: <FileText className="h-4 w-4" />,
           roles: ["admin"],
         },
@@ -119,7 +119,7 @@ export function AdminSidebar() {
 
   // Filter items based on user role
   const filteredItems = navItems.filter(
-    (item) => user?.role && item.roles.includes(user.role)
+    (item) => user?.role && (user.role === "admin" || user.role === "staff") && item.roles.includes(user.role)
   );
 
   // If not authenticated, don't render the sidebar
@@ -255,10 +255,10 @@ export function AdminSidebar() {
                       {!collapsed && openGroups[item.title.toLowerCase()] && (
                         <ul className="mt-1 ml-8 pl-3 space-y-1 border-l border-gray-200 dark:border-gray-700">
                           {item.children
-                            .filter(
-                              (child) =>
-                                user?.role && child.roles.includes(user.role)
-                            )
+                           .filter(
+                             (child) =>
+                               user?.role && (user.role === "admin" || user.role === "staff") && child.roles.includes(user.role)
+                           )
                             .map((child) => {
                               const isChildActive =
                                 child.href && pathname.startsWith(child.href);
@@ -388,7 +388,7 @@ export function AdminSidebar() {
                         {user?.name}
                       </p>
                       <p className="text-xs leading-none text-gray-500 dark:text-gray-400 capitalize">
-                        {user?.role === "admin" ? "Administrator" : "Staff"}
+                        {user?.role === "admin" ? "Administrator" : user?.role === "staff" ? "Staff" : user?.role}
                       </p>
                     </div>
                   </DropdownMenuLabel>
@@ -418,7 +418,7 @@ export function AdminSidebar() {
                     {user?.name}
                   </p>
                   <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">
-                    {user?.role === "admin" ? "Administrator" : "Staff"}
+                    {user?.role === "admin" ? "Administrator" : user?.role === "staff" ? "Staff" : user?.role}
                   </p>
                 </div>
               )}
