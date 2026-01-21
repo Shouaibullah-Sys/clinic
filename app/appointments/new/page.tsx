@@ -1,4 +1,4 @@
-//app/appointments/new/page.tsx
+// app/appointments/new/page.tsx
 
 "use client";
 
@@ -55,8 +55,10 @@ import {
   MapPin,
   Heart,
   Activity,
+  RefreshCw,
+  Hash,
 } from "lucide-react";
-import { format, isValid } from "date-fns";
+import { format, isValid, addMinutes, startOfDay, isToday } from "date-fns";
 import { cn } from "@/lib/utils";
 
 interface Patient {
@@ -82,6 +84,7 @@ interface TimeSlot {
   startTime: string;
   endTime: string;
   formattedTime: string;
+  autoNumber: string;
 }
 
 interface NewPatientFormData {
@@ -102,6 +105,7 @@ export default function NewAppointmentPage() {
   const { user, accessToken } = useAuthStore();
   const [loading, setLoading] = useState(false);
   const [searching, setSearching] = useState(false);
+  const [loadingDoctors, setLoadingDoctors] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   
@@ -114,13 +118,14 @@ export default function NewAppointmentPage() {
   const [appointmentDate, setAppointmentDate] = useState<string>(
     format(new Date(), "yyyy-MM-dd")
   );
-  const [appointmentTime, setAppointmentTime] = useState<string>("09:00");
-  const [duration, setDuration] = useState<number>(30);
+  const [appointmentTime, setAppointmentTime] = useState<string>("");
+  const [duration] = useState<number>(20); // Fixed 20 minutes duration
   const [appointmentType, setAppointmentType] = useState<string>("consultation");
   const [priority, setPriority] = useState<string>("medium");
   const [reason, setReason] = useState<string>("");
   const [symptoms, setSymptoms] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
+  const [autoNumber, setAutoNumber] = useState<string>("");
   
   // New Patient Dialog
   const [showNewPatientDialog, setShowNewPatientDialog] = useState(false);
@@ -142,6 +147,7 @@ export default function NewAppointmentPage() {
   const [availableSlots, setAvailableSlots] = useState<TimeSlot[]>([]);
   const [checkingAvailability, setCheckingAvailability] = useState(false);
   const [showNoResults, setShowNoResults] = useState(false);
+  const [todaysAppointmentsCount, setTodaysAppointmentsCount] = useState<number>(0);
 
   useEffect(() => {
     fetchDoctors();
@@ -151,19 +157,21 @@ export default function NewAppointmentPage() {
     if (selectedDoctor && appointmentDate) {
       checkAvailability();
     }
-  }, [selectedDoctor, appointmentDate, duration]);
+  }, [selectedDoctor, appointmentDate]);
 
   const fetchDoctors = async () => {
     try {
-      const response = await fetch("/api/users?role=doctor&active=true", {
+      setLoadingDoctors(true);
+      setError(null);
+      const response = await fetch("/api/doctors", {
         headers: {
           "Content-Type": "application/json",
           ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         },
       });
-      
+
       const data = await response.json();
-      
+
       if (data.success) {
         setDoctors(data.data);
       } else {
@@ -172,6 +180,8 @@ export default function NewAppointmentPage() {
     } catch (error) {
       console.error("Error fetching doctors:", error);
       setError("Failed to load doctors. Please try again.");
+    } finally {
+      setLoadingDoctors(false);
     }
   };
 
@@ -245,7 +255,35 @@ export default function NewAppointmentPage() {
       const data = await response.json();
       
       if (data.success) {
-        setAvailableSlots(data.data.availableSlots);
+        // Get today's appointments count for auto-numbering
+        const todayCountResponse = await fetch(`/api/appointments/today-count?doctorId=${selectedDoctor}`, {
+          headers: {
+            "Content-Type": "application/json",
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
+        });
+        
+        const countData = await todayCountResponse.json();
+        const todaysCount = countData.success ? countData.count : 0;
+        setTodaysAppointmentsCount(todaysCount);
+        
+        // Generate auto-numbered slots
+        const slotsWithNumbers = data.data.availableSlots.map((slot: any, index: number) => ({
+          ...slot,
+          autoNumber: (todaysCount + index + 1).toString().padStart(3, '0')
+        }));
+        
+        setAvailableSlots(slotsWithNumbers);
+        
+        // Auto-select the first available slot
+        if (slotsWithNumbers.length > 0) {
+          const slotTime = slotsWithNumbers[0].startTime.includes('T') 
+            ? slotsWithNumbers[0].startTime.split("T")[1].slice(0, 5)
+            : slotsWithNumbers[0].startTime.slice(0, 5);
+          
+          setAppointmentTime(slotTime);
+          setAutoNumber(slotsWithNumbers[0].autoNumber);
+        }
       } else {
         setError(data.error || "Failed to check availability");
       }
@@ -254,6 +292,35 @@ export default function NewAppointmentPage() {
       setError("Failed to check doctor availability");
     } finally {
       setCheckingAvailability(false);
+    }
+  };
+
+  const getNextAvailableTimeSlot = async () => {
+    if (!selectedDoctor || !appointmentDate) return null;
+    
+    try {
+      const params = new URLSearchParams({
+        doctorId: selectedDoctor,
+        date: appointmentDate,
+        duration: duration.toString(),
+      });
+      
+      const response = await fetch(`/api/appointments/next-available-slot?${params.toString()}`, {
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+      });
+      
+      const data = await response.json();
+      
+      if (data.success && data.data) {
+        return data.data;
+      }
+      return null;
+    } catch (error) {
+      console.error("Error getting next slot:", error);
+      return null;
     }
   };
 
@@ -274,7 +341,7 @@ export default function NewAppointmentPage() {
       }
       
       // Phone validation
-const phoneRegex = /^[\+]?[1-9][\d\s\-\(\)]{8,}$/;
+      const phoneRegex = /^[\+]?[1-9][\d\s\-\(\)]{8,}$/;
       if (!phoneRegex.test(newPatientForm.phone.replace(/\D/g, ''))) {
         setError("Please enter a valid phone number");
         return;
@@ -379,16 +446,21 @@ const phoneRegex = /^[\+]?[1-9][\d\s\-\(\)]{8,}$/;
     setSuccess(null);
     
     try {
+      // Calculate end time (20 minutes after start)
+      const endTime = addMinutes(appointmentDateTime, duration);
+      
       const appointmentData = {
         patientId: selectedPatient._id,
         doctorId: selectedDoctor,
         startTime: appointmentDateTime.toISOString(),
+        endTime: endTime.toISOString(),
         duration,
         appointmentType,
         reason: reason.trim(),
         symptoms: symptoms.trim(),
         priority,
         notes: notes.trim(),
+        autoNumber, // Include the auto-number
       };
       
       const response = await fetch("/api/appointments", {
@@ -409,8 +481,7 @@ const phoneRegex = /^[\+]?[1-9][\d\s\-\(\)]{8,}$/;
         setSelectedPatient(null);
         setSelectedDoctor("");
         setAppointmentDate(format(new Date(), "yyyy-MM-dd"));
-        setAppointmentTime("09:00");
-        setDuration(30);
+        setAppointmentTime("");
         setAppointmentType("consultation");
         setPriority("medium");
         setReason("");
@@ -419,6 +490,8 @@ const phoneRegex = /^[\+]?[1-9][\d\s\-\(\)]{8,}$/;
         setPatientSearch("");
         setSearchResults([]);
         setShowNoResults(false);
+        setAutoNumber("");
+        setTodaysAppointmentsCount(0);
         
         // Redirect after 2 seconds
         setTimeout(() => {
@@ -444,6 +517,32 @@ const phoneRegex = /^[\+]?[1-9][\d\s\-\(\)]{8,}$/;
       appointmentTime &&
       reason.trim()
     );
+  };
+
+  // Handle doctor selection
+  const handleDoctorSelect = async (doctorId: string) => {
+    setSelectedDoctor(doctorId);
+    
+    // Get next available time slot when doctor is selected
+    const nextSlot = await getNextAvailableTimeSlot();
+    if (nextSlot) {
+      const slotTime = nextSlot.startTime.includes('T') 
+        ? nextSlot.startTime.split("T")[1].slice(0, 5)
+        : nextSlot.startTime.slice(0, 5);
+      
+      setAppointmentTime(slotTime);
+      setAutoNumber(nextSlot.autoNumber);
+    }
+  };
+
+  // Handle time slot selection
+  const handleTimeSlotSelect = (slot: TimeSlot) => {
+    const slotTime = slot.startTime.includes('T') 
+      ? slot.startTime.split("T")[1].slice(0, 5)
+      : slot.startTime.slice(0, 5);
+    
+    setAppointmentTime(slotTime);
+    setAutoNumber(slot.autoNumber);
   };
 
   // Handle Enter key for patient search
@@ -481,6 +580,8 @@ const phoneRegex = /^[\+]?[1-9][\d\s\-\(\)]{8,}$/;
     }
     
     setAppointmentDate(date);
+    setAppointmentTime(""); // Clear time when date changes
+    setAutoNumber(""); // Clear auto number when date changes
     setError(null);
   };
 
@@ -493,8 +594,32 @@ const phoneRegex = /^[\+]?[1-9][\d\s\-\(\)]{8,}$/;
     }
   };
 
+  // Format time for display
+  const formatTimeDisplay = (time: string) => {
+    try {
+      const [hours, minutes] = time.split(':');
+      const date = new Date();
+      date.setHours(parseInt(hours), parseInt(minutes));
+      return format(date, "h:mm a");
+    } catch {
+      return time;
+    }
+  };
+
   // Get selected doctor info
   const selectedDoctorInfo = doctors.find(d => d._id === selectedDoctor);
+
+  // Calculate end time based on selected time
+  const calculateEndTime = () => {
+    if (!appointmentTime) return "";
+    try {
+      const startDateTime = new Date(`${appointmentDate}T${appointmentTime}`);
+      const endDateTime = addMinutes(startDateTime, duration);
+      return format(endDateTime, "HH:mm");
+    } catch {
+      return "";
+    }
+  };
 
   return (
     <div className="container mx-auto p-4 md:p-6 max-w-7xl">
@@ -1098,15 +1223,27 @@ const phoneRegex = /^[\+]?[1-9][\d\s\-\(\)]{8,}$/;
                     <Label htmlFor="doctor" className="text-base font-medium">
                       Select Doctor *
                     </Label>
-                    <span className="text-sm text-gray-500">
-                      {doctors.length} doctor{doctors.length !== 1 ? 's' : ''} available
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-gray-500">
+                        {doctors.length} doctor{doctors.length !== 1 ? 's' : ''} available
+                      </span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={fetchDoctors}
+                        disabled={loadingDoctors}
+                        className="h-8 px-2"
+                      >
+                        {loadingDoctors ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                      </Button>
+                    </div>
                   </div>
                   <Select
                     value={selectedDoctor}
-                    onValueChange={setSelectedDoctor}
+                    onValueChange={handleDoctorSelect}
                     required
-                    disabled={!selectedPatient}
+                    disabled={loadingDoctors || !selectedPatient}
                   >
                     <SelectTrigger className="h-11 text-base">
                       <SelectValue placeholder="Choose a doctor..." />
@@ -1132,7 +1269,7 @@ const phoneRegex = /^[\+]?[1-9][\d\s\-\(\)]{8,}$/;
                 </div>
 
                 {/* Date & Time Selection */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-3">
                     <Label htmlFor="date" className="flex items-center gap-2">
                       <CalendarIcon className="h-4 w-4" />
@@ -1157,56 +1294,67 @@ const phoneRegex = /^[\+]?[1-9][\d\s\-\(\)]{8,}$/;
                   </div>
                   
                   <div className="space-y-3">
-                    <Label htmlFor="time" className="flex items-center gap-2">
-                      <Clock className="h-4 w-4" />
-                      Time *
-                    </Label>
+                    <div className="flex items-center justify-between">
+                      <Label className="font-medium flex items-center gap-2">
+                        <Hash className="h-4 w-4" />
+                        Auto Number
+                      </Label>
+                      <div className="text-sm text-gray-500">
+                        {todaysAppointmentsCount > 0 ? `Today's appointments: ${todaysAppointmentsCount}` : ''}
+                      </div>
+                    </div>
                     <div className="relative">
                       <Input
-                        id="time"
-                        type="time"
-                        value={appointmentTime}
-                        onChange={(e) => setAppointmentTime(e.target.value)}
-                        required
-                        className="h-11 pl-10"
-                        min="08:00"
-                        max="18:00"
-                        step="900" // 15 minute intervals
-                        disabled={!selectedPatient}
+                        value={autoNumber}
+                        readOnly
+                        className="h-11 pl-10 bg-gray-50 font-mono text-lg font-bold"
+                        placeholder="Auto-generated number"
                       />
-                      <Clock className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                      <Hash className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                     </div>
-                    <p className="text-sm text-gray-500">
-                      Select appointment time
-                    </p>
-                  </div>
-                  
-                  <div className="space-y-3">
-                    <Label htmlFor="duration" className="font-medium">
-                      Duration *
-                    </Label>
-                    <Select
-                      value={duration.toString()}
-                      onValueChange={(value) => setDuration(parseInt(value))}
-                      disabled={!selectedPatient}
-                    >
-                      <SelectTrigger className="h-11">
-                        <SelectValue placeholder="Select duration" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="15">15 minutes</SelectItem>
-                        <SelectItem value="30">30 minutes</SelectItem>
-                        <SelectItem value="45">45 minutes</SelectItem>
-                        <SelectItem value="60">60 minutes</SelectItem>
-                        <SelectItem value="90">90 minutes</SelectItem>
-                        <SelectItem value="120">120 minutes</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <p className="text-sm text-gray-500">
-                      Estimated consultation time
+                    <p className="text-sm text-blue-600 font-medium">
+                      ✓ Auto-number generated based on today's sequence
                     </p>
                   </div>
                 </div>
+
+                {/* Current Appointment Time */}
+                {appointmentTime && (
+                  <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <Clock className="h-4 w-4 text-blue-600" />
+                          <Label className="font-medium text-blue-700">Selected Time Slot</Label>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <div className="text-center">
+                            <p className="text-sm text-gray-600">Start Time</p>
+                            <p className="text-2xl font-bold text-gray-900">
+                              {formatTimeDisplay(appointmentTime)}
+                            </p>
+                          </div>
+                          <div className="text-gray-400">→</div>
+                          <div className="text-center">
+                            <p className="text-sm text-gray-600">End Time</p>
+                            <p className="text-2xl font-bold text-gray-900">
+                              {formatTimeDisplay(calculateEndTime())}
+                            </p>
+                          </div>
+                          <div className="ml-4">
+                            <div className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium">
+                              {duration} minutes
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm text-gray-600">Auto Number</p>
+                        <p className="text-2xl font-bold text-blue-700">{autoNumber}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Available Slots */}
                 {selectedDoctor && appointmentDate && !checkingAvailability && availableSlots.length > 0 && (
@@ -1219,7 +1367,10 @@ const phoneRegex = /^[\+]?[1-9][\d\s\-\(\)]{8,}$/;
                     </div>
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
                       {availableSlots.slice(0, 10).map((slot, index) => {
-                        const slotTime = slot.startTime.split("T")[1].slice(0, 5);
+                        const slotTime = slot.startTime.includes('T') 
+                          ? slot.startTime.split("T")[1].slice(0, 5)
+                          : slot.startTime.slice(0, 5);
+                        
                         const isSelected = appointmentTime === slotTime;
                         return (
                           <Button
@@ -1227,12 +1378,15 @@ const phoneRegex = /^[\+]?[1-9][\d\s\-\(\)]{8,}$/;
                             type="button"
                             variant={isSelected ? "default" : "outline"}
                             className={cn(
-                              "h-12",
+                              "h-12 flex-col",
                               isSelected && "bg-blue-600 hover:bg-blue-700"
                             )}
-                            onClick={() => setAppointmentTime(slotTime)}
+                            onClick={() => handleTimeSlotSelect(slot)}
                           >
-                            {slot.formattedTime}
+                            <div className="font-medium">{slot.formattedTime.split(' - ')[0]}</div>
+                            <div className="text-xs mt-1 opacity-80">
+                              #{slot.autoNumber}
+                            </div>
                           </Button>
                         );
                       })}
@@ -1286,6 +1440,17 @@ const phoneRegex = /^[\+]?[1-9][\d\s\-\(\)]{8,}$/;
                     </div>
                   </div>
                 )}
+
+                {/* Duration Information */}
+                <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-gray-600" />
+                    <span className="text-sm font-medium text-gray-700">Duration Information</span>
+                  </div>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Each appointment is automatically set to <span className="font-semibold">20 minutes</span>. The system will generate sequential time slots starting from the next available time.
+                  </p>
+                </div>
               </CardContent>
             </Card>
 
@@ -1519,12 +1684,25 @@ const phoneRegex = /^[\+]?[1-9][\d\s\-\(\)]{8,}$/;
                           : "No time selected"}
                       </p>
                       {appointmentDate && appointmentTime && (
-                        <div className="mt-2 space-y-1">
-                          <p className="text-lg font-semibold text-gray-900">
-                            {appointmentTime}
-                          </p>
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="text-gray-600">{duration} minutes</span>
+                        <div className="mt-2 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-lg font-semibold text-gray-900">
+                                {formatTimeDisplay(appointmentTime)} - {formatTimeDisplay(calculateEndTime())}
+                              </p>
+                              <p className="text-sm text-gray-600">{duration} minutes</p>
+                            </div>
+                            <div className="text-right">
+                              <div className="flex items-center gap-2">
+                                <Hash className="h-4 w-4 text-blue-600" />
+                                <span className="text-lg font-bold text-blue-700">
+                                  #{autoNumber}
+                                </span>
+                              </div>
+                              <p className="text-xs text-gray-500">Auto Number</p>
+                            </div>
+                          </div>
+                          <div className="flex justify-between items-center mt-2">
                             <span className={cn(
                               "px-2 py-1 rounded-full text-xs font-medium",
                               priority === "emergency" ? "bg-red-100 text-red-700" :
@@ -1533,6 +1711,9 @@ const phoneRegex = /^[\+]?[1-9][\d\s\-\(\)]{8,}$/;
                               "bg-green-100 text-green-700"
                             )}>
                               {priority.toUpperCase()}
+                            </span>
+                            <span className="text-sm font-medium text-blue-600">
+                              {isToday(new Date(appointmentDate)) ? "Today" : format(new Date(appointmentDate), "MMM d")}
                             </span>
                           </div>
                         </div>
@@ -1621,10 +1802,10 @@ const phoneRegex = /^[\+]?[1-9][\d\s\-\(\)]{8,}$/;
                   <div className="pt-4 border-t border-gray-200">
                     <h4 className="text-sm font-medium text-gray-700 mb-2">Need Help?</h4>
                     <div className="space-y-2 text-sm text-gray-600">
-                      <p>• Check doctor availability before scheduling</p>
+                      <p>• System automatically assigns 20-minute time slots</p>
+                      <p>• Auto-number starts from 001 daily for each doctor</p>
+                      <p>• Time slots start from current available time</p>
                       <p>• Emergency appointments take priority</p>
-                      <p>• Include detailed symptoms for better care</p>
-                      <p>• Contact support if you encounter issues</p>
                     </div>
                   </div>
                 </div>
