@@ -1,17 +1,17 @@
-// components/SessionChecker.tsx
+// components/SessionChecker.tsx - FIXED VERSION
 "use client";
 
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuthStore } from "@/store/useAuthStore";
-import Cookies from "universal-cookie";
+import { jwtDecode } from "jwt-decode";
 
 export default function SessionChecker() {
   const router = useRouter();
   const pathname = usePathname();
-  const { isAuthenticated, isLoading, initialize, logout } = useAuthStore();
+  const { isAuthenticated, isLoading, initialize, logout, accessToken } = useAuthStore();
   const [isChecking, setIsChecking] = useState(true);
-  const cookies = new Cookies();
+  const [hasRedirected, setHasRedirected] = useState(false);
 
   useEffect(() => {
     // Initialize auth state on component mount
@@ -30,55 +30,62 @@ export default function SessionChecker() {
 
   useEffect(() => {
     // Only check authentication status after initialization is complete
-    if (isLoading || isChecking) return;
+    if (isLoading || isChecking || hasRedirected) return;
 
-    const publicPaths = ["/login", "/register", "/forgot-password"];
+    const publicPaths = [
+      "/", 
+      "/login", 
+      "/register", 
+      "/forgot-password",
+      "/reset-password",
+      "/unauthorized"
+    ];
     const isPublicPath = publicPaths.includes(pathname);
 
     // If not authenticated and trying to access a protected route, redirect to login
     if (!isAuthenticated && !isPublicPath) {
+      console.log("Not authenticated, redirecting to login");
+      setHasRedirected(true);
       router.push("/login");
       return;
     }
 
     // If authenticated and trying to access a public route, redirect to dashboard
-    if (isAuthenticated && isPublicPath) {
+    if (isAuthenticated && isPublicPath && pathname !== "/unauthorized") {
+      console.log("Authenticated on public route, redirecting to dashboard");
+      setHasRedirected(true);
       router.push("/dashboard");
       return;
     }
 
-    // Check if access token is expired and try to refresh it
+    // Check if access token is expired
     const checkTokenExpiration = async () => {
-      const accessToken = cookies.get("accessToken");
+      if (!accessToken) return;
 
-      if (accessToken) {
-        try {
-          // Simple check for token expiration (you might want to use jwt-decode for a proper check)
-          const tokenParts = accessToken.split(".");
-          if (tokenParts.length === 3) {
-            const payload = JSON.parse(atob(tokenParts[1]));
-            const expirationTime = payload.exp * 1000; // Convert to milliseconds
-            const currentTime = Date.now();
+      try {
+        const decoded: any = jwtDecode(accessToken);
+        const expirationTime = decoded.exp * 1000; // Convert to milliseconds
+        const currentTime = Date.now();
 
-            // If token expires in less than 5 minutes, try to refresh it
-            if (expirationTime - currentTime < 5 * 60 * 1000) {
-              try {
-                await useAuthStore.getState().refreshAccessToken();
-              } catch (error) {
-                console.error("Token refresh failed:", error);
-                logout();
-                router.push("/login");
-              }
-            }
+        // If token expires in less than 5 minutes, try to refresh it
+        if (expirationTime - currentTime < 5 * 60 * 1000) {
+          try {
+            await useAuthStore.getState().refreshAccessToken();
+            console.log("Token refreshed successfully");
+          } catch (error) {
+            console.error("Token refresh failed:", error);
+            logout();
+            setHasRedirected(true);
+            router.push("/login");
           }
-        } catch (error) {
-          console.error("Token validation error:", error);
         }
+      } catch (error) {
+        console.error("Token validation error:", error);
       }
     };
 
     checkTokenExpiration();
-  }, [isAuthenticated, isLoading, isChecking, pathname, router, logout]);
+  }, [isAuthenticated, isLoading, isChecking, pathname, router, logout, accessToken, hasRedirected]);
 
   // Show nothing while checking or loading
   if (isLoading || isChecking) {

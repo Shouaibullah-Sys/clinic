@@ -97,7 +97,7 @@ export default function AdminUsersPage() {
             <Skeleton className="h-10 w-24" />
             <Skeleton className="h-10 w-32" />
           </div>
-          <Skeleton className="h-[400px] w-full" />
+          <Skeleton className="h-100 w-full" />
         </div>
       </div>
     );

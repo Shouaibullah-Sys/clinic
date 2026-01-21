@@ -1,12 +1,14 @@
+// app/dashboard/layout.tsx
 'use client';
 
-import { AdminSidebar } from '@/components/admin/Sidebar';
-import ClinicLoadingAnimation from '@/components/ClinicLoadingAnimation';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { Sidebar } from '@/components/layout/Sidebar';
+import { Header } from '@/components/layout/Header';
+import ClinicLoadingAnimation from '@/components/ClinicLoadingAnimation';
 
-export default function AdminLayout({
+export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode
@@ -17,15 +19,12 @@ export default function AdminLayout({
   
   useEffect(() => {
     if (!isLoading && !initialized) {
-      // Only check when not loading
       if (!isAuthenticated) {
         router.push('/login');
-      } else if (user?.role !== 'admin') {
-        router.push('/unauthorized');
       }
       setInitialized(true);
     }
-  }, [isAuthenticated, user, router, isLoading, initialized]);
+  }, [isAuthenticated, router, isLoading, initialized]);
 
   if (isLoading || !initialized) {
     return (
@@ -35,20 +34,21 @@ export default function AdminLayout({
     );
   }
 
-  if (isAuthenticated && user?.role === 'admin') {
-    return (
-      <div className="flex h-screen">
-        <AdminSidebar />
-        <main className="flex-1 overflow-y-auto p-6">
-          {children}
-        </main>
-      </div>
-    );
+  if (!isAuthenticated) {
+    return null;
   }
 
   return (
-    <div className="flex items-center justify-center h-screen">
-      <p>Redirecting...</p>
+    <div className="min-h-screen bg-gray-50">
+      <Header />
+      <div className="flex">
+        <Sidebar />
+        <main className="flex-1 p-6">
+          <div className="max-w-7xl mx-auto">
+            {children}
+          </div>
+        </main>
+      </div>
     </div>
   );
 }

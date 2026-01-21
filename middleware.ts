@@ -1,4 +1,4 @@
-// middleware.ts
+// middleware.ts - UPDATED WITH COMPLETE ROLE-BASED ROUTING
 import { NextRequest, NextResponse } from "next/server";
 import { jwtVerify } from "jose";
 
@@ -18,6 +18,79 @@ const publicRoutes = [
   "/favicon.ico",
   "/public/(.*)"
 ];
+
+// Role-based route mapping
+const roleRoutes: Record<string, string[]> = {
+  admin: [
+    "/admin",
+    "/dashboard",
+    "/admissions",
+    "/patients",
+    "/doctors",
+    "/nurses",
+    "/staff",
+    "/reception",
+    "/pharmacy",
+    "/laboratory",
+    "/radiology",
+    "/services",
+    "/reports",
+    "/settings"
+  ],
+  doctor: [
+    "/doctor",
+    "/dashboard",
+    "/patients",
+    "/admissions",
+    "/prescriptions",
+    "/medical-records"
+  ],
+  nurse: [
+    "/nurse",
+    "/dashboard",
+    "/patients",
+    "/admissions",
+    "/medications",
+    "/vital-signs"
+  ],
+  receptionist: [
+    "/reception",
+    "/dashboard",
+    "/patients",
+    "/admissions",
+    "/appointments",
+    "/billing"
+  ],
+  pharmacist: [
+    "/pharmacy",
+    "/dashboard",
+    "/prescriptions",
+    "/inventory",
+    "/medications"
+  ],
+  lab_technician: [
+    "/laboratory",
+    "/dashboard",
+    "/lab-tests",
+    "/lab-results"
+  ],
+  radiologist: [
+    "/radiology",
+    "/dashboard",
+    "/imaging",
+    "/radiology-reports"
+  ],
+  admission: [
+    "/admissions",
+    "/dashboard",
+    "/patients",
+    "/beds"
+  ],
+  staff: [
+    "/staff",
+    "/dashboard"
+  ]
+};
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -61,8 +134,73 @@ export async function middleware(request: NextRequest) {
     const userId = payload.id as string;
     const userRole = payload.role as string;
 
-    // Role-based access control
+    // Special case: Dashboard should redirect to role-specific dashboard
+    if (pathname === "/dashboard") {
+      const roleDashboardMap: Record<string, string> = {
+        admin: "/admin/dashboard",
+        doctor: "/doctor/dashboard",
+        nurse: "/nurse/dashboard",
+        receptionist: "/reception/dashboard",
+        pharmacist: "/pharmacy/dashboard",
+        lab_technician: "/laboratory/dashboard",
+        radiologist: "/radiology/dashboard",
+        admission: "/admissions/dashboard",
+        staff: "/staff/dashboard"
+      };
+      
+      const redirectPath = roleDashboardMap[userRole] || "/staff/dashboard";
+      return NextResponse.redirect(new URL(redirectPath, request.url));
+    }
+
+    // Check role-based access for protected routes
     if (pathname.startsWith("/admin/") && userRole !== "admin") {
+      return NextResponse.redirect(new URL("/unauthorized", request.url));
+    }
+
+    if (pathname.startsWith("/doctor/") && !["admin", "doctor"].includes(userRole)) {
+      return NextResponse.redirect(new URL("/unauthorized", request.url));
+    }
+
+    if (pathname.startsWith("/nurse/") && !["admin", "doctor", "nurse"].includes(userRole)) {
+      return NextResponse.redirect(new URL("/unauthorized", request.url));
+    }
+
+    if (pathname.startsWith("/reception/") && !["admin", "receptionist"].includes(userRole)) {
+      return NextResponse.redirect(new URL("/unauthorized", request.url));
+    }
+
+    if (pathname.startsWith("/pharmacy/") && !["admin", "pharmacist"].includes(userRole)) {
+      return NextResponse.redirect(new URL("/unauthorized", request.url));
+    }
+
+    if (pathname.startsWith("/laboratory/") && !["admin", "lab_technician"].includes(userRole)) {
+      return NextResponse.redirect(new URL("/unauthorized", request.url));
+    }
+
+    if (pathname.startsWith("/radiology/") && !["admin", "radiologist"].includes(userRole)) {
+      return NextResponse.redirect(new URL("/unauthorized", request.url));
+    }
+
+    if (pathname.startsWith("/admissions/") && !["admin", "admission", "doctor", "nurse", "receptionist"].includes(userRole)) {
+      return NextResponse.redirect(new URL("/unauthorized", request.url));
+    }
+
+    if (pathname.startsWith("/staff/") && !["admin", "staff"].includes(userRole)) {
+      return NextResponse.redirect(new URL("/unauthorized", request.url));
+    }
+    // In your middleware, ensure admin routes are protected:
+if (pathname.startsWith("/admin/") && userRole !== "admin") {
+  return NextResponse.redirect(new URL("/unauthorized", request.url));
+}
+
+    // General access: Check if user can access this path based on their role
+    const allowedPaths = roleRoutes[userRole] || [];
+    const hasAccess = allowedPaths.some(allowedPath => 
+      pathname.startsWith(allowedPath)
+    );
+
+    if (!hasAccess && !pathname.startsWith("/api/")) {
+      // Allow API routes with proper headers
       return NextResponse.redirect(new URL("/unauthorized", request.url));
     }
 
@@ -86,6 +224,7 @@ export async function middleware(request: NextRequest) {
     // Clear invalid token
     const response = NextResponse.redirect(new URL("/login", request.url));
     response.cookies.delete("accessToken");
+    response.cookies.delete("refreshToken");
     
     return response;
   }

@@ -1,47 +1,36 @@
-// lib/models/User.ts
-import mongoose, { Schema, model, models, Document } from "mongoose";
-import bcrypt from "bcryptjs";
+import mongoose, { Schema, model, models } from "mongoose";
 
-// Extended User Document with all roles
-export interface IUser extends Document {
-  _id: mongoose.Types.ObjectId;
-  employeeId: string;
-  name: string;
+export interface IUser extends mongoose.Document {
   email: string;
   password: string;
+  name: string;
+  role: "admin" | "staff" | "doctor" | "nurse" | "receptionist" | "pharmacist" | "lab_technician" | "radiologist" | "admission";
   phone: string;
-  role: "admin" | "doctor" | "nurse" | "staff" | "receptionist" | "pharmacist" | "lab_technician" | "radiologist";
-  department: string;
-  designation: string;
+  avatar?: string;
+  approved: boolean;
+  active: boolean;
+  department?: string;
   specialization?: string;
   licenseNumber?: string;
-  approved: boolean;
-  avatar?: string;
-  active: boolean;
-  address?: string;
-  gender: "male" | "female" | "other";
-  joiningDate: Date;
-  refreshTokens: string[];
+  qualifications?: string[];
+  experience?: number; // in years
+  consultationFee?: number;
+  availability?: {
+    days: string[]; // ["monday", "tuesday", ...]
+    startTime: string; // "09:00"
+    endTime: string; // "17:00"
+    breakStart?: string;
+    breakEnd?: string;
+  };
+  biography?: string;
+  joiningDate?: Date;
+  permissions: string[];
   createdAt: Date;
   updatedAt: Date;
-  permissions: string[];
-  
-  // Method
-  comparePassword(candidatePassword: string): Promise<boolean>;
 }
 
 const userSchema = new Schema<IUser>(
   {
-    employeeId: {
-      type: String,
-      required: true,
-      unique: true,
-    },
-    name: {
-      type: String,
-      required: true,
-      trim: true,
-    },
     email: {
       type: String,
       required: true,
@@ -52,63 +41,88 @@ const userSchema = new Schema<IUser>(
     password: {
       type: String,
       required: true,
-      select: false, // Don't include in queries by default
+    },
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    role: {
+      type: String,
+      enum: ["admin", "staff", "doctor", "nurse", "receptionist", "pharmacist", "lab_technician", "radiologist", "admission"],
+      required: true,
     },
     phone: {
       type: String,
       required: true,
+      trim: true,
     },
-    role: {
-      type: String,
-      enum: ["admin", "doctor", "nurse", "staff", "receptionist", "pharmacist", "lab_technician", "radiologist"],
-      default: "staff",
-      required: true,
-    },
-    department: {
-      type: String,
-      required: true,
-    },
-    designation: {
-      type: String,
-      required: true,
-    },
-    specialization: {
-      type: String,
-    },
-    licenseNumber: {
+    avatar: {
       type: String,
     },
     approved: {
       type: Boolean,
       default: false,
     },
-    avatar: {
-      type: String,
-    },
     active: {
       type: Boolean,
       default: true,
     },
-    address: {
+    // Doctor-specific fields
+    department: {
       type: String,
     },
-    gender: {
+    specialization: {
       type: String,
-      enum: ["male", "female", "other"],
     },
-    refreshTokens: {
-      type: [String],
-      default: [],
-      select: false,
+    licenseNumber: {
+      type: String,
+      unique: true,
+      sparse: true,
     },
-    permissions: {
-      type: [String],
-      default: [],
+    qualifications: [{
+      type: String,
+    }],
+    experience: {
+      type: Number,
+      min: 0,
+    },
+    consultationFee: {
+      type: Number,
+      min: 0,
+    },
+    availability: {
+      days: [{
+        type: String,
+        enum: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"],
+      }],
+      startTime: {
+        type: String,
+        match: /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, // HH:MM format
+      },
+      endTime: {
+        type: String,
+        match: /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/,
+      },
+      breakStart: {
+        type: String,
+        match: /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/,
+      },
+      breakEnd: {
+        type: String,
+        match: /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/,
+      },
+    },
+    biography: {
+      type: String,
+      trim: true,
     },
     joiningDate: {
       type: Date,
-      default: Date.now,
     },
+    permissions: [{
+      type: String,
+    }],
   },
   {
     timestamps: true,
@@ -116,103 +130,69 @@ const userSchema = new Schema<IUser>(
 );
 
 // Indexes
+userSchema.index({ email: 1 });
 userSchema.index({ role: 1 });
-userSchema.index({ approved: 1, active: 1 });
-userSchema.index({ email: 1 }, { unique: true });
-userSchema.index({ employeeId: 1 }, { unique: true });
+userSchema.index({ department: 1 });
+userSchema.index({ specialization: 1 });
+userSchema.index({ active: 1, approved: 1 });
+userSchema.index({ licenseNumber: 1 });
 
-// Hash password before saving
-userSchema.pre("save", async function (next) {
-  if (!this.isModified("password")) return next();
-  
-  try {
-    const salt = await bcrypt.genSalt(10);
-    this.password = await bcrypt.hash(this.password, salt);
-    next();
-  } catch (error) {
-    next(error as Error);
-  }
-});
-
-// Compare password method
-userSchema.methods.comparePassword = async function (candidatePassword: string): Promise<boolean> {
-  return await bcrypt.compare(candidatePassword, this.password);
-};
-
-// Generate employee ID if not provided
+// Pre-save hook for doctors
 userSchema.pre("save", function (next) {
-  if (!this.employeeId) {
-    const random = Math.floor(1000 + Math.random() * 9000);
-    const year = new Date().getFullYear().toString().slice(-2);
-    const month = (new Date().getMonth() + 1).toString().padStart(2, '0');
-    this.employeeId = `EMP${year}${month}${random}`;
+  // Set default availability for doctors
+  if (this.role === "doctor" && !this.availability) {
+    this.availability = {
+      days: ["monday", "tuesday", "wednesday", "thursday", "friday"],
+      startTime: "09:00",
+      endTime: "17:00",
+      breakStart: "13:00",
+      breakEnd: "14:00",
+    };
   }
+  
+  // Set joining date if not provided
+  if (this.role === "doctor" && !this.joiningDate) {
+    this.joiningDate = new Date();
+  }
+  
   next();
 });
 
-// Static method to find by email
-userSchema.statics.findByEmail = function (email: string) {
-  return this.findOne({ email: email.toLowerCase() });
+// Virtual for full name
+userSchema.virtual("fullName").get(function () {
+  if (this.role === "doctor") {
+    return `Dr. ${this.name}`;
+  }
+  return this.name;
+});
+
+// Virtual for formatted experience
+userSchema.virtual("experienceText").get(function () {
+  if (this.experience === 1) {
+    return "1 year";
+  } else if (this.experience && this.experience > 1) {
+    return `${this.experience} years`;
+  }
+  return "Fresh";
+});
+
+// Static method to find active doctors
+userSchema.statics.findActiveDoctors = function () {
+  return this.find({
+    role: "doctor",
+    active: true,
+    approved: true,
+  })
+    .select("name specialization department phone email consultationFee availability")
+    .sort({ name: 1 });
 };
 
-interface UserModel extends mongoose.Model<IUser> {
-  findByEmail(email: string): Promise<IUser | null>;
-}
-
-export const User = (models.User || model<IUser, UserModel>("User", userSchema)) as UserModel;
-
-// Role permissions mapping
-export const RolePermissions = {
-  admin: ["all"],
-  doctor: [
-    "view_patients",
-    "manage_patients",
-    "view_admissions",
-    "manage_admissions",
-    "view_prescriptions",
-    "manage_prescriptions",
-    "view_medical_records",
-    "manage_medical_records"
-  ],
-  nurse: [
-    "view_patients",
-    "update_patients",
-    "view_admissions",
-    "update_admissions",
-    "view_medications",
-    "administer_medications",
-    "view_vital_signs",
-    "record_vital_signs"
-  ],
-  receptionist: [
-    "create_patients",
-    "view_patients",
-    "create_admissions",
-    "view_admissions",
-    "manage_appointments",
-    "view_appointments",
-    "manage_billing"
-  ],
-  pharmacist: [
-    "view_prescriptions",
-    "manage_prescriptions",
-    "view_inventory",
-    "manage_inventory",
-    "dispense_medications"
-  ],
-  lab_technician: [
-    "view_lab_tests",
-    "manage_lab_tests",
-    "view_lab_results",
-    "manage_lab_results",
-    "generate_reports"
-  ],
-  radiologist: [
-    "view_imaging",
-    "manage_imaging",
-    "view_radiology_reports",
-    "manage_radiology_reports",
-    "generate_reports"
-  ],
-  staff: ["view_patients", "view_admissions"],
+// Instance method for doctor availability check
+userSchema.methods.isAvailableOnDay = function (day: string): boolean {
+  if (this.role !== "doctor" || !this.availability || !this.availability.days) {
+    return false;
+  }
+  return this.availability.days.includes(day.toLowerCase());
 };
+
+export const User = models.User || model<IUser>("User", userSchema);
