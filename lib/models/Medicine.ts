@@ -1,33 +1,23 @@
-// lib/models/Medicine.ts
 import mongoose, { Schema, model, models } from "mongoose";
 
 export interface IMedicine extends mongoose.Document {
   medicineId: string;
+  appointment: mongoose.Types.ObjectId;
+  patient: mongoose.Types.ObjectId;
   name: string;
-  genericName: string;
-  brand: string;
-  category: string;
-  form: "tablet" | "capsule" | "syrup" | "injection" | "ointment" | "cream" | "drops" | "inhaler";
-  strength: string;
-  unit: string;
-  description?: string;
-  indications: string[];
-  contraindications: string[];
-  sideEffects: string[];
-  dosageInstructions: string;
-  storageInstructions: string;
-  manufacturer: string;
-  supplier: string;
-  batchNumber: string;
-  expiryDate: Date;
+  genericName?: string;
+  dosage: string;
+  frequency: string;
+  duration: string;
+  quantity: number;
   price: number;
-  cost: number;
-  stock: number;
-  reorderLevel: number;
-  minimumStock: number;
-  location?: string;
-  barcode?: string;
-  active: boolean;
+  total: number;
+  status: "prescribed" | "dispensed" | "cancelled";
+  prescribedBy: mongoose.Types.ObjectId;
+  prescribedAt: Date;
+  dispensedBy?: mongoose.Types.ObjectId;
+  dispensedAt?: Date;
+  notes?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -40,6 +30,16 @@ const medicineSchema = new Schema<IMedicine>(
       unique: true,
       uppercase: true,
     },
+    appointment: {
+      type: Schema.Types.ObjectId,
+      ref: "Appointment",
+      required: true,
+    },
+    patient: {
+      type: Schema.Types.ObjectId,
+      ref: "Patient",
+      required: true,
+    },
     name: {
       type: String,
       required: true,
@@ -47,102 +47,62 @@ const medicineSchema = new Schema<IMedicine>(
     },
     genericName: {
       type: String,
-      required: true,
       trim: true,
     },
-    brand: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-    category: {
+    dosage: {
       type: String,
       required: true,
       trim: true,
     },
-    form: {
-      type: String,
-      enum: ["tablet", "capsule", "syrup", "injection", "ointment", "cream", "drops", "inhaler"],
-      required: true,
-    },
-    strength: {
+    frequency: {
       type: String,
       required: true,
-    },
-    unit: {
-      type: String,
-      required: true,
-    },
-    description: {
-      type: String,
-    },
-    indications: [{
-      type: String,
       trim: true,
-    }],
-    contraindications: [{
+    },
+    duration: {
       type: String,
+      required: true,
       trim: true,
-    }],
-    sideEffects: [{
-      type: String,
-      trim: true,
-    }],
-    dosageInstructions: {
-      type: String,
     },
-    storageInstructions: {
-      type: String,
-    },
-    manufacturer: {
-      type: String,
+    quantity: {
+      type: Number,
       required: true,
-    },
-    supplier: {
-      type: String,
-      required: true,
-    },
-    batchNumber: {
-      type: String,
-      required: true,
-    },
-    expiryDate: {
-      type: Date,
-      required: true,
+      min: 1,
     },
     price: {
       type: Number,
       required: true,
       min: 0,
     },
-    cost: {
+    total: {
       type: Number,
       required: true,
       min: 0,
     },
-    stock: {
-      type: Number,
+    status: {
+      type: String,
+      enum: ["prescribed", "dispensed", "cancelled"],
+      default: "prescribed",
+    },
+    prescribedBy: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
       required: true,
-      default: 0,
-      min: 0,
     },
-    reorderLevel: {
-      type: Number,
-      default: 10,
+    prescribedAt: {
+      type: Date,
+      default: Date.now,
     },
-    minimumStock: {
-      type: Number,
-      default: 5,
+    dispensedBy: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
     },
-    location: {
+    dispensedAt: {
+      type: Date,
+    },
+    notes: {
       type: String,
-    },
-    barcode: {
-      type: String,
-    },
-    active: {
-      type: Boolean,
-      default: true,
+      trim: true,
     },
   },
   {
@@ -152,19 +112,32 @@ const medicineSchema = new Schema<IMedicine>(
 
 // Indexes
 medicineSchema.index({ medicineId: 1 });
+medicineSchema.index({ appointment: 1 });
+medicineSchema.index({ patient: 1 });
+medicineSchema.index({ status: 1 });
+medicineSchema.index({ prescribedAt: -1 });
 medicineSchema.index({ name: 1 });
-medicineSchema.index({ genericName: 1 });
-medicineSchema.index({ category: 1 });
-medicineSchema.index({ expiryDate: 1 });
-medicineSchema.index({ stock: 1 });
-medicineSchema.index({ active: 1 });
 
-// Pre-save hook
+// Compound indexes
+medicineSchema.index({ appointment: 1, status: 1 });
+medicineSchema.index({ patient: 1, status: 1 });
+
+// Pre-save hooks
 medicineSchema.pre("save", function (next) {
-  if (!this.medicineId || this.isNew) {
-    const random = Math.floor(10000 + Math.random() * 90000);
-    this.medicineId = `MED${random}`;
+  // Generate medicine ID if not exists
+  if (!this.medicineId) {
+    const date = new Date();
+    const year = date.getFullYear().toString().slice(-2);
+    const month = (date.getMonth() + 1).toString().padStart(2, "0");
+    const random = Math.floor(1000 + Math.random() * 9000);
+    this.medicineId = `MED${year}${month}${random}`;
   }
+  
+  // Calculate total if not provided
+  if (!this.total && this.price && this.quantity) {
+    this.total = this.price * this.quantity;
+  }
+  
   next();
 });
 

@@ -484,7 +484,7 @@ export default function AppointmentsPage() {
                   <TableHead>Type</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Priority</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead className="text-right">View</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -496,7 +496,7 @@ export default function AppointmentsPage() {
                   </TableRow>
                 ) : (
                   filteredAppointments.map((appointment) => (
-                    <TableRow key={appointment._id}>
+                    <TableRow key={appointment._id} onClick={() => router.push(`/appointments/${appointment._id}`)} className="cursor-pointer hover:bg-gray-50">
                       <TableCell className="font-medium">
                         {appointment.appointmentId}
                       </TableCell>
@@ -529,59 +529,10 @@ export default function AppointmentsPage() {
                         {getPriorityBadge(appointment.priority)}
                       </TableCell>
                       <TableCell className="text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm">
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                            <DropdownMenuItem
-                              onClick={() => router.push(`/appointments/${appointment._id}`)}
-                            >
-                              <Eye className="h-4 w-4 mr-2" />
-                              View Details
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => router.push(`/appointments/${appointment._id}/edit`)}
-                            >
-                              <Edit className="h-4 w-4 mr-2" />
-                              Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            {["scheduled", "confirmed"].includes(appointment.status) && (
-                              <DropdownMenuItem
-                                onClick={() => handleCheckIn(appointment._id)}
-                                className="text-green-600"
-                              >
-                                <CheckCircle className="h-4 w-4 mr-2" />
-                                Check In
-                              </DropdownMenuItem>
-                            )}
-                            {appointment.status === "checked-in" && (
-                              <DropdownMenuItem
-                                onClick={() => handleCheckOut(appointment._id)}
-                                className="text-blue-600"
-                              >
-                                <CheckCircle className="h-4 w-4 mr-2" />
-                                Check Out
-                              </DropdownMenuItem>
-                            )}
-                            {["scheduled", "confirmed"].includes(appointment.status) && (
-                              <DropdownMenuItem
-                                onClick={() => {
-                                  setSelectedAppointment(appointment);
-                                  setCancelDialogOpen(true);
-                                }}
-                                className="text-red-600"
-                              >
-                                <Trash2 className="h-4 w-4 mr-2" />
-                                Cancel Appointment
-                              </DropdownMenuItem>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                        <Button variant="ghost" size="sm">
+                          <Eye className="h-4 w-4 mr-2" />
+                          View
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))

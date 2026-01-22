@@ -36,6 +36,7 @@ const discountRequestSchema = new Schema<IDiscountRequest>(
       required: true,
       unique: true,
       uppercase: true,
+      // REMOVED index: true HERE since we define it below
     },
     patient: {
       type: Schema.Types.ObjectId,
@@ -145,8 +146,8 @@ const discountRequestSchema = new Schema<IDiscountRequest>(
   }
 );
 
-// Indexes for performance
-discountRequestSchema.index({ discountId: 1 });
+// Indexes for performance - DEFINE ALL INDEXES HERE
+discountRequestSchema.index({ discountId: 1 }, { unique: true }); // Changed from separate line
 discountRequestSchema.index({ patient: 1 });
 discountRequestSchema.index({ requestedBy: 1 });
 discountRequestSchema.index({ status: 1 });

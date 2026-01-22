@@ -54,19 +54,36 @@ import {
   Sparkles,
   FileText,
   Shield,
-  TrendingUp,
   Brain,
-  Heart,
+  HeartPulse,
   Eye,
   Thermometer,
+  ChevronDown,
+  ChevronUp,
+  Maximize2,
+  Minimize2,
+  Save,
+  Clock4,
+  Zap,
+  Star,
+  Bell,
+  Download,
+  Printer,
+  Share2,
+  Copy,
+  CalendarDays,
+  Users,
+  Target,
+  BarChart3,
 } from "lucide-react";
-import { format, isValid, isToday, addMinutes } from "date-fns";
+import { format, isValid, isToday, addMinutes, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Switch } from "@/components/ui/switch";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "sonner";
 import { z } from "zod";
 
@@ -154,6 +171,7 @@ export default function NewAppointmentPage() {
   const [searching, setSearching] = useState(false);
   const [loadingDoctors, setLoadingDoctors] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isFullScreen, setIsFullScreen] = useState(false);
   
   // Form state
   const [patientSearch, setPatientSearch] = useState("");
@@ -198,19 +216,37 @@ export default function NewAppointmentPage() {
   const [isEmergency, setIsEmergency] = useState(false);
   const [showQuickActions, setShowQuickActions] = useState(true);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [activeSection, setActiveSection] = useState<"patient" | "doctor" | "details">("patient");
+  const [estimatedTime, setEstimatedTime] = useState<string>("");
   
   // Refs
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const mainContainerRef = useRef<HTMLDivElement>(null);
 
   // Initialize
   useEffect(() => {
     fetchDoctors();
+    updateEstimatedTime();
     
     // Focus search input on mount
     if (searchInputRef.current) {
-      setTimeout(() => searchInputRef.current?.focus(), 100);
+      setTimeout(() => searchInputRef.current?.focus(), 300);
     }
-  }, []);
+
+    // Keyboard shortcuts
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.key === 'f') {
+        e.preventDefault();
+        setIsFullScreen(!isFullScreen);
+      }
+      if (e.key === 'Escape' && isFullScreen) {
+        setIsFullScreen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isFullScreen]);
 
   // Update auto-number when doctor or date changes
   useEffect(() => {
@@ -220,6 +256,7 @@ export default function NewAppointmentPage() {
       setAutoNumber("");
       setTodaysAppointmentsCount(0);
     }
+    updateEstimatedTime();
   }, [selectedDoctor, appointmentDate]);
 
   // Calculate completion progress
@@ -229,8 +266,30 @@ export default function NewAppointmentPage() {
     if (selectedDoctor) progress += 30;
     if (appointmentDate) progress += 20;
     if (reason.trim().length >= 10) progress += 20;
-    setCompletionProgress(progress);
+    setCompletionProgress(Math.min(progress, 100));
   }, [selectedPatient, selectedDoctor, appointmentDate, reason]);
+
+  // Update active section based on progress
+  useEffect(() => {
+    if (!selectedPatient) {
+      setActiveSection("patient");
+    } else if (!selectedDoctor) {
+      setActiveSection("doctor");
+    } else {
+      setActiveSection("details");
+    }
+  }, [selectedPatient, selectedDoctor]);
+
+  // Update estimated time based on selected doctor and patient
+  const updateEstimatedTime = () => {
+    if (selectedDoctor && selectedPatient) {
+      const now = new Date();
+      const nextHour = new Date(now.getTime() + 60 * 60 * 1000);
+      setEstimatedTime(format(nextHour, "h:mm a"));
+    } else {
+      setEstimatedTime("");
+    }
+  };
 
   // Handle search with debounce
   const handleSearchChange = useCallback((value: string) => {
@@ -243,7 +302,7 @@ export default function NewAppointmentPage() {
     if (value.trim().length >= 2) {
       const timeout = setTimeout(() => {
         searchPatients(value);
-      }, 500);
+      }, 300);
       setSearchDebounce(timeout);
     } else {
       setSearchResults([]);
@@ -575,12 +634,16 @@ export default function NewAppointmentPage() {
       e.preventDefault();
       searchPatients();
     }
+    if (e.key === 'Escape') {
+      clearSearch();
+    }
   };
 
   const clearSearch = () => {
     setPatientSearch("");
     setSearchResults([]);
     setShowNoResults(false);
+    searchInputRef.current?.focus();
   };
 
   const handleSelectPatient = (patient: Patient) => {
@@ -658,1209 +721,1177 @@ export default function NewAppointmentPage() {
     });
   };
 
+  // Template handlers
+  const handleTemplateSelect = (template: string) => {
+    switch (template) {
+      case "general":
+        setReason("General medical consultation for ongoing health concerns");
+        setSymptoms("");
+        break;
+      case "followup":
+        setAppointmentType("followup");
+        setReason("Follow-up appointment to monitor progress and adjust treatment plan");
+        break;
+      case "emergency":
+        setIsEmergency(true);
+        setPriority("emergency");
+        setAppointmentType("emergency");
+        setReason("Emergency medical attention required");
+        break;
+    }
+  };
+
   return (
-    <div className="container mx-auto p-4 md:p-6 max-w-7xl">
-      {/* Header with Progress */}
-      <div className="mb-8 space-y-6">
-        <div className="flex items-center justify-between mb-4">
-          <Button
-            variant="ghost"
-            onClick={() => router.push("/appointments")}
-            className="gap-2 hover:bg-accent"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Appointments
-          </Button>
-          <div className="flex items-center gap-4">
-            <div className="hidden md:flex items-center gap-2 text-sm">
-              <Calendar className="h-4 w-4 text-muted-foreground" />
-              <span className="text-muted-foreground">
-                {format(new Date(), "EEEE, MMMM d, yyyy")}
-              </span>
-            </div>
-            <Badge variant="outline" className="gap-2">
-              <Sparkles className="h-3 w-3" />
-              New Appointment
-            </Badge>
-          </div>
-        </div>
-        
-        <div className="space-y-2">
+    <div 
+      ref={mainContainerRef}
+      className={cn(
+        "min-h-screen bg-gradient-to-br from-background to-muted/30",
+        isFullScreen && "fixed inset-0 z-50 bg-background overflow-auto"
+      )}
+    >
+      {/* Top Navigation Bar */}
+      <div className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="px-6 py-4">
           <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-primary to-blue-600 bg-clip-text text-transparent">
-                Schedule New Appointment
-              </h1>
-              <p className="text-muted-foreground mt-2">
-                Book appointments efficiently with our step-by-step process
-              </p>
-            </div>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="flex items-center gap-2">
-                    <Progress value={completionProgress} className="w-32 h-2" />
-                    <span className="text-sm font-medium">{completionProgress}%</span>
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Form completion progress</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </div>
-          
-          {/* Quick Actions Bar */}
-          {showQuickActions && (
-            <div className="flex flex-wrap gap-2 pt-4">
-              <Badge 
-                variant={isEmergency ? "destructive" : "outline"}
-                className="cursor-pointer gap-2 hover:scale-105 transition-transform"
-                onClick={() => handleQuickAction("emergency")}
-              >
-                <AlertCircle className="h-3 w-3" />
-                Emergency Booking
-              </Badge>
-              <Badge 
-                variant="secondary"
-                className="cursor-pointer gap-2 hover:bg-secondary/80"
-                onClick={() => handleQuickAction("followup")}
-              >
-                <RefreshCw className="h-3 w-3" />
-                Follow-up Visit
-              </Badge>
-              <Badge 
-                variant="secondary"
-                className="cursor-pointer gap-2 hover:bg-secondary/80"
-                onClick={() => handleQuickAction("checkup")}
-              >
-                <Activity className="h-3 w-3" />
-                Routine Check-up
-              </Badge>
-              <Badge 
-                variant="secondary"
-                className="cursor-pointer gap-2 hover:bg-secondary/80"
-                onClick={() => handleQuickAction("consultation")}
-              >
-                <Stethoscope className="h-3 w-3" />
-                General Consultation
-              </Badge>
-              <div className="flex-1" />
+            <div className="flex items-center gap-4">
               <Button
                 variant="ghost"
-                size="sm"
-                onClick={() => setShowQuickActions(false)}
-                className="h-6 px-2"
+                onClick={() => router.push("/appointments")}
+                className="gap-2 hover:bg-accent"
+                size="lg"
               >
-                <X className="h-3 w-3" />
+                <ArrowLeft className="h-5 w-5" />
+                <span className="hidden sm:inline">Back</span>
               </Button>
+              
+              <div className="hidden md:flex items-center gap-4">
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-primary/10 rounded-full">
+                  <CalendarDays className="h-4 w-4 text-primary" />
+                  <span className="text-sm font-medium">
+                    {format(new Date(), "EEEE, MMMM d")}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-500/10 rounded-full">
+                  <Clock4 className="h-4 w-4 text-blue-500" />
+                  <span className="text-sm font-medium">
+                    {format(new Date(), "h:mm a")}
+                  </span>
+                </div>
+              </div>
             </div>
-          )}
+
+            <div className="flex items-center gap-3">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsFullScreen(!isFullScreen)}
+                      className="gap-2"
+                    >
+                      {isFullScreen ? (
+                        <Minimize2 className="h-4 w-4" />
+                      ) : (
+                        <Maximize2 className="h-4 w-4" />
+                      )}
+                      <span className="hidden sm:inline">
+                        {isFullScreen ? "Exit Fullscreen" : "Fullscreen"}
+                      </span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Press Ctrl+F to toggle fullscreen</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => window.print()}
+                >
+                  <Printer className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => toast.info("Copied appointment details")}
+                >
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Main Form */}
-      <form onSubmit={handleSubmit}>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Left Column - Patient & Details */}
-          <div className="lg:col-span-2 space-y-8">
-            {/* Patient Selection Card */}
-            <Card className="border-border shadow-sm hover:shadow-md transition-shadow">
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-1">
-                    <CardTitle className="text-xl flex items-center gap-2">
-                      <div className="p-2 bg-primary/10 rounded-lg">
-                        <User className="h-5 w-5 text-primary" />
-                      </div>
-                      Patient Information
-                    </CardTitle>
-                    <CardDescription>
-                      Search for an existing patient or create a new one
-                    </CardDescription>
-                  </div>
-                  <Badge variant="secondary" className="gap-2">
-                    1
-                    <ChevronRight className="h-3 w-3" />
-                  </Badge>
+      {/* Main Content */}
+      <div className={cn(
+        "mx-auto p-4 md:p-6 lg:p-8",
+        isFullScreen ? "max-w-none px-4 lg:px-8" : "max-w-7xl"
+      )}>
+        {/* Progress Header */}
+        <div className="mb-8">
+          <div className="flex items-start justify-between gap-6 mb-8">
+            <div className="space-y-3 flex-1">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-gradient-to-br from-primary to-primary/80 rounded-2xl shadow-lg">
+                  <Calendar className="h-8 w-8 text-white" />
                 </div>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {selectedPatient ? (
-                  <div className="space-y-4">
-                    <div className="relative overflow-hidden rounded-xl border bg-gradient-to-r from-primary/5 to-secondary/5 p-6">
-                      <div className="absolute top-0 right-0 w-24 h-24 bg-primary/5 rounded-full -translate-y-8 translate-x-8" />
-                      <div className="relative flex items-start justify-between">
-                        <div className="flex items-start gap-4">
-                          <div className="p-3 bg-background rounded-xl border shadow-sm">
-                            <User className="h-8 w-8 text-primary" />
-                          </div>
-                          <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-3">
-                              <h3 className="text-lg font-semibold">
-                                {selectedPatient.name}
-                              </h3>
-                              <Badge variant="default" className="gap-1">
-                                <CheckCircle className="h-3 w-3" />
-                                Selected
-                              </Badge>
+                <div>
+                  <h1 className="text-3xl lg:text-4xl font-bold tracking-tight bg-gradient-to-r from-primary to-blue-600 bg-clip-text text-transparent">
+                    Schedule New Appointment
+                  </h1>
+                  <p className="text-lg text-muted-foreground mt-2">
+                    Complete the form below to schedule an appointment
+                  </p>
+                </div>
+              </div>
+
+              {/* Progress Indicators */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-6">
+                <div className={cn(
+                  "p-4 rounded-xl border-2 transition-all duration-300",
+                  activeSection === "patient" 
+                    ? "border-primary bg-primary/5 shadow-md" 
+                    : "border-border"
+                )}>
+                  <div className="flex items-center gap-3">
+                    <div className={cn(
+                      "flex items-center justify-center w-8 h-8 rounded-full",
+                      selectedPatient ? "bg-green-500 text-white" : "bg-muted"
+                    )}>
+                      {selectedPatient ? <CheckCircle className="h-5 w-5" /> : "1"}
+                    </div>
+                    <div>
+                      <h3 className="font-semibold">Patient</h3>
+                      <p className="text-sm text-muted-foreground">
+                        {selectedPatient ? selectedPatient.name : "Select patient"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className={cn(
+                  "p-4 rounded-xl border-2 transition-all duration-300",
+                  activeSection === "doctor" 
+                    ? "border-blue-500 bg-blue-500/5 shadow-md" 
+                    : "border-border"
+                )}>
+                  <div className="flex items-center gap-3">
+                    <div className={cn(
+                      "flex items-center justify-center w-8 h-8 rounded-full",
+                      selectedDoctor ? "bg-green-500 text-white" : 
+                      selectedPatient ? "bg-blue-500 text-white" : "bg-muted"
+                    )}>
+                      {selectedDoctor ? <CheckCircle className="h-5 w-5" /> : "2"}
+                    </div>
+                    <div>
+                      <h3 className="font-semibold">Doctor</h3>
+                      <p className="text-sm text-muted-foreground">
+                        {selectedDoctorInfo ? `Dr. ${selectedDoctorInfo.name}` : "Select doctor"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className={cn(
+                  "p-4 rounded-xl border-2 transition-all duration-300",
+                  activeSection === "details" 
+                    ? "border-purple-500 bg-purple-500/5 shadow-md" 
+                    : "border-border"
+                )}>
+                  <div className="flex items-center gap-3">
+                    <div className={cn(
+                      "flex items-center justify-center w-8 h-8 rounded-full",
+                      isFormValid() ? "bg-green-500 text-white" : 
+                      selectedDoctor ? "bg-purple-500 text-white" : "bg-muted"
+                    )}>
+                      {isFormValid() ? <CheckCircle className="h-5 w-5" /> : "3"}
+                    </div>
+                    <div>
+                      <h3 className="font-semibold">Details</h3>
+                      <p className="text-sm text-muted-foreground">
+                        {reason ? "Complete details" : "Add appointment details"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-xl border-2 border-border">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">Completion</span>
+                      <span className="text-sm font-bold text-primary">{completionProgress}%</span>
+                    </div>
+                    <Progress value={completionProgress} className="h-2" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Main Form Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Left Column - Form Steps */}
+          <div className="lg:col-span-2 space-y-8">
+            {/* Step 1: Patient Selection */}
+            <div className={cn(
+              "transition-all duration-300",
+              activeSection !== "patient" && "opacity-75"
+            )}>
+              <Card className="border-2 border-primary/20 shadow-xl hover:shadow-2xl transition-all duration-300">
+                <CardHeader className="pb-4">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-3">
+                        <div className="p-3 bg-gradient-to-br from-primary to-primary/90 rounded-xl">
+                          <User className="h-6 w-6 text-white" />
+                        </div>
+                        <div>
+                          <CardTitle className="text-2xl">Step 1: Select Patient</CardTitle>
+                          <CardDescription>
+                            Search existing patient or create new patient record
+                          </CardDescription>
+                        </div>
+                      </div>
+                    </div>
+                    <Badge variant="default" className="px-3 py-1 text-sm">
+                      Required
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {selectedPatient ? (
+                    <div className="space-y-4">
+                      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary/5 to-primary/10 p-6 border border-primary/20">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -translate-y-12 translate-x-12" />
+                        <div className="relative flex items-start justify-between">
+                          <div className="flex items-start gap-4">
+                            <div className="p-4 bg-background rounded-xl border shadow-lg">
+                              <User className="h-10 w-10 text-primary" />
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              <div className="space-y-1">
-                                <div className="flex items-center gap-2 text-sm">
+                            <div className="space-y-3">
+                              <div className="flex items-center gap-3">
+                                <h3 className="text-xl font-bold">{selectedPatient.name}</h3>
+                                <Badge variant="default" className="gap-2">
+                                  <CheckCircle className="h-3 w-3" />
+                                  Selected
+                                </Badge>
+                              </div>
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div className="flex items-center gap-2">
                                   <Phone className="h-4 w-4 text-muted-foreground" />
                                   <span>{selectedPatient.phone}</span>
                                 </div>
                                 {selectedPatient.email && (
-                                  <div className="flex items-center gap-2 text-sm">
+                                  <div className="flex items-center gap-2">
                                     <Mail className="h-4 w-4 text-muted-foreground" />
                                     <span>{selectedPatient.email}</span>
                                   </div>
                                 )}
-                              </div>
-                              <div className="space-y-1">
                                 {selectedPatient.patientId && (
-                                  <div className="flex items-center gap-2 text-sm">
+                                  <div className="flex items-center gap-2">
                                     <Hash className="h-4 w-4 text-muted-foreground" />
-                                    <span className="font-medium">ID: {selectedPatient.patientId}</span>
-                                  </div>
-                                )}
-                                {selectedPatient.dateOfBirth && (
-                                  <div className="flex items-center gap-2 text-sm">
-                                    <Calendar className="h-4 w-4 text-muted-foreground" />
-                                    <span>{format(new Date(selectedPatient.dateOfBirth), "MMM d, yyyy")}</span>
+                                    <span>ID: {selectedPatient.patientId}</span>
                                   </div>
                                 )}
                               </div>
                             </div>
                           </div>
+                          <div className="flex flex-col gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => setSelectedPatient(null)}
+                              className="gap-2"
+                            >
+                              <X className="h-4 w-4" />
+                              Change
+                            </Button>
+                          </div>
                         </div>
-                        <div className="flex flex-col gap-2">
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-6">
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <Label htmlFor="patientSearch" className="text-lg font-semibold">
+                            Search Patient Database
+                          </Label>
+                          <span className="text-sm text-muted-foreground">
+                            Type at least 2 characters to search
+                          </span>
+                        </div>
+                        <div className="flex gap-3">
+                          <div className="relative flex-1">
+                            <Search className="absolute left-4 top-3.5 h-5 w-5 text-muted-foreground" />
+                            <Input
+                              ref={searchInputRef}
+                              id="patientSearch"
+                              placeholder="Search by name, phone number, or patient ID..."
+                              value={patientSearch}
+                              onChange={(e) => handleSearchChange(e.target.value)}
+                              onKeyDown={handleSearchKeyDown}
+                              className="pl-12 h-12 text-lg rounded-xl"
+                            />
+                            {patientSearch && (
+                              <button
+                                type="button"
+                                onClick={clearSearch}
+                                className="absolute right-4 top-3.5 text-muted-foreground hover:text-foreground"
+                              >
+                                <X className="h-5 w-5" />
+                              </button>
+                            )}
+                          </div>
                           <Button
                             type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              setSelectedPatient(null);
-                              setPatientSearch(selectedPatient.name);
-                            }}
+                            variant="secondary"
+                            onClick={() => searchPatients()}
+                            disabled={searching || !patientSearch.trim()}
+                            className="h-12 px-6 gap-2 rounded-xl"
                           >
-                            Change
+                            {searching ? (
+                              <Loader2 className="h-5 w-5 animate-spin" />
+                            ) : (
+                              <Search className="h-5 w-5" />
+                            )}
+                            Search
                           </Button>
+                          <Dialog open={showNewPatientDialog} onOpenChange={setShowNewPatientDialog}>
+                            <DialogTrigger asChild>
+                              <Button
+                                type="button"
+                                className="h-12 bg-gradient-to-r from-primary to-primary/90 hover:from-primary hover:to-primary gap-3 rounded-xl"
+                              >
+                                <UserPlus className="h-5 w-5" />
+                                New Patient
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                              <DialogHeader>
+                                <DialogTitle className="text-2xl flex items-center gap-2">
+                                  <UserPlus className="h-6 w-6" />
+                                  Create New Patient
+                                </DialogTitle>
+                                <DialogDescription>
+                                  Fill in the patient details below. All fields marked with * are required.
+                                </DialogDescription>
+                              </DialogHeader>
+                              
+                              <Tabs defaultValue="basic" className="w-full">
+                                <TabsList className="grid w-full grid-cols-2 mb-6">
+                                  <TabsTrigger value="basic" className="gap-2">
+                                    <User className="h-4 w-4" />
+                                    Basic Information
+                                  </TabsTrigger>
+                                  <TabsTrigger value="medical" className="gap-2">
+                                    <Activity className="h-4 w-4" />
+                                    Medical Information
+                                  </TabsTrigger>
+                                </TabsList>
+                                
+                                <TabsContent value="basic" className="space-y-6">
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div className="space-y-2">
+                                      <Label htmlFor="name" className="font-medium">
+                                        Full Name *
+                                      </Label>
+                                      <Input
+                                        id="name"
+                                        placeholder="John Doe"
+                                        value={newPatientForm.name}
+                                        onChange={(e) => setNewPatientForm(prev => ({
+                                          ...prev,
+                                          name: e.target.value
+                                        }))}
+                                        required
+                                        className={formErrors.name ? "border-red-500" : ""}
+                                      />
+                                      {formErrors.name && (
+                                        <p className="text-sm text-red-500">{formErrors.name}</p>
+                                      )}
+                                    </div>
+                                    
+                                    <div className="space-y-2">
+                                      <Label htmlFor="phone" className="font-medium">
+                                        Phone Number *
+                                      </Label>
+                                      <Input
+                                        id="phone"
+                                        placeholder="+1 (555) 123-4567"
+                                        value={newPatientForm.phone}
+                                        onChange={(e) => setNewPatientForm(prev => ({
+                                          ...prev,
+                                          phone: e.target.value
+                                        }))}
+                                        required
+                                        className={formErrors.phone ? "border-red-500" : ""}
+                                      />
+                                      {formErrors.phone && (
+                                        <p className="text-sm text-red-500">{formErrors.phone}</p>
+                                      )}
+                                    </div>
+                                    
+                                    <div className="space-y-2">
+                                      <Label htmlFor="email">Email Address</Label>
+                                      <Input
+                                        id="email"
+                                        type="email"
+                                        placeholder="john@example.com"
+                                        value={newPatientForm.email}
+                                        onChange={(e) => setNewPatientForm(prev => ({
+                                          ...prev,
+                                          email: e.target.value
+                                        }))}
+                                        className={formErrors.email ? "border-red-500" : ""}
+                                      />
+                                      {formErrors.email && (
+                                        <p className="text-sm text-red-500">{formErrors.email}</p>
+                                      )}
+                                    </div>
+                                    
+                                    <div className="space-y-2">
+                                      <Label htmlFor="dateOfBirth" className="font-medium">
+                                        Date of Birth *
+                                      </Label>
+                                      <Input
+                                        id="dateOfBirth"
+                                        type="date"
+                                        value={newPatientForm.dateOfBirth}
+                                        onChange={(e) => setNewPatientForm(prev => ({
+                                          ...prev,
+                                          dateOfBirth: e.target.value
+                                        }))}
+                                        required
+                                        className={formErrors.dateOfBirth ? "border-red-500" : ""}
+                                      />
+                                      {formErrors.dateOfBirth && (
+                                        <p className="text-sm text-red-500">{formErrors.dateOfBirth}</p>
+                                      )}
+                                    </div>
+                                    
+                                    <div className="space-y-2">
+                                      <Label htmlFor="gender" className="font-medium">
+                                        Gender *
+                                      </Label>
+                                      <Select
+                                        value={newPatientForm.gender}
+                                        onValueChange={(value: "male" | "female" | "other") => 
+                                          setNewPatientForm(prev => ({ ...prev, gender: value }))
+                                        }
+                                      >
+                                        <SelectTrigger className="h-11">
+                                          <SelectValue placeholder="Select gender" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="male">Male</SelectItem>
+                                          <SelectItem value="female">Female</SelectItem>
+                                          <SelectItem value="other">Other</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                      {formErrors.gender && (
+                                        <p className="text-sm text-red-500">{formErrors.gender}</p>
+                                      )}
+                                    </div>
+                                    
+                                    <div className="space-y-2">
+                                      <Label htmlFor="bloodGroup">Blood Group</Label>
+                                      <Select
+                                        value={newPatientForm.bloodGroup}
+                                        onValueChange={(value) => 
+                                          setNewPatientForm(prev => ({ ...prev, bloodGroup: value }))
+                                        }
+                                      >
+                                        <SelectTrigger className="h-11">
+                                          <SelectValue placeholder="Select blood group" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          {["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-", "unknown"].map((group) => (
+                                            <SelectItem key={group} value={group}>{group}</SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                  </div>
+                                  
+                                  <div className="space-y-2">
+                                    <Label htmlFor="address" className="flex items-center gap-2">
+                                      <MapPin className="h-4 w-4" />
+                                      Address
+                                    </Label>
+                                    <Textarea
+                                      id="address"
+                                      placeholder="123 Main Street, City, State, ZIP Code"
+                                      value={newPatientForm.address}
+                                      onChange={(e) => setNewPatientForm(prev => ({
+                                        ...prev,
+                                        address: e.target.value
+                                      }))}
+                                      rows={2}
+                                    />
+                                  </div>
+                                  
+                                  <div className="space-y-2">
+                                    <Label htmlFor="emergencyContact" className="flex items-center gap-2">
+                                      <Phone className="h-4 w-4" />
+                                      Emergency Contact
+                                    </Label>
+                                    <Input
+                                      id="emergencyContact"
+                                      placeholder="Emergency contact name and phone number"
+                                      value={newPatientForm.emergencyContact}
+                                      onChange={(e) => setNewPatientForm(prev => ({
+                                        ...prev,
+                                        emergencyContact: e.target.value
+                                      }))}
+                                      className="h-11"
+                                    />
+                                  </div>
+                                </TabsContent>
+                                
+                                <TabsContent value="medical" className="space-y-6">
+                                  <div className="space-y-2">
+                                    <Label htmlFor="allergies" className="flex items-center gap-2">
+                                      <AlertCircle className="h-4 w-4" />
+                                      Allergies
+                                    </Label>
+                                    <Textarea
+                                      id="allergies"
+                                      placeholder="List any allergies (e.g., Penicillin, Peanuts, Latex, etc.)"
+                                      value={newPatientForm.allergies}
+                                      onChange={(e) => setNewPatientForm(prev => ({
+                                        ...prev,
+                                        allergies: e.target.value
+                                      }))}
+                                      rows={3}
+                                    />
+                                    <p className="text-sm text-muted-foreground">
+                                      Separate multiple allergies with commas
+                                    </p>
+                                  </div>
+                                  
+                                  <div className="space-y-2">
+                                    <Label htmlFor="medicalHistory" className="flex items-center gap-2">
+                                      <Activity className="h-4 w-4" />
+                                      Medical History
+                                    </Label>
+                                    <Textarea
+                                      id="medicalHistory"
+                                      placeholder="Previous medical conditions, surgeries, chronic illnesses, medications, etc."
+                                      value={newPatientForm.medicalHistory}
+                                      onChange={(e) => setNewPatientForm(prev => ({
+                                        ...prev,
+                                        medicalHistory: e.target.value
+                                      }))}
+                                      rows={4}
+                                    />
+                                    <p className="text-sm text-muted-foreground">
+                                      Include any relevant medical history for better care
+                                    </p>
+                                  </div>
+                                </TabsContent>
+                              </Tabs>
+                              
+                              <DialogFooter className="gap-2">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  onClick={() => setShowNewPatientDialog(false)}
+                                  disabled={creatingPatient}
+                                  className="flex-1"
+                                >
+                                  Cancel
+                                </Button>
+                                <Button
+                                  type="button"
+                                  onClick={createNewPatient}
+                                  disabled={creatingPatient || !newPatientForm.name.trim() || !newPatientForm.phone.trim()}
+                                  className="flex-1 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 gap-2"
+                                >
+                                  {creatingPatient ? (
+                                    <>
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                      Creating...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <UserPlus className="h-4 w-4" />
+                                      Create Patient
+                                    </>
+                                  )}
+                                </Button>
+                              </DialogFooter>
+                            </DialogContent>
+                          </Dialog>
+                        </div>
+                      </div>
+
+                      {/* Search Results */}
+                      {searching ? (
+                        <div className="py-12 text-center border-2 border-dashed rounded-xl">
+                          <div className="inline-block p-4 bg-primary/10 rounded-full mb-4">
+                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                          </div>
+                          <p className="font-medium">Searching patients...</p>
+                          <p className="text-sm text-muted-foreground mt-1">Please wait while we search our database</p>
+                        </div>
+                      ) : searchResults.length > 0 ? (
+                        <div className="border rounded-xl overflow-hidden shadow-sm">
+                          <div className="bg-gradient-to-r from-primary/5 to-primary/10 px-6 py-4 border-b">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <h3 className="font-semibold">
+                                  Found {searchResults.length} patient{searchResults.length !== 1 ? 's' : ''}
+                                </h3>
+                                <p className="text-sm text-muted-foreground">Select a patient from the list below</p>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={clearSearch}
+                              >
+                                Clear
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="max-h-96 overflow-y-auto divide-y">
+                            {searchResults.map((patient) => (
+                              <div
+                                key={patient._id}
+                                className="p-4 hover:bg-accent/50 transition-colors cursor-pointer group"
+                                onClick={() => handleSelectPatient(patient)}
+                              >
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-background border rounded-lg group-hover:bg-primary/10 transition-colors">
+                                      <User className="h-5 w-5" />
+                                    </div>
+                                    <div>
+                                      <h4 className="font-semibold group-hover:text-primary">
+                                        {patient.name}
+                                      </h4>
+                                      <div className="flex flex-wrap gap-3 mt-1">
+                                        <span className="text-sm text-muted-foreground flex items-center gap-1">
+                                          <Phone className="h-3 w-3" />
+                                          {patient.phone}
+                                        </span>
+                                        {patient.email && (
+                                          <span className="text-sm text-muted-foreground flex items-center gap-1">
+                                            <Mail className="h-3 w-3" />
+                                            {patient.email}
+                                          </span>
+                                        )}
+                                        {patient.patientId && (
+                                          <span className="text-sm font-medium text-primary">
+                                            ID: {patient.patientId}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="opacity-0 group-hover:opacity-100 transition-opacity"
+                                  >
+                                    Select
+                                    <ChevronRight className="h-4 w-4 ml-1" />
+                                  </Button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : showNoResults ? (
+                        <div className="border-2 border-dashed rounded-xl p-8 text-center">
+                          <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
+                            <User className="h-8 w-8 text-muted-foreground" />
+                          </div>
+                          <h3 className="text-lg font-semibold mb-2">
+                            No Patients Found
+                          </h3>
+                          <p className="text-muted-foreground mb-6 max-w-md mx-auto">
+                            No patients found matching "<span className="font-medium">{patientSearch}</span>"
+                          </p>
+                          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                            <Button
+                              type="button"
+                              variant="default"
+                              onClick={() => {
+                                setNewPatientForm(prev => ({
+                                  ...prev,
+                                  name: patientSearch.trim(),
+                                  phone: "",
+                                  email: "",
+                                }));
+                                setShowNewPatientDialog(true);
+                              }}
+                              className="gap-2"
+                            >
+                              <Plus className="h-4 w-4" />
+                              Create New Patient
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={clearSearch}
+                            >
+                              Clear Search
+                            </Button>
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Step 2: Doctor & Date Selection */}
+            {selectedPatient && (
+              <div className={cn(
+                "transition-all duration-300",
+                activeSection !== "doctor" && "opacity-75"
+              )}>
+                <Card className="border-2 border-blue-500/20 shadow-xl hover:shadow-2xl transition-all duration-300">
+                  <CardHeader className="pb-4">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-3">
+                          <div className="p-3 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl">
+                            <Stethoscope className="h-6 w-6 text-white" />
+                          </div>
+                          <div>
+                            <CardTitle className="text-2xl">Step 2: Select Doctor & Date</CardTitle>
+                            <CardDescription>
+                              Choose doctor and appointment date
+                            </CardDescription>
+                          </div>
+                        </div>
+                      </div>
+                      <Badge variant="default" className="px-3 py-1 text-sm">
+                        Required
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    {/* Emergency Toggle */}
+                    <div className={cn(
+                      "p-4 rounded-xl border transition-all duration-300",
+                      isEmergency 
+                        ? "bg-red-500/10 border-red-500/30" 
+                        : "bg-gradient-to-r from-blue-500/5 to-blue-500/10 border-blue-500/20"
+                    )}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <AlertCircle className={cn(
+                            "h-6 w-6",
+                            isEmergency ? "text-red-500" : "text-blue-500"
+                          )} />
+                          <div>
+                            <h4 className="font-bold text-lg">Emergency Appointment</h4>
+                            <p className="text-sm text-muted-foreground">High priority scheduling</p>
+                          </div>
+                        </div>
+                        <Switch
+                          checked={isEmergency}
+                          onCheckedChange={(checked) => {
+                            setIsEmergency(checked);
+                            if (checked) {
+                              setPriority("emergency");
+                              setAppointmentType("emergency");
+                            } else {
+                              setPriority("medium");
+                            }
+                          }}
+                          className="data-[state=checked]:bg-red-500 h-6 w-11"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      {/* Doctor Selection */}
+                      <div className="space-y-3">
+                        <Label htmlFor="doctor" className="text-lg font-semibold">
+                          Select Doctor *
+                        </Label>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm text-muted-foreground">
+                            {doctors.length} doctors available
+                          </span>
                           <Button
                             type="button"
                             variant="ghost"
                             size="sm"
-                            onClick={() => {
-                              setSelectedPatient(null);
-                              clearSearch();
-                            }}
-                            className="text-destructive hover:text-destructive"
+                            onClick={fetchDoctors}
+                            disabled={loadingDoctors}
+                            className="h-8 w-8 p-0"
                           >
-                            <X className="h-4 w-4" />
+                            {loadingDoctors ? 
+                              <Loader2 className="h-4 w-4 animate-spin" /> : 
+                              <RefreshCw className="h-4 w-4" />
+                            }
                           </Button>
                         </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm text-green-600">
-                      <CheckCircle className="h-4 w-4" />
-                      Patient selected. You can now proceed to schedule the appointment.
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <Label htmlFor="patientSearch" className="text-base font-medium">
-                          Search Patient *
-                        </Label>
-                        <span className="text-sm text-muted-foreground">
-                          Search by name, phone, or patient ID
-                        </span>
-                      </div>
-                      <div className="flex gap-2">
-                        <div className="relative flex-1">
-                          <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                          <Input
-                            ref={searchInputRef}
-                            id="patientSearch"
-                            placeholder="Enter patient name, phone number, or patient ID..."
-                            value={patientSearch}
-                            onChange={(e) => handleSearchChange(e.target.value)}
-                            onKeyDown={handleSearchKeyDown}
-                            className="pl-9 h-11 text-base"
-                          />
-                          {patientSearch && (
-                            <button
-                              type="button"
-                              onClick={clearSearch}
-                              className="absolute right-3 top-3 text-muted-foreground hover:text-foreground"
-                            >
-                              <X className="h-4 w-4" />
-                            </button>
-                          )}
-                        </div>
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          onClick={() => searchPatients()}
-                          disabled={searching || !patientSearch.trim()}
-                          className="h-11 px-6 gap-2"
+                        <Select
+                          value={selectedDoctor}
+                          onValueChange={handleDoctorSelect}
+                          required
+                          disabled={loadingDoctors}
                         >
-                          {searching ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Search className="h-4 w-4" />
-                          )}
-                          Search
-                        </Button>
-                        <Dialog open={showNewPatientDialog} onOpenChange={setShowNewPatientDialog}>
-                          <DialogTrigger asChild>
-                            <Button
-                              type="button"
-                              className="h-11 bg-gradient-to-r from-primary to-primary/90 hover:from-primary hover:to-primary gap-2"
-                            >
-                              <UserPlus className="h-4 w-4" />
-                              New Patient
-                            </Button>
-                          </DialogTrigger>
-                          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-                            <DialogHeader>
-                              <DialogTitle className="text-2xl flex items-center gap-2">
-                                <UserPlus className="h-6 w-6" />
-                                Create New Patient
-                              </DialogTitle>
-                              <DialogDescription>
-                                Fill in the patient details below. All fields marked with * are required.
-                              </DialogDescription>
-                            </DialogHeader>
-                            
-                            <Tabs defaultValue="basic" className="w-full">
-                              <TabsList className="grid w-full grid-cols-2 mb-6">
-                                <TabsTrigger value="basic" className="gap-2">
-                                  <User className="h-4 w-4" />
-                                  Basic Information
-                                </TabsTrigger>
-                                <TabsTrigger value="medical" className="gap-2">
-                                  <Activity className="h-4 w-4" />
-                                  Medical Information
-                                </TabsTrigger>
-                              </TabsList>
-                              
-                              <TabsContent value="basic" className="space-y-6">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                  <div className="space-y-2">
-                                    <Label htmlFor="name" className="font-medium">
-                                      Full Name *
-                                    </Label>
-                                    <Input
-                                      id="name"
-                                      placeholder="John Doe"
-                                      value={newPatientForm.name}
-                                      onChange={(e) => setNewPatientForm(prev => ({
-                                        ...prev,
-                                        name: e.target.value
-                                      }))}
-                                      required
-                                      className={formErrors.name ? "border-red-500" : ""}
-                                    />
-                                    {formErrors.name && (
-                                      <p className="text-sm text-red-500">{formErrors.name}</p>
-                                    )}
-                                  </div>
-                                  
-                                  <div className="space-y-2">
-                                    <Label htmlFor="phone" className="font-medium">
-                                      Phone Number *
-                                    </Label>
-                                    <Input
-                                      id="phone"
-                                      placeholder="+1 (555) 123-4567"
-                                      value={newPatientForm.phone}
-                                      onChange={(e) => setNewPatientForm(prev => ({
-                                        ...prev,
-                                        phone: e.target.value
-                                      }))}
-                                      required
-                                      className={formErrors.phone ? "border-red-500" : ""}
-                                    />
-                                    {formErrors.phone && (
-                                      <p className="text-sm text-red-500">{formErrors.phone}</p>
-                                    )}
-                                  </div>
-                                  
-                                  <div className="space-y-2">
-                                    <Label htmlFor="email">Email Address</Label>
-                                    <Input
-                                      id="email"
-                                      type="email"
-                                      placeholder="john@example.com"
-                                      value={newPatientForm.email}
-                                      onChange={(e) => setNewPatientForm(prev => ({
-                                        ...prev,
-                                        email: e.target.value
-                                      }))}
-                                      className={formErrors.email ? "border-red-500" : ""}
-                                    />
-                                    {formErrors.email && (
-                                      <p className="text-sm text-red-500">{formErrors.email}</p>
-                                    )}
-                                  </div>
-                                  
-                                  <div className="space-y-2">
-                                    <Label htmlFor="dateOfBirth" className="font-medium">
-                                      Date of Birth *
-                                    </Label>
-                                    <Input
-                                      id="dateOfBirth"
-                                      type="date"
-                                      value={newPatientForm.dateOfBirth}
-                                      onChange={(e) => setNewPatientForm(prev => ({
-                                        ...prev,
-                                        dateOfBirth: e.target.value
-                                      }))}
-                                      required
-                                      className={formErrors.dateOfBirth ? "border-red-500" : ""}
-                                    />
-                                    {formErrors.dateOfBirth && (
-                                      <p className="text-sm text-red-500">{formErrors.dateOfBirth}</p>
-                                    )}
-                                  </div>
-                                  
-                                  <div className="space-y-2">
-                                    <Label htmlFor="gender" className="font-medium">
-                                      Gender *
-                                    </Label>
-                                    <Select
-                                      value={newPatientForm.gender}
-                                      onValueChange={(value: "male" | "female" | "other") => 
-                                        setNewPatientForm(prev => ({ ...prev, gender: value }))
-                                      }
-                                    >
-                                      <SelectTrigger className="h-11">
-                                        <SelectValue placeholder="Select gender" />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        <SelectItem value="male">Male</SelectItem>
-                                        <SelectItem value="female">Female</SelectItem>
-                                        <SelectItem value="other">Other</SelectItem>
-                                      </SelectContent>
-                                    </Select>
-                                    {formErrors.gender && (
-                                      <p className="text-sm text-red-500">{formErrors.gender}</p>
-                                    )}
-                                  </div>
-                                  
-                                  <div className="space-y-2">
-                                    <Label htmlFor="bloodGroup">Blood Group</Label>
-                                    <Select
-                                      value={newPatientForm.bloodGroup}
-                                      onValueChange={(value) => 
-                                        setNewPatientForm(prev => ({ ...prev, bloodGroup: value }))
-                                      }
-                                    >
-                                      <SelectTrigger className="h-11">
-                                        <SelectValue placeholder="Select blood group" />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        {["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-", "unknown"].map((group) => (
-                                          <SelectItem key={group} value={group}>{group}</SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-                                  </div>
-                                </div>
-                                
-                                <div className="space-y-2">
-                                  <Label htmlFor="address" className="flex items-center gap-2">
-                                    <MapPin className="h-4 w-4" />
-                                    Address
-                                  </Label>
-                                  <Textarea
-                                    id="address"
-                                    placeholder="123 Main Street, City, State, ZIP Code"
-                                    value={newPatientForm.address}
-                                    onChange={(e) => setNewPatientForm(prev => ({
-                                      ...prev,
-                                      address: e.target.value
-                                    }))}
-                                    rows={2}
-                                  />
-                                </div>
-                                
-                                <div className="space-y-2">
-                                  <Label htmlFor="emergencyContact" className="flex items-center gap-2">
-                                    <Phone className="h-4 w-4" />
-                                    Emergency Contact
-                                  </Label>
-                                  <Input
-                                    id="emergencyContact"
-                                    placeholder="Emergency contact name and phone number"
-                                    value={newPatientForm.emergencyContact}
-                                    onChange={(e) => setNewPatientForm(prev => ({
-                                      ...prev,
-                                      emergencyContact: e.target.value
-                                    }))}
-                                    className="h-11"
-                                  />
-                                </div>
-                              </TabsContent>
-                              
-                              <TabsContent value="medical" className="space-y-6">
-                                <div className="space-y-2">
-                                  <Label htmlFor="allergies" className="flex items-center gap-2">
-                                    <AlertCircle className="h-4 w-4" />
-                                    Allergies
-                                  </Label>
-                                  <Textarea
-                                    id="allergies"
-                                    placeholder="List any allergies (e.g., Penicillin, Peanuts, Latex, etc.)"
-                                    value={newPatientForm.allergies}
-                                    onChange={(e) => setNewPatientForm(prev => ({
-                                      ...prev,
-                                      allergies: e.target.value
-                                    }))}
-                                    rows={3}
-                                  />
-                                  <p className="text-sm text-muted-foreground">
-                                    Separate multiple allergies with commas
-                                  </p>
-                                </div>
-                                
-                                <div className="space-y-2">
-                                  <Label htmlFor="medicalHistory" className="flex items-center gap-2">
-                                    <Activity className="h-4 w-4" />
-                                    Medical History
-                                  </Label>
-                                  <Textarea
-                                    id="medicalHistory"
-                                    placeholder="Previous medical conditions, surgeries, chronic illnesses, medications, etc."
-                                    value={newPatientForm.medicalHistory}
-                                    onChange={(e) => setNewPatientForm(prev => ({
-                                      ...prev,
-                                      medicalHistory: e.target.value
-                                    }))}
-                                    rows={4}
-                                  />
-                                  <p className="text-sm text-muted-foreground">
-                                    Include any relevant medical history for better care
-                                  </p>
-                                </div>
-                              </TabsContent>
-                            </Tabs>
-                            
-                            <DialogFooter className="gap-2">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                onClick={() => setShowNewPatientDialog(false)}
-                                disabled={creatingPatient}
-                                className="flex-1"
-                              >
-                                Cancel
-                              </Button>
-                              <Button
-                                type="button"
-                                onClick={createNewPatient}
-                                disabled={creatingPatient || !newPatientForm.name.trim() || !newPatientForm.phone.trim()}
-                                className="flex-1 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 gap-2"
-                              >
-                                {creatingPatient ? (
-                                  <>
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                    Creating...
-                                  </>
-                                ) : (
-                                  <>
-                                    <UserPlus className="h-4 w-4" />
-                                    Create Patient
-                                  </>
-                                )}
-                              </Button>
-                            </DialogFooter>
-                          </DialogContent>
-                        </Dialog>
-                      </div>
-                    </div>
-
-                    {/* Search Results */}
-                    {searching ? (
-                      <div className="py-12 text-center border-2 border-dashed rounded-xl">
-                        <div className="inline-block p-4 bg-primary/10 rounded-full mb-4">
-                          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                        </div>
-                        <p className="font-medium">Searching patients...</p>
-                        <p className="text-sm text-muted-foreground mt-1">Please wait while we search our database</p>
-                      </div>
-                    ) : searchResults.length > 0 ? (
-                      <div className="border rounded-xl overflow-hidden">
-                        <div className="bg-muted px-4 py-3 border-b">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <h3 className="font-semibold">
-                                Found {searchResults.length} patient{searchResults.length !== 1 ? 's' : ''}
-                              </h3>
-                              <p className="text-sm text-muted-foreground">Select a patient from the list below</p>
-                            </div>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={clearSearch}
-                            >
-                              Clear
-                            </Button>
-                          </div>
-                        </div>
-                        <div className="max-h-96 overflow-y-auto divide-y">
-                          {searchResults.map((patient) => (
-                            <div
-                              key={patient._id}
-                              className="p-4 hover:bg-accent/50 transition-colors cursor-pointer group"
-                              onClick={() => handleSelectPatient(patient)}
-                            >
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                  <div className="p-2 bg-background border rounded-lg group-hover:bg-primary/10 transition-colors">
-                                    <User className="h-5 w-5" />
-                                  </div>
-                                  <div>
-                                    <h4 className="font-semibold group-hover:text-primary">
-                                      {patient.name}
-                                    </h4>
-                                    <div className="flex flex-wrap gap-3 mt-1">
-                                      <span className="text-sm text-muted-foreground flex items-center gap-1">
-                                        <Phone className="h-3 w-3" />
-                                        {patient.phone}
-                                      </span>
-                                      {patient.email && (
-                                        <span className="text-sm text-muted-foreground flex items-center gap-1">
-                                          <Mail className="h-3 w-3" />
-                                          {patient.email}
-                                        </span>
-                                      )}
-                                      {patient.patientId && (
-                                        <span className="text-sm font-medium text-primary">
-                                          ID: {patient.patientId}
-                                        </span>
-                                      )}
+                          <SelectTrigger className="h-14 text-lg rounded-xl">
+                            <SelectValue placeholder="Choose a doctor..." />
+                          </SelectTrigger>
+                          <SelectContent className="max-h-80">
+                            {loadingDoctors ? (
+                              <div className="p-8 text-center">
+                                <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
+                                <p className="text-sm text-muted-foreground">Loading doctors...</p>
+                              </div>
+                            ) : (
+                              doctors.map((doctor) => (
+                                <SelectItem key={doctor._id} value={doctor._id} className="py-3">
+                                  <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-blue-500/10 rounded-lg">
+                                      <Stethoscope className="h-4 w-4 text-blue-500" />
+                                    </div>
+                                    <div className="flex-1">
+                                      <span className="font-semibold">Dr. {doctor.name}</span>
+                                      <p className="text-sm text-muted-foreground">
+                                        {doctor.specialization} • {doctor.department}
+                                      </p>
                                     </div>
                                   </div>
-                                </div>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  className="opacity-0 group-hover:opacity-100 transition-opacity"
-                                >
-                                  Select
-                                  <ChevronRight className="h-4 w-4 ml-1" />
-                                </Button>
+                                </SelectItem>
+                              ))
+                            )}
+                          </SelectContent>
+                        </Select>
+                        {selectedDoctorInfo && (
+                          <div className="mt-4 p-4 bg-gradient-to-r from-blue-500/5 to-blue-500/10 rounded-xl">
+                            <div className="flex items-center gap-3">
+                              <div className="p-2 bg-white rounded-lg shadow-sm">
+                                <Stethoscope className="h-5 w-5 text-blue-500" />
+                              </div>
+                              <div>
+                                <h5 className="font-semibold">Dr. {selectedDoctorInfo.name}</h5>
+                                <p className="text-sm text-muted-foreground">
+                                  {selectedDoctorInfo.specialization} • {selectedDoctorInfo.department}
+                                </p>
                               </div>
                             </div>
-                          ))}
-                        </div>
+                          </div>
+                        )}
                       </div>
-                    ) : showNoResults ? (
-                      <div className="border-2 border-dashed rounded-xl p-8 text-center">
-                        <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
-                          <User className="h-8 w-8 text-muted-foreground" />
-                        </div>
-                        <h3 className="text-lg font-semibold mb-2">
-                          No Patients Found
-                        </h3>
-                        <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-                          No patients found matching "<span className="font-medium">{patientSearch}</span>"
-                        </p>
-                        <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                          <Button
-                            type="button"
-                            variant="default"
-                            onClick={() => {
-                              setNewPatientForm(prev => ({
-                                ...prev,
-                                name: patientSearch.trim(),
-                                phone: "",
-                                email: "",
-                              }));
-                              setShowNewPatientDialog(true);
-                            }}
-                            className="gap-2"
-                          >
-                            <Plus className="h-4 w-4" />
-                            Create New Patient
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={clearSearch}
-                          >
-                            Clear Search
-                          </Button>
-                        </div>
-                      </div>
-                    ) : patientSearch.trim().length > 0 && !showNoResults ? (
-                      <div className="text-center py-8 text-muted-foreground">
-                        <p>Continue typing or press Enter to search</p>
-                      </div>
-                    ) : null}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
 
-            {/* Doctor & Time Selection Card */}
-            <Card className={cn(
-              "border-border shadow-sm hover:shadow-md transition-all",
-              !selectedPatient && "opacity-50 pointer-events-none"
-            )}>
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-1">
-                    <CardTitle className="text-xl flex items-center gap-2">
-                      <div className="p-2 bg-blue-500/10 rounded-lg">
-                        <Stethoscope className="h-5 w-5 text-blue-500" />
-                      </div>
-                      Doctor & Appointment Date
-                    </CardTitle>
-                    <CardDescription>
-                      Select doctor and appointment date
-                    </CardDescription>
-                  </div>
-                  <Badge variant="secondary" className="gap-2">
-                    2
-                    <ChevronRight className="h-3 w-3" />
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {/* Emergency Toggle */}
-                <div className="flex items-center justify-between p-4 bg-destructive/5 border border-destructive/20 rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <AlertCircle className="h-5 w-5 text-destructive" />
-                    <div>
-                      <h4 className="font-medium">Emergency Appointment</h4>
-                      <p className="text-sm text-muted-foreground">High priority scheduling</p>
-                    </div>
-                  </div>
-                  <Switch
-                    checked={isEmergency}
-                    onCheckedChange={(checked) => {
-                      setIsEmergency(checked);
-                      if (checked) {
-                        setPriority("emergency");
-                        setAppointmentType("emergency");
-                      } else {
-                        setPriority("medium");
-                      }
-                    }}
-                    className="data-[state=checked]:bg-destructive"
-                  />
-                </div>
-
-                {/* Doctor Selection */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="doctor" className="text-base font-medium">
-                      Select Doctor *
-                    </Label>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline">
-                        {doctors.length} available
-                      </Badge>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={fetchDoctors}
-                        disabled={loadingDoctors}
-                        className="h-8 w-8 p-0"
-                      >
-                        {loadingDoctors ? 
-                          <Loader2 className="h-4 w-4 animate-spin" /> : 
-                          <RefreshCw className="h-4 w-4" />
-                        }
-                      </Button>
-                    </div>
-                  </div>
-                  <Select
-                    value={selectedDoctor}
-                    onValueChange={handleDoctorSelect}
-                    required
-                    disabled={loadingDoctors || !selectedPatient}
-                  >
-                    <SelectTrigger className="h-12 text-base">
-                      <SelectValue placeholder="Choose a doctor..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {loadingDoctors ? (
-                        <div className="p-4 text-center">
-                          <Loader2 className="h-6 w-6 animate-spin mx-auto" />
-                          <p className="text-sm text-muted-foreground mt-2">Loading doctors...</p>
-                        </div>
-                      ) : (
-                        doctors.map((doctor) => (
-                          <SelectItem key={doctor._id} value={doctor._id} className="py-3">
-                            <div className="flex flex-col">
-                              <span className="font-medium">Dr. {doctor.name}</span>
-                              <span className="text-sm text-muted-foreground">
-                                {doctor.specialization} • {doctor.department}
-                              </span>
+                      {/* Date Selection */}
+                      <div className="space-y-3">
+                        <Label htmlFor="date" className="text-lg font-semibold">
+                          Appointment Date *
+                        </Label>
+                        <div className="space-y-4">
+                          <div className="relative">
+                            <Calendar className="absolute left-4 top-4 h-5 w-5 text-muted-foreground" />
+                            <Input
+                              id="date"
+                              type="date"
+                              value={appointmentDate}
+                              onChange={(e) => handleDateChange(e.target.value)}
+                              required
+                              className="h-14 pl-12 text-lg rounded-xl"
+                              min={format(new Date(), "yyyy-MM-dd")}
+                            />
+                          </div>
+                          <div className="p-4 bg-gradient-to-r from-primary/5 to-primary/10 rounded-xl">
+                            <div className="flex items-center gap-2">
+                              <CalendarDays className="h-5 w-5 text-primary" />
+                              <span className="font-semibold">{formatDisplayDate(appointmentDate)}</span>
                             </div>
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
-                  {formErrors.doctorId && (
-                    <p className="text-sm text-red-500">{formErrors.doctorId}</p>
-                  )}
-                  {!selectedPatient && (
-                    <div className="flex items-center gap-2 text-sm text-amber-600">
-                      <AlertCircle className="h-4 w-4" />
-                      Select a patient first to choose a doctor
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                  )}
-                </div>
 
-                {/* Date & Auto-Number Selection */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-3">
-                    <Label htmlFor="date" className="flex items-center gap-2">
-                      <CalendarIcon className="h-4 w-4" />
-                      Appointment Date *
-                    </Label>
-                    <div className="relative">
-                      <Input
-                        id="date"
-                        type="date"
-                        value={appointmentDate}
-                        onChange={(e) => handleDateChange(e.target.value)}
-                        required
-                        className="h-12 pl-10"
-                        min={format(new Date(), "yyyy-MM-dd")}
-                        disabled={!selectedPatient}
-                      />
-                      <Calendar className="absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
-                    </div>
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Calendar className="h-3 w-3" />
-                      {formatDisplayDate(appointmentDate)}
-                    </div>
-                    {formErrors.appointmentDate && (
-                      <p className="text-sm text-red-500">{formErrors.appointmentDate}</p>
-                    )}
-                  </div>
-                  
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <Label className="font-medium flex items-center gap-2">
-                        <Hash className="h-4 w-4" />
+                    {/* Appointment Number */}
+                    <div className="space-y-3">
+                      <Label className="text-lg font-semibold">
                         Appointment Number
                       </Label>
-                      {todaysAppointmentsCount > 0 && (
-                        <Badge variant="secondary">
-                          {todaysAppointmentsCount} today
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="relative">
-                      <div className="absolute left-3 top-3.5">
-                        <Hash className="h-4 w-4 text-muted-foreground" />
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="p-6 bg-gradient-to-br from-primary/5 to-primary/10 rounded-2xl border border-primary/20">
+                          <div className="flex items-center justify-between mb-4">
+                            <h4 className="font-semibold">Today's Appointments</h4>
+                            <Badge variant="secondary">{todaysAppointmentsCount}</Badge>
+                          </div>
+                          <div className="text-3xl font-bold text-primary">
+                            #{autoNumber || "001"}
+                          </div>
+                          <p className="text-sm text-muted-foreground mt-2">
+                            Next available number
+                          </p>
+                        </div>
+                        <div className="p-6 bg-gradient-to-br from-blue-500/5 to-blue-500/10 rounded-2xl border border-blue-500/20">
+                          <div className="flex items-center justify-between mb-4">
+                            <h4 className="font-semibold">Estimated Time</h4>
+                            <Clock className="h-5 w-5 text-blue-500" />
+                          </div>
+                          <div className="text-3xl font-bold text-blue-500">
+                            {estimatedTime || "TBD"}
+                          </div>
+                          <p className="text-sm text-muted-foreground mt-2">
+                            Based on daily sequence
+                          </p>
+                        </div>
                       </div>
-                      <Input
-                        value={autoNumber ? `#${autoNumber}` : ""}
-                        readOnly
-                        className="h-12 pl-10 bg-muted font-mono text-lg font-bold"
-                        placeholder="Auto-generated"
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
+            {/* Step 3: Appointment Details */}
+            {selectedPatient && selectedDoctor && (
+              <div className={cn(
+                "transition-all duration-300",
+                activeSection !== "details" && "opacity-75"
+              )}>
+                <Card className="border-2 border-purple-500/20 shadow-xl hover:shadow-2xl transition-all duration-300">
+                  <CardHeader className="pb-4">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-3">
+                          <div className="p-3 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl">
+                            <FileText className="h-6 w-6 text-white" />
+                          </div>
+                          <div>
+                            <CardTitle className="text-2xl">Step 3: Appointment Details</CardTitle>
+                            <CardDescription>
+                              Provide appointment details and additional information
+                            </CardDescription>
+                          </div>
+                        </div>
+                      </div>
+                      <Badge variant="default" className="px-3 py-1 text-sm">
+                        Required
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    {/* Quick Templates */}
+                    <div className="space-y-3">
+                      <Label className="text-lg font-semibold">Quick Templates</Label>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => handleTemplateSelect("general")}
+                          className="gap-2"
+                        >
+                          <User className="h-4 w-4" />
+                          General Consultation
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => handleTemplateSelect("followup")}
+                          className="gap-2"
+                        >
+                          <RefreshCw className="h-4 w-4" />
+                          Follow-up Visit
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => handleTemplateSelect("emergency")}
+                          className="gap-2"
+                        >
+                          <AlertCircle className="h-4 w-4" />
+                          Emergency
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Appointment Type */}
+                      <div className="space-y-3">
+                        <Label htmlFor="appointmentType" className="font-semibold">
+                          Appointment Type *
+                        </Label>
+                        <Select
+                          value={appointmentType}
+                          onValueChange={setAppointmentType}
+                          required
+                          disabled={isEmergency}
+                        >
+                          <SelectTrigger className="h-12 rounded-xl">
+                            <SelectValue placeholder="Select type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Object.entries(appointmentTypeIcons).map(([value, icon]) => (
+                              <SelectItem key={value} value={value} className="py-3">
+                                <div className="flex items-center gap-3">
+                                  <span className="text-xl">{icon}</span>
+                                  <div>
+                                    <span className="capitalize">{value.replace("-", " ")}</span>
+                                    <p className="text-xs text-muted-foreground">
+                                      {value === "emergency" ? "High priority" : 
+                                       value === "consultation" ? "General visit" : 
+                                       value === "followup" ? "Follow-up" : "Other"}
+                                    </p>
+                                  </div>
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      
+                      {/* Priority */}
+                      <div className="space-y-3">
+                        <Label htmlFor="priority" className="font-semibold">
+                          Priority Level *
+                        </Label>
+                        <Select
+                          value={isEmergency ? "emergency" : priority}
+                          onValueChange={(value) => {
+                            if (value === "emergency") {
+                              setIsEmergency(true);
+                            } else {
+                              setIsEmergency(false);
+                            }
+                            setPriority(value);
+                          }}
+                          required
+                          disabled={isEmergency}
+                        >
+                          <SelectTrigger className="h-12 rounded-xl">
+                            <SelectValue placeholder="Select priority" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Object.entries(priorityColors).map(([value, className]) => (
+                              <SelectItem key={value} value={value} className="py-3">
+                                <div className="flex items-center gap-3">
+                                  <div className={`w-3 h-3 rounded-full ${className.split(' ')[0]}`}></div>
+                                  <div>
+                                    <span className="capitalize">{value}</span>
+                                    <p className="text-xs text-muted-foreground">
+                                      {value === "emergency" ? "Immediate attention" : 
+                                       value === "high" ? "Urgent" : 
+                                       value === "medium" ? "Standard" : "Low priority"}
+                                    </p>
+                                  </div>
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    
+                    {/* Reason */}
+                    <div className="space-y-3">
+                      <Label htmlFor="reason" className="font-semibold">
+                        Reason for Appointment *
+                      </Label>
+                      <Textarea
+                        id="reason"
+                        placeholder="Please describe the reason for the appointment in detail..."
+                        value={reason}
+                        onChange={(e) => setReason(e.target.value)}
+                        required
+                        rows={4}
+                        className="min-h-32 resize-y text-lg rounded-xl"
+                      />
+                      <div className="flex items-center justify-between text-sm text-muted-foreground">
+                        <span>Detailed description helps doctor prepare</span>
+                        <span className={reason.length < 10 ? "text-red-500 font-medium" : ""}>
+                          {reason.length}/500 characters
+                        </span>
+                      </div>
+                    </div>
+                    
+                    {/* Symptoms */}
+                    <div className="space-y-3">
+                      <Label className="font-semibold flex items-center gap-2">
+                        <Brain className="h-5 w-5" />
+                        Symptoms
+                      </Label>
+                      <div className="flex flex-wrap gap-2 mb-3">
+                        {commonSymptoms.map((symptom) => {
+                          const isSelected = symptoms.split(',').map(s => s.trim()).includes(symptom);
+                          return (
+                            <Badge
+                              key={symptom}
+                              variant={isSelected ? "default" : "outline"}
+                              className={cn(
+                                "cursor-pointer hover:scale-105 transition-all",
+                                isSelected && "bg-primary hover:bg-primary/90"
+                              )}
+                              onClick={() => handleSymptomClick(symptom)}
+                            >
+                              {symptom}
+                            </Badge>
+                          );
+                        })}
+                      </div>
+                      <Textarea
+                        placeholder="List any symptoms the patient is experiencing..."
+                        value={symptoms}
+                        onChange={(e) => setSymptoms(e.target.value)}
+                        rows={3}
+                        className="min-h-24 resize-y rounded-xl"
                       />
                     </div>
-                    <div className="flex items-center gap-2 text-sm text-green-600">
-                      <CheckCircle className="h-4 w-4" />
-                      Auto-number generated based on daily sequence
+                    
+                    {/* Notes */}
+                    <div className="space-y-3">
+                      <Label htmlFor="notes" className="font-semibold flex items-center gap-2">
+                        <FileText className="h-5 w-5" />
+                        Additional Notes
+                      </Label>
+                      <Textarea
+                        id="notes"
+                        placeholder="Any special instructions, preferences, or notes..."
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                        rows={3}
+                        className="min-h-24 resize-y rounded-xl"
+                      />
                     </div>
-                  </div>
-                </div>
-
-                {/* Appointment Information */}
-                <div className="p-4 bg-blue-500/5 border border-blue-500/20 rounded-lg">
-                  <div className="flex items-center gap-3 mb-3">
-                    <Clock className="h-5 w-5 text-blue-500" />
-                    <h4 className="font-medium">Appointment Information</h4>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                      <span>20 minutes per appointment</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                      <span>Auto-number starts from 001 daily</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                      <span>Time assigned based on sequence</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                      <span>Focus on daily numbering system</span>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Appointment Details Card */}
-            <Card className={cn(
-              "border-border shadow-sm hover:shadow-md transition-all",
-              (!selectedPatient || !selectedDoctor) && "opacity-50 pointer-events-none"
-            )}>
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-1">
-                    <CardTitle className="text-xl flex items-center gap-2">
-                      <div className="p-2 bg-purple-500/10 rounded-lg">
-                        <FileText className="h-5 w-5 text-purple-500" />
-                      </div>
-                      Appointment Details
-                    </CardTitle>
-                    <CardDescription>
-                      Provide appointment reason and additional information
-                    </CardDescription>
-                  </div>
-                  <Badge variant="secondary" className="gap-2">
-                    3
-                    <ChevronRight className="h-3 w-3" />
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-3">
-                    <Label htmlFor="appointmentType" className="font-medium">
-                      Appointment Type *
-                    </Label>
-                    <Select
-                      value={appointmentType}
-                      onValueChange={setAppointmentType}
-                      required
-                      disabled={!selectedPatient || !selectedDoctor || isEmergency}
-                    >
-                      <SelectTrigger className="h-12">
-                        <SelectValue placeholder="Select type" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Object.entries(appointmentTypeIcons).map(([value, icon]) => (
-                          <SelectItem key={value} value={value}>
-                            <div className="flex items-center gap-2">
-                              <span>{icon}</span>
-                              <span className="capitalize">{value.replace("-", " ")}</span>
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
-                  <div className="space-y-3">
-                    <Label htmlFor="priority" className="font-medium">
-                      Priority Level *
-                    </Label>
-                    <Select
-                      value={isEmergency ? "emergency" : priority}
-                      onValueChange={(value) => {
-                        if (value === "emergency") {
-                          setIsEmergency(true);
-                        } else {
-                          setIsEmergency(false);
-                        }
-                        setPriority(value);
-                      }}
-                      required
-                      disabled={!selectedPatient || !selectedDoctor || isEmergency}
-                    >
-                      <SelectTrigger className="h-12">
-                        <SelectValue placeholder="Select priority" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Object.entries(priorityColors).map(([value, className]) => (
-                          <SelectItem key={value} value={value}>
-                            <div className="flex items-center gap-2">
-                              <div className={`w-2 h-2 rounded-full ${className.split(' ')[0]}`}></div>
-                              <span className="capitalize">{value}</span>
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                
-                <div className="space-y-3">
-                  <Label htmlFor="reason" className="font-medium">
-                    Reason for Appointment *
-                  </Label>
-                  <Textarea
-                    id="reason"
-                    placeholder="Please describe the reason for the appointment in detail..."
-                    value={reason}
-                    onChange={(e) => setReason(e.target.value)}
-                    required
-                    rows={4}
-                    className="min-h-[120px] resize-y"
-                    disabled={!selectedPatient || !selectedDoctor}
-                  />
-                  <div className="flex items-center justify-between text-sm text-muted-foreground">
-                    <span>Be specific about symptoms, concerns, or follow-up needs</span>
-                    <span className={reason.length < 10 ? "text-red-500" : ""}>
-                      {reason.length}/500
-                    </span>
-                  </div>
-                  {formErrors.reason && (
-                    <p className="text-sm text-red-500">{formErrors.reason}</p>
-                  )}
-                </div>
-                
-                {/* Common Symptoms */}
-                <div className="space-y-3">
-                  <Label className="flex items-center gap-2">
-                    <Brain className="h-4 w-4" />
-                    Common Symptoms (Optional)
-                  </Label>
-                  <div className="flex flex-wrap gap-2">
-                    {commonSymptoms.map((symptom) => {
-                      const isSelected = symptoms.split(',').map(s => s.trim()).includes(symptom);
-                      return (
-                        <Badge
-                          key={symptom}
-                          variant={isSelected ? "default" : "outline"}
-                          className="cursor-pointer hover:scale-105 transition-transform"
-                          onClick={() => handleSymptomClick(symptom)}
-                        >
-                          {symptom}
-                        </Badge>
-                      );
-                    })}
-                  </div>
-                  <Textarea
-                    placeholder="List any symptoms the patient is experiencing..."
-                    value={symptoms}
-                    onChange={(e) => setSymptoms(e.target.value)}
-                    rows={3}
-                    className="min-h-[100px] resize-y"
-                    disabled={!selectedPatient || !selectedDoctor}
-                  />
-                </div>
-                
-                <div className="space-y-3">
-                  <Label htmlFor="notes" className="flex items-center gap-2">
-                    <AlertCircle className="h-4 w-4" />
-                    Additional Notes (Optional)
-                  </Label>
-                  <Textarea
-                    id="notes"
-                    placeholder="Any special instructions, preferences, or notes..."
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    rows={3}
-                    className="min-h-[100px] resize-y"
-                    disabled={!selectedPatient || !selectedDoctor}
-                  />
-                </div>
-              </CardContent>
-            </Card>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
           </div>
 
           {/* Right Column - Summary & Actions */}
           <div className="space-y-8">
-            {/* Summary Card */}
-            <Card className="sticky top-6 border-primary/20 shadow-lg">
-              <CardHeader className="pb-4">
-                <CardTitle className="text-xl bg-gradient-to-r from-primary to-blue-600 bg-clip-text text-transparent">
-                  Appointment Summary
-                </CardTitle>
-                <CardDescription>
-                  Review all details before scheduling
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-4">
-                  {/* Patient Section */}
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2">
-                      <User className="h-4 w-4 text-primary" />
-                      <h4 className="font-semibold">Patient Details</h4>
-                    </div>
-                    <div className={cn(
-                      "p-4 rounded-lg border transition-all",
-                      selectedPatient 
-                        ? "bg-primary/5 border-primary/20 shadow-sm" 
-                        : "bg-muted border-muted-foreground/20"
-                    )}>
-                      <div className="flex items-start gap-3">
-                        <div className={cn(
-                          "p-2 rounded-lg",
-                          selectedPatient ? "bg-primary/10" : "bg-muted-foreground/10"
-                        )}>
-                          <User className={cn(
-                            "h-5 w-5",
-                            selectedPatient ? "text-primary" : "text-muted-foreground"
-                          )} />
-                        </div>
-                        <div className="flex-1">
-                          <p className={cn(
-                            "font-medium",
-                            selectedPatient ? "" : "text-muted-foreground italic"
-                          )}>
-                            {selectedPatient ? selectedPatient.name : "No patient selected"}
-                          </p>
-                          {selectedPatient && (
-                            <div className="mt-2 space-y-1 text-sm text-muted-foreground">
-                              <p>{selectedPatient.phone}</p>
-                              {selectedPatient.patientId && (
-                                <p>ID: {selectedPatient.patientId}</p>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                        {selectedPatient && (
-                          <CheckCircle className="h-5 w-5 text-green-500" />
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {/* Doctor Section */}
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2">
-                      <Stethoscope className="h-4 w-4 text-blue-500" />
-                      <h4 className="font-semibold">Doctor Details</h4>
-                    </div>
-                    <div className={cn(
-                      "p-4 rounded-lg border transition-all",
-                      selectedDoctor
-                        ? "bg-blue-500/5 border-blue-500/20 shadow-sm"
-                        : "bg-muted border-muted-foreground/20"
-                    )}>
-                      <div className="flex items-start gap-3">
-                        <div className={cn(
-                          "p-2 rounded-lg",
-                          selectedDoctor ? "bg-blue-500/10" : "bg-muted-foreground/10"
-                        )}>
-                          <Stethoscope className={cn(
-                            "h-5 w-5",
-                            selectedDoctor ? "text-blue-500" : "text-muted-foreground"
-                          )} />
-                        </div>
-                        <div className="flex-1">
-                          <p className={cn(
-                            "font-medium",
-                            selectedDoctor ? "" : "text-muted-foreground italic"
-                          )}>
-                            {selectedDoctorInfo ? `Dr. ${selectedDoctorInfo.name}` : "No doctor selected"}
-                          </p>
-                          {selectedDoctorInfo && (
-                            <div className="mt-2 space-y-1 text-sm text-muted-foreground">
-                              <p>{selectedDoctorInfo.specialization}</p>
-                              <p>{selectedDoctorInfo.department}</p>
-                            </div>
-                          )}
-                        </div>
-                        {selectedDoctor && (
-                          <CheckCircle className="h-5 w-5 text-green-500" />
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {/* Appointment Section */}
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4 text-purple-500" />
-                      <h4 className="font-semibold">Appointment Details</h4>
-                    </div>
-                    <div className={cn(
-                      "p-4 rounded-lg border transition-all",
-                      appointmentDate
-                        ? "bg-purple-500/5 border-purple-500/20 shadow-sm"
-                        : "bg-muted border-muted-foreground/20"
-                    )}>
-                      <div className="space-y-4">
-                        <div>
-                          <p className="font-medium text-lg">
-                            {appointmentDate ? formatDisplayDate(appointmentDate) : "No date selected"}
-                          </p>
-                          {appointmentDate && (
-                            <div className="flex items-center justify-between mt-2">
-                              <div className="flex items-center gap-2">
-                                <Hash className="h-4 w-4" />
-                                <span className="text-2xl font-bold bg-gradient-to-r from-primary to-purple-600 bg-clip-text text-transparent">
-                                  #{autoNumber || "000"}
-                                </span>
-                              </div>
-                              <Badge 
-                                variant={isEmergency ? "destructive" : "secondary"}
-                                className={priorityColors[priority as keyof typeof priorityColors]}
-                              >
-                                {(isEmergency ? "emergency" : priority).toUpperCase()}
-                              </Badge>
-                            </div>
-                          )}
-                        </div>
-                        
-                        {appointmentDate && (
-                          <div className="grid grid-cols-2 gap-4 pt-4 border-t">
-                            <div className="space-y-1">
-                              <p className="text-sm text-muted-foreground">Type</p>
-                              <p className="font-medium capitalize flex items-center gap-2">
-                                <span>{appointmentTypeIcons[appointmentType as keyof typeof appointmentTypeIcons]}</span>
-                                {appointmentType.replace("-", " ")}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-sm text-muted-foreground">Duration</p>
-                              <p className="font-medium">20 minutes</p>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                
-                <Separator />
-                
-                {/* Quick Stats */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <p className="text-sm text-muted-foreground">Today's Count</p>
-                    <p className="text-2xl font-bold">{todaysAppointmentsCount}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-sm text-muted-foreground">Next Number</p>
-                    <p className="text-2xl font-bold text-primary">#{autoNumber || "001"}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
             {/* Action Card */}
-            <Card className="border-green-500/20 shadow-lg">
+            <Card className=" sticky top-24  border-2 border-green-500/20 shadow-2xl">
               <CardContent className="p-6">
                 <div className="space-y-6">
-                  <div>
-                    <h3 className="text-lg font-semibold mb-2">
-                      Ready to Schedule
+                  <div className="text-center">
+                    <h3 className="text-xl font-bold mb-2">
+                      Schedule Appointment
                     </h3>
-                    <p className="text-muted-foreground text-sm">
-                      Review all information and schedule the appointment
+                    <p className="text-muted-foreground">
+                      Review all information before scheduling
                     </p>
                   </div>
                   
                   <div className="space-y-3">
                     <Button
                       type="submit"
+                      onClick={handleSubmit}
                       disabled={loading || !isFormValid()}
-                      className="w-full h-14 text-base font-medium bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 shadow-lg hover:shadow-xl transition-all"
+                      className="w-full h-14 text-lg font-bold bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 shadow-lg hover:shadow-xl transition-all rounded-xl"
                       size="lg"
                     >
                       {loading ? (
@@ -1876,51 +1907,66 @@ export default function NewAppointmentPage() {
                       )}
                     </Button>
                     
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => router.push("/appointments")}
-                      className="w-full h-11"
-                      disabled={loading}
-                    >
-                      Cancel
-                    </Button>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => router.push("/appointments")}
+                        className="h-11"
+                        disabled={loading}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => {
+                          setSelectedPatient(null);
+                          setSelectedDoctor("");
+                          setAppointmentDate(format(new Date(), "yyyy-MM-dd"));
+                          setReason("");
+                          setSymptoms("");
+                          setNotes("");
+                          setAutoNumber("");
+                        }}
+                        className="h-11 gap-2"
+                        disabled={loading}
+                      >
+                        <RefreshCw className="h-4 w-4" />
+                        Reset
+                      </Button>
+                    </div>
                   </div>
                   
                   {!isFormValid() && (
-                    <div className="p-4 bg-amber-500/5 border border-amber-500/20 rounded-lg">
-                      <div className="flex items-center gap-2 mb-2">
-                        <AlertCircle className="h-4 w-4 text-amber-600" />
-                        <span className="font-medium text-amber-700">
+                    <div className="p-4 bg-gradient-to-r from-amber-500/5 to-amber-500/10 border border-amber-500/20 rounded-xl">
+                      <div className="flex items-center gap-2 mb-3">
+                        <AlertCircle className="h-5 w-5 text-amber-600" />
+                        <span className="font-semibold text-amber-700">
                           Incomplete Information
                         </span>
                       </div>
-                      <ul className="space-y-1 text-sm text-amber-600">
+                      <ul className="space-y-1.5 text-sm text-amber-600">
                         {!selectedPatient && <li className="flex items-center gap-2">• Select or create a patient</li>}
                         {!selectedDoctor && <li className="flex items-center gap-2">• Choose a doctor</li>}
-                        {!appointmentDate && <li className="flex items-center gap-2">• Select appointment date</li>}
                         {reason.length < 10 && <li className="flex items-center gap-2">• Provide detailed reason ({reason.length}/10)</li>}
                       </ul>
                     </div>
                   )}
                   
                   <div className="pt-4 border-t">
-                    <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
-                      <Shield className="h-4 w-4" />
-                      Information & Help
-                    </h4>
+                    <div className="flex items-center gap-2 mb-3">
+                      <Shield className="h-5 w-5 text-primary" />
+                      <h4 className="font-semibold">Information</h4>
+                    </div>
                     <div className="space-y-2 text-sm text-muted-foreground">
                       <div className="flex items-start gap-2">
                         <div className="w-1.5 h-1.5 bg-primary rounded-full mt-1.5"></div>
-                        <p>Appointments are scheduled by date only</p>
-                      </div>
-                      <div className="flex items-start gap-2">
-                        <div className="w-1.5 h-1.5 bg-primary rounded-full mt=1.5"></div>
-                        <p>Auto-number starts from 001 daily for each doctor</p>
+                        <p>Appointments scheduled by date only</p>
                       </div>
                       <div className="flex items-start gap-2">
                         <div className="w-1.5 h-1.5 bg-primary rounded-full mt-1.5"></div>
-                        <p>Sequential numbering based on daily appointment count</p>
+                        <p>Auto-number starts from 001 daily</p>
                       </div>
                       <div className="flex items-start gap-2">
                         <div className="w-1.5 h-1.5 bg-primary rounded-full mt-1.5"></div>
@@ -1933,7 +1979,28 @@ export default function NewAppointmentPage() {
             </Card>
           </div>
         </div>
-      </form>
+
+        {/* Bottom Navigation */}
+        
+      </div>
     </div>
   );
 }
+
+// Helper component for left chevron
+const ChevronLeft = ({ className }: { className?: string }) => (
+  <svg 
+    xmlns="http://www.w3.org/2000/svg" 
+    width="24" 
+    height="24" 
+    viewBox="0 0 24 24" 
+    fill="none" 
+    stroke="currentColor" 
+    strokeWidth="2" 
+    strokeLinecap="round" 
+    strokeLinejoin="round" 
+    className={className}
+  >
+    <path d="m15 18-6-6 6-6"/>
+  </svg>
+);

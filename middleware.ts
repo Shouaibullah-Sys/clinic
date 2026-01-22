@@ -61,12 +61,15 @@ const roleRoutes: Record<string, string[]> = {
     "/appointments",
     "/billing"
   ],
-  pharmacist: [
+  pharmacist: [ 
     "/pharmacy",
     "/dashboard",
     "/prescriptions",
     "/inventory",
-    "/medications"
+    "/medications",
+    "/pharmacy/dashboard",
+    "/pharmacy/stock",
+    "/pharmacy/prescriptions"
   ],
   lab_technician: [
     "/laboratory",
@@ -169,9 +172,9 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL("/unauthorized", request.url));
     }
 
-    if (pathname.startsWith("/pharmacy/") && !["admin", "pharmacist"].includes(userRole)) {
-      return NextResponse.redirect(new URL("/unauthorized", request.url));
-    }
+      if (pathname.startsWith("/pharmacy/") && !["admin", "pharmacist"].includes(userRole)) {
+    return NextResponse.redirect(new URL("/unauthorized", request.url));
+}
 
     if (pathname.startsWith("/laboratory/") && !["admin", "lab_technician"].includes(userRole)) {
       return NextResponse.redirect(new URL("/unauthorized", request.url));

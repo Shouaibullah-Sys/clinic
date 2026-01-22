@@ -1,6 +1,8 @@
+// app/reception/discounts/new/page.tsx
+
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/useAuthStore";
 import { Button } from "@/components/ui/button";
@@ -27,9 +29,10 @@ interface PatientSearchResult {
 }
 
 export default function NewDiscountRequestPage() {
-  const router = useRouter();
-  const { user, accessToken } = useAuthStore();
-  const [loading, setLoading] = useState(false);
+   const router = useRouter();
+   const { user, accessToken } = useAuthStore();
+   const formRef = useRef<HTMLFormElement>(null);
+   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<PatientSearchResult[]>([]);
   const [selectedPatient, setSelectedPatient] = useState<PatientSearchResult | null>(null);
@@ -72,8 +75,8 @@ export default function NewDiscountRequestPage() {
     setLoading(true);
     setError(null);
     setSuccess(null);
-    
-    const formData = new FormData(e.currentTarget);
+
+    const formData = new FormData(formRef.current!);
     const data = {
       patientId: formData.get("patientId"),
       requestedAmount: formData.get("amount"),
@@ -104,10 +107,10 @@ export default function NewDiscountRequestPage() {
       if (result.success) {
         setSuccess("Discount request submitted successfully!");
         // Clear form
-        e.currentTarget.reset();
+        formRef.current?.reset();
         setSelectedPatient(null);
         setSearchResults([]);
-        
+
         // Redirect after 2 seconds
         setTimeout(() => {
           router.push("/reception/dashboard");
@@ -174,7 +177,7 @@ export default function NewDiscountRequestPage() {
             </Alert>
           )}
           
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
             {/* Patient Search */}
             <div className="space-y-4">
               <Label htmlFor="patientSearch">Search Patient</Label>

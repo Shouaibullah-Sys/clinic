@@ -1,19 +1,20 @@
-// lib/models/LabTest.ts
+//lib/models/LabTest.ts
+
 import mongoose, { Schema, model, models } from "mongoose";
 
 export interface ILabTest extends mongoose.Document {
   testId: string;
+  appointment: mongoose.Types.ObjectId;
+  patient: mongoose.Types.ObjectId;
   testName: string;
-  testCode: string;
   category: string;
-  description?: string;
-  specimenType: "blood" | "urine" | "stool" | "tissue" | "saliva" | "other";
-  preparationInstructions?: string;
-  turnaroundTime: number; // in hours
   price: number;
-  normalRange?: string;
-  unit?: string;
-  active: boolean;
+  status: "pending" | "processing" | "completed" | "cancelled";
+  orderedBy: mongoose.Types.ObjectId;
+  orderedAt: Date;
+  result?: string;
+  completedAt?: Date;
+  notes?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -24,51 +25,65 @@ const labTestSchema = new Schema<ILabTest>(
       type: String,
       required: true,
       unique: true,
+      uppercase: true,
+    },
+    appointment: {
+      type: Schema.Types.ObjectId,
+      ref: "Appointment",
+      required: true,
+    },
+    patient: {
+      type: Schema.Types.ObjectId,
+      ref: "Patient",
+      required: true,
     },
     testName: {
       type: String,
       required: true,
       trim: true,
     },
-    testCode: {
-      type: String,
-      required: true,
-      unique: true,
-      uppercase: true,
-    },
     category: {
       type: String,
       required: true,
-    },
-    description: {
-      type: String,
-    },
-    specimenType: {
-      type: String,
-      enum: ["blood", "urine", "stool", "tissue", "saliva", "other"],
-      required: true,
-    },
-    preparationInstructions: {
-      type: String,
-    },
-    turnaroundTime: {
-      type: Number,
-      default: 24,
+      enum: [
+        "hematology",
+        "biochemistry",
+        "microbiology",
+        "immunology",
+        "urinalysis",
+        "radiology",
+        "other",
+      ],
     },
     price: {
       type: Number,
       required: true,
       min: 0,
     },
-    normalRange: {
+    status: {
       type: String,
+      enum: ["pending", "processing", "completed", "cancelled"],
+      default: "pending",
     },
-    unit: {
+    orderedBy: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    orderedAt: {
+      type: Date,
+      default: Date.now,
+    },
+    result: {
       type: String,
+      trim: true,
     },
-    active: {
-      type: Boolean,
-      default: true,
+    completedAt: {
+      type: Date,
+    },
+    notes: {
+      type: String,
+      trim: true,
     },
   },
   {
@@ -78,16 +93,25 @@ const labTestSchema = new Schema<ILabTest>(
 
 // Indexes
 labTestSchema.index({ testId: 1 });
-labTestSchema.index({ testCode: 1 });
-labTestSchema.index({ testName: 1 });
+labTestSchema.index({ appointment: 1 });
+labTestSchema.index({ patient: 1 });
+labTestSchema.index({ status: 1 });
+labTestSchema.index({ orderedAt: -1 });
 labTestSchema.index({ category: 1 });
-labTestSchema.index({ active: 1 });
 
-// Pre-save hook
+// Compound indexes
+labTestSchema.index({ appointment: 1, status: 1 });
+labTestSchema.index({ patient: 1, status: 1 });
+
+// Pre-save hooks
 labTestSchema.pre("save", function (next) {
-  if (!this.testId || this.isNew) {
-    const random = Math.floor(10000 + Math.random() * 90000);
-    this.testId = `TEST${random}`;
+  // Generate test ID if not exists
+  if (!this.testId) {
+    const date = new Date();
+    const year = date.getFullYear().toString().slice(-2);
+    const month = (date.getMonth() + 1).toString().padStart(2, "0");
+    const random = Math.floor(1000 + Math.random() * 9000);
+    this.testId = `LAB${year}${month}${random}`;
   }
   next();
 });

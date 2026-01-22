@@ -181,8 +181,16 @@ export async function POST(request: NextRequest) {
       );
     }
     
+    // Generate discount ID
+    const date = new Date();
+    const year = date.getFullYear().toString().slice(-2);
+    const month = (date.getMonth() + 1).toString().padStart(2, "0");
+    const random = Math.floor(1000 + Math.random() * 9000);
+    const discountId = `DIS${year}${month}${random}`;
+
     // Create discount request using the DiscountRequest model
     const discountRequest = new DiscountRequest({
+      discountId,
       patient: patientId,
       requestedAmount: amount,
       discountPercentage: originalAmount ? (amount / originalAmount) * 100 : undefined,

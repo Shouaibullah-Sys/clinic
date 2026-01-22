@@ -86,9 +86,9 @@ const patientSchema = new Schema<IPatient>(
   }
 );
 
-// Indexes
-patientSchema.index({ patientId: 1 });
-patientSchema.index({ phone: 1 });
+// Indexes - DEFINE ALL INDEXES HERE
+patientSchema.index({ patientId: 1 }, { unique: true, sparse: true });
+patientSchema.index({ phone: 1 }, { unique: true });
 patientSchema.index({ name: 1 });
 patientSchema.index({ active: 1 });
 patientSchema.index({ createdAt: -1 });
