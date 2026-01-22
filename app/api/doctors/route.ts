@@ -17,57 +17,56 @@ async function verifyToken(token: string) {
   }
 }
 
-async function authenticate(request: NextRequest) {
-  const authHeader = request.headers.get("authorization");
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return { error: "Unauthorized. No token provided.", status: 401 };
-  }
-
-  const token = authHeader.split(" ")[1];
-  const payload = await verifyToken(token);
-
-  if (!payload) {
-    return { error: "Invalid or expired token.", status: 401 };
-  }
-
-  const userRole = payload.role as string;
-
-  // Allow receptionists, doctors, nurses, and admins
-  if (!["admin", "receptionist", "doctor", "nurse"].includes(userRole)) {
-    return { error: "Forbidden. Access denied.", status: 403 };
-  }
-
-  return { userId: payload.id as string, userRole };
-}
-
-// GET: Fetch active doctors for appointment scheduling
 export async function GET(request: NextRequest) {
   try {
     await dbConnect();
-
-    const auth = await authenticate(request);
-    if ("error" in auth) {
+    
+    // Authentication
+    const authHeader = request.headers.get("authorization");
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return NextResponse.json(
-        { success: false, error: auth.error },
-        { status: auth.status }
+        { success: false, error: "Unauthorized. No token provided." },
+        { status: 401 }
       );
     }
-
-    // Fetch active doctors with essential fields
-    const doctors = await User.find({
-      role: "doctor",
-      active: true,
-      approved: true,
-    })
-      .select("_id name specialization department phone")
+    
+    const token = authHeader.split(" ")[1];
+    const payload = await verifyToken(token);
+    
+    if (!payload) {
+      return NextResponse.json(
+        { success: false, error: "Invalid or expired token." },
+        { status: 401 }
+      );
+    }
+    
+    const { searchParams } = new URL(request.url);
+    const activeOnly = searchParams.get("active") !== "false";
+    const department = searchParams.get("department");
+    
+    // Build query
+    let query: any = { role: "doctor", active: activeOnly };
+    
+    if (department && department !== "all") {
+      query.department = department;
+    }
+    
+    // Get doctors
+    const doctors = await User.find(query)
+      .select("_id name email phone specialization department availability active approved consultationFee")
       .sort({ name: 1 })
       .lean();
-
+    
+    // Get unique departments
+    const departments = await User.distinct("department", { role: "doctor", active: true });
+    
     return NextResponse.json({
       success: true,
       data: doctors,
+      departments: departments.filter(Boolean).sort(),
+      total: doctors.length,
     });
-
+    
   } catch (error) {
     console.error("Error fetching doctors:", error);
     return NextResponse.json(

@@ -18,12 +18,12 @@ async function verifyToken(token: string) {
   }
 }
 
-// POST: Create new patient - CORRECTED VERSION
+// POST: Create new patient
 export async function POST(request: NextRequest) {
   try {
     await dbConnect();
     
-    // Get token from Authorization header
+    // Authentication
     const authHeader = request.headers.get("authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return NextResponse.json(
@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
     const userId = payload.id as string;
     const userRole = payload.role as string;
     
-    // Only admin, receptionist, and doctors can create patients
+    // Authorization
     if (!["admin", "receptionist", "doctor"].includes(userRole)) {
       return NextResponse.json(
         { success: false, error: "Forbidden. You don't have permission to create patients." },
@@ -67,9 +67,7 @@ export async function POST(request: NextRequest) {
       medicalHistory,
     } = body;
     
-    console.log("Received patient data:", body);
-    
-    // Validate required fields
+    // Validation
     if (!name || !phone || !dateOfBirth || !gender) {
       return NextResponse.json(
         { 
@@ -82,19 +80,19 @@ export async function POST(request: NextRequest) {
     
     // Clean phone number
     const cleanPhone = phone.replace(/\D/g, '');
-    
+
     if (cleanPhone.length < 10) {
       return NextResponse.json(
         { success: false, error: "Phone number must be at least 10 digits" },
         { status: 400 }
       );
     }
-    
-    // Check if patient with same phone already exists
-    const existingPatient = await Patient.findOne({ 
-      phone: { $regex: cleanPhone, $options: 'i' } 
+
+    // Check for existing patient
+    const existingPatient = await Patient.findOne({
+      phone: { $regex: cleanPhone, $options: 'i' }
     });
-    
+
     if (existingPatient) {
       return NextResponse.json({
         success: false,
@@ -104,28 +102,28 @@ export async function POST(request: NextRequest) {
           name: existingPatient.name,
           phone: existingPatient.phone,
           patientId: existingPatient.patientId,
+          email: existingPatient.email,
+          dateOfBirth: existingPatient.dateOfBirth,
+          gender: existingPatient.gender,
         }
       }, { status: 409 });
     }
     
-    // Generate patient ID manually first
+    // Generate patient ID
     const date = new Date();
     const year = date.getFullYear().toString().slice(-2);
     const month = (date.getMonth() + 1).toString().padStart(2, "0");
     const random = Math.floor(1000 + Math.random() * 9000);
-    let generatedPatientId = `PAT${year}${month}${random}`; // FIXED: changed const to let
-    
-    console.log("Generated patientId:", generatedPatientId);
-    
-    // Check if this patientId already exists (unlikely but possible)
+    let generatedPatientId = `PAT${year}${month}${random}`;
+
+    // Check for ID collision
     const existingWithSameId = await Patient.findOne({ patientId: generatedPatientId });
     if (existingWithSameId) {
-      // Regenerate if collision occurs
       const newRandom = Math.floor(1000 + Math.random() * 9000);
-      generatedPatientId = `PAT${year}${month}${newRandom}`; // Now this works because it's let
+      generatedPatientId = `PAT${year}${month}${newRandom}`;
     }
     
-    // Create patient with explicit patientId
+    // Create patient
     const patientData: any = {
       patientId: generatedPatientId,
       name: name.trim(),
@@ -136,7 +134,7 @@ export async function POST(request: NextRequest) {
       active: true,
     };
     
-    // Add optional fields if provided
+    // Add optional fields
     if (email) patientData.email = email.trim().toLowerCase();
     if (address) patientData.address = address.trim();
     if (emergencyContact) patientData.emergencyContact = emergencyContact.trim();
@@ -144,23 +142,17 @@ export async function POST(request: NextRequest) {
     if (allergies) patientData.allergies = allergies.trim();
     if (medicalHistory) patientData.medicalHistory = medicalHistory.trim();
     
-    console.log("Creating patient with data:", patientData);
-    
     const patient = new Patient(patientData);
-    
-    // Save and handle errors
+
+    // Save patient
     try {
       await patient.save();
-      console.log("Patient saved successfully:", patient);
     } catch (saveError: any) {
-      console.error("Save error details:", saveError);
-      
-      // Handle duplicate key errors
       if (saveError.code === 11000) {
         const field = Object.keys(saveError.keyPattern)[0];
         return NextResponse.json(
-          { 
-            success: false, 
+          {
+            success: false,
             error: `A patient with this ${field} already exists`,
             details: saveError.keyValue
           },
@@ -168,7 +160,6 @@ export async function POST(request: NextRequest) {
         );
       }
       
-      // Handle validation errors
       if (saveError.name === 'ValidationError') {
         const errors: string[] = [];
         for (const field in saveError.errors) {
@@ -187,16 +178,17 @@ export async function POST(request: NextRequest) {
       throw saveError;
     }
     
-    // Return success response
+    // Return success
     return NextResponse.json({
       success: true,
       data: {
         id: patient._id.toString(),
+        _id: patient._id.toString(),
         patientId: patient.patientId,
         name: patient.name,
         phone: patient.phone,
         email: patient.email,
-        dateOfBirth: patient.dateOfBirth,
+        dateOfBirth: patient.dateOfBirth?.toISOString().split('T')[0],
         gender: patient.gender,
         address: patient.address,
       },
@@ -216,12 +208,12 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// GET: Search patients (with pagination)
+// GET: Search patients
 export async function GET(request: NextRequest) {
   try {
     await dbConnect();
     
-    // Get token from Authorization header
+    // Authentication
     const authHeader = request.headers.get("authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return NextResponse.json(
@@ -241,9 +233,9 @@ export async function GET(request: NextRequest) {
     }
     
     const { searchParams } = new URL(request.url);
-    const search = searchParams.get("search");
+    const search = searchParams.get("q") || searchParams.get("search");
     const page = parseInt(searchParams.get("page") || "1");
-    const limit = parseInt(searchParams.get("limit") || "20");
+    const limit = parseInt(searchParams.get("limit") || "10");
     const skip = (page - 1) * limit;
     
     let query: any = { active: true };
@@ -260,7 +252,7 @@ export async function GET(request: NextRequest) {
     
     const [patients, total] = await Promise.all([
       Patient.find(query)
-        .select("name phone email patientId dateOfBirth gender")
+        .select("_id name phone email patientId dateOfBirth gender address")
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
@@ -270,7 +262,10 @@ export async function GET(request: NextRequest) {
     
     return NextResponse.json({
       success: true,
-      data: patients,
+      data: patients.map(p => ({
+        ...p,
+        dateOfBirth: p.dateOfBirth ? p.dateOfBirth.toISOString().split('T')[0] : undefined
+      })),
       pagination: {
         page,
         limit,
