@@ -1,3 +1,5 @@
+// lib/models/User.ts
+
 import mongoose, { Schema, model, models } from "mongoose";
 
 export interface IUser extends mongoose.Document {
@@ -26,6 +28,7 @@ export interface IUser extends mongoose.Document {
   biography?: string;
   joiningDate?: Date;
   permissions: string[];
+  refreshTokens?: string[]; // Add refresh tokens for JWT
   createdAt: Date;
   updatedAt: Date;
 }
@@ -129,27 +132,58 @@ const userSchema = new Schema<IUser>(
     permissions: [{
       type: String,
     }],
+    refreshTokens: [{
+      type: String,
+    }],
   },
   {
     timestamps: true,
+    toJSON: {
+      transform: function(doc, ret) {
+        delete ret.password;
+        delete ret.refreshTokens;
+        return ret;
+      }
+    },
+    toObject: {
+      transform: function(doc, ret) {
+        delete ret.password;
+        delete ret.refreshTokens;
+        return ret;
+      }
+    }
   }
 );
+
 // Counter for employeeId generation
 const counterSchema = new Schema({
   _id: { type: String, required: true },
   seq: { type: Number, default: 0 }
 });
 const Counter = models.Counter || model('Counter', counterSchema);
- 
+
 // Indexes
 userSchema.index({ role: 1 });
 userSchema.index({ department: 1 });
 userSchema.index({ specialization: 1 });
 userSchema.index({ active: 1, approved: 1 });
+userSchema.index({ email: 1 }, { unique: true });
+userSchema.index({ licenseNumber: 1 }, { unique: true, sparse: true });
 
 // Pre-save hook for doctors
 userSchema.pre("save", async function (next) {
   const user = this;
+  
+  // Only hash password if it's modified
+  if (user.isModified('password')) {
+    try {
+      const bcrypt = await import('bcryptjs');
+      const salt = await bcrypt.genSalt(10);
+      user.password = await bcrypt.hash(user.password, salt);
+    } catch (error) {
+      return next(error as any);
+    }
+  }
   
   // Set default availability for doctors
   if (user.role === "doctor" && !user.availability) {
@@ -172,7 +206,7 @@ userSchema.pre("save", async function (next) {
       );
       
       // Generate unique ID with prefix based on role
-      const prefix = "DOC"; // Or "EMP" if you prefer
+      const prefix = "DOC";
       user.employeeId = `${prefix}${counter.seq.toString().padStart(4, '0')}`;
       console.log(`Generated employeeId: ${user.employeeId} for ${user.role} ${user.name}`);
     } catch (error) {
@@ -184,6 +218,17 @@ userSchema.pre("save", async function (next) {
   // Set joining date if not provided
   if (user.role === "doctor" && !user.joiningDate) {
     user.joiningDate = new Date();
+  }
+  
+  // Set default permissions for doctors
+  if (user.role === "doctor" && (!user.permissions || user.permissions.length === 0)) {
+    user.permissions = [
+      "view_patients",
+      "create_prescriptions",
+      "view_appointments",
+      "update_medical_records",
+      "view_own_patients",
+    ];
   }
   
   next();
@@ -218,12 +263,56 @@ userSchema.statics.findActiveDoctors = function () {
     .sort({ name: 1 });
 };
 
+// Static method to find doctor by ID
+userSchema.statics.findDoctorById = function (id: string) {
+  return this.findOne({
+    _id: id,
+    role: "doctor",
+    active: true,
+    approved: true,
+  }).select("-password -refreshTokens");
+};
+
 // Instance method for doctor availability check
 userSchema.methods.isAvailableOnDay = function (day: string): boolean {
   if (this.role !== "doctor" || !this.availability || !this.availability.days) {
     return false;
   }
   return this.availability.days.includes(day.toLowerCase());
+};
+
+// Instance method to check password
+userSchema.methods.comparePassword = async function (candidatePassword: string): Promise<boolean> {
+  try {
+    const bcrypt = await import('bcryptjs');
+    return await bcrypt.compare(candidatePassword, this.password);
+  } catch (error) {
+    console.error('Error comparing password:', error);
+    return false;
+  }
+};
+
+// Method to add refresh token
+userSchema.methods.addRefreshToken = function (token: string) {
+  if (!this.refreshTokens) {
+    this.refreshTokens = [];
+  }
+  this.refreshTokens.push(token);
+  
+  // Keep only last 5 refresh tokens
+  if (this.refreshTokens.length > 5) {
+    this.refreshTokens = this.refreshTokens.slice(-5);
+  }
+  
+  return this.save();
+};
+
+// Method to remove refresh token
+userSchema.methods.removeRefreshToken = function (token: string) {
+  if (this.refreshTokens) {
+    this.refreshTokens = this.refreshTokens.filter(t => t !== token);
+  }
+  return this.save();
 };
 
 export const User = models.User || model<IUser>("User", userSchema);

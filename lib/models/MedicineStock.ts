@@ -10,7 +10,7 @@ export interface IMedicineStock {
   originalQuantity: number;
   unitPrice: number;
   sellingPrice: number;
-  supplier: string;
+  supplier: string; 
   description?: string;
   createdAt: Date;
   updatedAt: Date;

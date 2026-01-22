@@ -38,12 +38,16 @@ const roleRoutes: Record<string, string[]> = {
     "/settings"
   ],
   doctor: [
-    "/doctor",
+      "/doctor",
     "/dashboard",
     "/patients",
     "/admissions",
     "/prescriptions",
-    "/medical-records"
+    "/medical-records",
+    "/doctor/dashboard",
+    "/doctor/patients",
+    "/doctor/appointments",
+    "/doctor/prescriptions"
   ],
   nurse: [
     "/nurse",

@@ -1,1751 +1,471 @@
 // app/pharmacy/dashboard/page.tsx
+
 "use client";
-import { useState, useMemo } from "react";
-import useSWR from "swr";
-import {
-  CalendarIcon,
-  PlusIcon,
-  PillIcon,
-  ReceiptIcon,
-  WalletIcon,
-  AlertCircleIcon,
-  TrendingUpIcon,
-  TrendingDownIcon,
-  Loader2Icon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  EditIcon,
-  TrashIcon,
-} from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useAuthStore } from "@/store/useAuthStore";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import {
+  Package,
+  DollarSign,
+  AlertCircle,
+  Calendar,
+  TrendingDown,
+  ArrowRight,
+  Plus,
+  RefreshCw,
+} from "lucide-react";
 import { format } from "date-fns";
-import { useAuthStore } from "@/store/useAuthStore";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  useReactTable,
-  getCoreRowModel,
-  getPaginationRowModel,
-  flexRender,
-  ColumnDef,
-} from "@tanstack/react-table";
 
-// Types
-type DashboardStats = {
-  totalSales: number;
-  cashSales: number;
-  cardSales: number;
-  insuranceSales: number;
-  totalExpenses: number;
-  inventoryValue: number;
-  lowStockItems: number;
-};
-
-type LowStockItem = {
+interface MedicineStock {
   _id: string;
   name: string;
   batchNumber: string;
   currentQuantity: number;
   originalQuantity: number;
-  remainingPercentage: number;
-};
-
-type MedicineStock = {
-  _id: string;
-  name: string;
-  batchNumber: string;
   expiryDate: string;
-  currentQuantity: number;
-  originalQuantity: number;
-  unitPrice: number;
   sellingPrice: number;
-  supplier: string;
-};
+  unitPrice: number;
+}
 
-type RecentPrescription = {
-  _id: string;
-  invoiceNumber: string;
-  patientName: string;
-  totalAmount: number;
-  paymentMethod: string;
-  createdAt: string;
-  status: string;
-};
+export default function PharmacyDashboardPage() {
+  const router = useRouter();
+  const { user, accessToken } = useAuthStore();
+  const [loading, setLoading] = useState(true);
+  const [medicines, setMedicines] = useState<MedicineStock[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
-type RecentExpense = {
-  _id: string;
-  amount: number;
-  category: string;
-  description: string;
-  date: string;
-};
+  // Check if user has pharmacy access
+  useEffect(() => {
+    if (user && !["admin", "pharmacist"].includes(user.role)) {
+      router.push("/unauthorized");
+    }
+  }, [user, router]);
 
-// Fetcher function with timeout and error handling
-const fetcher = async (url: string) => {
-  try {
-    // Add timeout to prevent hanging requests
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 25000); // 25 second timeout (increased for optimized queries)
+  // Fetch medicine stock
+  const fetchMedicines = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await fetch("/api/pharmacy/stock?limit=10", {
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setMedicines(data.data);
+      } else {
+        setError(data.error || "Failed to fetch medicine stock");
+        setMedicines([]);
+      }
+    } catch (error) {
+      console.error("Error fetching medicine stock:", error);
+      setError("Failed to fetch medicine stock");
+      setMedicines([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    const response = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        "Cache-Control": "no-cache",
-        Pragma: "no-cache",
-      },
+  useEffect(() => {
+    if (user && ["admin", "pharmacist"].includes(user.role) && accessToken) {
+      fetchMedicines();
+    }
+  }, [user, accessToken]);
+
+  // Calculate statistics
+  const calculateStats = () => {
+    const stats = {
+      totalItems: medicines.length,
+      totalValue: medicines.reduce((sum, med) => sum + (med.currentQuantity * med.sellingPrice), 0),
+      lowStock: 0,
+      expiringSoon: 0,
+      expired: 0,
+      outOfStock: 0,
+    };
+
+    medicines.forEach(medicine => {
+      const stockPercentage = (medicine.currentQuantity / medicine.originalQuantity) * 100;
+      const expiryDate = new Date(medicine.expiryDate);
+      const today = new Date();
+      const daysToExpiry = Math.ceil((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      
+      if (stockPercentage <= 20) stats.lowStock++;
+      if (stockPercentage === 0) stats.outOfStock++;
+      if (daysToExpiry <= 30 && daysToExpiry > 0) stats.expiringSoon++;
+      if (daysToExpiry < 0) stats.expired++;
     });
 
-    clearTimeout(timeoutId);
+    return stats;
+  };
 
-    if (!response.ok) {
-      // Handle different error types
-      if (response.status === 401) {
-        throw new Error("Unauthorized access");
-      } else if (response.status === 403) {
-        throw new Error("Access forbidden");
-      } else if (response.status >= 500) {
-        throw new Error(`Server error: ${response.status}`);
-      } else {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-    }
+  const stats = calculateStats();
 
-    const contentType = response.headers.get("content-type");
-    if (contentType && contentType.indexOf("application/json") !== -1) {
-      const data = await response.json();
-      return data;
-    } else {
-      throw new Error("Response is not JSON");
-    }
-  } catch (error) {
-    if (error instanceof Error) {
-      if (error.name === "AbortError") {
-        console.error(`Request timeout for ${url}`);
-        throw new Error("Request timeout - please check your connection");
-      }
-    }
-    console.error(`Error fetching ${url}:`, error);
-    throw error;
-  }
-};
+  // Get low stock medicines
+  const lowStockMedicines = medicines.filter(medicine => {
+    const stockPercentage = (medicine.currentQuantity / medicine.originalQuantity) * 100;
+    return stockPercentage <= 20 && stockPercentage > 0;
+  }).slice(0, 5);
 
-// Table Pagination Component
-function TablePagination({ table }: { table: any }) {
-  return (
-    <div className="flex items-center justify-end space-x-2 py-4">
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => table.previousPage()}
-        disabled={!table.getCanPreviousPage()}
-      >
-        <ChevronLeftIcon className="h-4 w-4" />
-      </Button>
-      <span className="text-sm font-medium">
-        Page {table.getState().pagination.pageIndex + 1} of{" "}
-        {table.getPageCount()}
-      </span>
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => table.nextPage()}
-        disabled={!table.getCanNextPage()}
-      >
-        <ChevronRightIcon className="h-4 w-4" />
-      </Button>
-    </div>
-  );
-}
+  // Get expiring soon medicines
+  const expiringSoonMedicines = medicines.filter(medicine => {
+    const expiryDate = new Date(medicine.expiryDate);
+    const today = new Date();
+    const daysToExpiry = Math.ceil((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    return daysToExpiry <= 30 && daysToExpiry > 0;
+  }).slice(0, 5);
 
-// Mobile Card Components
-function MobilePrescriptionCard({
-  prescription,
-}: {
-  prescription: RecentPrescription;
-}) {
-  return (
-    <Card className="mb-3 p-3">
-      <CardContent className="p-0 space-y-2">
-        <div className="flex justify-between items-start">
-          <div className="space-y-1 flex-1">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium">
-                {prescription.patientName}
-              </span>
-              <Badge
-                variant={
-                  prescription.status === "completed"
-                    ? "default"
-                    : prescription.status === "pending"
-                    ? "secondary"
-                    : "destructive"
-                }
-                className="text-xs"
-              >
-                {prescription.status}
-              </Badge>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Invoice: {prescription.invoiceNumber}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {format(new Date(prescription.createdAt), "MMM d, yyyy")}
-            </p>
-          </div>
-          <div className="text-right">
-            <p className="text-sm font-bold">
-              AFN {prescription.totalAmount.toFixed(2)}
-            </p>
-            <Badge variant="outline" className="text-xs capitalize mt-1">
-              {prescription.paymentMethod}
-            </Badge>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function MobileExpenseCard({ expense }: { expense: RecentExpense }) {
-  return (
-    <Card className="mb-3 p-3">
-      <CardContent className="p-0 space-y-2">
-        <div className="flex justify-between items-start">
-          <div className="space-y-1 flex-1">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium">{expense.category}</span>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {expense.description}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {format(new Date(expense.date), "MMM d, yyyy")}
-            </p>
-          </div>
-          <div className="text-right">
-            <p className="text-sm font-bold text-red-600">
-              AFN {expense.amount.toFixed(2)}
-            </p>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function MobileMedicineCard({
-  medicine,
-  onEdit,
-}: {
-  medicine: MedicineStock;
-  onEdit: (medicine: MedicineStock) => void;
-}) {
-  const stockPercentage =
-    (medicine.currentQuantity / medicine.originalQuantity) * 100;
-
-  return (
-    <Card className="mb-3 p-3">
-      <CardContent className="p-0 space-y-2">
-        <div className="flex justify-between items-start">
-          <div className="space-y-1 flex-1">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium">{medicine.name}</span>
-              <Badge variant="secondary" className="text-xs">
-                {medicine.batchNumber}
-              </Badge>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Expires: {format(new Date(medicine.expiryDate), "MMM yyyy")}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Stock: {medicine.currentQuantity} / {medicine.originalQuantity}
-            </p>
-            <div className="flex items-center gap-2 mt-1">
-              <Progress
-                value={stockPercentage}
-                className="w-20 h-2"
-                style={
-                  {
-                    "--progress-indicator-color":
-                      stockPercentage < 10
-                        ? "#ef4444"
-                        : stockPercentage < 20
-                        ? "#eab308"
-                        : "#22c55e",
-                  } as React.CSSProperties
-                }
-              />
-              <span className="text-xs font-medium">
-                {stockPercentage.toFixed(0)}%
-              </span>
-            </div>
-          </div>
-          <div className="text-right">
-            <div className="space-y-1">
-              <p className="text-sm font-bold">
-                AFN {medicine.sellingPrice.toFixed(2)}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Buy: AFN {medicine.unitPrice.toFixed(2)}
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onEdit(medicine)}
-              className="mt-2 h-6 w-6 p-0"
-            >
-              <EditIcon className="h-3 w-3" />
-            </Button>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-// Component for Prescriptions Table with TanStack React Table
-function PrescriptionsTableWithPagination({
-  prescriptions,
-}: {
-  prescriptions: RecentPrescription[];
-}) {
-  const columns = useMemo<ColumnDef<RecentPrescription>[]>(
-    () => [
-      {
-        accessorKey: "patientName",
-        header: "Patient",
-        cell: ({ row }) => (
-          <div className="text-xs sm:text-sm">
-            {row.getValue("patientName")}
-          </div>
-        ),
-      },
-      {
-        accessorKey: "totalAmount",
-        header: "Amount",
-        cell: ({ row }) => (
-          <div className="text-xs sm:text-sm">
-            AFN {Number(row.getValue("totalAmount")).toFixed(2)}
-          </div>
-        ),
-      },
-      {
-        accessorKey: "paymentMethod",
-        header: "Payment",
-        cell: ({ row }) => (
-          <Badge variant="outline" className="text-xs capitalize">
-            {row.getValue("paymentMethod")}
-          </Badge>
-        ),
-      },
-      {
-        accessorKey: "createdAt",
-        header: "Date",
-        cell: ({ row }) => (
-          <div className="text-xs sm:text-sm">
-            {format(new Date(row.getValue("createdAt")), "MMM d, yyyy")}
-          </div>
-        ),
-      },
-      {
-        accessorKey: "status",
-        header: "Status",
-        cell: ({ row }) => (
-          <Badge
-            variant={
-              row.getValue("status") === "completed"
-                ? "default"
-                : row.getValue("status") === "pending"
-                ? "secondary"
-                : "destructive"
-            }
-            className="text-xs"
-          >
-            {row.getValue("status")}
-          </Badge>
-        ),
-      },
-    ],
-    []
-  );
-
-  const table = useReactTable({
-    data: prescriptions,
-    columns,
-    getCoreRowModel: getCoreRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    initialState: {
-      pagination: {
-        pageSize: 10,
-      },
-    },
-  });
-
-  return (
-    <>
-      {/* Desktop Table View */}
-      <div className="hidden sm:block">
-        <Table>
-          <TableHeader>
-            {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id}>
-                {headerGroup.headers.map((header) => (
-                  <TableHead key={header.id}>
-                    {flexRender(
-                      header.column.columnDef.header,
-                      header.getContext()
-                    )}
-                  </TableHead>
-                ))}
-              </TableRow>
-            ))}
-          </TableHeader>
-          <TableBody>
-            {table.getRowModel().rows?.length ? (
-              table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id}>
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
-                      {flexRender(
-                        cell.column.columnDef.cell,
-                        cell.getContext()
-                      )}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell
-                  colSpan={columns.length}
-                  className="h-24 text-center"
-                >
-                  No prescriptions found.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
-
-      {/* Mobile Card View */}
-      <div className="sm:hidden space-y-3">
-        {table.getRowModel().rows?.length ? (
-          table
-            .getRowModel()
-            .rows.map((row) => (
-              <MobilePrescriptionCard
-                key={row.id}
-                prescription={row.original}
-              />
-            ))
-        ) : (
-          <div className="text-center py-4 text-muted-foreground">
-            No prescriptions found.
-          </div>
-        )}
-      </div>
-
-      {table.getPageCount() > 1 && <TablePagination table={table} />}
-    </>
-  );
-}
-
-// Component for Inventory Table with TanStack React Table
-function InventoryTableWithPagination({
-  onEditMedicine,
-}: {
-  onEditMedicine: (medicine: MedicineStock) => void;
-}) {
-  const {
-    data: inventory,
-    isLoading,
-    mutate,
-  } = useSWR("/api/pharmacy/inventory", fetcher);
-
-  const columns = useMemo<ColumnDef<MedicineStock>[]>(
-    () => [
-      {
-        accessorKey: "name",
-        header: "Medicine",
-        cell: ({ row }) => (
-          <div className="font-medium text-xs sm:text-sm">
-            {row.getValue("name")}
-          </div>
-        ),
-      },
-      {
-        accessorKey: "batchNumber",
-        header: "Batch No.",
-        cell: ({ row }) => (
-          <div className="text-xs sm:text-sm">
-            {row.getValue("batchNumber")}
-          </div>
-        ),
-      },
-      {
-        accessorKey: "expiryDate",
-        header: "Expiry",
-        cell: ({ row }) => (
-          <div className="text-xs sm:text-sm">
-            {format(new Date(row.getValue("expiryDate")), "MMM yyyy")}
-          </div>
-        ),
-      },
-      {
-        accessorKey: "currentQuantity",
-        header: "Stock",
-        cell: ({ row }) => {
-          const medicine = row.original;
-          const stockPercentage =
-            (medicine.currentQuantity / medicine.originalQuantity) * 100;
-          return (
-            <div className="flex items-center">
-              <span className="mr-2 text-xs sm:text-sm">
-                {medicine.currentQuantity}
-              </span>
-              <Progress
-                value={stockPercentage}
-                className="w-24 h-2"
-                style={
-                  {
-                    "--progress-indicator-color":
-                      stockPercentage < 10
-                        ? "#ef4444"
-                        : stockPercentage < 20
-                        ? "#eab308"
-                        : "#22c55e",
-                  } as React.CSSProperties
-                }
-              />
-            </div>
-          );
-        },
-      },
-      {
-        accessorKey: "unitPrice",
-        header: "Unit Price",
-        cell: ({ row }) => (
-          <div className="text-xs sm:text-sm">
-            AFN {Number(row.getValue("unitPrice")).toFixed(2)}
-          </div>
-        ),
-      },
-      {
-        accessorKey: "sellingPrice",
-        header: "Selling Price",
-        cell: ({ row }) => (
-          <div className="text-xs sm:text-sm">
-            AFN {Number(row.getValue("sellingPrice")).toFixed(2)}
-          </div>
-        ),
-      },
-      {
-        accessorKey: "supplier",
-        header: "Supplier",
-        cell: ({ row }) => (
-          <div className="text-xs sm:text-sm">{row.getValue("supplier")}</div>
-        ),
-      },
-      {
-        id: "actions",
-        header: "Actions",
-        cell: ({ row }) => {
-          const handleDelete = async (id: string) => {
-            if (confirm("Are you sure you want to delete this medicine?")) {
-              try {
-                await fetch(`/api/pharmacy/inventory/${id}`, {
-                  method: "DELETE",
-                });
-                mutate(); // Refresh the data
-              } catch (error) {
-                console.error("Failed to delete medicine:", error);
-              }
-            }
-          };
-
-          return (
-            <div className="flex space-x-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => onEditMedicine(row.original)}
-                className="h-6 w-6 sm:h-8 sm:w-8 p-0"
-              >
-                <EditIcon className="h-3 w-3 sm:h-4 sm:w-4" />
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handleDelete(row.original._id)}
-                className="h-6 w-6 sm:h-8 sm:w-8 p-0"
-              >
-                <TrashIcon className="h-3 w-3 sm:h-4 sm:w-4" />
-              </Button>
-            </div>
-          );
-        },
-      },
-    ],
-    [mutate, onEditMedicine]
-  );
-
-  const table = useReactTable({
-    data: inventory || [],
-    columns,
-    getCoreRowModel: getCoreRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    initialState: {
-      pagination: {
-        pageSize: 10,
-      },
-    },
-  });
-
-  if (isLoading) {
+  if (!user || !["admin", "pharmacist"].includes(user.role)) {
     return (
-      <div className="flex items-center justify-center h-32">
-        <Loader2Icon className="h-8 w-8 animate-spin" />
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+          <h2 className="text-xl font-semibold mb-2">Unauthorized Access</h2>
+          <p className="text-gray-600">You don't have permission to access this page.</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <>
-      {/* Desktop Table View */}
-      <div className="hidden sm:block">
-        <Table>
-          <TableHeader>
-            {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id}>
-                {headerGroup.headers.map((header) => (
-                  <TableHead key={header.id}>
-                    {flexRender(
-                      header.column.columnDef.header,
-                      header.getContext()
-                    )}
-                  </TableHead>
-                ))}
-              </TableRow>
-            ))}
-          </TableHeader>
-          <TableBody>
-            {table.getRowModel().rows?.length ? (
-              table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id}>
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
-                      {flexRender(
-                        cell.column.columnDef.cell,
-                        cell.getContext()
-                      )}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell
-                  colSpan={columns.length}
-                  className="h-24 text-center"
-                >
-                  No medicine found.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
-
-      {/* Mobile Card View */}
-      <div className="sm:hidden space-y-3">
-        {table.getRowModel().rows?.length ? (
-          table
-            .getRowModel()
-            .rows.map((row) => (
-              <MobileMedicineCard
-                key={row.id}
-                medicine={row.original}
-                onEdit={onEditMedicine}
-              />
-            ))
-        ) : (
-          <div className="text-center py-4 text-muted-foreground">
-            No medicine found.
-          </div>
-        )}
-      </div>
-
-      {table.getPageCount() > 1 && <TablePagination table={table} />}
-    </>
-  );
-}
-
-// Component for Expenses Table with TanStack React Table
-function ExpensesTableWithPagination({
-  expenses,
-}: {
-  expenses: RecentExpense[];
-}) {
-  const columns = useMemo<ColumnDef<RecentExpense>[]>(
-    () => [
-      {
-        accessorKey: "amount",
-        header: "Amount",
-        cell: ({ row }) => (
-          <div className="font-medium text-xs sm:text-sm">
-            AFN {Number(row.getValue("amount")).toFixed(2)}
-          </div>
-        ),
-      },
-      {
-        accessorKey: "category",
-        header: "Category",
-        cell: ({ row }) => (
-          <div className="text-xs sm:text-sm">{row.getValue("category")}</div>
-        ),
-      },
-      {
-        accessorKey: "description",
-        header: "Description",
-        cell: ({ row }) => (
-          <div className="text-xs sm:text-sm">
-            {row.getValue("description")}
-          </div>
-        ),
-      },
-      {
-        accessorKey: "date",
-        header: "Date",
-        cell: ({ row }) => (
-          <div className="text-xs sm:text-sm">
-            {format(new Date(row.getValue("date")), "MMM d, yyyy")}
-          </div>
-        ),
-      },
-    ],
-    []
-  );
-
-  const table = useReactTable({
-    data: expenses,
-    columns,
-    getCoreRowModel: getCoreRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    initialState: {
-      pagination: {
-        pageSize: 10,
-      },
-    },
-  });
-
-  return (
-    <>
-      {/* Desktop Table View */}
-      <div className="hidden sm:block">
-        <Table>
-          <TableHeader>
-            {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id}>
-                {headerGroup.headers.map((header) => (
-                  <TableHead key={header.id}>
-                    {flexRender(
-                      header.column.columnDef.header,
-                      header.getContext()
-                    )}
-                  </TableHead>
-                ))}
-              </TableRow>
-            ))}
-          </TableHeader>
-          <TableBody>
-            {table.getRowModel().rows?.length ? (
-              table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id}>
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
-                      {flexRender(
-                        cell.column.columnDef.cell,
-                        cell.getContext()
-                      )}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell
-                  colSpan={columns.length}
-                  className="h-24 text-center"
-                >
-                  No expenses found.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
-
-      {/* Mobile Card View */}
-      <div className="sm:hidden space-y-3">
-        {table.getRowModel().rows?.length ? (
-          table
-            .getRowModel()
-            .rows.map((row) => (
-              <MobileExpenseCard key={row.id} expense={row.original} />
-            ))
-        ) : (
-          <div className="text-center py-4 text-muted-foreground">
-            No expenses found.
-          </div>
-        )}
-      </div>
-
-      {table.getPageCount() > 1 && <TablePagination table={table} />}
-    </>
-  );
-}
-
-// Dialog Components
-function AddExpenseDialog({
-  open,
-  onOpenChange,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const [isLoading, setIsLoading] = useState(false);
-
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setIsLoading(true);
-
-    const formData = new FormData(e.currentTarget);
-    const expenseData = {
-      amount: parseFloat(formData.get("amount") as string),
-      category: formData.get("category") as string,
-      description: formData.get("description") as string,
-      date: formData.get("date") as string,
-    };
-
-    try {
-      const response = await fetch("/api/pharmacy/expenses", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(expenseData),
-      });
-
-      if (response.ok) {
-        onOpenChange(false);
-        // You might want to refresh the expenses data here
-      } else {
-        console.error("Failed to add expense");
-      }
-    } catch (error) {
-      console.error("Error adding expense:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[95vw] max-w-md">
-        <DialogHeader>
-          <DialogTitle className="text-base sm:text-lg">
-            Add New Expense
-          </DialogTitle>
-          <DialogDescription className="text-xs sm:text-sm">
-            Enter the details of the new expense. Click save when you're done.
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit}>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-2 sm:gap-4">
-              <Label
-                htmlFor="amount"
-                className="text-left sm:text-right text-xs sm:text-sm"
-              >
-                Amount
-              </Label>
-              <Input
-                id="amount"
-                name="amount"
-                type="number"
-                step="0.01"
-                className="col-span-1 sm:col-span-3 text-xs sm:text-sm"
-                required
-              />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-2 sm:gap-4">
-              <Label
-                htmlFor="category"
-                className="text-left sm:text-right text-xs sm:text-sm"
-              >
-                Category
-              </Label>
-              <Select name="category" required>
-                <SelectTrigger className="col-span-1 sm:col-span-3 text-xs sm:text-sm">
-                  <SelectValue placeholder="Select a category" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="medicines" className="text-xs sm:text-sm">
-                    Medicines
-                  </SelectItem>
-                  <SelectItem value="supplies" className="text-xs sm:text-sm">
-                    Supplies
-                  </SelectItem>
-                  <SelectItem value="equipment" className="text-xs sm:text-sm">
-                    Equipment
-                  </SelectItem>
-                  <SelectItem value="utilities" className="text-xs sm:text-sm">
-                    Utilities
-                  </SelectItem>
-                  <SelectItem value="rent" className="text-xs sm:text-sm">
-                    Rent
-                  </SelectItem>
-                  <SelectItem value="salaries" className="text-xs sm:text-sm">
-                    Salaries
-                  </SelectItem>
-                  <SelectItem value="other" className="text-xs sm:text-sm">
-                    Other
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-2 sm:gap-4">
-              <Label
-                htmlFor="description"
-                className="text-left sm:text-right text-xs sm:text-sm"
-              >
-                Description
-              </Label>
-              <Textarea
-                id="description"
-                name="description"
-                className="col-span-1 sm:col-span-3 text-xs sm:text-sm"
-                required
-              />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-2 sm:gap-4">
-              <Label
-                htmlFor="date"
-                className="text-left sm:text-right text-xs sm:text-sm"
-              >
-                Date
-              </Label>
-              <Input
-                id="date"
-                name="date"
-                type="date"
-                className="col-span-1 sm:col-span-3 text-xs sm:text-sm"
-                required
-                defaultValue={format(new Date(), "yyyy-MM-dd")}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              type="submit"
-              disabled={isLoading}
-              className="text-xs sm:text-sm"
-            >
-              {isLoading ? (
-                <Loader2Icon className="h-3 w-3 sm:h-4 sm:w-4 animate-spin mr-1 sm:mr-2" />
-              ) : null}
-              Save Expense
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function AddMedicineDialog({
-  open,
-  onOpenChange,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const [isLoading, setIsLoading] = useState(false);
-
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setIsLoading(true);
-
-    const formData = new FormData(e.currentTarget);
-    const medicineData = {
-      name: formData.get("name") as string,
-      batchNumber: formData.get("batchNumber") as string,
-      expiryDate: formData.get("expiryDate") as string,
-      currentQuantity: parseInt(formData.get("currentQuantity") as string),
-      originalQuantity: parseInt(formData.get("originalQuantity") as string),
-      unitPrice: parseFloat(formData.get("unitPrice") as string),
-      sellingPrice: parseFloat(formData.get("sellingPrice") as string),
-      supplier: formData.get("supplier") as string,
-    };
-
-    try {
-      const response = await fetch("/api/pharmacy/inventory", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(medicineData),
-      });
-
-      if (response.ok) {
-        onOpenChange(false);
-        // You might want to refresh the inventory data here
-      } else {
-        console.error("Failed to add medicine");
-      }
-    } catch (error) {
-      console.error("Error adding medicine:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[95vw] max-w-md max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="text-base sm:text-lg">
-            Add New Medicine
-          </DialogTitle>
-          <DialogDescription className="text-xs sm:text-sm">
-            Enter the details of the new medicine. Click save when you're done.
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit}>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-2 sm:gap-4">
-              <Label
-                htmlFor="name"
-                className="text-left sm:text-right text-xs sm:text-sm"
-              >
-                Name
-              </Label>
-              <Input
-                id="name"
-                name="name"
-                className="col-span-1 sm:col-span-3 text-xs sm:text-sm"
-                required
-              />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-2 sm:gap-4">
-              <Label
-                htmlFor="batchNumber"
-                className="text-left sm:text-right text-xs sm:text-sm"
-              >
-                Batch Number
-              </Label>
-              <Input
-                id="batchNumber"
-                name="batchNumber"
-                className="col-span-1 sm:col-span-3 text-xs sm:text-sm"
-                required
-              />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-2 sm:gap-4">
-              <Label
-                htmlFor="expiryDate"
-                className="text-left sm:text-right text-xs sm:text-sm"
-              >
-                Expiry Date
-              </Label>
-              <Input
-                id="expiryDate"
-                name="expiryDate"
-                type="date"
-                className="col-span-1 sm:col-span-3 text-xs sm:text-sm"
-                required
-              />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-2 sm:gap-4">
-              <Label
-                htmlFor="currentQuantity"
-                className="text-left sm:text-right text-xs sm:text-sm"
-              >
-                Current Quantity
-              </Label>
-              <Input
-                id="currentQuantity"
-                name="currentQuantity"
-                type="number"
-                className="col-span-1 sm:col-span-3 text-xs sm:text-sm"
-                required
-              />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-2 sm:gap-4">
-              <Label
-                htmlFor="originalQuantity"
-                className="text-left sm:text-right text-xs sm:text-sm"
-              >
-                Original Quantity
-              </Label>
-              <Input
-                id="originalQuantity"
-                name="originalQuantity"
-                type="number"
-                className="col-span-1 sm:col-span-3 text-xs sm:text-sm"
-                required
-              />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-2 sm:gap-4">
-              <Label
-                htmlFor="unitPrice"
-                className="text-left sm:text-right text-xs sm:text-sm"
-              >
-                Unit Price
-              </Label>
-              <Input
-                id="unitPrice"
-                name="unitPrice"
-                type="number"
-                step="0.01"
-                className="col-span-1 sm:col-span-3 text-xs sm:text-sm"
-                required
-              />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-2 sm:gap-4">
-              <Label
-                htmlFor="sellingPrice"
-                className="text-left sm:text-right text-xs sm:text-sm"
-              >
-                Selling Price
-              </Label>
-              <Input
-                id="sellingPrice"
-                name="sellingPrice"
-                type="number"
-                step="0.01"
-                className="col-span-1 sm:col-span-3 text-xs sm:text-sm"
-                required
-              />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-2 sm:gap-4">
-              <Label
-                htmlFor="supplier"
-                className="text-left sm:text-right text-xs sm:text-sm"
-              >
-                Supplier
-              </Label>
-              <Input
-                id="supplier"
-                name="supplier"
-                className="col-span-1 sm:col-span-3 text-xs sm:text-sm"
-                required
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              type="submit"
-              disabled={isLoading}
-              className="text-xs sm:text-sm"
-            >
-              {isLoading ? (
-                <Loader2Icon className="h-3 w-3 sm:h-4 sm:w-4 animate-spin mr-1 sm:mr-2" />
-              ) : null}
-              Save Medicine
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function EditMedicineDialog({
-  open,
-  onOpenChange,
-  medicine,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  medicine: MedicineStock | null;
-}) {
-  const [isLoading, setIsLoading] = useState(false);
-
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (!medicine) return;
-
-    setIsLoading(true);
-
-    const formData = new FormData(e.currentTarget);
-    const medicineData = {
-      name: formData.get("name") as string,
-      batchNumber: formData.get("batchNumber") as string,
-      expiryDate: formData.get("expiryDate") as string,
-      currentQuantity: parseInt(formData.get("currentQuantity") as string),
-      originalQuantity: parseInt(formData.get("originalQuantity") as string),
-      unitPrice: parseFloat(formData.get("unitPrice") as string),
-      sellingPrice: parseFloat(formData.get("sellingPrice") as string),
-      supplier: formData.get("supplier") as string,
-    };
-
-    try {
-      const response = await fetch(`/api/pharmacy/inventory/${medicine._id}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(medicineData),
-      });
-
-      if (response.ok) {
-        onOpenChange(false);
-        // You might want to refresh the inventory data here
-      } else {
-        console.error("Failed to update medicine");
-      }
-    } catch (error) {
-      console.error("Error updating medicine:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  if (!medicine) return null;
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[95vw] max-w-md max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="text-base sm:text-lg">
-            Edit Medicine
-          </DialogTitle>
-          <DialogDescription className="text-xs sm:text-sm">
-            Update the details of this medicine. Click save when you're done.
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit}>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-2 sm:gap-4">
-              <Label
-                htmlFor="edit-name"
-                className="text-left sm:text-right text-xs sm:text-sm"
-              >
-                Name
-              </Label>
-              <Input
-                id="edit-name"
-                name="name"
-                className="col-span-1 sm:col-span-3 text-xs sm:text-sm"
-                required
-                defaultValue={medicine.name}
-              />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-2 sm:gap-4">
-              <Label
-                htmlFor="edit-batchNumber"
-                className="text-left sm:text-right text-xs sm:text-sm"
-              >
-                Batch Number
-              </Label>
-              <Input
-                id="edit-batchNumber"
-                name="batchNumber"
-                className="col-span-1 sm:col-span-3 text-xs sm:text-sm"
-                required
-                defaultValue={medicine.batchNumber}
-              />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-2 sm:gap-4">
-              <Label
-                htmlFor="edit-expiryDate"
-                className="text-left sm:text-right text-xs sm:text-sm"
-              >
-                Expiry Date
-              </Label>
-              <Input
-                id="edit-expiryDate"
-                name="expiryDate"
-                type="date"
-                className="col-span-1 sm:col-span-3 text-xs sm:text-sm"
-                required
-                defaultValue={format(
-                  new Date(medicine.expiryDate),
-                  "yyyy-MM-dd"
-                )}
-              />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-2 sm:gap-4">
-              <Label
-                htmlFor="edit-currentQuantity"
-                className="text-left sm:text-right text-xs sm:text-sm"
-              >
-                Current Quantity
-              </Label>
-              <Input
-                id="edit-currentQuantity"
-                name="currentQuantity"
-                type="number"
-                className="col-span-1 sm:col-span-3 text-xs sm:text-sm"
-                required
-                defaultValue={medicine.currentQuantity}
-              />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-2 sm:gap-4">
-              <Label
-                htmlFor="edit-originalQuantity"
-                className="text-left sm:text-right text-xs sm:text-sm"
-              >
-                Original Quantity
-              </Label>
-              <Input
-                id="edit-originalQuantity"
-                name="originalQuantity"
-                type="number"
-                className="col-span-1 sm:col-span-3 text-xs sm:text-sm"
-                required
-                defaultValue={medicine.originalQuantity}
-              />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-2 sm:gap-4">
-              <Label
-                htmlFor="edit-unitPrice"
-                className="text-left sm:text-right text-xs sm:text-sm"
-              >
-                Unit Price
-              </Label>
-              <Input
-                id="edit-unitPrice"
-                name="unitPrice"
-                type="number"
-                step="0.01"
-                className="col-span-1 sm:col-span-3 text-xs sm:text-sm"
-                required
-                defaultValue={medicine.unitPrice}
-              />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-2 sm:gap-4">
-              <Label
-                htmlFor="edit-sellingPrice"
-                className="text-left sm:text-right text-xs sm:text-sm"
-              >
-                Selling Price
-              </Label>
-              <Input
-                id="edit-sellingPrice"
-                name="sellingPrice"
-                type="number"
-                step="0.01"
-                className="col-span-1 sm:col-span-3 text-xs sm:text-sm"
-                required
-                defaultValue={medicine.sellingPrice}
-              />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-2 sm:gap-4">
-              <Label
-                htmlFor="edit-supplier"
-                className="text-left sm:text-right text-xs sm:text-sm"
-              >
-                Supplier
-              </Label>
-              <Input
-                id="edit-supplier"
-                name="supplier"
-                className="col-span-1 sm:col-span-3 text-xs sm:text-sm"
-                required
-                defaultValue={medicine.supplier}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              type="submit"
-              disabled={isLoading}
-              className="text-xs sm:text-sm"
-            >
-              {isLoading ? (
-                <Loader2Icon className="h-3 w-3 sm:h-4 sm:w-4 animate-spin mr-1 sm:mr-2" />
-              ) : null}
-              Save Changes
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-export default function PharmacyDashboard() {
-  const { user } = useAuthStore();
-
-  // Fetch all dashboard data
-  const { data: stats, isLoading: statsLoading } = useSWR<DashboardStats>(
-    "/api/pharmacy/dashboard/stats",
-    fetcher
-  );
-  const { data: recentPrescriptions, isLoading: prescriptionsLoading } = useSWR<
-    RecentPrescription[]
-  >("/api/pharmacy/prescriptions/recent", fetcher);
-  const {
-    data: lowStockData,
-    isLoading: stockLoading,
-    error: stockError,
-    mutate: refetchLowStock,
-  } = useSWR("/api/pharmacy/inventory/low-stock", fetcher);
-  const lowStockItems = lowStockData?.data || [];
-  const { data: recentExpenses, isLoading: expensesLoading } = useSWR<
-    RecentExpense[]
-  >("/api/pharmacy/expenses/recent", fetcher);
-
-  // Dialog states
-  const [isAddExpenseDialogOpen, setIsAddExpenseDialogOpen] = useState(false);
-  const [isAddMedicineDialogOpen, setIsAddMedicineDialogOpen] = useState(false);
-  const [isEditMedicineDialogOpen, setIsEditMedicineDialogOpen] =
-    useState(false);
-  const [selectedMedicine, setSelectedMedicine] =
-    useState<MedicineStock | null>(null);
-
-  // Calculate percentage changes (mock data - replace with actual comparison logic)
-  const salesChange = 12.5;
-  const expensesChange = -4.3;
-  const inventoryChange = 2.1;
-
-  // Loading state for the entire dashboard
-  const isLoading =
-    statsLoading || prescriptionsLoading || stockLoading || expensesLoading;
-
-  // Handle medicine edit
-  const handleEditMedicine = (medicine: MedicineStock) => {
-    setSelectedMedicine(medicine);
-    setIsEditMedicineDialogOpen(true);
-  };
-
-  return (
-    <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-8">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-        <h1 className="text-xl sm:text-3xl font-bold">Pharmacy Dashboard</h1>
-        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-          <Button variant="outline" className="text-xs sm:text-sm">
-            <CalendarIcon className="mr-2 h-3 w-3 sm:h-4 sm:w-4" />
-            {format(new Date(), "MMMM d, yyyy")}
+    <div className="space-y-6 p-4 md:p-6">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold">Pharmacy Dashboard</h1>
+          <p className="text-gray-500 mt-1">Welcome back, {user.name}!</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <Button variant="outline" size="sm" onClick={fetchMedicines}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Refresh
           </Button>
-          <Button
-            variant="outline"
-            onClick={() => refetchLowStock()}
-            className="text-xs sm:text-sm"
-          >
-            Refresh Stock Alerts
+          <Button onClick={() => router.push("/pharmacy/stock")}>
+            <Plus className="h-4 w-4 mr-2" />
+            Manage Stock
           </Button>
         </div>
       </div>
 
-      {isLoading ? (
-        <div className="flex items-center justify-center h-64">
-          <Loader2Icon className="h-12 w-12 animate-spin" />
-        </div>
-      ) : (
-        <>
-          {/* Stats Overview */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-xs sm:text-sm font-medium">
-                  Total Sales
-                </CardTitle>
-                <ReceiptIcon className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-lg sm:text-2xl font-bold">
-                  AFN {stats?.totalSales?.toFixed(2) || "0.00"}
-                </div>
-                <div
-                  className={`flex items-center text-xs ${
-                    salesChange >= 0 ? "text-green-500" : "text-red-500"
-                  }`}
-                >
-                  {salesChange >= 0 ? (
-                    <TrendingUpIcon className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
-                  ) : (
-                    <TrendingDownIcon className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
-                  )}
-                  {Math.abs(salesChange)}% from last period
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-xs sm:text-sm font-medium">
-                  Total Expenses
-                </CardTitle>
-                <WalletIcon className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-lg sm:text-2xl font-bold">
-                  AFN {stats?.totalExpenses?.toFixed(2) || "0.00"}
-                </div>
-                <div
-                  className={`flex items-center text-xs ${
-                    expensesChange >= 0 ? "text-green-500" : "text-red-500"
-                  }`}
-                >
-                  {expensesChange >= 0 ? (
-                    <TrendingUpIcon className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
-                  ) : (
-                    <TrendingDownIcon className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
-                  )}
-                  {Math.abs(expensesChange)}% from last period
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-xs sm:text-sm font-medium">
-                  Inventory Value
-                </CardTitle>
-                <PillIcon className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-lg sm:text-2xl font-bold">
-                  AFN {stats?.inventoryValue?.toFixed(2) || "0.00"}
-                </div>
-                <div
-                  className={`flex items-center text-xs ${
-                    inventoryChange >= 0 ? "text-green-500" : "text-red-500"
-                  }`}
-                >
-                  {inventoryChange >= 0 ? (
-                    <TrendingUpIcon className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
-                  ) : (
-                    <TrendingDownIcon className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
-                  )}
-                  {Math.abs(inventoryChange)}% from last period
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-xs sm:text-sm font-medium">
-                  Low Stock Items
-                </CardTitle>
-                <AlertCircleIcon className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-lg sm:text-2xl font-bold">
-                  {stats?.lowStockItems || 0}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Items below 20% stock level
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Main Content */}
-          <Tabs defaultValue="overview" className="space-y-4">
-            <TabsList className="flex overflow-x-auto w-full">
-              <TabsTrigger value="overview" className="text-xs sm:text-sm">
-                Overview
-              </TabsTrigger>
-              <TabsTrigger value="inventory" className="text-xs sm:text-sm">
-                Inventory
-              </TabsTrigger>
-              <TabsTrigger value="expenses" className="text-xs sm:text-sm">
-                Expenses
-              </TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="overview" className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-                <Card className="col-span-4">
-                  <CardHeader>
-                    <CardTitle className="text-sm sm:text-base">
-                      Recent Prescriptions
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <PrescriptionsTableWithPagination
-                      prescriptions={recentPrescriptions || []}
-                    />
-                  </CardContent>
-                </Card>
-
-                <Card className="col-span-3">
-                  <CardHeader className="flex flex-row items-center justify-between">
-                    <CardTitle className="text-sm sm:text-base">
-                      Low Stock Alerts
-                    </CardTitle>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => refetchLowStock()}
-                      className="text-xs"
-                    >
-                      Refresh
-                    </Button>
-                  </CardHeader>
-                  <CardContent>
-                    {stockError ? (
-                      <div className="text-red-500 text-center py-4 text-sm">
-                        Failed to load low stock items. Please check your API
-                        endpoint.
-                      </div>
-                    ) : lowStockItems.length === 0 ? (
-                      <div className="text-muted-foreground text-center py-4 text-sm">
-                        No low stock items. All inventory levels are good.
-                      </div>
-                    ) : (
-                      <div className="space-y-4">
-                        {lowStockItems.map((item: LowStockItem) => (
-                          <div
-                            key={item._id}
-                            className="flex items-center p-3 border rounded-lg"
-                          >
-                            <div className="space-y-1 w-full">
-                              <p className="text-sm font-medium leading-none">
-                                {item.name} - {item.batchNumber}
-                              </p>
-                              <div className="flex items-center justify-between">
-                                <span className="text-xs text-muted-foreground">
-                                  {item.currentQuantity} /{" "}
-                                  {item.originalQuantity} remaining
-                                </span>
-                                <span
-                                  className={`text-xs font-medium ${
-                                    item.remainingPercentage < 10
-                                      ? "text-red-500"
-                                      : item.remainingPercentage < 20
-                                      ? "text-amber-500"
-                                      : "text-green-500"
-                                  }`}
-                                >
-                                  {item.remainingPercentage.toFixed(0)}%
-                                </span>
-                              </div>
-                              <Progress
-                                value={item.remainingPercentage}
-                                className="h-2 mt-1"
-                                style={
-                                  {
-                                    "--progress-indicator-color":
-                                      item.remainingPercentage < 10
-                                        ? "#ef4444"
-                                        : item.remainingPercentage < 20
-                                        ? "#eab308"
-                                        : "#22c55e",
-                                  } as React.CSSProperties
-                                }
-                              />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
-            </TabsContent>
-
-            <TabsContent value="inventory">
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between">
-                  <CardTitle className="text-sm sm:text-base">
-                    Medicine Inventory
-                  </CardTitle>
-                  <Button
-                    size="sm"
-                    onClick={() => setIsAddMedicineDialogOpen(true)}
-                    className="text-xs sm:text-sm"
-                  >
-                    <PlusIcon className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-                    Add Medicine
-                  </Button>
-                </CardHeader>
-                <CardContent>
-                  <InventoryTableWithPagination
-                    onEditMedicine={handleEditMedicine}
-                  />
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="expenses">
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between">
-                  <CardTitle className="text-sm sm:text-base">
-                    Expense Records
-                  </CardTitle>
-                  <Button
-                    size="sm"
-                    onClick={() => setIsAddExpenseDialogOpen(true)}
-                    className="text-xs sm:text-sm"
-                  >
-                    <PlusIcon className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-                    Add Expense
-                  </Button>
-                </CardHeader>
-                <CardContent>
-                  <ExpensesTableWithPagination
-                    expenses={recentExpenses || []}
-                  />
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </Tabs>
-
-          {/* Add Expense Dialog */}
-          <AddExpenseDialog
-            open={isAddExpenseDialogOpen}
-            onOpenChange={setIsAddExpenseDialogOpen}
-          />
-
-          {/* Add Medicine Dialog */}
-          <AddMedicineDialog
-            open={isAddMedicineDialogOpen}
-            onOpenChange={setIsAddMedicineDialogOpen}
-          />
-
-          {/* Edit Medicine Dialog */}
-          <EditMedicineDialog
-            open={isEditMedicineDialogOpen}
-            onOpenChange={setIsEditMedicineDialogOpen}
-            medicine={selectedMedicine}
-          />
-        </>
+      {/* Error Alert */}
+      {error && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Total Items</p>
+                <p className="text-2xl font-bold mt-1">{medicines.length}</p>
+              </div>
+              <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
+                <Package className="h-5 w-5 text-blue-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Inventory Value</p>
+                <p className="text-2xl font-bold mt-1">
+                  ${stats.totalValue.toLocaleString()}
+                </p>
+              </div>
+              <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center">
+                <DollarSign className="h-5 w-5 text-green-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Low Stock</p>
+                <p className="text-2xl font-bold mt-1">{stats.lowStock}</p>
+              </div>
+              <div className="h-10 w-10 rounded-full bg-orange-100 flex items-center justify-center">
+                <TrendingDown className="h-5 w-5 text-orange-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Expiring Soon</p>
+                <p className="text-2xl font-bold mt-1">{stats.expiringSoon}</p>
+              </div>
+              <div className="h-10 w-10 rounded-full bg-yellow-100 flex items-center justify-center">
+                <Calendar className="h-5 w-5 text-yellow-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Quick Actions */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className="cursor-pointer hover:bg-gray-50 transition-colors" onClick={() => router.push("/pharmacy/stock")}>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Stock Management</p>
+                <p className="text-lg font-bold mt-1">View All Medicines</p>
+              </div>
+              <ArrowRight className="h-5 w-5 text-gray-400" />
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card className="cursor-pointer hover:bg-gray-50 transition-colors" onClick={() => router.push("/pharmacy/stock?status=low_stock")}>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Low Stock Alert</p>
+                <p className="text-lg font-bold mt-1">{stats.lowStock} Items</p>
+              </div>
+              <AlertCircle className="h-5 w-5 text-orange-500" />
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card className="cursor-pointer hover:bg-gray-50 transition-colors" onClick={() => router.push("/pharmacy/stock?status=expiring_soon")}>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Expiring Soon</p>
+                <p className="text-lg font-bold mt-1">{stats.expiringSoon} Items</p>
+              </div>
+              <Calendar className="h-5 w-5 text-yellow-500" />
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card className="cursor-pointer hover:bg-gray-50 transition-colors" onClick={() => router.push("/appointments")}>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Appointments</p>
+                <p className="text-lg font-bold mt-1">View Prescriptions</p>
+              </div>
+              <ArrowRight className="h-5 w-5 text-gray-400" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Alerts Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Low Stock Alert */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingDown className="h-5 w-5 text-orange-500" />
+              Low Stock Alert
+            </CardTitle>
+            <CardDescription>
+              Medicines with stock levels below 20%
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {lowStockMedicines.length === 0 ? (
+              <p className="text-gray-500 text-center py-4">No low stock medicines found</p>
+            ) : (
+              <div className="space-y-4">
+                {lowStockMedicines.map((medicine) => {
+                  const stockPercentage = (medicine.currentQuantity / medicine.originalQuantity) * 100;
+                  
+                  return (
+                    <div key={medicine._id} className="flex items-center justify-between p-3 border rounded-lg">
+                      <div>
+                        <p className="font-medium">{medicine.name}</p>
+                        <p className="text-sm text-gray-500">{medicine.batchNumber}</p>
+                      </div>
+                      <div className="text-right">
+                        <div className="flex items-center gap-2">
+                          <Progress value={stockPercentage} className="h-2 w-20" />
+                          <Badge variant="destructive" className="whitespace-nowrap">
+                            {medicine.currentQuantity}/{medicine.originalQuantity}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">{stockPercentage.toFixed(1)}% remaining</p>
+                      </div>
+                    </div>
+                  );
+                })}
+                {stats.lowStock > 5 && (
+                  <Button
+                    variant="ghost"
+                    className="w-full"
+                    onClick={() => router.push("/pharmacy/stock?status=low_stock")}
+                  >
+                    View All {stats.lowStock} Items
+                    <ArrowRight className="h-4 w-4 ml-2" />
+                  </Button>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Expiring Soon Alert */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Calendar className="h-5 w-5 text-yellow-500" />
+              Expiring Soon
+            </CardTitle>
+            <CardDescription>
+              Medicines expiring within 30 days
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {expiringSoonMedicines.length === 0 ? (
+              <p className="text-gray-500 text-center py-4">No medicines expiring soon</p>
+            ) : (
+              <div className="space-y-4">
+                {expiringSoonMedicines.map((medicine) => {
+                  const expiryDate = new Date(medicine.expiryDate);
+                  const today = new Date();
+                  const daysToExpiry = Math.ceil((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                  
+                  return (
+                    <div key={medicine._id} className="flex items-center justify-between p-3 border rounded-lg">
+                      <div>
+                        <p className="font-medium">{medicine.name}</p>
+                        <p className="text-sm text-gray-500">{medicine.batchNumber}</p>
+                      </div>
+                      <div className="text-right">
+                        <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
+                          {daysToExpiry} days
+                        </Badge>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Expires: {format(expiryDate, "MMM d, yyyy")}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+                {stats.expiringSoon > 5 && (
+                  <Button
+                    variant="ghost"
+                    className="w-full"
+                    onClick={() => router.push("/pharmacy/stock?status=expiring_soon")}
+                  >
+                    View All {stats.expiringSoon} Items
+                    <ArrowRight className="h-4 w-4 ml-2" />
+                  </Button>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Recent Medicines */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent Medicines</CardTitle>
+          <CardDescription>
+            Recently added medicines to the inventory
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="flex items-center justify-center h-32">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            </div>
+          ) : medicines.length === 0 ? (
+            <p className="text-gray-500 text-center py-8">No medicines found</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left py-3 px-4">Medicine</th>
+                    <th className="text-left py-3 px-4">Batch</th>
+                    <th className="text-left py-3 px-4">Stock</th>
+                    <th className="text-left py-3 px-4">Expiry</th>
+                    <th className="text-left py-3 px-4">Price</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {medicines.slice(0, 5).map((medicine) => {
+                    const stockPercentage = (medicine.currentQuantity / medicine.originalQuantity) * 100;
+                    const expiryDate = new Date(medicine.expiryDate);
+                    
+                    return (
+                      <tr key={medicine._id} className="border-b hover:bg-gray-50">
+                        <td className="py-3 px-4">
+                          <p className="font-medium">{medicine.name}</p>
+                          <p className="text-sm text-gray-500">{medicine.originalQuantity}</p>
+                        </td>
+                        <td className="py-3 px-4">
+                          <Badge variant="outline" className="font-mono">
+                            {medicine.batchNumber}
+                          </Badge>
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-2">
+                            <Progress value={stockPercentage} className="h-2 w-24" />
+                            <span className="text-sm">
+                              {medicine.currentQuantity}/{medicine.originalQuantity}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-2">
+                            <Calendar className="h-4 w-4 text-gray-400" />
+                            {format(expiryDate, "MMM d, yyyy")}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4">
+                          <p className="font-medium">${medicine.sellingPrice.toFixed(2)}</p>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {medicines.length > 5 && (
+            <div className="mt-4">
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => router.push("/pharmacy/stock")}
+              >
+                View All Medicines
+                <ArrowRight className="h-4 w-4 ml-2" />
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
