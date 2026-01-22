@@ -15,7 +15,6 @@ const APILogSchema = new Schema<IAPILog>({
   userId: {
     type: String,
     required: true,
-    index: true,
   },
   activityType: {
     type: String,
@@ -43,7 +42,6 @@ const APILogSchema = new Schema<IAPILog>({
   timestamp: {
     type: Date,
     default: Date.now,
-    index: true,
   },
 });
 

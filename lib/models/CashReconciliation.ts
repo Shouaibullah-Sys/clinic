@@ -89,7 +89,6 @@ const cashReconciliationSchema = new Schema<ICashReconciliation>(
     date: {
       type: Date,
       required: true,
-      index: true,
     },
     shift: {
       type: String,

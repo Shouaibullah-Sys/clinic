@@ -87,6 +87,8 @@ interface TimeSlot {
   autoNumber: string;
 }
 
+// Note: TimeSlot interface kept for potential future use, but not used in current implementation
+
 interface NewPatientFormData {
   name: string;
   phone: string;
@@ -118,7 +120,6 @@ export default function NewAppointmentPage() {
   const [appointmentDate, setAppointmentDate] = useState<string>(
     format(new Date(), "yyyy-MM-dd")
   );
-  const [appointmentTime, setAppointmentTime] = useState<string>("");
   const [duration] = useState<number>(20); // Fixed 20 minutes duration
   const [appointmentType, setAppointmentType] = useState<string>("consultation");
   const [priority, setPriority] = useState<string>("medium");
@@ -126,7 +127,7 @@ export default function NewAppointmentPage() {
   const [symptoms, setSymptoms] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
   const [autoNumber, setAutoNumber] = useState<string>("");
-  
+
   // New Patient Dialog
   const [showNewPatientDialog, setShowNewPatientDialog] = useState(false);
   const [creatingPatient, setCreatingPatient] = useState(false);
@@ -142,12 +143,10 @@ export default function NewAppointmentPage() {
     allergies: "",
     medicalHistory: "",
   });
-  
-  // Availability
-  const [availableSlots, setAvailableSlots] = useState<TimeSlot[]>([]);
-  const [checkingAvailability, setCheckingAvailability] = useState(false);
-  const [showNoResults, setShowNoResults] = useState(false);
+
+  // Auto-numbering
   const [todaysAppointmentsCount, setTodaysAppointmentsCount] = useState<number>(0);
+  const [showNoResults, setShowNoResults] = useState(false);
 
   useEffect(() => {
     fetchDoctors();
@@ -155,7 +154,7 @@ export default function NewAppointmentPage() {
 
   useEffect(() => {
     if (selectedDoctor && appointmentDate) {
-      checkAvailability();
+      generateAutoNumber();
     }
   }, [selectedDoctor, appointmentDate]);
 
@@ -234,93 +233,28 @@ export default function NewAppointmentPage() {
     }
   };
 
-  const checkAvailability = async () => {
+  const generateAutoNumber = async () => {
     if (!selectedDoctor || !appointmentDate) return;
-    
-    try {
-      setCheckingAvailability(true);
-      const params = new URLSearchParams({
-        doctorId: selectedDoctor,
-        date: appointmentDate,
-        duration: duration.toString(),
-      });
-      
-      const response = await fetch(`/api/appointments/availability?${params.toString()}`, {
-        headers: {
-          "Content-Type": "application/json",
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-        },
-      });
-      
-      const data = await response.json();
-      
-      if (data.success) {
-        // Get today's appointments count for auto-numbering
-        const todayCountResponse = await fetch(`/api/appointments/today-count?doctorId=${selectedDoctor}`, {
-          headers: {
-            "Content-Type": "application/json",
-            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-          },
-        });
-        
-        const countData = await todayCountResponse.json();
-        const todaysCount = countData.success ? countData.count : 0;
-        setTodaysAppointmentsCount(todaysCount);
-        
-        // Generate auto-numbered slots
-        const slotsWithNumbers = data.data.availableSlots.map((slot: any, index: number) => ({
-          ...slot,
-          autoNumber: (todaysCount + index + 1).toString().padStart(3, '0')
-        }));
-        
-        setAvailableSlots(slotsWithNumbers);
-        
-        // Auto-select the first available slot
-        if (slotsWithNumbers.length > 0) {
-          const slotTime = slotsWithNumbers[0].startTime.includes('T') 
-            ? slotsWithNumbers[0].startTime.split("T")[1].slice(0, 5)
-            : slotsWithNumbers[0].startTime.slice(0, 5);
-          
-          setAppointmentTime(slotTime);
-          setAutoNumber(slotsWithNumbers[0].autoNumber);
-        }
-      } else {
-        setError(data.error || "Failed to check availability");
-      }
-    } catch (error) {
-      console.error("Error checking availability:", error);
-      setError("Failed to check doctor availability");
-    } finally {
-      setCheckingAvailability(false);
-    }
-  };
 
-  const getNextAvailableTimeSlot = async () => {
-    if (!selectedDoctor || !appointmentDate) return null;
-    
     try {
-      const params = new URLSearchParams({
-        doctorId: selectedDoctor,
-        date: appointmentDate,
-        duration: duration.toString(),
-      });
-      
-      const response = await fetch(`/api/appointments/next-available-slot?${params.toString()}`, {
+      // Get today's appointments count for auto-numbering
+      const todayCountResponse = await fetch(`/api/appointments/count?doctorId=${selectedDoctor}&date=${appointmentDate}`, {
         headers: {
           "Content-Type": "application/json",
           ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         },
       });
-      
-      const data = await response.json();
-      
-      if (data.success && data.data) {
-        return data.data;
-      }
-      return null;
+
+      const countData = await todayCountResponse.json();
+      const todaysCount = countData.success ? countData.count : 0;
+      setTodaysAppointmentsCount(todaysCount);
+
+      // Generate next auto-number
+      const nextNumber = (todaysCount + 1).toString().padStart(3, '0');
+      setAutoNumber(nextNumber);
     } catch (error) {
-      console.error("Error getting next slot:", error);
-      return null;
+      console.error("Error generating auto number:", error);
+      setError("Failed to generate appointment number");
     }
   };
 
@@ -429,15 +363,8 @@ export default function NewAppointmentPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!selectedPatient || !selectedDoctor || !appointmentDate || !appointmentTime || !reason) {
-      setError("Please fill in all required fields");
-      return;
-    }
-    
-    // Validate appointment time
-    const appointmentDateTime = new Date(`${appointmentDate}T${appointmentTime}`);
-    if (appointmentDateTime < new Date()) {
-      setError("Appointment time cannot be in the past");
+    if (!selectedPatient || !selectedDoctor || !appointmentDate || !reason) {
+      setError("Please select a patient, doctor, date, and provide appointment reason");
       return;
     }
     
@@ -446,8 +373,19 @@ export default function NewAppointmentPage() {
     setSuccess(null);
     
     try {
+      // Generate appointment time (use current time)
+      const now = new Date();
+      const appointmentDateTime = new Date(appointmentDate);
+      
+      // Set time to 9:00 AM or current time if later
+      appointmentDateTime.setHours(9, 0, 0, 0);
+      if (isToday(new Date(appointmentDate)) && now > appointmentDateTime) {
+        appointmentDateTime.setHours(now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
+      }
+      
       // Calculate end time (20 minutes after start)
-      const endTime = addMinutes(appointmentDateTime, duration);
+      const endTime = new Date(appointmentDateTime);
+      endTime.setMinutes(endTime.getMinutes() + duration);
       
       const appointmentData = {
         patientId: selectedPatient._id,
@@ -460,7 +398,7 @@ export default function NewAppointmentPage() {
         symptoms: symptoms.trim(),
         priority,
         notes: notes.trim(),
-        autoNumber, // Include the auto-number
+        autoNumber,
       };
       
       const response = await fetch("/api/appointments", {
@@ -481,7 +419,6 @@ export default function NewAppointmentPage() {
         setSelectedPatient(null);
         setSelectedDoctor("");
         setAppointmentDate(format(new Date(), "yyyy-MM-dd"));
-        setAppointmentTime("");
         setAppointmentType("consultation");
         setPriority("medium");
         setReason("");
@@ -514,7 +451,6 @@ export default function NewAppointmentPage() {
       selectedPatient &&
       selectedDoctor &&
       appointmentDate &&
-      appointmentTime &&
       reason.trim()
     );
   };
@@ -522,27 +458,6 @@ export default function NewAppointmentPage() {
   // Handle doctor selection
   const handleDoctorSelect = async (doctorId: string) => {
     setSelectedDoctor(doctorId);
-    
-    // Get next available time slot when doctor is selected
-    const nextSlot = await getNextAvailableTimeSlot();
-    if (nextSlot) {
-      const slotTime = nextSlot.startTime.includes('T') 
-        ? nextSlot.startTime.split("T")[1].slice(0, 5)
-        : nextSlot.startTime.slice(0, 5);
-      
-      setAppointmentTime(slotTime);
-      setAutoNumber(nextSlot.autoNumber);
-    }
-  };
-
-  // Handle time slot selection
-  const handleTimeSlotSelect = (slot: TimeSlot) => {
-    const slotTime = slot.startTime.includes('T') 
-      ? slot.startTime.split("T")[1].slice(0, 5)
-      : slot.startTime.slice(0, 5);
-    
-    setAppointmentTime(slotTime);
-    setAutoNumber(slot.autoNumber);
   };
 
   // Handle Enter key for patient search
@@ -573,14 +488,13 @@ export default function NewAppointmentPage() {
     const selectedDate = new Date(date);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    
+
     if (selectedDate < today) {
       setError("Appointment date cannot be in the past");
       return;
     }
-    
+
     setAppointmentDate(date);
-    setAppointmentTime(""); // Clear time when date changes
     setAutoNumber(""); // Clear auto number when date changes
     setError(null);
   };
@@ -594,6 +508,9 @@ export default function NewAppointmentPage() {
     }
   };
 
+  // Get selected doctor info
+  const selectedDoctorInfo = doctors.find(d => d._id === selectedDoctor);
+
   // Format time for display
   const formatTimeDisplay = (time: string) => {
     try {
@@ -606,19 +523,9 @@ export default function NewAppointmentPage() {
     }
   };
 
-  // Get selected doctor info
-  const selectedDoctorInfo = doctors.find(d => d._id === selectedDoctor);
-
-  // Calculate end time based on selected time
-  const calculateEndTime = () => {
-    if (!appointmentTime) return "";
-    try {
-      const startDateTime = new Date(`${appointmentDate}T${appointmentTime}`);
-      const endDateTime = addMinutes(startDateTime, duration);
-      return format(endDateTime, "HH:mm");
-    } catch {
-      return "";
-    }
+  // Format time from Date object
+  const formatDateToTime = (date: Date): string => {
+    return format(date, "HH:mm");
   };
 
   return (
@@ -1203,10 +1110,10 @@ export default function NewAppointmentPage() {
                   <div>
                     <CardTitle className="text-xl flex items-center gap-2">
                       <Stethoscope className="h-5 w-5 text-gray-600" />
-                      Doctor & Appointment Time
+                      Doctor & Appointment Date
                     </CardTitle>
                     <CardDescription>
-                      Select doctor and schedule appointment time
+                      Select doctor and appointment date
                     </CardDescription>
                   </div>
                   <div className="flex items-center gap-2">
@@ -1268,12 +1175,12 @@ export default function NewAppointmentPage() {
                   )}
                 </div>
 
-                {/* Date & Time Selection */}
+                {/* Date & Auto-Number Selection */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-3">
                     <Label htmlFor="date" className="flex items-center gap-2">
                       <CalendarIcon className="h-4 w-4" />
-                      Date *
+                      Appointment Date *
                     </Label>
                     <div className="relative">
                       <Input
@@ -1318,138 +1225,18 @@ export default function NewAppointmentPage() {
                   </div>
                 </div>
 
-                {/* Current Appointment Time */}
-                {appointmentTime && (
-                  <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <Clock className="h-4 w-4 text-blue-600" />
-                          <Label className="font-medium text-blue-700">Selected Time Slot</Label>
-                        </div>
-                        <div className="flex items-center gap-4">
-                          <div className="text-center">
-                            <p className="text-sm text-gray-600">Start Time</p>
-                            <p className="text-2xl font-bold text-gray-900">
-                              {formatTimeDisplay(appointmentTime)}
-                            </p>
-                          </div>
-                          <div className="text-gray-400">→</div>
-                          <div className="text-center">
-                            <p className="text-sm text-gray-600">End Time</p>
-                            <p className="text-2xl font-bold text-gray-900">
-                              {formatTimeDisplay(calculateEndTime())}
-                            </p>
-                          </div>
-                          <div className="ml-4">
-                            <div className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium">
-                              {duration} minutes
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm text-gray-600">Auto Number</p>
-                        <p className="text-2xl font-bold text-blue-700">{autoNumber}</p>
-                      </div>
-                    </div>
+                {/* Appointment Information */}
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-center gap-3 mb-3">
+                    <Clock className="h-5 w-5 text-blue-600" />
+                    <h4 className="font-medium text-blue-700">Appointment Information</h4>
                   </div>
-                )}
-
-                {/* Available Slots */}
-                {selectedDoctor && appointmentDate && !checkingAvailability && availableSlots.length > 0 && (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <Label className="font-medium">Available Time Slots</Label>
-                      <span className="text-sm text-green-600 font-medium">
-                        {availableSlots.length} slot{availableSlots.length !== 1 ? 's' : ''} available
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
-                      {availableSlots.slice(0, 10).map((slot, index) => {
-                        const slotTime = slot.startTime.includes('T') 
-                          ? slot.startTime.split("T")[1].slice(0, 5)
-                          : slot.startTime.slice(0, 5);
-                        
-                        const isSelected = appointmentTime === slotTime;
-                        return (
-                          <Button
-                            key={index}
-                            type="button"
-                            variant={isSelected ? "default" : "outline"}
-                            className={cn(
-                              "h-12 flex-col",
-                              isSelected && "bg-blue-600 hover:bg-blue-700"
-                            )}
-                            onClick={() => handleTimeSlotSelect(slot)}
-                          >
-                            <div className="font-medium">{slot.formattedTime.split(' - ')[0]}</div>
-                            <div className="text-xs mt-1 opacity-80">
-                              #{slot.autoNumber}
-                            </div>
-                          </Button>
-                        );
-                      })}
-                    </div>
-                    {availableSlots.length > 10 && (
-                      <p className="text-sm text-gray-500 text-center">
-                        Showing first 10 of {availableSlots.length} available slots
-                      </p>
-                    )}
+                  <div className="space-y-2 text-sm text-gray-600">
+                    <p>• Each appointment is automatically set to <span className="font-semibold">20 minutes</span></p>
+                    <p>• Auto-number starts from 001 for each doctor daily</p>
+                    <p>• Time will be automatically assigned based on sequence</p>
+                    <p>• Focus is on the auto-number rather than specific times</p>
                   </div>
-                )}
-
-                {checkingAvailability && (
-                  <div className="border-2 border-dashed border-gray-200 rounded-lg p-6 text-center">
-                    <Loader2 className="h-8 w-8 animate-spin mx-auto text-blue-600" />
-                    <p className="text-gray-600 mt-3 font-medium">Checking doctor availability...</p>
-                    <p className="text-sm text-gray-500 mt-1">
-                      Finding available time slots for {selectedDoctorInfo?.name || "selected doctor"}
-                    </p>
-                  </div>
-                )}
-
-                {selectedDoctor && appointmentDate && !checkingAvailability && availableSlots.length === 0 && (
-                  <div className="border-2 border-dashed border-amber-200 rounded-lg p-6 text-center bg-amber-50">
-                    <AlertCircle className="h-10 w-10 text-amber-500 mx-auto mb-3" />
-                    <h4 className="font-semibold text-amber-700 mb-2">No Available Slots</h4>
-                    <p className="text-amber-600 mb-4">
-                      No available time slots found for {formatDisplayDate(appointmentDate)}
-                    </p>
-                    <div className="flex gap-2 justify-center">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          const tomorrow = new Date();
-                          tomorrow.setDate(tomorrow.getDate() + 1);
-                          setAppointmentDate(format(tomorrow, "yyyy-MM-dd"));
-                        }}
-                      >
-                        Try Tomorrow
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setSelectedDoctor("")}
-                      >
-                        Change Doctor
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Duration Information */}
-                <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                  <div className="flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-gray-600" />
-                    <span className="text-sm font-medium text-gray-700">Duration Information</span>
-                  </div>
-                  <p className="text-sm text-gray-600 mt-1">
-                    Each appointment is automatically set to <span className="font-semibold">20 minutes</span>. The system will generate sequential time slots starting from the next available time.
-                  </p>
                 </div>
               </CardContent>
             </Card>
@@ -1669,28 +1456,25 @@ export default function NewAppointmentPage() {
                   <div className="space-y-3">
                     <h4 className="font-semibold text-gray-700 flex items-center gap-2">
                       <Calendar className="h-4 w-4 text-blue-600" />
-                      Appointment Time
+                      Appointment Date & Number
                     </h4>
                     <div className={cn(
                       "p-3 rounded-lg border",
-                      (appointmentDate && appointmentTime) ? "bg-purple-50 border-purple-200" : "bg-gray-50 border-gray-200"
+                      appointmentDate ? "bg-purple-50 border-purple-200" : "bg-gray-50 border-gray-200"
                     )}>
                       <p className={cn(
                         "font-medium",
-                        (appointmentDate && appointmentTime) ? "text-purple-700" : "text-gray-400 italic"
+                        appointmentDate ? "text-purple-700" : "text-gray-400 italic"
                       )}>
-                        {appointmentDate && appointmentTime
+                        {appointmentDate
                           ? `${formatDisplayDate(appointmentDate)}`
-                          : "No time selected"}
+                          : "No date selected"}
                       </p>
-                      {appointmentDate && appointmentTime && (
+                      {appointmentDate && (
                         <div className="mt-2 space-y-2">
                           <div className="flex items-center justify-between">
                             <div>
-                              <p className="text-lg font-semibold text-gray-900">
-                                {formatTimeDisplay(appointmentTime)} - {formatTimeDisplay(calculateEndTime())}
-                              </p>
-                              <p className="text-sm text-gray-600">{duration} minutes</p>
+                              <p className="text-sm text-gray-600">Appointment scheduled for this date</p>
                             </div>
                             <div className="text-right">
                               <div className="flex items-center gap-2">
@@ -1793,7 +1577,7 @@ export default function NewAppointmentPage() {
                       <ul className="mt-2 space-y-1 text-sm text-amber-600">
                         {!selectedPatient && <li>• Select or create a patient</li>}
                         {!selectedDoctor && <li>• Choose a doctor</li>}
-                        {(!appointmentDate || !appointmentTime) && <li>• Select date and time</li>}
+                        {!appointmentDate && <li>• Select appointment date</li>}
                         {!reason && <li>• Provide appointment reason</li>}
                       </ul>
                     </div>
@@ -1802,9 +1586,9 @@ export default function NewAppointmentPage() {
                   <div className="pt-4 border-t border-gray-200">
                     <h4 className="text-sm font-medium text-gray-700 mb-2">Need Help?</h4>
                     <div className="space-y-2 text-sm text-gray-600">
-                      <p>• System automatically assigns 20-minute time slots</p>
+                      <p>• Appointments are scheduled by date only</p>
                       <p>• Auto-number starts from 001 daily for each doctor</p>
-                      <p>• Time slots start from current available time</p>
+                      <p>• Sequential numbering based on daily appointment count</p>
                       <p>• Emergency appointments take priority</p>
                     </div>
                   </div>

@@ -19,7 +19,7 @@ export interface IPatient extends mongoose.Document {
 }
 
 const patientSchema = new Schema<IPatient>(
-  {
+  { 
     patientId: {
       type: String,
       unique: true,

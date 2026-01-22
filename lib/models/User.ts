@@ -9,6 +9,7 @@ export interface IUser extends mongoose.Document {
   avatar?: string;
   approved: boolean;
   active: boolean;
+  employeeId?: string;
   department?: string;
   specialization?: string;
   licenseNumber?: string;
@@ -67,6 +68,11 @@ const userSchema = new Schema<IUser>(
     active: {
       type: Boolean,
       default: true,
+    },
+    employeeId: {
+      type: String,
+      unique: true,
+      sparse: true,
     },
     // Doctor-specific fields
     department: {
@@ -128,20 +134,26 @@ const userSchema = new Schema<IUser>(
     timestamps: true,
   }
 );
-
+// Counter for employeeId generation
+const counterSchema = new Schema({
+  _id: { type: String, required: true },
+  seq: { type: Number, default: 0 }
+});
+const Counter = models.Counter || model('Counter', counterSchema);
+ 
 // Indexes
-userSchema.index({ email: 1 });
 userSchema.index({ role: 1 });
 userSchema.index({ department: 1 });
 userSchema.index({ specialization: 1 });
 userSchema.index({ active: 1, approved: 1 });
-userSchema.index({ licenseNumber: 1 });
 
 // Pre-save hook for doctors
-userSchema.pre("save", function (next) {
+userSchema.pre("save", async function (next) {
+  const user = this;
+  
   // Set default availability for doctors
-  if (this.role === "doctor" && !this.availability) {
-    this.availability = {
+  if (user.role === "doctor" && !user.availability) {
+    user.availability = {
       days: ["monday", "tuesday", "wednesday", "thursday", "friday"],
       startTime: "09:00",
       endTime: "17:00",
@@ -150,9 +162,28 @@ userSchema.pre("save", function (next) {
     };
   }
   
+  // Generate unique employeeId for doctors
+  if (user.role === "doctor" && !user.employeeId) {
+    try {
+      const counter = await Counter.findOneAndUpdate(
+        { _id: 'employeeId' },
+        { $inc: { seq: 1 } },
+        { new: true, upsert: true }
+      );
+      
+      // Generate unique ID with prefix based on role
+      const prefix = "DOC"; // Or "EMP" if you prefer
+      user.employeeId = `${prefix}${counter.seq.toString().padStart(4, '0')}`;
+      console.log(`Generated employeeId: ${user.employeeId} for ${user.role} ${user.name}`);
+    } catch (error) {
+      console.error('Error generating employeeId:', error);
+      return next(error as any);
+    }
+  }
+  
   // Set joining date if not provided
-  if (this.role === "doctor" && !this.joiningDate) {
-    this.joiningDate = new Date();
+  if (user.role === "doctor" && !user.joiningDate) {
+    user.joiningDate = new Date();
   }
   
   next();

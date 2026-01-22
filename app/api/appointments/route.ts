@@ -2,7 +2,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
-import { Appointment } from "@/lib/models/Appointment";
+import { Appointment, IAppointment } from "@/lib/models/Appointment";
 import { Patient } from "@/lib/models/Patient";
 import { User } from "@/lib/models/User";
 import { jwtVerify } from "jose";
@@ -10,6 +10,69 @@ import mongoose from "mongoose";
 import { startOfDay, endOfDay } from "date-fns";
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-this";
+
+// Define response interface for appointments with display fields
+interface AppointmentResponse {
+  id: string;
+  appointmentId: string;
+  patient: any;
+  doctor: any;
+  department?: string;
+  appointmentType: string;
+  date: Date;
+  startTime: Date;
+  endTime: Date;
+  duration: number;
+  autoNumber: string;
+  status: string;
+  reason: string;
+  symptoms?: string;
+  priority: string;
+  notes?: string;
+  checkInTime?: Date;
+  checkOutTime?: Date;
+  waitingTime?: number;
+  consultationTime?: number;
+  referralSource?: string;
+  previousAppointment?: string;
+  rescheduledFrom?: string;
+  cancelledBy?: any;
+  cancelledReason?: string;
+  cancelledAt?: Date;
+  createdBy: any;
+  updatedBy?: any;
+  createdAt: Date;
+  updatedAt: Date;
+  
+  // Virtuals
+  isPastDue: boolean;
+  isToday: boolean;
+  isUpcoming: boolean;
+  formattedDate: string;
+  formattedTime: string;
+  timeSlot: string;
+  
+  // Display fields
+  displayStartTime: string;
+  displayEndTime: string;
+  localStartTime: Date;
+  localEndTime: Date;
+  localDate?: string;
+}
+
+// Helper function to format time
+function formatToLocalTime(date: Date): string {
+  const localDate = new Date(date);
+  
+  // Format as 12-hour time with AM/PM
+  let hours = localDate.getHours();
+  const minutes = localDate.getMinutes().toString().padStart(2, '0');
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12;
+  hours = hours ? hours : 12; // the hour '0' should be '12'
+  
+  return `${hours}:${minutes} ${ampm}`;
+}
 
 async function verifyToken(token: string) {
   try {
@@ -35,6 +98,42 @@ async function authenticate(request: NextRequest) {
   }
 
   return { userId: payload.id as string, userRole: payload.role as string };
+}
+
+// Transform appointment to response format
+function transformAppointmentToResponse(appointment: any): AppointmentResponse {
+  const appointmentObj = appointment.toObject ? appointment.toObject() : appointment;
+  
+  return {
+    ...appointmentObj,
+    id: appointmentObj._id?.toString() || appointmentObj.id,
+    displayStartTime: formatToLocalTime(new Date(appointmentObj.startTime)),
+    displayEndTime: formatToLocalTime(new Date(appointmentObj.endTime)),
+    localStartTime: new Date(appointmentObj.startTime),
+    localEndTime: new Date(appointmentObj.endTime),
+    localDate: new Date(appointmentObj.startTime).toISOString().split('T')[0],
+    // Add virtual fields
+    isPastDue: appointmentObj.isPastDue || (new Date() > new Date(appointmentObj.startTime) && appointmentObj.status === "scheduled"),
+    isToday: appointmentObj.isToday || (new Date(appointmentObj.startTime).toDateString() === new Date().toDateString()),
+    isUpcoming: appointmentObj.isUpcoming || (new Date() < new Date(appointmentObj.startTime) && appointmentObj.status === "scheduled"),
+    formattedDate: appointmentObj.formattedDate || new Date(appointmentObj.startTime).toLocaleDateString("en-US", {
+      weekday: "short",
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    }),
+    formattedTime: appointmentObj.formattedTime || new Date(appointmentObj.startTime).toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+    }),
+    timeSlot: appointmentObj.timeSlot || `${new Date(appointmentObj.startTime).toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+    })} - ${new Date(appointmentObj.endTime).toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+    })}`,
+  };
 }
 
 // GET: Fetch appointments with filters
@@ -79,7 +178,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST: Create new appointment with auto-numbering
+// POST: Create new appointment with auto-numbering only
 export async function POST(request: NextRequest) {
   try {
     await dbConnect();
@@ -118,9 +217,9 @@ export async function POST(request: NextRequest) {
     } = body;
     
     // Validate required fields
-    if (!patientId || !doctorId || !startTime || !reason) {
+    if (!patientId || !doctorId || !reason) {
       return NextResponse.json(
-        { success: false, error: "Missing required fields: patientId, doctorId, startTime, and reason are required" },
+        { success: false, error: "Missing required fields: patientId, doctorId, and reason are required" },
         { status: 400 }
       );
     }
@@ -143,39 +242,20 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Parse start time
-    const appointmentStartTime = new Date(startTime);
-    if (isNaN(appointmentStartTime.getTime())) {
-      return NextResponse.json(
-        { success: false, error: "Invalid start time" },
-        { status: 400 }
-      );
-    }
-    
-    // Validate appointment is not in the past
-    if (appointmentStartTime < new Date()) {
-      return NextResponse.json(
-        { success: false, error: "Appointment time cannot be in the past" },
-        { status: 400 }
-      );
+    // Parse start time (use current time if not provided)
+    let appointmentStartTime = new Date();
+    if (startTime) {
+      appointmentStartTime = new Date(startTime);
+      if (isNaN(appointmentStartTime.getTime())) {
+        return NextResponse.json(
+          { success: false, error: "Invalid start time" },
+          { status: 400 }
+        );
+      }
     }
     
     // Ensure duration is at least 20 minutes
     const appointmentDuration = Math.max(20, duration);
-    
-    // Check if doctor is available
-    const isAvailable = await Appointment.checkAvailability(
-      doctorId,
-      appointmentStartTime,
-      appointmentDuration
-    );
-    
-    if (!isAvailable) {
-      return NextResponse.json(
-        { success: false, error: "Doctor is not available at this time" },
-        { status: 409 }
-      );
-    }
     
     // Calculate end time
     const appointmentEndTime = new Date(appointmentStartTime);
@@ -185,15 +265,25 @@ export async function POST(request: NextRequest) {
     const appointmentDate = new Date(appointmentStartTime);
     appointmentDate.setHours(0, 0, 0, 0);
     
-    // Get appointment count for the date for auto-numbering if not provided
-    let appointmentAutoNumber = autoNumber;
-    if (!appointmentAutoNumber) {
-      const appointmentCount = await Appointment.getAppointmentCountByDate(doctorId, appointmentDate);
-      appointmentAutoNumber = (appointmentCount + 1).toString().padStart(3, '0');
-    }
+    // Get appointment count for the date for auto-numbering
+    const appointmentCount = await Appointment.getAppointmentCountByDate(doctorId, appointmentDate);
+    const appointmentAutoNumber = autoNumber || (appointmentCount + 1).toString().padStart(3, '0');
+    
+    // Generate appointment ID
+    const generateAppointmentId = () => {
+      const date = new Date();
+      const year = date.getFullYear().toString().slice(-2);
+      const month = (date.getMonth() + 1).toString().padStart(2, "0");
+      const day = date.getDate().toString().padStart(2, "0");
+      const random = Math.floor(100 + Math.random() * 900);
+      return `APT${year}${month}${day}${random}`;
+    };
+    
+    const appointmentId = generateAppointmentId();
     
     // Create appointment
     const appointment = new Appointment({
+      appointmentId: appointmentId,
       patient: patientId,
       doctor: doctorId,
       department: department || doctor.department,
@@ -220,9 +310,12 @@ export async function POST(request: NextRequest) {
       { path: "createdBy", select: "name" },
     ]);
     
+    // Transform to response format
+    const appointmentResponse = transformAppointmentToResponse(appointment);
+    
     return NextResponse.json({
       success: true,
-      data: appointment,
+      data: appointmentResponse,
       message: "Appointment created successfully",
     }, { status: 201 });
     
@@ -241,6 +334,7 @@ export async function POST(request: NextRequest) {
       for (const field in error.errors) {
         errors.push(`${field}: ${error.errors[field].message}`);
       }
+      console.error('Validation errors:', errors);
       return NextResponse.json(
         { success: false, error: "Validation failed", details: errors },
         { status: 400 }
@@ -349,9 +443,12 @@ export async function PATCH(request: NextRequest) {
       { path: "doctor", select: "name specialization department" },
     ]);
     
+    // Transform to response format
+    const appointmentResponse = transformAppointmentToResponse(appointment);
+    
     return NextResponse.json({
       success: true,
-      data: appointment,
+      data: appointmentResponse,
       message: "Appointment updated successfully",
     });
     
@@ -526,11 +623,14 @@ async function handleGetAppointments(
     .limit(limit)
     .lean();
   
+  // Transform appointments to response format
+  const transformedAppointments = appointments.map(transformAppointmentToResponse);
+  
   const total = await Appointment.countDocuments(query);
   
   return NextResponse.json({
     success: true,
-    data: appointments,
+    data: transformedAppointments,
     pagination: {
       page,
       limit,
@@ -613,6 +713,8 @@ async function handleGetNextSlot(
       endTime: nextSlot.endTime.toISOString(),
       formattedTime: nextSlot.formattedTime,
       autoNumber: nextSlot.autoNumber,
+      displayStartTime: formatToLocalTime(nextSlot.startTime),
+      displayEndTime: formatToLocalTime(nextSlot.endTime),
     },
   });
 }
@@ -651,6 +753,8 @@ async function handleGetAvailableSlots(
       endTime: slot.endTime.toISOString(),
       formattedTime: slot.formattedTime,
       autoNumber: slot.autoNumber,
+      displayStartTime: formatToLocalTime(slot.startTime),
+      displayEndTime: formatToLocalTime(slot.endTime),
     })),
     count: slots.length,
   });
@@ -692,6 +796,7 @@ async function handleCheckAvailability(
       isAvailable,
       startTime: appointmentStartTime.toISOString(),
       duration,
+      displayStartTime: formatToLocalTime(appointmentStartTime),
     },
   });
 }

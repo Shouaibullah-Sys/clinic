@@ -182,10 +182,7 @@ const fetchDashboardData = async () => {
 
   const formatTime = (timestamp: string) => {
     const date = parseISO(timestamp);
-    if (isToday(date)) {
-      return format(date, "hh:mm a");
-    }
-    return format(date, "MMM d, hh:mm a");
+    return format(date, "MMM d, yyyy");
   };
   
 

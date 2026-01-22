@@ -5,21 +5,21 @@ import { Admission } from "@/lib/models/Admission";
 import { Patient } from "@/lib/models/Patient";
 import { User } from "@/lib/models/User";
 import { authMiddleware } from "@/lib/middleware/auth";
-import mongoose from "mongoose";
 
 // GET single admission
 export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
+   request: NextRequest,
+   { params }: { params: { id: string } }
 ) {
-  try {
-    // Apply auth middleware
-    const authResponse = authMiddleware(request);
-    if (authResponse instanceof NextResponse) {
-      return authResponse;
-    }
+   try {
+     console.log("params:", params, "typeof params:", typeof params);
+     // Apply auth middleware
+     const authResponse = authMiddleware(request);
+     if (authResponse instanceof NextResponse) {
+       return authResponse;
+     }
 
-    await dbConnect();
+     await dbConnect();
 
     const admission = await Admission.findById(params.id)
       .populate("patient")

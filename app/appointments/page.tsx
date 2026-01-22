@@ -354,7 +354,7 @@ export default function AppointmentsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {appointments.filter(a => isToday(parseISO(a.startTime))).length}
+              {appointments.filter(a => isToday(parseISO(a.date))).length}
             </div>
             <p className="text-xs text-gray-500">Appointments scheduled for today</p>
           </CardContent>
@@ -480,7 +480,7 @@ export default function AppointmentsPage() {
                   <TableHead>ID</TableHead>
                   <TableHead>Patient</TableHead>
                   <TableHead>Doctor</TableHead>
-                  <TableHead>Time</TableHead>
+                  <TableHead>Date</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Priority</TableHead>
@@ -513,14 +513,9 @@ export default function AppointmentsPage() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <div>
-                          <p className="font-medium">
-                            {format(parseISO(appointment.startTime), "hh:mm a")}
-                          </p>
-                          <p className="text-sm text-gray-500">
-                            {format(parseISO(appointment.startTime), "MMM d, yyyy")}
-                          </p>
-                        </div>
+                        <p className="font-medium">
+                          {format(parseISO(appointment.date), "MMM d, yyyy")}
+                        </p>
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline">
@@ -656,9 +651,9 @@ export default function AppointmentsPage() {
                     <p className="font-medium">Dr. {selectedAppointment.doctor.name}</p>
                   </div>
                   <div>
-                    <p className="text-gray-500">Time</p>
+                    <p className="text-gray-500">Date</p>
                     <p className="font-medium">
-                      {format(parseISO(selectedAppointment.startTime), "MMM d, hh:mm a")}
+                      {format(parseISO(selectedAppointment.date), "MMM d, yyyy")}
                     </p>
                   </div>
                   <div>

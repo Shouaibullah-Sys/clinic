@@ -48,11 +48,11 @@ async function authenticateAdmin(request: NextRequest) {
 // GET: Get single doctor
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await dbConnect();
-    
+
     const auth = await authenticateAdmin(request);
     if ("error" in auth) {
       return NextResponse.json(
@@ -60,8 +60,9 @@ export async function GET(
         { status: auth.status }
       );
     }
-    
-    const doctorId = params.id;
+
+    const { id } = await params;
+    const doctorId = id;
     
     // Validate ObjectId
     if (!mongoose.Types.ObjectId.isValid(doctorId)) {
@@ -100,11 +101,11 @@ export async function GET(
 // PUT: Update doctor
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await dbConnect();
-    
+
     const auth = await authenticateAdmin(request);
     if ("error" in auth) {
       return NextResponse.json(
@@ -112,8 +113,9 @@ export async function PUT(
         { status: auth.status }
       );
     }
-    
-    const doctorId = params.id;
+
+    const { id } = await params;
+    const doctorId = id;
     
     // Validate ObjectId
     if (!mongoose.Types.ObjectId.isValid(doctorId)) {
@@ -231,20 +233,22 @@ export async function PUT(
 // DELETE: Deactivate doctor (soft delete)
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await dbConnect();
-    
+
     const auth = await authenticateAdmin(request);
     if ("error" in auth) {
       return NextResponse.json(
         { success: false, error: auth.error },
         { status: auth.status }
+
       );
     }
-    
-    const doctorId = params.id;
+
+    const { id } = await params;
+    const doctorId = id;
     
     // Validate ObjectId
     if (!mongoose.Types.ObjectId.isValid(doctorId)) {

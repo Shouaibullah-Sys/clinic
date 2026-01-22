@@ -33,7 +33,7 @@ export interface IDailyExpense {
 
 const dailyExpenseSchema = new Schema<IDailyExpense>(
   {
-    date: { type: Date, default: Date.now, index: true },
+    date: { type: Date, default: Date.now },
     description: { type: String, required: true, minlength: 3 },
     amount: { type: Number, required: true, min: 0 },
     expenseType: {
@@ -48,7 +48,6 @@ const dailyExpenseSchema = new Schema<IDailyExpense>(
         "other",
       ],
       default: "normal",
-      index: true,
     },
     category: {
       type: String,
@@ -62,7 +61,6 @@ const dailyExpenseSchema = new Schema<IDailyExpense>(
         "miscellaneous",
       ],
       default: "operational",
-      index: true,
     },
     receiptNumber: { type: String, required: false },
     notes: { type: String, required: false },

@@ -1,4 +1,5 @@
-// app/api/appointments/available-slots/route.ts
+// app/api/appointments/count/route.ts
+
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
 import { Appointment } from "@/lib/models/Appointment";
@@ -47,17 +48,15 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const doctorId = searchParams.get("doctorId");
     const date = searchParams.get("date");
-    const duration = parseInt(searchParams.get("duration") || "20");
-    const limit = parseInt(searchParams.get("limit") || "10");
     
-    if (!doctorId || !date) {
+    if (!doctorId) {
       return NextResponse.json(
-        { success: false, error: "doctorId and date are required" },
+        { success: false, error: "doctorId is required" },
         { status: 400 }
       );
     }
     
-    const targetDate = new Date(date);
+    const targetDate = date ? new Date(date) : new Date();
     if (isNaN(targetDate.getTime())) {
       return NextResponse.json(
         { success: false, error: "Invalid date format" },
@@ -65,23 +64,18 @@ export async function GET(request: NextRequest) {
       );
     }
     
-    const slots = await Appointment.getAvailableSlots(doctorId, targetDate, duration, limit);
+    const count = await Appointment.getAppointmentCountByDate(doctorId, targetDate);
     
     return NextResponse.json({
       success: true,
-      data: slots.map(slot => ({
-        startTime: slot.startTime.toISOString(),
-        endTime: slot.endTime.toISOString(),
-        formattedTime: slot.formattedTime,
-        autoNumber: slot.autoNumber,
-      })),
-      count: slots.length,
+      count,
+      date: targetDate.toISOString().split('T')[0],
     });
     
   } catch (error) {
-    console.error("Error getting available slots:", error);
+    console.error("Error getting appointment count:", error);
     return NextResponse.json(
-      { success: false, error: "Failed to get available slots" },
+      { success: false, error: "Failed to get appointment count" },
       { status: 500 }
     );
   }

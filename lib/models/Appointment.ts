@@ -1,7 +1,7 @@
 // lib/models/Appointment.ts
 
 import mongoose, { Schema, model, models, Model } from "mongoose";
-import { startOfDay, endOfDay, isToday, isSameDay } from "date-fns";
+import { startOfDay, endOfDay, isToday, isSameDay, format } from "date-fns";
 
 export interface IAppointment extends mongoose.Document {
   appointmentId: string;
@@ -113,7 +113,6 @@ const appointmentSchema = new Schema<IAppointment, IAppointmentModel>(
     date: {
       type: Date,
       required: true,
-      index: true,
     },
     startTime: {
       type: Date,
@@ -133,13 +132,11 @@ const appointmentSchema = new Schema<IAppointment, IAppointmentModel>(
     autoNumber: {
       type: String,
       required: true,
-      index: true,
     },
     status: {
       type: String,
       enum: ["scheduled", "confirmed", "checked-in", "in-progress", "completed", "cancelled", "no-show", "rescheduled"],
       default: "scheduled",
-      index: true,
     },
     reason: {
       type: String,
@@ -212,7 +209,7 @@ const appointmentSchema = new Schema<IAppointment, IAppointmentModel>(
 );
 
 // Indexes for performance
-appointmentSchema.index({ appointmentId: 1 }, { unique: true });
+appointmentSchema.index({ appointmentId: 1 });
 appointmentSchema.index({ patient: 1 });
 appointmentSchema.index({ doctor: 1 });
 appointmentSchema.index({ date: 1, startTime: 1 });
@@ -298,8 +295,6 @@ appointmentSchema.pre("save", async function (next) {
       appointment.status = "checked-in";
     } else if (appointment.checkOutTime && appointment.status === "checked-in") {
       appointment.status = "completed";
-    } else if (appointment.startTime && now > appointment.startTime && appointment.status === "scheduled") {
-      appointment.status = "no-show";
     }
 
     next();
@@ -449,91 +444,40 @@ appointmentSchema.statics.getNextAvailableSlot = async function (
   autoNumber: string;
 } | null> {
   try {
-    // Get doctor's appointments for the target date
-    const startOfTargetDay = startOfDay(date);
-    const endOfTargetDay = endOfDay(date);
-
-    const appointments = await this.find({
-      doctor: doctorId,
-      startTime: { $gte: startOfTargetDay, $lte: endOfTargetDay },
-      status: { $nin: ["cancelled", "no-show"] },
-    }).sort({ startTime: 1 });
-
     // Get appointment count for the date for auto-numbering
     const appointmentCount = await this.getAppointmentCountByDate(doctorId, date);
-
-    // Default working hours (8 AM to 6 PM)
-    const WORK_START_HOUR = 8;
-    const WORK_END_HOUR = 18;
-    const SLOT_INTERVAL = 20; // 20 minutes
-
+    
+    // Generate next auto-number
+    const nextAutoNumber = (appointmentCount + 1).toString().padStart(3, '0');
+    
+    // Set default start time (9:00 AM)
     let currentTime = new Date(date);
-    currentTime.setHours(WORK_START_HOUR, 0, 0, 0);
-
-    const endOfWorkDay = new Date(date);
-    endOfWorkDay.setHours(WORK_END_HOUR, 0, 0, 0);
-
-    // If it's today, start from current time or next available slot
+    currentTime.setHours(9, 0, 0, 0);
+    
+    // If it's today, start from current time
     const today = new Date();
     if (isSameDay(date, today)) {
       const now = new Date();
       if (now > currentTime) {
-        // Round up to next 20-minute interval
-        const minutes = now.getMinutes();
-        const remainder = minutes % SLOT_INTERVAL;
-        const roundedMinutes = remainder === 0 ? minutes : minutes + (SLOT_INTERVAL - remainder);
-        
         currentTime = new Date(now);
-        currentTime.setMinutes(roundedMinutes, 0, 0);
-        
-        // Make sure we don't start before work start time
-        const workStartTime = new Date(date);
-        workStartTime.setHours(WORK_START_HOUR, 0, 0, 0);
-        if (currentTime < workStartTime) {
-          currentTime = workStartTime;
+        // Round up to next 20-minute interval
+        const minutes = currentTime.getMinutes();
+        const remainder = minutes % 20;
+        if (remainder > 0) {
+          currentTime.setMinutes(minutes + (20 - remainder));
         }
       }
     }
-
-    // Find next available slot
-    let slotNumber = appointmentCount + 1;
     
-    while (currentTime < endOfWorkDay) {
-      const slotEndTime = new Date(currentTime);
-      slotEndTime.setMinutes(slotEndTime.getMinutes() + duration);
-
-      // Check if slot would end after work end time
-      if (slotEndTime > endOfWorkDay) {
-        break;
-      }
-
-      // Check for conflicts with existing appointments
-      const hasConflict = appointments.some(appointment => {
-        const appointmentStart = new Date(appointment.startTime);
-        const appointmentEnd = new Date(appointment.endTime);
-        
-        return (
-          (currentTime >= appointmentStart && currentTime < appointmentEnd) ||
-          (slotEndTime > appointmentStart && slotEndTime <= appointmentEnd) ||
-          (currentTime <= appointmentStart && slotEndTime >= appointmentEnd)
-        );
-      });
-
-      if (!hasConflict) {
-        return {
-          startTime: new Date(currentTime),
-          endTime: slotEndTime,
-          formattedTime: `${currentTime.getHours().toString().padStart(2, '0')}:${currentTime.getMinutes().toString().padStart(2, '0')} - ${slotEndTime.getHours().toString().padStart(2, '0')}:${slotEndTime.getMinutes().toString().padStart(2, '0')}`,
-          autoNumber: slotNumber.toString().padStart(3, '0'),
-        };
-      }
-
-      // Move to next 20-minute interval
-      currentTime.setMinutes(currentTime.getMinutes() + SLOT_INTERVAL);
-      slotNumber++;
-    }
-
-    return null;
+    const endTime = new Date(currentTime);
+    endTime.setMinutes(endTime.getMinutes() + duration);
+    
+    return {
+      startTime: currentTime,
+      endTime: endTime,
+      formattedTime: `${currentTime.getHours().toString().padStart(2, '0')}:${currentTime.getMinutes().toString().padStart(2, '0')} - ${endTime.getHours().toString().padStart(2, '0')}:${endTime.getMinutes().toString().padStart(2, '0')}`,
+      autoNumber: nextAutoNumber,
+    };
   } catch (error) {
     console.error("Error getting next available slot:", error);
     return null;
@@ -559,88 +503,46 @@ appointmentSchema.statics.getAvailableSlots = async function (
       autoNumber: string;
     }> = [];
 
-    // Get doctor's appointments for the target date
-    const startOfTargetDay = startOfDay(date);
-    const endOfTargetDay = endOfDay(date);
-
-    const appointments = await this.find({
-      doctor: doctorId,
-      startTime: { $gte: startOfTargetDay, $lte: endOfTargetDay },
-      status: { $nin: ["cancelled", "no-show"] },
-    }).sort({ startTime: 1 });
-
     // Get appointment count for the date for auto-numbering
     const appointmentCount = await this.getAppointmentCountByDate(doctorId, date);
 
-    // Default working hours (8 AM to 6 PM)
-    const WORK_START_HOUR = 8;
-    const WORK_END_HOUR = 18;
-    const SLOT_INTERVAL = 20;
-
+    // Set default start time (9:00 AM)
     let currentTime = new Date(date);
-    currentTime.setHours(WORK_START_HOUR, 0, 0, 0);
-
-    const endOfWorkDay = new Date(date);
-    endOfWorkDay.setHours(WORK_END_HOUR, 0, 0, 0);
-
-    // If it's today, start from current time or next available slot
+    currentTime.setHours(9, 0, 0, 0);
+    
+    // If it's today, start from current time
     const today = new Date();
     if (isSameDay(date, today)) {
       const now = new Date();
       if (now > currentTime) {
-        // Round up to next 20-minute interval
-        const minutes = now.getMinutes();
-        const remainder = minutes % SLOT_INTERVAL;
-        const roundedMinutes = remainder === 0 ? minutes : minutes + (SLOT_INTERVAL - remainder);
-        
         currentTime = new Date(now);
-        currentTime.setMinutes(roundedMinutes, 0, 0);
-        
-        // Make sure we don't start before work start time
-        const workStartTime = new Date(date);
-        workStartTime.setHours(WORK_START_HOUR, 0, 0, 0);
-        if (currentTime < workStartTime) {
-          currentTime = workStartTime;
+        // Round up to next 20-minute interval
+        const minutes = currentTime.getMinutes();
+        const remainder = minutes % 20;
+        if (remainder > 0) {
+          currentTime.setMinutes(minutes + (20 - remainder));
         }
       }
     }
 
-    // Find available slots
+    // Generate slots based on auto-number sequence
     let slotNumber = appointmentCount + 1;
     
-    while (currentTime < endOfWorkDay && slots.length < limit) {
+    while (slots.length < limit) {
       const slotEndTime = new Date(currentTime);
       slotEndTime.setMinutes(slotEndTime.getMinutes() + duration);
 
-      // Check if slot would end after work end time
-      if (slotEndTime > endOfWorkDay) {
-        break;
-      }
-
-      // Check for conflicts with existing appointments
-      const hasConflict = appointments.some(appointment => {
-        const appointmentStart = new Date(appointment.startTime);
-        const appointmentEnd = new Date(appointment.endTime);
-        
-        return (
-          (currentTime >= appointmentStart && currentTime < appointmentEnd) ||
-          (slotEndTime > appointmentStart && slotEndTime <= appointmentEnd) ||
-          (currentTime <= appointmentStart && slotEndTime >= appointmentEnd)
-        );
+      slots.push({
+        startTime: new Date(currentTime),
+        endTime: slotEndTime,
+        formattedTime: `${currentTime.getHours().toString().padStart(2, '0')}:${currentTime.getMinutes().toString().padStart(2, '0')} - ${slotEndTime.getHours().toString().padStart(2, '0')}:${slotEndTime.getMinutes().toString().padStart(2, '0')}`,
+        autoNumber: slotNumber.toString().padStart(3, '0'),
       });
-
-      if (!hasConflict) {
-        slots.push({
-          startTime: new Date(currentTime),
-          endTime: slotEndTime,
-          formattedTime: `${currentTime.getHours().toString().padStart(2, '0')}:${currentTime.getMinutes().toString().padStart(2, '0')} - ${slotEndTime.getHours().toString().padStart(2, '0')}:${slotEndTime.getMinutes().toString().padStart(2, '0')}`,
-          autoNumber: slotNumber.toString().padStart(3, '0'),
-        });
-        slotNumber++;
-      }
-
+      
+      slotNumber++;
+      
       // Move to next 20-minute interval
-      currentTime.setMinutes(currentTime.getMinutes() + SLOT_INTERVAL);
+      currentTime.setMinutes(currentTime.getMinutes() + 20);
     }
 
     return slots;
@@ -694,72 +596,6 @@ appointmentSchema.methods.reschedule = function (
   this.rescheduledFrom = undefined;
 
   return this.save();
-};
-
-// Add a method to clean the object for API responses
-appointmentSchema.methods.toCleanObject = function (): any {
-  const obj = this.toObject();
-  
-  // Transform ObjectIds to strings
-  const transformId = (field: any) => {
-    if (field && field._id) {
-      return field._id.toString();
-    }
-    return field?.toString();
-  };
-  
-  // Transform populated objects
-  const transformPopulated = (field: any) => {
-    if (field && typeof field === 'object' && !(field instanceof mongoose.Types.ObjectId)) {
-      const { _id, __v, ...rest } = field;
-      return {
-        id: _id?.toString(),
-        ...rest,
-      };
-    }
-    return field;
-  };
-  
-  return {
-    id: obj._id?.toString(),
-    appointmentId: obj.appointmentId,
-    autoNumber: obj.autoNumber,
-    patient: transformPopulated(obj.patient),
-    doctor: transformPopulated(obj.doctor),
-    department: obj.department,
-    appointmentType: obj.appointmentType,
-    date: obj.date,
-    startTime: obj.startTime,
-    endTime: obj.endTime,
-    duration: obj.duration,
-    status: obj.status,
-    reason: obj.reason,
-    symptoms: obj.symptoms,
-    priority: obj.priority,
-    notes: obj.notes,
-    checkInTime: obj.checkInTime,
-    checkOutTime: obj.checkOutTime,
-    waitingTime: obj.waitingTime,
-    consultationTime: obj.consultationTime,
-    referralSource: obj.referralSource,
-    previousAppointment: transformId(obj.previousAppointment),
-    rescheduledFrom: transformId(obj.rescheduledFrom),
-    cancelledBy: transformPopulated(obj.cancelledBy),
-    cancelledReason: obj.cancelledReason,
-    cancelledAt: obj.cancelledAt,
-    createdBy: transformPopulated(obj.createdBy),
-    updatedBy: transformPopulated(obj.updatedBy),
-    createdAt: obj.createdAt,
-    updatedAt: obj.updatedAt,
-    
-    // Virtuals
-    isPastDue: this.isPastDue,
-    isToday: this.isToday,
-    isUpcoming: this.isUpcoming,
-    formattedDate: this.formattedDate,
-    formattedTime: this.formattedTime,
-    timeSlot: this.timeSlot,
-  };
 };
 
 // Export the model with proper typing
