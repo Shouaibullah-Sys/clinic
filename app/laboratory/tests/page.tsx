@@ -60,6 +60,7 @@ import {
   Activity
 } from "lucide-react";
 import { format } from "date-fns";
+import { useAuthStore } from "@/store/useAuthStore";
 
 interface LabTest {
   _id: string;
@@ -94,6 +95,7 @@ interface LabTest {
 }
 
 export default function LaboratoryTestsPage() {
+  const { accessToken } = useAuthStore();
   const [tests, setTests] = useState<LabTest[]>([]);
   const [filteredTests, setFilteredTests] = useState<LabTest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -110,19 +112,22 @@ export default function LaboratoryTestsPage() {
     fetchTests();
   }, []);
 
-  useEffect(() => {
-    filterTests();
-  }, [searchQuery, statusFilter, collectionFilter, processingFilter, paymentFilter, tests]);
-
   const fetchTests = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
+      if (!accessToken) return;
+
       const response = await fetch('/api/laboratory/tests?limit=50', {
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
         },
       });
+      
+      if (response.status === 401) {
+        window.location.href = '/login';
+        return;
+      }
       
       if (response.ok) {
         const data = await response.json();
@@ -135,6 +140,10 @@ export default function LaboratoryTestsPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    filterTests();
+  }, [searchQuery, statusFilter, collectionFilter, processingFilter, paymentFilter, tests]);
 
   const filterTests = () => {
     let filtered = [...tests];
@@ -308,13 +317,14 @@ export default function LaboratoryTestsPage() {
   };
 
   const handleSendReport = async (test: LabTest) => {
+    if (!accessToken) return;
+    
     // Send report via email
     try {
-      const token = localStorage.getItem('token');
       const response = await fetch(`/api/laboratory/tests/${test._id}/send-report`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -716,4 +726,4 @@ function getPaymentColor(verified: boolean, status: string) {
     case "pending": return "bg-red-100 text-red-800";
     default: return "bg-gray-100 text-gray-800";
   }
-}
+} 

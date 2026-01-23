@@ -3,58 +3,36 @@
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
 import { LabTest } from "@/lib/models/LabTest";
-import { jwtVerify } from "jose";
+import { authenticateRequest, canAccessLaboratory } from "@/lib/auth";
 
-const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-this";
-
-async function verifyToken(token: string) {
-  try {
-    const secret = new TextEncoder().encode(JWT_SECRET);
-    const { payload } = await jwtVerify(token, secret);
-    return payload;
-  } catch (error) {
-    return null;
-  }
-}
-
-// GET: Get test categories distribution
 export async function GET(request: NextRequest) {
   try {
     await dbConnect();
     
-    // Authentication
-    const authHeader = request.headers.get("authorization");
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    // Authenticate the request
+    const auth = await authenticateRequest(request);
+    if (!auth.success) {
       return NextResponse.json(
-        { success: false, error: "Unauthorized. No token provided." },
-        { status: 401 }
+        { success: false, error: auth.error },
+        { status: auth.status || 401 }
       );
     }
     
-    const token = authHeader.split(" ")[1];
-    const payload = await verifyToken(token);
-    
-    if (!payload) {
+    // Check if user can access laboratory
+    if (!auth.userRole || !canAccessLaboratory(auth.userRole)) {
       return NextResponse.json(
-        { success: false, error: "Invalid or expired token." },
-        { status: 401 }
-      );
-    }
-    
-    const userId = payload.id as string;
-    const userRole = payload.role as string;
-    
-    // Allow laboratory staff, admin, doctors, and receptionists
-    const allowedRoles = ["lab_technician", "admin", "doctor", "receptionist"];
-    if (!allowedRoles.includes(userRole)) {
-      return NextResponse.json(
-        { success: false, error: "Forbidden. You don't have permission to access test categories." },
+        { 
+          success: false, 
+          error: "Forbidden. You don't have permission to access test categories." 
+        },
         { status: 403 }
       );
     }
     
     const { searchParams } = new URL(request.url);
     const timeRange = searchParams.get("timeRange") || "month";
+    
+    console.log(`Test categories requested by ${auth.userRole} ${auth.userName}`);
     
     let dateFilter: any = {};
     const now = new Date();
@@ -92,8 +70,8 @@ export async function GET(request: NextRequest) {
     let baseQuery: any = { ...dateFilter, status: { $ne: "cancelled" } };
     
     // If doctor is viewing, only show their tests
-    if (userRole === "doctor") {
-      baseQuery.doctor = userId;
+    if (auth.userRole === "doctor") {
+      baseQuery.doctor = auth.userId;
     }
     
     // Get tests grouped by category
@@ -134,23 +112,29 @@ export async function GET(request: NextRequest) {
       { $sort: { count: -1 } }
     ]);
     
-    // Format category data for charts
+    // Format category data for charts with safe null handling
     const categoryData = testsByCategory.map(cat => ({
-      name: cat._id.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()),
+      name: cat._id 
+        ? cat._id.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())
+        : "Uncategorized",
       value: cat.count,
       revenue: cat.totalRevenue || 0,
       avgProcessingTime: cat.avgProcessingTime ? Math.round(cat.avgProcessingTime / (1000 * 60 * 60)) : 0 // Convert to hours
     }));
     
-    // Format status data
+    // Format status data with safe null handling
     const statusData = testsByStatus.map(status => ({
-      name: status._id.charAt(0).toUpperCase() + status._id.slice(1),
+      name: status._id 
+        ? status._id.charAt(0).toUpperCase() + status._id.slice(1)
+        : "Unknown",
       value: status.count
     }));
     
-    // Format priority data
+    // Format priority data with safe null handling - FIXED THIS LINE
     const priorityData = testsByPriority.map(priority => ({
-      name: priority._id.charAt(0).toUpperCase() + priority._id.slice(1),
+      name: priority._id 
+        ? priority._id.charAt(0).toUpperCase() + priority._id.slice(1)
+        : "Not Specified",
       value: priority.count
     }));
     
@@ -172,7 +156,11 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     console.error("Error fetching test categories:", error);
     return NextResponse.json(
-      { success: false, error: error.message || "Failed to fetch test categories" },
+      { 
+        success: false, 
+        error: error.message || "Failed to fetch test categories",
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      },
       { status: 500 }
     );
   }

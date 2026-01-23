@@ -69,6 +69,7 @@ import {
   LineChart,
   Line
 } from "recharts";
+import { useAuthStore } from "@/store/useAuthStore";
 
 interface LabTest {
   _id: string;
@@ -146,65 +147,92 @@ export default function LaboratoryDashboard() {
   }, [searchQuery, statusFilter, priorityFilter, tests]);
 
   const fetchDashboardData = async () => {
-    try {
-      setLoading(true);
-      const token = localStorage.getItem('token');
-      
-      // Fetch dashboard stats
-      const statsResponse = await fetch(`/api/laboratory/dashboard?timeRange=${timeRange}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-      
-      // Fetch recent tests
-      const testsResponse = await fetch('/api/laboratory/tests?limit=10&sort=orderedAt', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-      
-      // Fetch revenue data
-      const revenueResponse = await fetch(`/api/laboratory/revenue?timeRange=${timeRange}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-      
-      // Fetch test category data
-      const categoryResponse = await fetch('/api/laboratory/tests/categories', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-      
-      if (statsResponse.ok) {
-        const statsData = await statsResponse.json();
-        setStats(statsData.data?.statistics || {});
-      }
-      
-      if (testsResponse.ok) {
-        const testsData = await testsResponse.json();
-        setTests(testsData.data || []);
-        setFilteredTests(testsData.data || []);
-      }
-      
-      if (revenueResponse.ok) {
-        const revenueData = await revenueResponse.json();
-        setRevenueData(revenueData.data || []);
-      }
-      
-      if (categoryResponse.ok) {
-        const categoryData = await categoryResponse.json();
-        setTestCategoryData(categoryData.data || []);
-      }
-      
-    } catch (error) {
-      console.error('Error fetching dashboard data:', error);
-    } finally {
-      setLoading(false);
+  try {
+    setLoading(true);
+    const { accessToken } = useAuthStore.getState();
+    
+    // Check if we have a token
+    if (!accessToken) {
+      console.error("No access token found");
+      return;
     }
-  };
+    
+    console.log("Fetching dashboard data with token:", accessToken.substring(0, 20) + "...");
+    
+    const headers = {
+      'Authorization': `Bearer ${accessToken}`,
+      'Content-Type': 'application/json'
+    };
+    
+    // Fetch dashboard stats
+    const statsResponse = await fetch(`/api/laboratory/dashboard?timeRange=${timeRange}`, {
+      headers,
+    });
+    
+    console.log("Dashboard response status:", statsResponse.status);
+    
+    if (statsResponse.status === 401) {
+      console.error("Authentication failed - token might be invalid");
+      // Try to refresh token or redirect to login
+      return;
+    }
+    
+    if (statsResponse.status === 403) {
+      console.error("Permission denied - check user role");
+      return;
+    }
+    
+    if (!statsResponse.ok) {
+      console.error("Failed to fetch dashboard data");
+      return;
+    }
+    
+    const statsData = await statsResponse.json();
+    console.log("Dashboard data received:", statsData);
+    
+    if (statsData.success) {
+      setStats(statsData.data?.statistics || {});
+    } else {
+      console.error("Error in dashboard response:", statsData.error);
+    }
+    
+    // Fetch recent tests
+    const testsResponse = await fetch('/api/laboratory/tests?limit=10&sort=orderedAt', {
+      headers,
+    });
+    
+    if (testsResponse.ok) {
+      const testsData = await testsResponse.json();
+      setTests(testsData.data || []);
+      setFilteredTests(testsData.data || []);
+    }
+    
+    // Fetch revenue data
+    const revenueResponse = await fetch(`/api/laboratory/revenue?timeRange=${timeRange}`, {
+      headers,
+    });
+    
+    if (revenueResponse.ok) {
+      const revenueData = await revenueResponse.json();
+      setRevenueData(revenueData.data || []);
+    }
+    
+    // Fetch test category data
+    const categoryResponse = await fetch('/api/laboratory/tests/categories', {
+      headers,
+    });
+    
+    if (categoryResponse.ok) {
+      const categoryData = await categoryResponse.json();
+      setTestCategoryData(categoryData.data?.categoryData || []);
+    }
+    
+  } catch (error) {
+    console.error('Error fetching dashboard data:', error);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const filterTests = () => {
     let filtered = [...tests];

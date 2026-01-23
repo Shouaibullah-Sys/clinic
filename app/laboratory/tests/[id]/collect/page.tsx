@@ -32,6 +32,7 @@ import {
   Clock
 } from "lucide-react";
 import { format } from "date-fns";
+import { useAuthStore } from "@/store/useAuthStore";
 
 interface TestInfo {
   _id: string;
@@ -61,6 +62,7 @@ interface TestInfo {
 export default function CollectSamplePage() {
   const params = useParams();
   const router = useRouter();
+  const { accessToken } = useAuthStore();
   const [test, setTest] = useState<TestInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -94,12 +96,22 @@ export default function CollectSamplePage() {
   const fetchTestInfo = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
+      if (!accessToken) {
+        router.push('/login');
+        return;
+      }
+
       const response = await fetch(`/api/laboratory/tests/${params.id}/collect?info=true`, {
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
         },
       });
+      
+      if (response.status === 401) {
+        router.push('/login');
+        return;
+      }
       
       if (!response.ok) {
         throw new Error('Failed to fetch test information');
@@ -124,12 +136,15 @@ export default function CollectSamplePage() {
     
     try {
       setSubmitting(true);
-      const token = localStorage.getItem('token');
+      if (!accessToken) {
+        router.push('/login');
+        return;
+      }
       
       const response = await fetch(`/api/laboratory/tests/${params.id}/collect`, {
         method: 'PUT',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -139,6 +154,11 @@ export default function CollectSamplePage() {
           sampleConditionNotes,
         }),
       });
+      
+      if (response.status === 401) {
+        router.push('/login');
+        return;
+      }
       
       const data = await response.json();
       

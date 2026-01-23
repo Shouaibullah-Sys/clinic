@@ -3,126 +3,74 @@
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
 import { LabTest } from "@/lib/models/LabTest";
-import { jwtVerify } from "jose";
-import mongoose from "mongoose";
+import { authenticateRequest, canAccessLaboratory } from "@/lib/auth";
 
-const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-this";
-
-async function verifyToken(token: string) {
-  try {
-    const secret = new TextEncoder().encode(JWT_SECRET);
-    const { payload } = await jwtVerify(token, secret);
-    return payload;
-  } catch (error) {
-    return null;
-  }
-}
-
-// GET: Laboratory staff view tests with filters
 export async function GET(request: NextRequest) {
   try {
     await dbConnect();
     
-    // Authentication
-    const authHeader = request.headers.get("authorization");
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    // Authenticate the request
+    const auth = await authenticateRequest(request);
+    if (!auth.success) {
       return NextResponse.json(
-        { success: false, error: "Unauthorized. No token provided." },
-        { status: 401 }
+        { success: false, error: auth.error },
+        { status: auth.status || 401 }
       );
     }
     
-    const token = authHeader.split(" ")[1];
-    const payload = await verifyToken(token);
-    
-    if (!payload) {
+    // Check if user can access laboratory
+    if (!canAccessLaboratory(auth.userRole)) {
       return NextResponse.json(
-        { success: false, error: "Invalid or expired token." },
-        { status: 401 }
-      );
-    }
-    
-    const userId = payload.id as string;
-    const userRole = payload.role as string;
-    
-    // Allow laboratory staff, admin, doctors, and receptionists
-    const allowedRoles = ["lab_technician", "admin", "doctor", "receptionist"];
-    if (!allowedRoles.includes(userRole)) {
-      return NextResponse.json(
-        { success: false, error: "Forbidden. You don't have permission to access laboratory tests." },
+        { success: false, error: "Forbidden. You don't have permission to access lab tests." },
         { status: 403 }
       );
     }
     
     const { searchParams } = new URL(request.url);
+    const limit = parseInt(searchParams.get("limit") || "10");
+    const sort = searchParams.get("sort") || "orderedAt";
     const status = searchParams.get("status");
-    const collectionStatus = searchParams.get("collectionStatus");
-    const processingStatus = searchParams.get("processingStatus");
-    const verificationStatus = searchParams.get("verificationStatus");
     const priority = searchParams.get("priority");
-    const patientId = searchParams.get("patientId");
-    const dateFrom = searchParams.get("dateFrom");
-    const dateTo = searchParams.get("dateTo");
-    const paymentVerified = searchParams.get("paymentVerified");
-    const page = parseInt(searchParams.get("page") || "1");
-    const limit = parseInt(searchParams.get("limit") || "50");
-    const skip = (page - 1) * limit;
     
-    let query: any = { status: { $ne: "cancelled" } };
+    console.log(`Lab tests requested by ${auth.userRole} ${auth.userName}`);
     
-    // Apply filters
-    if (status) query.status = status;
-    if (collectionStatus) query.collectionStatus = collectionStatus;
-    if (processingStatus) query.processingStatus = processingStatus;
-    if (verificationStatus) query.verificationStatus = verificationStatus;
-    if (priority) query.priority = priority;
-    if (patientId) query.patient = patientId;
-    if (paymentVerified !== null) {
-      query.paymentVerified = paymentVerified === "true";
+    // Build query
+    const query: any = {};
+    
+    if (status && status !== "all") {
+      query.status = status;
     }
     
-    // Date range filter
-    if (dateFrom || dateTo) {
-      query.orderedAt = {};
-      if (dateFrom) query.orderedAt.$gte = new Date(dateFrom);
-      if (dateTo) query.orderedAt.$lte = new Date(dateTo);
+    if (priority && priority !== "all") {
+      query.priority = priority;
     }
     
-    // If doctor is viewing, only show their tests
-    if (userRole === "doctor") {
-      query.doctor = userId;
+    // If user is lab technician, show all tests
+    // If user is doctor, show only their tests
+    if (auth.userRole === "doctor") {
+      query.doctor = auth.userId;
     }
     
-    // Get tests with pagination
-    const [tests, total] = await Promise.all([
-      LabTest.find(query)
-        .populate("patient", "name patientId phone age gender")
-        .populate("doctor", "name specialization department")
-        .populate("orderedBy", "name")
-        .populate("collectionDetails.collectedBy", "name")
-        .populate("paymentVerifiedBy", "name")
-        .sort({ priority: -1, orderedAt: -1 }) // Urgent first, then by date
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-      LabTest.countDocuments(query),
-    ]);
+    // Fetch tests
+    const tests = await LabTest.find(query)
+      .populate("patient", "name patientId phone")
+      .populate("doctor", "name specialization")
+      .populate("orderedBy", "name")
+      .sort({ [sort]: -1 })
+      .limit(limit)
+      .lean();
     
     return NextResponse.json({
       success: true,
       data: tests,
-      pagination: {
-        page,
-        limit,
-        total,
-        pages: Math.ceil(total / limit),
-      },
+      count: tests.length,
+      userRole: auth.userRole
     });
     
   } catch (error: any) {
-    console.error("Error fetching laboratory tests:", error);
+    console.error("Error fetching lab tests:", error);
     return NextResponse.json(
-      { success: false, error: error.message || "Failed to fetch tests" },
+      { success: false, error: error.message || "Failed to fetch lab tests" },
       { status: 500 }
     );
   }

@@ -27,6 +27,7 @@ import {
   Save
 } from "lucide-react";
 import { format } from "date-fns";
+import { useAuthStore } from "@/store/useAuthStore";
 
 interface TestInfo {
   _id: string;
@@ -53,6 +54,7 @@ interface TestInfo {
 export default function ProcessTestPage() {
   const params = useParams();
   const router = useRouter();
+  const { accessToken } = useAuthStore();
   const [test, setTest] = useState<TestInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -73,12 +75,22 @@ export default function ProcessTestPage() {
   const fetchTestInfo = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
+      if (!accessToken) {
+        router.push('/login');
+        return;
+      }
+
       const response = await fetch(`/api/laboratory/tests/${params.id}/process?info=true`, {
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
         },
       });
+      
+      if (response.status === 401) {
+        router.push('/login');
+        return;
+      }
       
       if (!response.ok) {
         throw new Error('Failed to fetch test information');
@@ -103,14 +115,17 @@ export default function ProcessTestPage() {
     
     try {
       setSubmitting(true);
-      const token = localStorage.getItem('token');
+      if (!accessToken) {
+        router.push('/login');
+        return;
+      }
       
       const reagentsArray = reagentsUsed.split(',').map(r => r.trim()).filter(r => r);
       
       const response = await fetch(`/api/laboratory/tests/${params.id}/process`, {
         method: 'PUT',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -122,6 +137,11 @@ export default function ProcessTestPage() {
           processingNotes: processingNotes || undefined,
         }),
       });
+      
+      if (response.status === 401) {
+        router.push('/login');
+        return;
+      }
       
       const data = await response.json();
       

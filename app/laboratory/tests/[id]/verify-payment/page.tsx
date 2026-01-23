@@ -33,7 +33,7 @@ import {
   Calendar
 } from "lucide-react";
 import { format } from "date-fns";
-import { fetchJSON } from "@/lib/utils/api";
+import { useAuthStore } from "@/store/useAuthStore";
 
 interface TestInfo {
   _id: string;
@@ -74,6 +74,7 @@ interface TestInfo {
 export default function VerifyPaymentPage() {
   const params = useParams();
   const router = useRouter();
+  const { accessToken } = useAuthStore();
   const [test, setTest] = useState<TestInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -95,15 +96,32 @@ export default function VerifyPaymentPage() {
   const fetchTestInfo = async () => {
     try {
       setLoading(true);
-      const response = await fetchJSON(`/api/laboratory/tests/${params.id}/verify-payment?info=true`);
-      setTest(response.data);
+      if (!accessToken) {
+        router.push('/login');
+        return;
+      }
+
+      const response = await fetch(`/api/laboratory/tests/${params.id}/verify-payment?info=true`, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (response.status === 401) {
+        router.push('/login');
+        return;
+      }
+      
+      const data = await response.json();
+      setTest(data.data);
       
       // Pre-fill form with existing payment details
-      if (response.data?.charges?.paymentMethod) {
-        setPaymentMethod(response.data.charges.paymentMethod);
+      if (data.data?.charges?.paymentMethod) {
+        setPaymentMethod(data.data.charges.paymentMethod);
       }
-      if (response.data?.charges?.transactionId) {
-        setTransactionId(response.data.charges.transactionId);
+      if (data.data?.charges?.transactionId) {
+        setTransactionId(data.data.charges.transactionId);
       }
     } catch (err: any) {
       setError(err.message);
@@ -131,9 +149,17 @@ export default function VerifyPaymentPage() {
     
     try {
       setSubmitting(true);
+      if (!accessToken) {
+        router.push('/login');
+        return;
+      }
       
-      const response = await fetchJSON(`/api/laboratory/tests/${params.id}/verify-payment`, {
+      const response = await fetch(`/api/laboratory/tests/${params.id}/verify-payment`, {
         method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({
           verify,
           notes,
@@ -142,7 +168,14 @@ export default function VerifyPaymentPage() {
         }),
       });
       
-      alert(response.message || "Payment verification updated successfully!");
+      if (response.status === 401) {
+        router.push('/login');
+        return;
+      }
+      
+      const data = await response.json();
+      
+      alert(data.message || "Payment verification updated successfully!");
       router.push(`/laboratory/tests/${params.id}`);
     } catch (err: any) {
       alert(err.message || "Failed to verify payment");
@@ -555,35 +588,35 @@ export default function VerifyPaymentPage() {
                 )}
               </div>
               
-              {test.charges.paymentMethod && (
+              if (test.charges.paymentMethod) {
                 <div>
                   <p className="text-sm text-muted-foreground">Payment Method</p>
                   <p className="font-medium">{test.charges.paymentMethod}</p>
                 </div>
-              )}
+              }
               
-              {test.charges.transactionId && (
+              if (test.charges.transactionId) {
                 <div>
                   <p className="text-sm text-muted-foreground">Transaction ID</p>
                   <p className="font-medium">{test.charges.transactionId}</p>
                 </div>
-              )}
+              }
               
-              {test.charges.paymentDate && (
+              if (test.charges.paymentDate) {
                 <div>
                   <p className="text-sm text-muted-foreground">Payment Date</p>
                   <p className="font-medium">
                     {format(new Date(test.charges.paymentDate), "MMM dd, yyyy HH:mm")}
                   </p>
                 </div>
-              )}
+              }
               
-              {test.charges.collectedBy && (
+              if (test.charges.collectedBy) {
                 <div>
                   <p className="text-sm text-muted-foreground">Collected By</p>
                   <p className="font-medium">{test.charges.collectedBy.name}</p>
                 </div>
-              )}
+              }
             </CardContent>
           </Card>
 
