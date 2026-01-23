@@ -1,3 +1,5 @@
+// app/appointments/new/page.tsx
+
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
@@ -745,12 +747,12 @@ export default function NewAppointmentPage() {
     <div 
       ref={mainContainerRef}
       className={cn(
-        "min-h-screen bg-gradient-to-br from-background to-muted/30",
+        "min-h-screen bg-linear-to-br from-background to-muted/30",
         isFullScreen && "fixed inset-0 z-50 bg-background overflow-auto"
       )}
     >
       {/* Top Navigation Bar */}
-      <div className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <div className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60">
         <div className="px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -837,11 +839,11 @@ export default function NewAppointmentPage() {
           <div className="flex items-start justify-between gap-6 mb-8">
             <div className="space-y-3 flex-1">
               <div className="flex items-center gap-3">
-                <div className="p-3 bg-gradient-to-br from-primary to-primary/80 rounded-2xl shadow-lg">
+                <div className="p-3 bg-linear-to-br from-primary to-primary/80 rounded-2xl shadow-lg">
                   <Calendar className="h-8 w-8 text-white" />
                 </div>
                 <div>
-                  <h1 className="text-3xl lg:text-4xl font-bold tracking-tight bg-gradient-to-r from-primary to-blue-600 bg-clip-text text-transparent">
+                  <h1 className="text-3xl lg:text-4xl font-bold tracking-tight bg-linear-to-r from-primary to-blue-600 bg-clip-text text-transparent">
                     Schedule New Appointment
                   </h1>
                   <p className="text-lg text-muted-foreground mt-2">
@@ -948,7 +950,7 @@ export default function NewAppointmentPage() {
                   <div className="flex items-center justify-between">
                     <div className="space-y-2">
                       <div className="flex items-center gap-3">
-                        <div className="p-3 bg-gradient-to-br from-primary to-primary/90 rounded-xl">
+                        <div className="p-3 bg-linear-to-br from-primary to-primary/90 rounded-xl">
                           <User className="h-6 w-6 text-white" />
                         </div>
                         <div>
@@ -967,7 +969,7 @@ export default function NewAppointmentPage() {
                 <CardContent className="space-y-6">
                   {selectedPatient ? (
                     <div className="space-y-4">
-                      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary/5 to-primary/10 p-6 border border-primary/20">
+                      <div className="relative overflow-hidden rounded-2xl bg-linear-to-r from-primary/5 to-primary/10 p-6 border border-primary/20">
                         <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -translate-y-12 translate-x-12" />
                         <div className="relative flex items-start justify-between">
                           <div className="flex items-start gap-4">
@@ -1067,7 +1069,7 @@ export default function NewAppointmentPage() {
                             <DialogTrigger asChild>
                               <Button
                                 type="button"
-                                className="h-12 bg-gradient-to-r from-primary to-primary/90 hover:from-primary hover:to-primary gap-3 rounded-xl"
+                                className="h-12 bg-linear-to-r from-primary to-primary/90 hover:from-primary hover:to-primary gap-3 rounded-xl"
                               >
                                 <UserPlus className="h-5 w-5" />
                                 New Patient
@@ -1312,7 +1314,7 @@ export default function NewAppointmentPage() {
                                   type="button"
                                   onClick={createNewPatient}
                                   disabled={creatingPatient || !newPatientForm.name.trim() || !newPatientForm.phone.trim()}
-                                  className="flex-1 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 gap-2"
+                                  className="flex-1 bg-linear-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 gap-2"
                                 >
                                   {creatingPatient ? (
                                     <>
@@ -1343,7 +1345,7 @@ export default function NewAppointmentPage() {
                         </div>
                       ) : searchResults.length > 0 ? (
                         <div className="border rounded-xl overflow-hidden shadow-sm">
-                          <div className="bg-gradient-to-r from-primary/5 to-primary/10 px-6 py-4 border-b">
+                          <div className="bg-linear-to-r from-primary/5 to-primary/10 px-6 py-4 border-b">
                             <div className="flex items-center justify-between">
                               <div>
                                 <h3 className="font-semibold">
@@ -1465,7 +1467,7 @@ export default function NewAppointmentPage() {
                     <div className="flex items-center justify-between">
                       <div className="space-y-2">
                         <div className="flex items-center gap-3">
-                          <div className="p-3 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl">
+                          <div className="p-3 bg-linear-to-br from-blue-500 to-blue-600 rounded-xl">
                             <Stethoscope className="h-6 w-6 text-white" />
                           </div>
                           <div>
@@ -1487,7 +1489,7 @@ export default function NewAppointmentPage() {
                       "p-4 rounded-xl border transition-all duration-300",
                       isEmergency 
                         ? "bg-red-500/10 border-red-500/30" 
-                        : "bg-gradient-to-r from-blue-500/5 to-blue-500/10 border-blue-500/20"
+                        : "bg-linear-to-r from-blue-500/5 to-blue-500/10 border-blue-500/20"
                     )}>
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
@@ -1575,7 +1577,7 @@ export default function NewAppointmentPage() {
                           </SelectContent>
                         </Select>
                         {selectedDoctorInfo && (
-                          <div className="mt-4 p-4 bg-gradient-to-r from-blue-500/5 to-blue-500/10 rounded-xl">
+                          <div className="mt-4 p-4 bg-linear-to-r from-blue-500/5 to-blue-500/10 rounded-xl">
                             <div className="flex items-center gap-3">
                               <div className="p-2 bg-white rounded-lg shadow-sm">
                                 <Stethoscope className="h-5 w-5 text-blue-500" />
@@ -1609,7 +1611,7 @@ export default function NewAppointmentPage() {
                               min={format(new Date(), "yyyy-MM-dd")}
                             />
                           </div>
-                          <div className="p-4 bg-gradient-to-r from-primary/5 to-primary/10 rounded-xl">
+                          <div className="p-4 bg-linear-to-r from-primary/5 to-primary/10 rounded-xl">
                             <div className="flex items-center gap-2">
                               <CalendarDays className="h-5 w-5 text-primary" />
                               <span className="font-semibold">{formatDisplayDate(appointmentDate)}</span>
@@ -1625,7 +1627,7 @@ export default function NewAppointmentPage() {
                         Appointment Number
                       </Label>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="p-6 bg-gradient-to-br from-primary/5 to-primary/10 rounded-2xl border border-primary/20">
+                        <div className="p-6 bg-linear-to-br from-primary/5 to-primary/10 rounded-2xl border border-primary/20">
                           <div className="flex items-center justify-between mb-4">
                             <h4 className="font-semibold">Today's Appointments</h4>
                             <Badge variant="secondary">{todaysAppointmentsCount}</Badge>
@@ -1637,7 +1639,7 @@ export default function NewAppointmentPage() {
                             Next available number
                           </p>
                         </div>
-                        <div className="p-6 bg-gradient-to-br from-blue-500/5 to-blue-500/10 rounded-2xl border border-blue-500/20">
+                        <div className="p-6 bg-linear-to-br from-blue-500/5 to-blue-500/10 rounded-2xl border border-blue-500/20">
                           <div className="flex items-center justify-between mb-4">
                             <h4 className="font-semibold">Estimated Time</h4>
                             <Clock className="h-5 w-5 text-blue-500" />
@@ -1667,7 +1669,7 @@ export default function NewAppointmentPage() {
                     <div className="flex items-center justify-between">
                       <div className="space-y-2">
                         <div className="flex items-center gap-3">
-                          <div className="p-3 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl">
+                          <div className="p-3 bg-linear-to-br from-purple-500 to-purple-600 rounded-xl">
                             <FileText className="h-6 w-6 text-white" />
                           </div>
                           <div>
@@ -1891,7 +1893,7 @@ export default function NewAppointmentPage() {
                       type="submit"
                       onClick={handleSubmit}
                       disabled={loading || !isFormValid()}
-                      className="w-full h-14 text-lg font-bold bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 shadow-lg hover:shadow-xl transition-all rounded-xl"
+                      className="w-full h-14 text-lg font-bold bg-linear-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 shadow-lg hover:shadow-xl transition-all rounded-xl"
                       size="lg"
                     >
                       {loading ? (
@@ -1939,7 +1941,7 @@ export default function NewAppointmentPage() {
                   </div>
                   
                   {!isFormValid() && (
-                    <div className="p-4 bg-gradient-to-r from-amber-500/5 to-amber-500/10 border border-amber-500/20 rounded-xl">
+                    <div className="p-4 bg-linear-to-r from-amber-500/5 to-amber-500/10 border border-amber-500/20 rounded-xl">
                       <div className="flex items-center gap-2 mb-3">
                         <AlertCircle className="h-5 w-5 text-amber-600" />
                         <span className="font-semibold text-amber-700">

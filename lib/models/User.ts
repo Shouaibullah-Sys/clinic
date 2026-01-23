@@ -140,14 +140,14 @@ const userSchema = new Schema<IUser>(
     timestamps: true,
     toJSON: {
       transform: function(doc, ret) {
-        delete ret.password;
+        delete (ret as any).password;
         delete ret.refreshTokens;
         return ret;
       }
     },
     toObject: {
       transform: function(doc, ret) {
-        delete ret.password;
+        delete (ret as any).password;
         delete ret.refreshTokens;
         return ret;
       }
@@ -167,8 +167,6 @@ userSchema.index({ role: 1 });
 userSchema.index({ department: 1 });
 userSchema.index({ specialization: 1 });
 userSchema.index({ active: 1, approved: 1 });
-userSchema.index({ email: 1 }, { unique: true });
-userSchema.index({ licenseNumber: 1 }, { unique: true, sparse: true });
 
 // Pre-save hook for doctors
 userSchema.pre("save", async function (next) {
@@ -228,6 +226,19 @@ userSchema.pre("save", async function (next) {
       "view_appointments",
       "update_medical_records",
       "view_own_patients",
+      "order_lab_tests",
+      "view_lab_results",
+    ];
+  }
+  
+  // Set default permissions for receptionists
+  if (user.role === "receptionist" && (!user.permissions || user.permissions.length === 0)) {
+    user.permissions = [
+      "view_patients",
+      "create_appointments",
+      "manage_billing",
+      "view_lab_tests",
+      "update_lab_charges",
     ];
   }
   
@@ -310,7 +321,7 @@ userSchema.methods.addRefreshToken = function (token: string) {
 // Method to remove refresh token
 userSchema.methods.removeRefreshToken = function (token: string) {
   if (this.refreshTokens) {
-    this.refreshTokens = this.refreshTokens.filter(t => t !== token);
+    this.refreshTokens = this.refreshTokens.filter((t: string) => t !== token);
   }
   return this.save();
 };

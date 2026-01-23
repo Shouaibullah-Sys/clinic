@@ -1,3 +1,5 @@
+// lib/models/Patient.ts
+
 import mongoose, { Schema, model, models } from "mongoose";
 
 export interface IPatient extends mongoose.Document {

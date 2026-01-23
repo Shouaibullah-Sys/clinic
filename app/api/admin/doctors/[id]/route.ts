@@ -160,8 +160,16 @@ export async function PUT(
     }
     
     // Handle availability days
-    if (updates.availability?.days && typeof updates.availability.days === 'string') {
-      updates.availability.days = updates.availability.days.split(',').map((day: string) => day.trim().toLowerCase());
+    if (updates.availability?.days) {
+      if (typeof updates.availability.days === 'string') {
+        console.log('Original availability.days string:', updates.availability.days);
+        updates.availability.days = (updates.availability.days as string).split(',').map((day: string) => day.trim().toLowerCase()).filter((day: string) => day.length > 0);
+        console.log('Processed availability.days array:', updates.availability.days);
+      } else if (Array.isArray(updates.availability.days)) {
+        console.log('Original availability.days array:', updates.availability.days);
+        updates.availability.days = (updates.availability.days as string[]).map((day: string) => day.trim().toLowerCase()).filter((day: string) => day.length > 0);
+        console.log('Filtered availability.days array:', updates.availability.days);
+      }
     }
     
     // Check for email uniqueness if email is being updated
@@ -196,6 +204,7 @@ export async function PUT(
     }
     
     // Apply updates
+    console.log('Updates object before saving:', JSON.stringify(updates, null, 2));
     Object.assign(doctor, updates);
     await doctor.save();
     

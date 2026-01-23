@@ -27,6 +27,7 @@ export interface IAppointment extends mongoose.Document {
   previousAppointment?: mongoose.Types.ObjectId;
   rescheduledFrom?: mongoose.Types.ObjectId;
   cancelledBy?: mongoose.Types.ObjectId;
+  labTests?: mongoose.Types.ObjectId[];
   cancelledReason?: string;
   cancelledAt?: Date;
   createdBy: mongoose.Types.ObjectId;
@@ -209,7 +210,6 @@ const appointmentSchema = new Schema<IAppointment, IAppointmentModel>(
 );
 
 // Indexes for performance
-appointmentSchema.index({ appointmentId: 1 });
 appointmentSchema.index({ patient: 1 });
 appointmentSchema.index({ doctor: 1 });
 appointmentSchema.index({ date: 1, startTime: 1 });
@@ -317,6 +317,7 @@ appointmentSchema.virtual("isUpcoming").get(function () {
 });
 
 appointmentSchema.virtual("formattedDate").get(function () {
+  if (!this.startTime) return "";
   return this.startTime.toLocaleDateString("en-US", {
     weekday: "short",
     year: "numeric",
@@ -326,13 +327,26 @@ appointmentSchema.virtual("formattedDate").get(function () {
 });
 
 appointmentSchema.virtual("formattedTime").get(function () {
-  return this.startTime.toLocaleTimeString("en-US", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  console.log("formattedTime called, startTime:", this.startTime, "type:", typeof this.startTime);
+  
+  if (!this.startTime || !(this.startTime instanceof Date)) {
+    console.warn("Invalid startTime in formattedTime:", this.startTime);
+    return "";
+  }
+  
+  try {
+    return this.startTime.toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch (error) {
+    console.error("Error formatting time:", error);
+    return "";
+  }
 });
 
 appointmentSchema.virtual("timeSlot").get(function () {
+  if (!this.startTime || !this.endTime) return "";
   const start = this.startTime.toLocaleTimeString("en-US", {
     hour: "2-digit",
     minute: "2-digit",
@@ -342,6 +356,12 @@ appointmentSchema.virtual("timeSlot").get(function () {
     minute: "2-digit",
   });
   return `${start} - ${end}`;
+});
+
+appointmentSchema.virtual("labTests", {
+  ref: "LabTest",
+  localField: "_id",
+  foreignField: "appointment",
 });
 
 // Static methods

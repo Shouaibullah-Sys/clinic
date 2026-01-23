@@ -407,7 +407,10 @@ export default function DoctorsManagementPage() {
   };
 
   const openEditDialog = (doctor: Doctor) => {
-    setEditingDoctor(doctor);
+    setEditingDoctor({
+      ...doctor,
+      availability: doctor.availability || { days: [], startTime: '09:00', endTime: '17:00' }
+    });
     setShowEditDoctorDialog(true);
   };
 
@@ -1203,25 +1206,93 @@ export default function DoctorsManagementPage() {
                       type="checkbox"
                       id="active"
                       checked={editingDoctor.active}
-                      onChange={(e) => setEditingDoctor(prev => 
+                      onChange={(e) => setEditingDoctor(prev =>
                         prev ? { ...prev, active: e.target.checked } : null
                       )}
                       className="rounded"
                     />
                     <Label htmlFor="active">Active</Label>
                   </div>
-                  
+
                   <div className="flex items-center gap-2">
                     <input
                       type="checkbox"
                       id="approved"
                       checked={editingDoctor.approved}
-                      onChange={(e) => setEditingDoctor(prev => 
+                      onChange={(e) => setEditingDoctor(prev =>
                         prev ? { ...prev, approved: e.target.checked } : null
                       )}
                       className="rounded"
                     />
                     <Label htmlFor="approved">Approved</Label>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <Label className="font-medium">Working Hours</Label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="workingDays">Working Days</Label>
+                    <Input
+                      id="workingDays"
+                      placeholder="monday,tuesday,wednesday,thursday,friday"
+                      value={editingDoctor.availability?.days?.join(', ') || ''}
+                      onChange={(e) => setEditingDoctor(prev =>
+                        prev ? { ...prev, availability: { ...prev.availability!, days: e.target.value.split(',').map(d => d.trim()) } } : null
+                      )}
+                    />
+                    <p className="text-xs text-gray-500">
+                      Enter days separated by commas (monday, tuesday, etc.)
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="startTime">Start Time</Label>
+                    <Input
+                      id="startTime"
+                      type="time"
+                      value={editingDoctor.availability?.startTime || ''}
+                      onChange={(e) => setEditingDoctor(prev =>
+                        prev ? { ...prev, availability: { ...prev.availability!, startTime: e.target.value } } : null
+                      )}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="endTime">End Time</Label>
+                    <Input
+                      id="endTime"
+                      type="time"
+                      value={editingDoctor.availability?.endTime || ''}
+                      onChange={(e) => setEditingDoctor(prev =>
+                        prev ? { ...prev, availability: { ...prev.availability!, endTime: e.target.value } } : null
+                      )}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="breakTime">Break Time (Optional)</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        id="breakStart"
+                        type="time"
+                        placeholder="Start"
+                        value={editingDoctor.availability?.breakStart || ''}
+                        onChange={(e) => setEditingDoctor(prev =>
+                          prev ? { ...prev, availability: { ...prev.availability!, breakStart: e.target.value } } : null
+                        )}
+                      />
+                      <Input
+                        id="breakEnd"
+                        type="time"
+                        placeholder="End"
+                        value={editingDoctor.availability?.breakEnd || ''}
+                        onChange={(e) => setEditingDoctor(prev =>
+                          prev ? { ...prev, availability: { ...prev.availability!, breakEnd: e.target.value } } : null
+                        )}
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
