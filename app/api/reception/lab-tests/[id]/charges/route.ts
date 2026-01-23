@@ -27,6 +27,8 @@ async function safePopulateLabTest(labTest: any) {
     { path: "patient", select: "name patientId phone" },
     { path: "doctor", select: "name specialization" },
     { path: "charges.collectedBy", select: "name" },
+    { path: "paymentVerifiedBy", select: "name" },
+    { path: "orderedBy", select: "name" },
   ]);
   
   // Now safely handle appointment population separately
@@ -97,6 +99,7 @@ export async function PUT(
       paymentMethod,
       paidAmount,
       transactionId,
+      verifyPayment = true, // Default to true when payment is made
     } = body;
     
     // Find lab test
@@ -109,9 +112,30 @@ export async function PUT(
       );
     }
     
-    // Calculate new paid amount (add to existing paid amount)
+    // Check if test is cancelled
+    if (labTest.status === "cancelled") {
+      return NextResponse.json(
+        { success: false, error: "Cannot update charges for cancelled test" },
+        { status: 400 }
+      );
+    }
+    
+    // Calculate new paid amount
     const currentPaid = labTest.charges.paid || 0;
-    const newPaidAmount = paidAmount !== undefined ? paidAmount : labTest.charges.paid;
+    const newPaidAmount = paidAmount !== undefined ? parseFloat(paidAmount) : currentPaid;
+    const totalAmount = labTest.discountedPrice || labTest.price;
+    
+    // Check if payment exceeds total amount
+    if (newPaidAmount > totalAmount) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: `Payment amount (${newPaidAmount}) exceeds total amount (${totalAmount})`,
+          maxAllowed: totalAmount 
+        },
+        { status: 400 }
+      );
+    }
     
     // Update ONLY the charges fields
     const updates: any = {};
@@ -123,13 +147,23 @@ export async function PUT(
     if (transactionId) updates["charges.transactionId"] = transactionId;
     
     if (paidAmount !== undefined) {
-      updates["charges.paid"] = parseFloat(paidAmount);
+      updates["charges.paid"] = newPaidAmount;
       updates["charges.paymentDate"] = new Date();
       updates["charges.collectedBy"] = new mongoose.Types.ObjectId(userId);
+      
+      // Auto-verify payment if fully paid and verifyPayment is true
+      const isFullyPaid = newPaidAmount >= totalAmount;
+      if (isFullyPaid && verifyPayment) {
+        updates.paymentVerified = true;
+        updates.paymentVerifiedBy = new mongoose.Types.ObjectId(userId);
+        updates.paymentVerifiedAt = new Date();
+        
+        // Add verification note
+        updates["verificationDetails.verificationNotes"] = `Payment verified automatically upon full payment collection. Collected by receptionist.`;
+      }
     }
     
     // Use findOneAndUpdate to only update the specific fields
-    // This prevents validation errors on other fields
     const updatedLabTest = await LabTest.findByIdAndUpdate(
       testId,
       {
@@ -138,7 +172,7 @@ export async function PUT(
       },
       {
         new: true,
-        runValidators: true // Only validate the fields being updated
+        runValidators: true
       }
     );
 
@@ -149,12 +183,37 @@ export async function PUT(
       );
     }
     
+    // Check if sample collection can now proceed
+    let canCollectSample = false;
+    let collectionMessage = "";
+    
+    if (updatedLabTest.paymentVerified) {
+      canCollectSample = updatedLabTest.canCollectSample;
+      collectionMessage = canCollectSample 
+        ? "Payment verified. Sample can now be collected." 
+        : "Payment verified but sample collection not yet available.";
+    } else if (updatedLabTest.charges.paid > 0) {
+      collectionMessage = "Partial payment received. Full payment required for sample collection.";
+    }
+    
     // Safely populate the lab test with proper date handling
     const populatedLabTest = await safePopulateLabTest(updatedLabTest);
     
     return NextResponse.json({
       success: true,
       data: populatedLabTest,
+      paymentStatus: {
+        paid: updatedLabTest.charges.paid,
+        due: updatedLabTest.charges.due,
+        total: updatedLabTest.charges.totalAmount,
+        isFullyPaid: updatedLabTest.charges.paid >= updatedLabTest.charges.totalAmount,
+        paymentVerified: updatedLabTest.paymentVerified,
+      },
+      collectionInfo: {
+        canCollectSample,
+        message: collectionMessage,
+        requiresPaymentVerification: !updatedLabTest.paymentVerified && updatedLabTest.priority === "routine",
+      },
       message: "Lab test charges updated successfully"
     });
     
@@ -227,6 +286,8 @@ export async function GET(
       .populate("patient", "name patientId phone")
       .populate("doctor", "name specialization")
       .populate("charges.collectedBy", "name")
+      .populate("paymentVerifiedBy", "name")
+      .populate("orderedBy", "name")
       .lean();
     
     if (!labTest) {
@@ -254,15 +315,147 @@ export async function GET(
       }
     }
     
+    // Calculate collection eligibility
+    const canCollectSample = labTest.status !== "cancelled" &&
+      (labTest.paymentVerified || labTest.priority !== "routine") &&
+      ["pending", "scheduled"].includes(labTest.collectionStatus);
+    
     return NextResponse.json({
       success: true,
-      data: labTest,
+      data: {
+        ...labTest,
+        collectionEligibility: {
+          canCollectSample,
+          requiresPaymentVerification: !labTest.paymentVerified && labTest.priority === "routine",
+          paymentStatus: labTest.charges.paymentStatus,
+          paymentVerified: labTest.paymentVerified,
+          priority: labTest.priority,
+        },
+      },
     });
     
   } catch (error: any) {
     console.error("Error fetching lab test charges:", error);
     return NextResponse.json(
       { success: false, error: error.message || "Failed to fetch charges" },
+      { status: 500 }
+    );
+  }
+}
+
+// PATCH: Manually verify payment (for cases where payment was made offline)
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    await dbConnect();
+    
+    // Authentication
+    const authHeader = request.headers.get("authorization");
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized. No token provided." },
+        { status: 401 }
+      );
+    }
+    
+    const token = authHeader.split(" ")[1];
+    const payload = await verifyToken(token);
+    
+    if (!payload) {
+      return NextResponse.json(
+        { success: false, error: "Invalid or expired token." },
+        { status: 401 }
+      );
+    }
+    
+    const userId = payload.id as string;
+    const userRole = payload.role as string;
+    
+    // Only receptionist, laboratory staff, and admin can verify payments
+    if (!["receptionist", "lab_technician", "admin"].includes(userRole)) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden. Only authorized staff can verify payments." },
+        { status: 403 }
+      );
+    }
+    
+    const { id: testId } = await params;
+    const body = await request.json();
+    const { 
+      verify = true, 
+      notes,
+      paymentMethod,
+      transactionId 
+    } = body;
+    
+    // Find lab test
+    const labTest = await LabTest.findById(testId);
+    
+    if (!labTest) {
+      return NextResponse.json(
+        { success: false, error: "Lab test not found" },
+        { status: 404 }
+      );
+    }
+    
+    // Check if test is cancelled
+    if (labTest.status === "cancelled") {
+      return NextResponse.json(
+        { success: false, error: "Cannot verify payment for cancelled test" },
+        { status: 400 }
+      );
+    }
+    
+    let updatedTest;
+    let message;
+    
+    if (verify) {
+      // Verify payment
+      const updates: any = {
+        paymentVerified: true,
+        paymentVerifiedBy: new mongoose.Types.ObjectId(userId),
+        paymentVerifiedAt: new Date(),
+      };
+      
+      // Add payment method and transaction ID if provided
+      if (paymentMethod) updates["charges.paymentMethod"] = paymentMethod;
+      if (transactionId) updates["charges.transactionId"] = transactionId;
+      
+      // Add verification notes
+      if (notes) {
+        updates["verificationDetails.verificationNotes"] = 
+          (labTest.verificationDetails?.verificationNotes || "") + 
+          `\n${new Date().toISOString()}: ${notes} (Verified by: ${userRole})`;
+      }
+      
+      updatedTest = await LabTest.findByIdAndUpdate(
+        testId,
+        { $set: updates },
+        { new: true }
+      );
+      
+      message = "Payment verified successfully";
+    } else {
+      // Unverify payment
+      updatedTest = await LabTest.unverifyPayment(testId);
+      message = "Payment verification removed";
+    }
+    
+    // Populate response
+    const populatedTest = await safePopulateLabTest(updatedTest);
+    
+    return NextResponse.json({
+      success: true,
+      data: populatedTest,
+      message,
+    });
+    
+  } catch (error: any) {
+    console.error("Error manually verifying payment:", error);
+    return NextResponse.json(
+      { success: false, error: error.message || "Failed to verify payment" },
       { status: 500 }
     );
   }

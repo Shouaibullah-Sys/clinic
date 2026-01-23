@@ -1,18 +1,59 @@
-// app/laboratory/dashboard/page.tsx
+// app/laboratory/dashboard/page.tsx - UPDATED VERSION
 "use client";
 
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { useState, useEffect } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
-import { CalendarIcon } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { format } from "date-fns";
-import { cn } from "@/lib/utils";
-import { useMemo, useState, useEffect } from "react";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Label } from "@/components/ui/label";
+import Link from "next/link";
+import { 
+  Search, 
+  Filter, 
+  MoreVertical, 
+  Eye, 
+  FileText, 
+  TestTube,
+  AlertTriangle,
+  CheckCircle,
+  Clock,
+  Calendar,
+  Download,
+  Printer,
+  Mail,
+  Plus,
+  RefreshCw,
+  TrendingUp,
+  Users,
+  Activity,
+  CreditCard,
+  FileCheck
+} from "lucide-react";
+import { format, subDays, startOfMonth, endOfMonth } from "date-fns";
 import {
   BarChart,
   Bar,
@@ -25,907 +66,664 @@ import {
   PieChart,
   Pie,
   Cell,
+  LineChart,
+  Line
 } from "recharts";
-import { Skeleton } from "@/components/ui/skeleton";
-import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { Badge } from "@/components/ui/badge";
 
-// Import TanStack Query and Table
-import { useQuery } from "@tanstack/react-query";
-import {
-  ColumnDef,
-  flexRender,
-  getCoreRowModel,
-  getPaginationRowModel,
-  useReactTable,
-} from "@tanstack/react-table";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-
-const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884D8"];
-
-interface LabRecord {
+interface LabTest {
   _id: string;
-  amountPaid: number;
-  testType: string;
-  date: string;
-  description?: string;
-  doctorName?: string;
+  testId: string;
+  testName: string;
+  category: string;
+  patient: {
+    name: string;
+    patientId: string;
+    phone: string;
+  };
+  doctor: {
+    name: string;
+    specialization: string;
+  };
+  status: string;
+  priority: string;
+  collectionStatus: string;
+  processingStatus: string;
+  verificationStatus: string;
+  paymentVerified: boolean;
+  orderedAt: string;
+  charges: {
+    paymentStatus: string;
+    totalAmount: number;
+    paid: number;
+    due: number;
+  };
+  results?: {
+    reportedAt?: string;
+  };
 }
 
-interface Expense {
-  _id: string;
-  amount: number;
-  expenseType: string;
-  date: string;
-  description?: string;
+interface DashboardStats {
+  totalTestsToday: number;
+  pendingCollection: number;
+  pendingProcessing: number;
+  pendingVerification: number;
+  urgentTests: number;
+  completedToday: number;
+  unpaidTests: number;
+  totalRevenue: number;
+  monthlyRevenue: number;
+  monthlyExpenses: number;
+  netProfit: number;
 }
 
-interface TestTypeData {
-  name: string;
-  value: number;
-}
-
-interface ExpenseTypeData {
-  name: string;
-  value: number;
-}
-
-interface MonthlyData {
-  name: string;
+interface RevenueData {
+  month: string;
   revenue: number;
   expenses: number;
   profit: number;
 }
 
-interface Metrics {
-  totalRevenue: number;
-  totalExpenses: number;
-  netProfit: number;
-  testTypeData: TestTypeData[];
-  expenseTypeData: ExpenseTypeData[];
-}
+export default function LaboratoryDashboard() {
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [tests, setTests] = useState<LabTest[]>([]);
+  const [filteredTests, setFilteredTests] = useState<LabTest[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [priorityFilter, setPriorityFilter] = useState("all");
+  const [revenueData, setRevenueData] = useState<RevenueData[]>([]);
+  const [testCategoryData, setTestCategoryData] = useState<any[]>([]);
+  const [timeRange, setTimeRange] = useState("month");
 
-// Mobile Transaction Card Component
-const MobileTransactionCard = ({ transaction }: { transaction: any }) => (
-  <Card className="mb-3 p-3">
-    <CardContent className="p-0 space-y-2">
-      <div className="flex justify-between items-start">
-        <div className="space-y-1 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium">
-              {format(new Date(transaction.date), "MMM dd, yyyy")}
-            </span>
-            <Badge
-              variant={
-                transaction.displayType === "Revenue" ? "default" : "secondary"
-              }
-              className="text-xs"
-            >
-              {transaction.displayType}
-            </Badge>
-          </div>
-          <p className="text-sm font-medium">{transaction.displayName}</p>
-          {transaction.doctorName && (
-            <p className="text-xs text-muted-foreground">
-              Dr. {transaction.doctorName}
-            </p>
-          )}
-        </div>
-        <div className="text-right">
-          <p
-            className={`text-sm font-bold ${
-              transaction.displayAmount >= 0 ? "text-green-600" : "text-red-600"
-            }`}
-          >
-            {transaction.displayAmount >= 0 ? "+" : "-"}AFN{" "}
-            {Math.abs(transaction.displayAmount).toFixed(2)}
-          </p>
-        </div>
-      </div>
-    </CardContent>
-  </Card>
-);
-
-// Optimized fetcher for TanStack Query
-const fetchData = async (url: string) => {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 10000);
-
-  try {
-    const response = await fetch(url, {
-      signal: controller.signal,
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch: ${response.status}`);
-    }
-
-    return await response.json();
-  } finally {
-    clearTimeout(timeoutId);
-  }
-};
-
-// Debounce hook
-function useDebounce<T>(value: T, delay: number): T {
-  const [debouncedValue, setDebouncedValue] = useState<T>(value);
+  const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
 
   useEffect(() => {
-    const handler = setTimeout(() => {
-      setDebouncedValue(value);
-    }, delay);
+    fetchDashboardData();
+  }, [timeRange]);
 
-    return () => {
-      clearTimeout(handler);
-    };
-  }, [value, delay]);
+  useEffect(() => {
+    filterTests();
+  }, [searchQuery, statusFilter, priorityFilter, tests]);
 
-  return debouncedValue;
-}
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+      const token = localStorage.getItem('token');
+      
+      // Fetch dashboard stats
+      const statsResponse = await fetch(`/api/laboratory/dashboard?timeRange=${timeRange}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      
+      // Fetch recent tests
+      const testsResponse = await fetch('/api/laboratory/tests?limit=10&sort=orderedAt', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      
+      // Fetch revenue data
+      const revenueResponse = await fetch(`/api/laboratory/revenue?timeRange=${timeRange}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      
+      // Fetch test category data
+      const categoryResponse = await fetch('/api/laboratory/tests/categories', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      
+      if (statsResponse.ok) {
+        const statsData = await statsResponse.json();
+        setStats(statsData.data?.statistics || {});
+      }
+      
+      if (testsResponse.ok) {
+        const testsData = await testsResponse.json();
+        setTests(testsData.data || []);
+        setFilteredTests(testsData.data || []);
+      }
+      
+      if (revenueResponse.ok) {
+        const revenueData = await revenueResponse.json();
+        setRevenueData(revenueData.data || []);
+      }
+      
+      if (categoryResponse.ok) {
+        const categoryData = await categoryResponse.json();
+        setTestCategoryData(categoryData.data || []);
+      }
+      
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-function DashboardContent() {
-  const [startDate, setStartDate] = useState<Date | undefined>();
-  const [endDate, setEndDate] = useState<Date | undefined>();
+  const filterTests = () => {
+    let filtered = [...tests];
 
-  // Debounce date changes
-  const debouncedStartDate = useDebounce(startDate, 500);
-  const debouncedEndDate = useDebounce(endDate, 500);
-
-  // Build query parameters for API calls
-  const buildQueryParams = useMemo(() => {
-    const params = new URLSearchParams();
-    if (debouncedStartDate)
-      params.append("startDate", debouncedStartDate.toISOString());
-    if (debouncedEndDate)
-      params.append("endDate", debouncedEndDate.toISOString());
-    params.append("page", "1");
-    params.append("limit", "1000");
-    return params.toString();
-  }, [debouncedStartDate, debouncedEndDate]);
-
-  // TanStack Query for records - always fetch data (lifetime by default)
-  const {
-    data: recordsResponse,
-    isLoading: recordsLoading,
-    error: recordsError,
-  } = useQuery({
-    queryKey: [
-      "lab-records",
-      debouncedStartDate?.toISOString(),
-      debouncedEndDate?.toISOString(),
-    ],
-    queryFn: () => fetchData(`/api/laboratory/records?${buildQueryParams}`),
-    staleTime: 5 * 60 * 1000, // 5 minutes
-  });
-
-  // TanStack Query for expenses - always fetch data (lifetime by default)
-  const {
-    data: expensesResponse,
-    isLoading: expensesLoading,
-    error: expensesError,
-  } = useQuery({
-    queryKey: [
-      "lab-expenses",
-      debouncedStartDate?.toISOString(),
-      debouncedEndDate?.toISOString(),
-    ],
-    queryFn: () => fetchData(`/api/laboratory/expenses?${buildQueryParams}`),
-    staleTime: 5 * 60 * 1000, // 5 minutes
-  });
-
-  // Extract records and expenses safely
-  const records = useMemo(
-    () => recordsResponse?.records || [],
-    [recordsResponse]
-  );
-  const expenses = useMemo(
-    () => expensesResponse?.expenses || [],
-    [expensesResponse]
-  );
-
-  // Calculate metrics with proper error handling
-  const metrics = useMemo(() => {
-    const validRecords = Array.isArray(records) ? records : [];
-    const validExpenses = Array.isArray(expenses) ? expenses : [];
-
-    if (validRecords.length === 0 && validExpenses.length === 0) {
-      return {
-        totalRevenue: 0,
-        totalExpenses: 0,
-        netProfit: 0,
-        testTypeData: [],
-        expenseTypeData: [],
-      };
+    // Apply search filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(test =>
+        test.testId.toLowerCase().includes(query) ||
+        test.testName.toLowerCase().includes(query) ||
+        test.patient.name.toLowerCase().includes(query) ||
+        test.patient.patientId.toLowerCase().includes(query) ||
+        test.doctor.name.toLowerCase().includes(query)
+      );
     }
 
-    const totalRevenue = validRecords.reduce(
-      (sum: number, record: LabRecord) => {
-        if (!record || typeof record.amountPaid !== "number") return sum;
-        return sum + record.amountPaid;
-      },
-      0
-    );
+    // Apply status filter
+    if (statusFilter !== "all") {
+      filtered = filtered.filter(test => test.status === statusFilter);
+    }
 
-    const totalExpenses = validExpenses.reduce(
-      (sum: number, expense: Expense) => {
-        if (!expense || typeof expense.amount !== "number") return sum;
-        return sum + expense.amount;
-      },
-      0
-    );
+    // Apply priority filter
+    if (priorityFilter !== "all") {
+      filtered = filtered.filter(test => test.priority === priorityFilter);
+    }
 
-    const netProfit = totalRevenue - totalExpenses;
+    setFilteredTests(filtered);
+  };
 
-    // Group by test type safely
-    const testTypeData: Record<string, number> = {};
-    validRecords.forEach((record: LabRecord) => {
-      if (record?.testType && typeof record.amountPaid === "number") {
-        testTypeData[record.testType] =
-          (testTypeData[record.testType] || 0) + record.amountPaid;
-      }
-    });
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "ordered": return "bg-blue-100 text-blue-800";
+      case "collected": return "bg-yellow-100 text-yellow-800";
+      case "processing": return "bg-purple-100 text-purple-800";
+      case "completed": return "bg-green-100 text-green-800";
+      case "reported": return "bg-emerald-100 text-emerald-800";
+      case "cancelled": return "bg-red-100 text-red-800";
+      default: return "bg-gray-100 text-gray-800";
+    }
+  };
 
-    // Group by expense type safely
-    const expenseTypeData: Record<string, number> = {};
-    validExpenses.forEach((expense: Expense) => {
-      if (expense?.expenseType && typeof expense.amount === "number") {
-        const type =
-          expense.expenseType === "doctor_salary"
-            ? "Doctor Salaries"
-            : "Other Expenses";
-        expenseTypeData[type] = (expenseTypeData[type] || 0) + expense.amount;
-      }
-    });
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
+      case "emergency": return "bg-red-100 text-red-800 border-red-300";
+      case "urgent": return "bg-orange-100 text-orange-800 border-orange-300";
+      default: return "bg-blue-100 text-blue-800 border-blue-300";
+    }
+  };
 
-    return {
-      totalRevenue,
-      totalExpenses,
-      netProfit,
-      testTypeData: Object.entries(testTypeData).map(([name, value]) => ({
-        name,
-        value,
-      })),
-      expenseTypeData: Object.entries(expenseTypeData).map(([name, value]) => ({
-        name,
-        value,
-      })),
-    };
-  }, [records, expenses]);
+  const getPaymentStatusColor = (status: string, verified: boolean) => {
+    if (verified) return "bg-green-100 text-green-800";
+    switch (status) {
+      case "paid": return "bg-green-100 text-green-800";
+      case "partial": return "bg-yellow-100 text-yellow-800";
+      case "pending": return "bg-red-100 text-red-800";
+      default: return "bg-gray-100 text-gray-800";
+    }
+  };
 
-  // Monthly data for line chart
-  const monthlyData = useMemo(() => {
-    const validRecords = Array.isArray(records) ? records : [];
-    const validExpenses = Array.isArray(expenses) ? expenses : [];
-
-    if (validRecords.length === 0 && validExpenses.length === 0) return [];
-
-    // Group records by month safely
-    const monthlyRecords: Record<string, number> = {};
-    validRecords.forEach((record: LabRecord) => {
-      if (record?.date && typeof record.amountPaid === "number") {
-        try {
-          const month = format(new Date(record.date), "MMM yyyy");
-          monthlyRecords[month] =
-            (monthlyRecords[month] || 0) + record.amountPaid;
-        } catch (error) {
-          console.error("Error formatting record date:", error);
-        }
-      }
-    });
-
-    // Group expenses by month safely
-    const monthlyExpenses: Record<string, number> = {};
-    validExpenses.forEach((expense: Expense) => {
-      if (expense?.date && typeof expense.amount === "number") {
-        try {
-          const month = format(new Date(expense.date), "MMM yyyy");
-          monthlyExpenses[month] =
-            (monthlyExpenses[month] || 0) + expense.amount;
-        } catch (error) {
-          console.error("Error formatting expense date:", error);
-        }
-      }
-    });
-
-    // Combine data
-    const allMonths = new Set([
-      ...Object.keys(monthlyRecords),
-      ...Object.keys(monthlyExpenses),
-    ]);
-
-    return Array.from(allMonths)
-      .map((month) => ({
-        name: month,
-        revenue: monthlyRecords[month] || 0,
-        expenses: monthlyExpenses[month] || 0,
-        profit: (monthlyRecords[month] || 0) - (monthlyExpenses[month] || 0),
-      }))
-      .sort((a, b) => new Date(a.name).getTime() - new Date(b.name).getTime());
-  }, [records, expenses]);
-
-  // Combine records and expenses for the transactions table
-  const combinedTransactions = useMemo(() => {
-    const validRecords = Array.isArray(records) ? records : [];
-    const validExpenses = Array.isArray(expenses) ? expenses : [];
-
-    const recordsWithType = validRecords.map((record) => ({
-      ...record,
-      type: "record",
-      displayAmount: record.amountPaid,
-      displayType: "Revenue",
-      displayName: record.testType,
-    }));
-
-    const expensesWithType = validExpenses.map((expense) => ({
-      ...expense,
-      type: "expense",
-      displayAmount: -expense.amount,
-      displayType:
-        expense.expenseType === "doctor_salary" ? "Doctor Salary" : "Expense",
-      displayName: expense.description || "Expense",
-    }));
-
-    return [...recordsWithType, ...expensesWithType].sort((a, b) => {
-      try {
-        return new Date(b.date).getTime() - new Date(a.date).getTime();
-      } catch {
-        return 0;
-      }
-    });
-  }, [records, expenses]);
-
-  // Define responsive columns for the transactions table
-  const transactionColumns: ColumnDef<any>[] = [
-    {
-      accessorKey: "date",
-      header: () => <span className="text-xs sm:text-sm">Date</span>,
-      cell: ({ row }) => {
-        try {
-          return (
-            <span className="text-xs sm:text-sm whitespace-nowrap">
-              {format(new Date(row.original.date), "MMM dd, yyyy")}
-            </span>
-          );
-        } catch {
-          return "Invalid Date";
-        }
-      },
-    },
-    {
-      accessorKey: "type",
-      header: () => <span className="text-xs sm:text-sm">Type</span>,
-      cell: ({ row }) => {
-        return (
-          <Badge
-            variant={
-              row.original.displayType === "Revenue" ? "default" : "secondary"
-            }
-            className="text-xs"
-          >
-            {row.original.displayType}
-          </Badge>
-        );
-      },
-    },
-    {
-      accessorKey: "name",
-      header: () => (
-        <span className="text-xs sm:text-sm hidden sm:table-cell">
-          Description
-        </span>
-      ),
-      cell: ({ row }) => {
-        return (
-          <div className="hidden sm:table-cell max-w-[120px] sm:max-w-[200px] truncate text-xs sm:text-sm">
-            {row.original.displayName}
-            {row.original.doctorName && (
-              <div className="text-xs text-muted-foreground">
-                Dr. {row.original.doctorName}
-              </div>
-            )}
-          </div>
-        );
-      },
-    },
-    {
-      accessorKey: "amount",
-      header: () => <span className="text-xs sm:text-sm">Amount</span>,
-      cell: ({ row }) => {
-        const amount = row.original.displayAmount;
-        const isPositive = amount >= 0;
-
-        return (
-          <div
-            className={`text-xs sm:text-sm font-bold ${
-              isPositive ? "text-green-600" : "text-red-600"
-            }`}
-          >
-            {isPositive ? "+" : "-"}AFN {Math.abs(amount).toFixed(2)}
-          </div>
-        );
-      },
-    },
-  ];
-
-  // Setup TanStack Table with built-in pagination for transactions
-  const transactionsTable = useReactTable({
-    data: combinedTransactions,
-    columns: transactionColumns,
-    getCoreRowModel: getCoreRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    initialState: {
-      pagination: {
-        pageSize: 10,
-      },
-    },
-  });
-
-  const isLoading = recordsLoading || expensesLoading;
-
-  if (isLoading) {
+  if (loading) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-          {[...Array(3)].map((_, i) => (
-            <Skeleton key={i} className="h-[120px] w-full" />
+      <div className="container mx-auto p-6 space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {[...Array(4)].map((_, i) => (
+            <Card key={i} className="animate-pulse">
+              <CardContent className="h-32" />
+            </Card>
           ))}
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {[...Array(4)].map((_, i) => (
-            <Skeleton key={i} className="h-[400px] w-full" />
+          {[...Array(2)].map((_, i) => (
+            <Card key={i} className="animate-pulse">
+              <CardContent className="h-80" />
+            </Card>
           ))}
         </div>
+        <Card className="animate-pulse">
+          <CardContent className="h-96" />
+        </Card>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-8">
-      {/* Header - Responsive */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 sm:mb-6 gap-4">
-        <h1 className="text-xl sm:text-2xl font-bold">
-          Laboratory Financial Dashboard
-        </h1>
-        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                variant="outline"
-                className={cn(
-                  "justify-start text-left font-normal text-xs sm:text-sm",
-                  !startDate && "text-muted-foreground"
-                )}
-              >
-                <CalendarIcon className="mr-2 h-3 w-3 sm:h-4 sm:w-4" />
-                {startDate ? (
-                  format(startDate, "MMM dd, yyyy")
-                ) : (
-                  <span>Start Date</span>
-                )}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0">
-              <Calendar
-                mode="single"
-                selected={startDate}
-                onSelect={setStartDate}
-                initialFocus
-              />
-            </PopoverContent>
-          </Popover>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                variant="outline"
-                className={cn(
-                  "justify-start text-left font-normal text-xs sm:text-sm",
-                  !endDate && "text-muted-foreground"
-                )}
-              >
-                <CalendarIcon className="mr-2 h-3 w-3 sm:h-4 sm:w-4" />
-                {endDate ? (
-                  format(endDate, "MMM dd, yyyy")
-                ) : (
-                  <span>End Date</span>
-                )}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0">
-              <Calendar
-                mode="single"
-                selected={endDate}
-                onSelect={setEndDate}
-                initialFocus
-                disabled={(date) => (startDate ? date < startDate : false)}
-              />
-            </PopoverContent>
-          </Popover>
-          <Button
-            variant="secondary"
-            onClick={() => {
-              setStartDate(undefined);
-              setEndDate(undefined);
-            }}
-            className="text-xs sm:text-sm"
-          >
-            Clear
+    <div className="container mx-auto p-4 md:p-6 space-y-6">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Laboratory Analytics Dashboard</h1>
+          <p className="text-muted-foreground">
+            Comprehensive overview of laboratory operations and finances
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Select value={timeRange} onValueChange={setTimeRange}>
+            <SelectTrigger className="w-45">
+              <SelectValue placeholder="Time Range" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="today">Today</SelectItem>
+              <SelectItem value="week">This Week</SelectItem>
+              <SelectItem value="month">This Month</SelectItem>
+              <SelectItem value="quarter">This Quarter</SelectItem>
+              <SelectItem value="year">This Year</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button variant="outline" onClick={fetchDashboardData}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Refresh
           </Button>
         </div>
       </div>
 
-      {/* Always show dashboard data - lifetime data by default */}
-      <>
-        {/* Key Metrics */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mb-4 sm:mb-6">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm sm:text-base">
-                Total Revenue
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-xl sm:text-3xl font-bold">
-                AFN {metrics?.totalRevenue?.toFixed(2) || "0.00"}
-              </div>
-              <p className="text-xs sm:text-sm text-muted-foreground mt-2">
-                {debouncedStartDate && debouncedEndDate
-                  ? `Filtered period: ${format(
-                      debouncedStartDate,
-                      "MMM d, yyyy"
-                    )} - ${format(debouncedEndDate, "MMM d, yyyy")}`
-                  : "Lifetime total"}
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm sm:text-base">
-                Total Expenses
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-xl sm:text-3xl font-bold">
-                AFN {metrics?.totalExpenses?.toFixed(2) || "0.00"}
-              </div>
-              <p className="text-xs sm:text-sm text-muted-foreground mt-2">
-                {debouncedStartDate && debouncedEndDate
-                  ? `Filtered period: ${format(
-                      debouncedStartDate,
-                      "MMM d, yyyy"
-                    )} - ${format(debouncedEndDate, "MMM d, yyyy")}`
-                  : "Lifetime total"}
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm sm:text-base">Net Profit</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div
-                className={`text-xl sm:text-3xl font-bold ${
-                  metrics?.netProfit && metrics.netProfit >= 0
-                    ? "text-green-600"
-                    : "text-red-600"
-                }`}
-              >
-                AFN {metrics?.netProfit?.toFixed(2) || "0.00"}
-              </div>
-              <p className="text-xs sm:text-sm text-muted-foreground mt-2">
-                {debouncedStartDate && debouncedEndDate
-                  ? `Filtered period: ${format(
-                      debouncedStartDate,
-                      "MMM d, yyyy"
-                    )} - ${format(debouncedEndDate, "MMM d, yyyy")}`
-                  : "Lifetime total"}
-              </p>
-            </CardContent>
-          </Card>
-        </div>
+      {/* Financial Metrics */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+            <TrendingUp className="h-4 w-4 text-green-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">₹{stats?.totalRevenue?.toLocaleString() || "0"}</div>
+            <p className="text-xs text-muted-foreground">
+              {timeRange === "today" ? "Today" : 
+               timeRange === "week" ? "This Week" :
+               timeRange === "month" ? "This Month" :
+               timeRange === "quarter" ? "This Quarter" : "This Year"}
+            </p>
+          </CardContent>
+        </Card>
 
-        {/* Charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-4 sm:mb-6">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm sm:text-base">
-                Monthly Performance
-                {debouncedStartDate && debouncedEndDate && (
-                  <span className="text-xs font-normal text-muted-foreground block">
-                    Filtered: {format(debouncedStartDate, "MMM d, yyyy")} -{" "}
-                    {format(debouncedEndDate, "MMM d, yyyy")}
-                  </span>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="h-[300px] sm:h-[400px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={monthlyData}
-                  margin={{
-                    top: 20,
-                    right: 30,
-                    left: 20,
-                    bottom: 5,
-                  }}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Net Profit</CardTitle>
+            <CreditCard className="h-4 w-4 text-blue-500" />
+          </CardHeader>
+          <CardContent>
+            <div className={`text-2xl font-bold ${(stats?.netProfit || 0) >= 0 ? "text-green-600" : "text-red-600"}`}>
+              ₹{stats?.netProfit?.toLocaleString() || "0"}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {timeRange === "today" ? "Today" : 
+               timeRange === "week" ? "This Week" :
+               timeRange === "month" ? "This Month" :
+               timeRange === "quarter" ? "This Quarter" : "This Year"}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Tests</CardTitle>
+            <TestTube className="h-4 w-4 text-purple-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats?.totalTestsToday || 0}</div>
+            <p className="text-xs text-muted-foreground">
+              {timeRange === "today" ? "Today" : 
+               timeRange === "week" ? "This Week" :
+               timeRange === "month" ? "This Month" :
+               timeRange === "quarter" ? "This Quarter" : "This Year"}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Pending Payment</CardTitle>
+            <FileCheck className="h-4 w-4 text-orange-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats?.unpaidTests || 0}</div>
+            <p className="text-xs text-muted-foreground">
+              Tests requiring payment
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Charts Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Revenue Chart */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Revenue & Profit Trend</CardTitle>
+          </CardHeader>
+          <CardContent className="h-80">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={revenueData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="month" />
+                <YAxis />
+                <Tooltip />
+                <Legend />
+                <Line type="monotone" dataKey="revenue" stroke="#8884d8" activeDot={{ r: 8 }} />
+                <Line type="monotone" dataKey="profit" stroke="#82ca9d" />
+              </LineChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        {/* Test Categories Chart */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Tests by Category</CardTitle>
+          </CardHeader>
+          <CardContent className="h-80">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={testCategoryData}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                  outerRadius={80}
+                  fill="#8884d8"
+                  dataKey="value"
                 >
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="revenue" fill="#8884d8" name="Revenue" />
-                  <Bar dataKey="expenses" fill="#82ca9d" name="Expenses" />
-                  <Bar dataKey="profit" fill="#ffc658" name="Profit" />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
+                  {testCategoryData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      </div>
 
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm sm:text-base">
-                Revenue by Test Type
-                {debouncedStartDate && debouncedEndDate && (
-                  <span className="text-xs font-normal text-muted-foreground block">
-                    Filtered: {format(debouncedStartDate, "MMM d, yyyy")} -{" "}
-                    {format(debouncedEndDate, "MMM d, yyyy")}
-                  </span>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="h-[300px] sm:h-[400px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={metrics?.testTypeData || []}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    outerRadius={80}
-                    fill="#8884d8"
-                    dataKey="value"
-                    nameKey="name"
-                    label={({ name, percent }) =>
-                      `${name} ${(percent * 100).toFixed(0)}%`
-                    }
-                  >
-                    {metrics?.testTypeData?.map((entry, index) => (
-                      <Cell
-                        key={`cell-${index}`}
-                        fill={COLORS[index % COLORS.length]}
-                      />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        </div>
+      {/* Operational Metrics */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Pending Collection</CardTitle>
+            <Clock className="h-4 w-4 text-yellow-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats?.pendingCollection || 0}</div>
+            <p className="text-xs text-muted-foreground">
+              Waiting for samples
+            </p>
+          </CardContent>
+        </Card>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm sm:text-base">
-                Expense Breakdown
-                {debouncedStartDate && debouncedEndDate && (
-                  <span className="text-xs font-normal text-muted-foreground block">
-                    Filtered: {format(debouncedStartDate, "MMM d, yyyy")} -{" "}
-                    {format(debouncedEndDate, "MMM d, yyyy")}
-                  </span>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="h-[300px] sm:h-[400px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={metrics?.expenseTypeData || []}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    outerRadius={80}
-                    fill="#8884d8"
-                    dataKey="value"
-                    nameKey="name"
-                    label={({ name, percent }) =>
-                      `${name} ${(percent * 100).toFixed(0)}%`
-                    }
-                  >
-                    {metrics?.expenseTypeData?.map((entry, index) => (
-                      <Cell
-                        key={`cell-${index}`}
-                        fill={COLORS[index % COLORS.length]}
-                      />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">In Processing</CardTitle>
+            <Activity className="h-4 w-4 text-blue-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats?.pendingProcessing || 0}</div>
+            <p className="text-xs text-muted-foreground">
+              Currently being processed
+            </p>
+          </CardContent>
+        </Card>
 
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm sm:text-base">
-                Recent Transactions
-                {debouncedStartDate && debouncedEndDate && (
-                  <span className="text-xs font-normal text-muted-foreground block">
-                    Filtered: {format(debouncedStartDate, "MMM d, yyyy")} -{" "}
-                    {format(debouncedEndDate, "MMM d, yyyy")}
-                  </span>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {/* Desktop Table View (hidden on mobile) */}
-              <div className="hidden sm:block rounded-md border mb-4">
-                <Table>
-                  <TableHeader>
-                    {transactionsTable.getHeaderGroups().map((headerGroup) => (
-                      <TableRow key={headerGroup.id}>
-                        {headerGroup.headers.map((header) => (
-                          <TableHead
-                            key={header.id}
-                            className="text-xs sm:text-sm p-2 sm:p-4"
-                          >
-                            {header.isPlaceholder
-                              ? null
-                              : flexRender(
-                                  header.column.columnDef.header,
-                                  header.getContext()
-                                )}
-                          </TableHead>
-                        ))}
-                      </TableRow>
-                    ))}
-                  </TableHeader>
-                  <TableBody>
-                    {transactionsTable.getRowModel().rows?.length ? (
-                      transactionsTable.getRowModel().rows.map((row) => (
-                        <TableRow
-                          key={row.id}
-                          data-state={row.getIsSelected() && "selected"}
-                        >
-                          {row.getVisibleCells().map((cell) => (
-                            <TableCell key={cell.id} className="p-2 sm:p-4">
-                              {flexRender(
-                                cell.column.columnDef.cell,
-                                cell.getContext()
-                              )}
-                            </TableCell>
-                          ))}
-                        </TableRow>
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell
-                          colSpan={transactionColumns.length}
-                          className="h-24 text-center text-xs sm:text-sm text-muted-foreground"
-                        >
-                          No transactions found.
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Pending Verification</CardTitle>
+            <CheckCircle className="h-4 w-4 text-purple-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats?.pendingVerification || 0}</div>
+            <p className="text-xs text-muted-foreground">
+              Awaiting verification
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Urgent Tests</CardTitle>
+            <AlertTriangle className="h-4 w-4 text-red-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-red-600">{stats?.urgentTests || 0}</div>
+            <p className="text-xs text-muted-foreground">
+              Require immediate attention
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Recent Tests Table */}
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <CardTitle>Recent Tests</CardTitle>
+            <div className="flex items-center gap-2 w-full md:w-auto">
+              <div className="relative flex-1 md:flex-none">
+                <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search tests..."
+                  className="pl-9 w-full md:w-62.5"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
               </div>
-
-              {/* Mobile Card View (shown only on mobile) */}
-              <div className="sm:hidden space-y-3">
-                {transactionsTable.getRowModel().rows?.length ? (
-                  transactionsTable
-                    .getRowModel()
-                    .rows.map((row) => (
-                      <MobileTransactionCard
-                        key={row.id}
-                        transaction={row.original}
-                      />
-                    ))
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-32.5">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="ordered">Ordered</SelectItem>
+                  <SelectItem value="collected">Collected</SelectItem>
+                  <SelectItem value="processing">Processing</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button asChild variant="outline" size="sm">
+                <Link href="/laboratory/tests">
+                  View All
+                </Link>
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Test ID</TableHead>
+                  <TableHead>Patient</TableHead>
+                  <TableHead>Test Name</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Priority</TableHead>
+                  <TableHead>Payment</TableHead>
+                  <TableHead>Ordered</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredTests.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                      No tests found
+                    </TableCell>
+                  </TableRow>
                 ) : (
-                  <Card className="p-6 text-center">
-                    <CardContent>
-                      <p className="text-sm text-muted-foreground">
-                        No transactions found
-                      </p>
-                    </CardContent>
-                  </Card>
+                  filteredTests.map((test) => (
+                    <TableRow key={test._id}>
+                      <TableCell className="font-medium">
+                        <Link 
+                          href={`/laboratory/tests/${test._id}`}
+                          className="hover:text-primary hover:underline"
+                        >
+                          {test.testId}
+                        </Link>
+                      </TableCell>
+                      <TableCell>
+                        <div>
+                          <div className="font-medium">{test.patient.name}</div>
+                          <div className="text-sm text-muted-foreground">{test.patient.patientId}</div>
+                        </div>
+                      </TableCell>
+                      <TableCell>{test.testName}</TableCell>
+                      <TableCell>
+                        <Badge className={getStatusColor(test.status)}>
+                          {test.status.charAt(0).toUpperCase() + test.status.slice(1)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge 
+                          variant="outline" 
+                          className={getPriorityColor(test.priority)}
+                        >
+                          {test.priority}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col gap-1">
+                          <Badge className={getPaymentStatusColor(test.charges.paymentStatus, test.paymentVerified)}>
+                            {test.paymentVerified ? "Verified" : test.charges.paymentStatus}
+                          </Badge>
+                          {!test.paymentVerified && test.charges.due > 0 && (
+                            <div className="text-xs text-red-600">
+                              Due: ₹{test.charges.due}
+                            </div>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {format(new Date(test.orderedAt), "MMM dd, HH:mm")}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm">
+                              ⋮
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem asChild>
+                              <Link href={`/laboratory/tests/${test._id}`}>
+                                View Details
+                              </Link>
+                            </DropdownMenuItem>
+                            {test.collectionStatus === "pending" && (
+                              <DropdownMenuItem asChild>
+                                <Link href={`/laboratory/tests/${test._id}/collect`}>
+                                  Collect Sample
+                                </Link>
+                              </DropdownMenuItem>
+                            )}
+                            {test.collectionStatus === "collected" && test.processingStatus === "pending" && (
+                              <DropdownMenuItem asChild>
+                                <Link href={`/laboratory/tests/${test._id}/process`}>
+                                  Process Test
+                                </Link>
+                              </DropdownMenuItem>
+                            )}
+                            {!test.paymentVerified && (
+                              <DropdownMenuItem asChild>
+                                <Link href={`/laboratory/tests/${test._id}/verify-payment`}>
+                                  Verify Payment
+                                </Link>
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))
                 )}
-              </div>
+              </TableBody>
+            </Table>
+          </div>
+          
+          <div className="flex items-center justify-between mt-4">
+            <div className="text-sm text-muted-foreground">
+              Showing {filteredTests.length} of {tests.length} recent tests
+            </div>
+            <Button asChild variant="outline" size="sm">
+              <Link href="/laboratory/tests">
+                View All Tests
+              </Link>
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
-              {/* TanStack Table Pagination Controls */}
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-                <div className="text-xs sm:text-sm text-muted-foreground">
-                  {transactionsTable.getRowModel().rows.length} of{" "}
-                  {combinedTransactions.length}
-                </div>
+      {/* Quick Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Today's Overview</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-muted-foreground">Tests Ordered</span>
+              <span className="font-medium">{stats?.totalTestsToday || 0}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-muted-foreground">Tests Completed</span>
+              <span className="font-medium">{stats?.completedToday || 0}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-muted-foreground">Revenue</span>
+              <span className="font-medium text-green-600">₹{stats?.totalRevenue || 0}</span>
+            </div>
+          </CardContent>
+        </Card>
 
-                <div className="flex items-center space-x-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => transactionsTable.previousPage()}
-                    disabled={!transactionsTable.getCanPreviousPage()}
-                    className="text-xs h-8"
-                  >
-                    Prev
-                  </Button>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Payment Status</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-muted-foreground">Paid Tests</span>
+              <span className="font-medium text-green-600">
+                {tests.filter(t => t.charges.paymentStatus === "paid").length}
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-muted-foreground">Pending Payment</span>
+              <span className="font-medium text-yellow-600">
+                {tests.filter(t => t.charges.paymentStatus === "pending").length}
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-muted-foreground">Payment Verified</span>
+              <span className="font-medium text-green-600">
+                {tests.filter(t => t.paymentVerified).length}
+              </span>
+            </div>
+          </CardContent>
+        </Card>
 
-                  <div className="hidden sm:flex items-center gap-1">
-                    {Array.from(
-                      {
-                        length: Math.min(5, transactionsTable.getPageCount()),
-                      },
-                      (_, i) => {
-                        const pageNumber = i + 1;
-                        const currentPage =
-                          transactionsTable.getState().pagination.pageIndex + 1;
-                        return (
-                          <Button
-                            key={pageNumber}
-                            variant={
-                              currentPage === pageNumber ? "default" : "outline"
-                            }
-                            size="sm"
-                            onClick={() => transactionsTable.setPageIndex(i)}
-                            className="h-8 w-8 p-0 text-xs"
-                          >
-                            {pageNumber}
-                          </Button>
-                        );
-                      }
-                    )}
-                  </div>
-
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => transactionsTable.nextPage()}
-                    disabled={!transactionsTable.getCanNextPage()}
-                    className="text-xs h-8"
-                  >
-                    Next
-                  </Button>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <p className="text-xs sm:text-sm lg:hidden font-medium hidden sm:block">
-                    Rows per page
-                  </p>
-                  <select
-                    value={transactionsTable.getState().pagination.pageSize}
-                    onChange={(e) => {
-                      transactionsTable.setPageSize(Number(e.target.value));
-                    }}
-                    className="h-8 w-[70px] rounded-md border border-input bg-background px-3 py-1 text-xs sm:text-sm"
-                  >
-                    {[10, 20, 30, 50].map((size) => (
-                      <option key={size} value={size}>
-                        {size}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Quick Actions</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Button asChild variant="outline" className="w-full justify-start">
+              <Link href="/laboratory/tests?collectionStatus=pending">
+                <Clock className="h-4 w-4 mr-2" />
+                Pending Collection ({stats?.pendingCollection || 0})
+              </Link>
+            </Button>
+            <Button asChild variant="outline" className="w-full justify-start">
+              <Link href="/laboratory/tests?processingStatus=pending&collectionStatus=collected">
+                <Activity className="h-4 w-4 mr-2" />
+                Processing Queue ({stats?.pendingProcessing || 0})
+              </Link>
+            </Button>
+            <Button asChild variant="outline" className="w-full justify-start">
+              <Link href="/laboratory/tests?priority=urgent,emergency">
+                <AlertTriangle className="h-4 w-4 mr-2" />
+                Urgent Tests ({stats?.urgentTests || 0})
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
     </div>
-  );
-}
-
-export default function Dashboard() {
-  return (
-    <ErrorBoundary>
-      <DashboardContent />
-    </ErrorBoundary>
   );
 }

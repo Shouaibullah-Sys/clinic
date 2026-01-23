@@ -122,6 +122,13 @@ export async function POST(request: NextRequest) {
       const testHash = await bcrypt.hash(password, 10);
       console.log('Test hash of input (first 30 chars):', testHash.substring(0, 30) + '...');
       console.log('Stored hash (first 30 chars):', user.password.substring(0, 30) + '...');
+  
+      // Check if stored hash is double-hashed (hash with 12 then 10)
+      const hash12 = await bcrypt.hash(password, 12);
+      const doubleHash = await bcrypt.hash(hash12, 10);
+      console.log('Double hash (12 then 10, first 30 chars):', doubleHash.substring(0, 30) + '...');
+      const isDoubleHashed = doubleHash.substring(0, 30) === user.password.substring(0, 30);
+      console.log('Is stored hash double-hashed?', isDoubleHashed);
       
       return NextResponse.json(
         { 

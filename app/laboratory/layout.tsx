@@ -20,8 +20,6 @@ import { Metadata } from "next";
 
 const navLinks = [
   { href: "/laboratory/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/laboratory/records", label: "Daily Records", icon: ClipboardList },
-  { href: "/laboratory/expenses", label: "Daily Expenses", icon: HandCoins },
 ];
 
 export default function LaboratoryLayout({
@@ -68,7 +66,7 @@ export default function LaboratoryLayout({
         {/* Desktop Sidebar */}
         <aside className="hidden md:block w-64 border-r bg-muted/40">
           <div className="flex h-full flex-col gap-2">
-            <div className="flex h-14 items-center border-b px-4 lg:h-[60px]">
+            <div className="flex h-14 items-center border-b px-4 lg:h-15">
               <Link
                 href="laboratory/dashboard"
                 className="flex items-center gap-2 font-semibold"
