@@ -111,6 +111,28 @@ export const useAuthStore = create<AuthState>()(
             }
           }
 
+          // If no token in localStorage, try to get from cookies via /api/auth/me
+          try {
+            const response = await fetch("/api/auth/me", {
+              credentials: "include",
+            });
+
+            if (response.ok) {
+              const data = await response.json();
+              // Decode the token to get user info (since we don't have it in cookies)
+              // For now, we'll set a placeholder and let the API handle auth
+              set({
+                user: data.user,
+                accessToken: null, // We'll rely on cookies for API calls
+                isAuthenticated: true,
+                isLoading: false,
+              });
+              return;
+            }
+          } catch (cookieError) {
+            console.log("No valid session in cookies either");
+          }
+
           // If no valid token, try to refresh
           const refreshToken = get().refreshToken;
           if (refreshToken) {

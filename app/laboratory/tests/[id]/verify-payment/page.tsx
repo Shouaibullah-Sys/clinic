@@ -606,7 +606,7 @@ export default function VerifyPaymentPage() {
                 <div>
                   <p className="text-sm text-muted-foreground">Payment Date</p>
                   <p className="font-medium">
-                    {format(new Date(test.charges.paymentDate), "MMM dd, yyyy HH:mm")}
+                    {format(new Date(test.charges.paymentDate!), "MMM dd, yyyy HH:mm")}
                   </p>
                 </div>
               }
@@ -614,7 +614,7 @@ export default function VerifyPaymentPage() {
               if (test.charges.collectedBy) {
                 <div>
                   <p className="text-sm text-muted-foreground">Collected By</p>
-                  <p className="font-medium">{test.charges.collectedBy.name}</p>
+                  <p className="font-medium">{test.charges.collectedBy?.name}</p>
                 </div>
               }
             </CardContent>

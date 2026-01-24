@@ -1,4 +1,5 @@
 // app/laboratory/tests/page.tsx
+
 "use client";
 
 import { useState, useEffect } from "react";
@@ -94,6 +95,56 @@ interface LabTest {
   };
 }
 
+// Safe date formatting utility
+const safeFormatDate = (dateString: string | undefined | null, formatStr: string = "MMM dd, yyyy HH:mm"): string => {
+  if (!dateString) return "N/A";
+  
+  try {
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) {
+      return "Invalid Date";
+    }
+    return format(date, formatStr);
+  } catch (error) {
+    console.error('Date formatting error:', error);
+    return "Date Error";
+  }
+};
+
+// Safe date formatting component
+interface FormattedDateProps {
+  date: string | undefined | null;
+  format?: string;
+  fallback?: string;
+  className?: string;
+}
+
+function FormattedDate({ 
+  date, 
+  format: formatStr = "MMM dd, yyyy HH:mm", 
+  fallback = "N/A",
+  className = "" 
+}: FormattedDateProps) {
+  if (!date) return <span className={className}>{fallback}</span>;
+  
+  try {
+    const parsedDate = new Date(date);
+    if (isNaN(parsedDate.getTime())) {
+      console.warn(`Invalid date string: ${date}`);
+      return <span className={className}>{fallback}</span>;
+    }
+    
+    return (
+      <span className={className}>
+        {format(parsedDate, formatStr)}
+      </span>
+    );
+  } catch (error) {
+    console.error('Date formatting error:', error);
+    return <span className={className}>{fallback}</span>;
+  }
+}
+
 export default function LaboratoryTestsPage() {
   const { accessToken } = useAuthStore();
   const [tests, setTests] = useState<LabTest[]>([]);
@@ -122,6 +173,7 @@ export default function LaboratoryTestsPage() {
           'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
       });
       
       if (response.status === 401) {
@@ -244,7 +296,7 @@ export default function LaboratoryTestsPage() {
           <body>
             <div class="header">
               <h1>MEDICAL LABORATORY REPORT</h1>
-              <div class="subtitle">${format(new Date(), "MMMM dd, yyyy")}</div>
+              <div class="subtitle">${safeFormatDate(new Date().toISOString(), "MMMM dd, yyyy")}</div>
             </div>
             
             <div class="patient-info">
@@ -282,7 +334,7 @@ export default function LaboratoryTestsPage() {
                 </tr>
                 <tr>
                   <td><strong>Ordered Date:</strong></td>
-                  <td>${format(new Date(test.orderedAt), "MMM dd, yyyy HH:mm")}</td>
+                  <td>${safeFormatDate(test.orderedAt, "MMM dd, yyyy HH:mm")}</td>
                   <td><strong>Status:</strong></td>
                   <td>${test.status}</td>
                 </tr>
@@ -295,7 +347,7 @@ export default function LaboratoryTestsPage() {
             </div>
             
             <div class="footer">
-              <p>Generated on ${format(new Date(), "MMMM dd, yyyy HH:mm")}</p>
+              <p>Generated on ${safeFormatDate(new Date().toISOString(), "MMMM dd, yyyy HH:mm")}</p>
               <p>Authorized Laboratory Signature</p>
             </div>
             
@@ -327,6 +379,7 @@ export default function LaboratoryTestsPage() {
           'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify({
           recipient: "",
           notes: reportNotes,
@@ -619,7 +672,7 @@ function TestsTable({ tests, onGenerateReport }: { tests: LabTest[]; onGenerateR
                 </div>
               </TableCell>
               <TableCell>
-                {format(new Date(test.orderedAt), "MMM dd, HH:mm")}
+                <FormattedDate date={test.orderedAt} format="MMM dd, HH:mm" />
               </TableCell>
               <TableCell className="text-right">
                 <DropdownMenu>
@@ -726,4 +779,4 @@ function getPaymentColor(verified: boolean, status: string) {
     case "pending": return "bg-red-100 text-red-800";
     default: return "bg-gray-100 text-gray-800";
   }
-} 
+}

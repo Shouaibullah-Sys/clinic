@@ -1,4 +1,5 @@
 // app/laboratory/tests/[id]/page.tsx
+
 "use client";
 
 import { useState, useEffect } from "react";
@@ -10,9 +11,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
+import { useAuthStore } from "@/store/useAuthStore";
 import { 
   ArrowLeft, 
-  Calendar, 
   User, 
   Stethoscope, 
   TestTube, 
@@ -25,10 +26,8 @@ import {
   Printer,
   Mail,
   RefreshCw,
-  Edit,
   MoreVertical
 } from "lucide-react";
-import { format } from "date-fns";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -51,14 +50,6 @@ interface LabTest {
   verificationStatus: string;
   paymentVerified: boolean;
   orderedAt: string;
-  collectedAt?: string;
-  completedAt?: string;
-  reportedAt?: string;
-  
-  appointment: {
-    appointmentId: string;
-    date: string;
-  };
   
   patient: {
     name: string;
@@ -68,17 +59,17 @@ interface LabTest {
     gender?: string;
   };
   
-  doctor: {
+  doctor?: {
     name: string;
     specialization: string;
     phone?: string;
   };
   
-  orderedBy: {
+  orderedBy?: {
     name: string;
   };
   
-  charges: {
+  charges?: {
     basePrice: number;
     tax: number;
     discount: number;
@@ -106,30 +97,6 @@ interface LabTest {
     remarks?: string;
   };
   
-  collectionDetails?: {
-    collectionTime?: string;
-    collectedBy?: {
-      name: string;
-    };
-    sampleId?: string;
-    sampleCondition?: string;
-    collectionNotes?: string;
-  };
-  
-  processingDetails?: {
-    processingStartTime?: string;
-    processingEndTime?: string;
-    processedBy?: {
-      name: string;
-    };
-    equipmentUsed?: string;
-    reagentsUsed?: string[];
-    qualityControl?: {
-      passed?: boolean;
-      notes?: string;
-    };
-  };
-  
   results?: {
     parameters: Array<{
       name: string;
@@ -150,57 +117,92 @@ interface LabTest {
     verifiedAt?: string;
     reportUrl?: string;
   };
-  
-  verificationDetails?: {
-    verifiedBy?: {
-      name: string;
-    };
-    verifiedAt?: string;
-    verificationNotes?: string;
-  };
-  
-  paymentVerifiedBy?: {
-    name: string;
-  };
-  paymentVerifiedAt?: string;
 }
+
+// Safe date formatting utility
+const safeFormatDate = (dateString: string | undefined | null, formatStr: string = "MMM dd, yyyy HH:mm"): string => {
+  if (!dateString) return "N/A";
+  
+  try {
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) {
+      return "Invalid Date";
+    }
+    return new Date(dateString).toLocaleDateString('en-US', {
+      month: 'short',
+      day: '2-digit',
+      year: 'numeric',
+      ...(formatStr.includes('HH:mm') ? { 
+        hour: '2-digit', 
+        minute: '2-digit' 
+      } : {})
+    });
+  } catch (error) {
+    console.error('Date formatting error:', error);
+    return "N/A";
+  }
+};
+
+// Safe string access
+const safeString = (str: string | undefined | null, fallback: string = "N/A"): string => {
+  if (!str) return fallback;
+  return str;
+};
+
+// Safe uppercase first letter
+const safeUpperCaseFirst = (str: string | undefined | null, fallback: string = "N/A"): string => {
+  if (!str) return fallback;
+  return str.charAt(0).toUpperCase() + str.slice(1);
+};
 
 export default function TestDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const { accessToken, isLoading: authLoading } = useAuthStore();
   const [test, setTest] = useState<LabTest | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchTestDetails();
-  }, [params.id]);
+    if (!authLoading && accessToken) {
+      fetchTestDetails();
+    }
+  }, [params.id, accessToken, authLoading]);
 
   const fetchTestDetails = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
       const response = await fetch(`/api/laboratory/tests/${params.id}`, {
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
         },
       });
+      
+      if (response.status === 401) {
+        router.push('/login');
+        return;
+      }
       
       if (!response.ok) {
         throw new Error('Failed to fetch test details');
       }
       
       const data = await response.json();
+      console.log("Test data:", data.data); // Debug log
       setTest(data.data);
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || "Failed to load test details");
+      console.error("Error fetching test:", err);
     } finally {
       setLoading(false);
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
+  const getStatusColor = (status: string | undefined) => {
+    if (!status) return "bg-gray-100 text-gray-800";
+    
+    switch (status.toLowerCase()) {
       case "ordered": return "bg-blue-100 text-blue-800";
       case "collected": return "bg-yellow-100 text-yellow-800";
       case "processing": return "bg-purple-100 text-purple-800";
@@ -211,17 +213,22 @@ export default function TestDetailPage() {
     }
   };
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
+  const getPriorityColor = (priority: string | undefined) => {
+    if (!priority) return "bg-blue-100 text-blue-800 border-blue-300";
+    
+    switch (priority.toLowerCase()) {
       case "emergency": return "bg-red-100 text-red-800 border-red-300";
       case "urgent": return "bg-orange-100 text-orange-800 border-orange-300";
       default: return "bg-blue-100 text-blue-800 border-blue-300";
     }
   };
 
-  const getPaymentColor = (verified: boolean, status: string) => {
+  const getPaymentColor = (verified: boolean | undefined, status: string | undefined) => {
     if (verified) return "bg-green-100 text-green-800";
-    switch (status) {
+    
+    if (!status) return "bg-gray-100 text-gray-800";
+    
+    switch (status.toLowerCase()) {
       case "paid": return "bg-green-100 text-green-800";
       case "partial": return "bg-yellow-100 text-yellow-800";
       case "pending": return "bg-red-100 text-red-800";
@@ -235,14 +242,14 @@ export default function TestDetailPage() {
 
   const handleGenerateReport = async () => {
     try {
-      const token = localStorage.getItem('token');
       const response = await fetch(`/api/laboratory/tests/${params.id}/generate-report`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         },
       });
-      
+
       if (response.ok) {
         const data = await response.json();
         window.open(data.data.reportUrl, '_blank');
@@ -255,7 +262,7 @@ export default function TestDetailPage() {
     }
   };
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <div className="container mx-auto p-6">
         <Skeleton className="h-8 w-64 mb-6" />
@@ -298,6 +305,55 @@ export default function TestDetailPage() {
     );
   }
 
+  // Safe values
+  const safeTest = {
+    testId: safeString(test.testId, "Unknown"),
+    testName: safeString(test.testName, "Unknown Test"),
+    category: safeString(test.category, "Unknown"),
+    status: safeString(test.status, "unknown"),
+    priority: safeString(test.priority, "routine"),
+    collectionStatus: safeString(test.collectionStatus, "pending"),
+    processingStatus: safeString(test.processingStatus, "pending"),
+    verificationStatus: safeString(test.verificationStatus, "pending"),
+    paymentVerified: test.paymentVerified || false,
+    orderedAt: test.orderedAt,
+    
+    patient: {
+      name: safeString(test.patient?.name, "Unknown Patient"),
+      patientId: safeString(test.patient?.patientId, "Unknown"),
+      phone: safeString(test.patient?.phone, "N/A"),
+      age: test.patient?.age,
+      gender: safeString(test.patient?.gender),
+    },
+    
+    doctor: {
+      name: safeString(test.doctor?.name, "N/A"),
+      specialization: safeString(test.doctor?.specialization, "N/A"),
+    },
+    
+    orderedBy: {
+      name: safeString(test.orderedBy?.name, "Unknown"),
+    },
+    
+    charges: {
+      basePrice: test.charges?.basePrice || 0,
+      tax: test.charges?.tax || 0,
+      discount: test.charges?.discount || 0,
+      otherCharges: test.charges?.otherCharges || 0,
+      totalAmount: test.charges?.totalAmount || 0,
+      paid: test.charges?.paid || 0,
+      due: test.charges?.due || 0,
+      paymentStatus: safeString(test.charges?.paymentStatus, "pending"),
+      paymentMethod: safeString(test.charges?.paymentMethod),
+      transactionId: safeString(test.charges?.transactionId),
+      paymentDate: test.charges?.paymentDate,
+      collectedBy: test.charges?.collectedBy,
+    },
+    
+    specimen: test.specimen,
+    results: test.results,
+  };
+
   return (
     <div className="container mx-auto p-4 md:p-6 space-y-6">
       {/* Header */}
@@ -308,15 +364,15 @@ export default function TestDetailPage() {
           </Button>
           <div>
             <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
-              {test.testName}
+              {safeTest.testName}
             </h1>
             <div className="flex items-center gap-2 mt-1">
-              <Badge variant="outline">{test.testId}</Badge>
-              <Badge className={getStatusColor(test.status)}>
-                {test.status.charAt(0).toUpperCase() + test.status.slice(1)}
+              <Badge variant="outline">{safeTest.testId}</Badge>
+              <Badge className={getStatusColor(safeTest.status)}>
+                {safeUpperCaseFirst(safeTest.status)}
               </Badge>
-              <Badge className={getPriorityColor(test.priority)}>
-                {test.priority}
+              <Badge className={getPriorityColor(safeTest.priority)}>
+                {safeTest.priority}
               </Badge>
             </div>
           </div>
@@ -354,12 +410,11 @@ export default function TestDetailPage() {
       </div>
 
       <Tabs defaultValue="details" className="w-full">
-        <TabsList className="grid grid-cols-2 md:grid-cols-5 w-full">
+        <TabsList className="grid grid-cols-2 md:grid-cols-4 w-full">
           <TabsTrigger value="details">Details</TabsTrigger>
           <TabsTrigger value="specimen">Specimen</TabsTrigger>
           <TabsTrigger value="results">Results</TabsTrigger>
           <TabsTrigger value="payment">Payment</TabsTrigger>
-          <TabsTrigger value="timeline">Timeline</TabsTrigger>
         </TabsList>
 
         {/* Details Tab */}
@@ -378,20 +433,20 @@ export default function TestDetailPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <p className="text-sm text-muted-foreground">Patient Name</p>
-                      <p className="font-medium">{test.patient.name}</p>
+                      <p className="font-medium">{safeTest.patient.name}</p>
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">Patient ID</p>
-                      <p className="font-medium">{test.patient.patientId}</p>
+                      <p className="font-medium">{safeTest.patient.patientId}</p>
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">Phone</p>
-                      <p className="font-medium">{test.patient.phone}</p>
+                      <p className="font-medium">{safeTest.patient.phone}</p>
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">Age / Gender</p>
                       <p className="font-medium">
-                        {test.patient.age ? `${test.patient.age} years` : 'N/A'} / {test.patient.gender || 'N/A'}
+                        {safeTest.patient.age ? `${safeTest.patient.age} years` : 'N/A'} / {safeTest.patient.gender}
                       </p>
                     </div>
                   </div>
@@ -409,21 +464,11 @@ export default function TestDetailPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <p className="text-sm text-muted-foreground">Doctor Name</p>
-                      <p className="font-medium">Dr. {test.doctor.name}</p>
+                      <p className="font-medium">Dr. {safeTest.doctor.name}</p>
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">Specialization</p>
-                      <p className="font-medium">{test.doctor.specialization}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Appointment ID</p>
-                      <p className="font-medium">{test.appointment.appointmentId}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Appointment Date</p>
-                      <p className="font-medium">
-                        {format(new Date(test.appointment.date), "MMM dd, yyyy")}
-                      </p>
+                      <p className="font-medium">{safeTest.doctor.specialization}</p>
                     </div>
                   </div>
                 </CardContent>
@@ -442,16 +487,16 @@ export default function TestDetailPage() {
                 <CardContent className="space-y-4">
                   <div>
                     <p className="text-sm text-muted-foreground">Test Category</p>
-                    <p className="font-medium">{test.category.replace(/_/g, ' ')}</p>
+                    <p className="font-medium">{safeTest.category.replace(/_/g, ' ')}</p>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Ordered By</p>
-                    <p className="font-medium">{test.orderedBy.name}</p>
+                    <p className="font-medium">{safeTest.orderedBy.name}</p>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Ordered At</p>
                     <p className="font-medium">
-                      {format(new Date(test.orderedAt), "MMM dd, yyyy HH:mm")}
+                      {safeFormatDate(safeTest.orderedAt, "MMM dd, yyyy HH:mm")}
                     </p>
                   </div>
                   {test.description && (
@@ -469,7 +514,7 @@ export default function TestDetailPage() {
                   <CardTitle>Quick Actions</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  {test.collectionStatus === "pending" && (
+                  {safeTest.collectionStatus === "pending" && (
                     <Button asChild className="w-full">
                       <Link href={`/laboratory/tests/${params.id}/collect`}>
                         <TestTube className="h-4 w-4 mr-2" />
@@ -478,7 +523,7 @@ export default function TestDetailPage() {
                     </Button>
                   )}
                   
-                  {test.collectionStatus === "collected" && test.processingStatus === "pending" && (
+                  {safeTest.collectionStatus === "collected" && safeTest.processingStatus === "pending" && (
                     <Button asChild className="w-full">
                       <Link href={`/laboratory/tests/${params.id}/process`}>
                         <Clock className="h-4 w-4 mr-2" />
@@ -487,7 +532,7 @@ export default function TestDetailPage() {
                     </Button>
                   )}
                   
-                  {test.processingStatus === "completed" && test.verificationStatus === "pending" && (
+                  {safeTest.processingStatus === "completed" && safeTest.verificationStatus === "pending" && (
                     <Button asChild className="w-full">
                       <Link href={`/laboratory/tests/${params.id}/results`}>
                         <FileText className="h-4 w-4 mr-2" />
@@ -496,7 +541,7 @@ export default function TestDetailPage() {
                     </Button>
                   )}
                   
-                  {!test.paymentVerified && (
+                  {!safeTest.paymentVerified && (
                     <Button asChild variant="outline" className="w-full">
                       <Link href={`/laboratory/tests/${params.id}/verify-payment`}>
                         <CreditCard className="h-4 w-4 mr-2" />
@@ -517,128 +562,54 @@ export default function TestDetailPage() {
 
         {/* Specimen Tab */}
         <TabsContent value="specimen" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Specimen Details */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <TestTube className="h-5 w-5" />
-                  Specimen Details
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {test.specimen ? (
-                  <>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <p className="text-sm text-muted-foreground">Type</p>
-                        <p className="font-medium">{test.specimen.type || "N/A"}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">Quantity</p>
-                        <p className="font-medium">{test.specimen.quantity || "N/A"}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">Container</p>
-                        <p className="font-medium">{test.specimen.container || "N/A"}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">Collection Time</p>
-                        <p className="font-medium">
-                          {test.specimen.collectionTime 
-                            ? format(new Date(test.specimen.collectionTime), "MMM dd, yyyy HH:mm")
-                            : "N/A"}
-                        </p>
-                      </div>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <TestTube className="h-5 w-5" />
+                Specimen Details
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {safeTest.specimen ? (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Type</p>
+                      <p className="font-medium">{safeTest.specimen.type || "N/A"}</p>
                     </div>
-                    {test.specimen.remarks && (
-                      <div>
-                        <p className="text-sm text-muted-foreground">Remarks</p>
-                        <p className="font-medium">{test.specimen.remarks}</p>
-                      </div>
-                    )}
-                    {test.specimen.collectedBy && (
-                      <div>
-                        <p className="text-sm text-muted-foreground">Collected By</p>
-                        <p className="font-medium">{test.specimen.collectedBy.name}</p>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <p className="text-muted-foreground">No specimen details available.</p>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Collection Status */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Collection Status</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">Collection Status</p>
-                  <Badge className={
-                    test.collectionStatus === "collected" ? "bg-green-100 text-green-800" :
-                    test.collectionStatus === "pending" ? "bg-yellow-100 text-yellow-800" :
-                    "bg-gray-100 text-gray-800"
-                  }>
-                    {test.collectionStatus.charAt(0).toUpperCase() + test.collectionStatus.slice(1)}
-                  </Badge>
-                </div>
-                
-                {test.collectionDetails && (
-                  <>
-                    {test.collectionDetails.sampleId && (
-                      <div>
-                        <p className="text-sm text-muted-foreground">Sample ID</p>
-                        <p className="font-medium">{test.collectionDetails.sampleId}</p>
-                      </div>
-                    )}
-                    
-                    {test.collectionDetails.sampleCondition && (
-                      <div>
-                        <p className="text-sm text-muted-foreground">Sample Condition</p>
-                        <p className="font-medium">{test.collectionDetails.sampleCondition}</p>
-                      </div>
-                    )}
-                    
-                    {test.collectionDetails.collectionNotes && (
-                      <div>
-                        <p className="text-sm text-muted-foreground">Collection Notes</p>
-                        <p className="font-medium">{test.collectionDetails.collectionNotes}</p>
-                      </div>
-                    )}
-                    
-                    {test.collectionDetails.collectedBy && (
-                      <div>
-                        <p className="text-sm text-muted-foreground">Collected By</p>
-                        <p className="font-medium">{test.collectionDetails.collectedBy.name}</p>
-                      </div>
-                    )}
-                    
-                    {test.collectionDetails.collectionTime && (
-                      <div>
-                        <p className="text-sm text-muted-foreground">Collection Time</p>
-                        <p className="font-medium">
-                          {format(new Date(test.collectionDetails.collectionTime), "MMM dd, yyyy HH:mm")}
-                        </p>
-                      </div>
-                    )}
-                  </>
-                )}
-                
-                {test.collectionStatus === "pending" && (
-                  <Button asChild className="w-full mt-4">
-                    <Link href={`/laboratory/tests/${params.id}/collect`}>
-                      <TestTube className="h-4 w-4 mr-2" />
-                      Collect Sample Now
-                    </Link>
-                  </Button>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Quantity</p>
+                      <p className="font-medium">{safeTest.specimen.quantity || "N/A"}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Container</p>
+                      <p className="font-medium">{safeTest.specimen.container || "N/A"}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Collection Time</p>
+                      <p className="font-medium">
+                        {safeFormatDate(safeTest.specimen.collectionTime)}
+                      </p>
+                    </div>
+                  </div>
+                  {safeTest.specimen.remarks && (
+                    <div>
+                      <p className="text-sm text-muted-foreground">Remarks</p>
+                      <p className="font-medium">{safeTest.specimen.remarks}</p>
+                    </div>
+                  )}
+                  {safeTest.specimen.collectedBy && (
+                    <div>
+                      <p className="text-sm text-muted-foreground">Collected By</p>
+                      <p className="font-medium">{safeTest.specimen.collectedBy.name}</p>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p className="text-muted-foreground">No specimen details available.</p>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* Results Tab */}
@@ -650,18 +621,18 @@ export default function TestDetailPage() {
                 Test Results
               </CardTitle>
               <CardDescription>
-                {test.verificationStatus === "verified" 
+                {safeTest.verificationStatus === "verified" 
                   ? "Results verified and ready for reporting"
-                  : test.processingStatus === "completed"
+                  : safeTest.processingStatus === "completed"
                   ? "Processing completed - awaiting verification"
                   : "Test results will appear here once processing is complete"}
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {test.results ? (
+              {safeTest.results ? (
                 <div className="space-y-6">
                   {/* Parameters Table */}
-                  {test.results.parameters && test.results.parameters.length > 0 && (
+                  {safeTest.results.parameters && safeTest.results.parameters.length > 0 && (
                     <div>
                       <h3 className="text-lg font-medium mb-4">Parameters</h3>
                       <div className="rounded-md border">
@@ -677,7 +648,7 @@ export default function TestDetailPage() {
                             </tr>
                           </thead>
                           <tbody>
-                            {test.results.parameters.map((param, index) => (
+                            {safeTest.results.parameters.map((param, index) => (
                               <tr key={index} className="border-b hover:bg-muted/50">
                                 <td className="p-3">{param.name}</td>
                                 <td className="p-3 font-medium">{param.value}</td>
@@ -702,49 +673,14 @@ export default function TestDetailPage() {
                   )}
                   
                   {/* Interpretation */}
-                  {test.results.interpretation && (
+                  {safeTest.results.interpretation && (
                     <div>
                       <h3 className="text-lg font-medium mb-2">Interpretation</h3>
                       <div className="p-4 bg-muted/50 rounded-md">
-                        <p className="whitespace-pre-wrap">{test.results.interpretation}</p>
+                        <p className="whitespace-pre-wrap">{safeTest.results.interpretation}</p>
                       </div>
                     </div>
                   )}
-                  
-                  {/* Verification Info */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {test.results.reportedBy && (
-                      <div>
-                        <p className="text-sm text-muted-foreground">Reported By</p>
-                        <p className="font-medium">{test.results.reportedBy.name}</p>
-                      </div>
-                    )}
-                    
-                    {test.results.reportedAt && (
-                      <div>
-                        <p className="text-sm text-muted-foreground">Reported At</p>
-                        <p className="font-medium">
-                          {format(new Date(test.results.reportedAt), "MMM dd, yyyy HH:mm")}
-                        </p>
-                      </div>
-                    )}
-                    
-                    {test.results.verifiedBy && (
-                      <div>
-                        <p className="text-sm text-muted-foreground">Verified By</p>
-                        <p className="font-medium">{test.results.verifiedBy.name}</p>
-                      </div>
-                    )}
-                    
-                    {test.results.verifiedAt && (
-                      <div>
-                        <p className="text-sm text-muted-foreground">Verified At</p>
-                        <p className="font-medium">
-                          {format(new Date(test.results.verifiedAt), "MMM dd, yyyy HH:mm")}
-                        </p>
-                      </div>
-                    )}
-                  </div>
                   
                   {/* Report Actions */}
                   <div className="flex gap-2">
@@ -765,7 +701,7 @@ export default function TestDetailPage() {
                   <p className="text-muted-foreground mt-2">
                     Test results are not available yet. Check back after processing is complete.
                   </p>
-                  {test.processingStatus === "completed" && (
+                  {safeTest.processingStatus === "completed" && (
                     <Button asChild className="mt-4">
                       <Link href={`/laboratory/tests/${params.id}/results`}>
                         Enter Results
@@ -780,282 +716,100 @@ export default function TestDetailPage() {
 
         {/* Payment Tab */}
         <TabsContent value="payment" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Payment Details */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <CreditCard className="h-5 w-5" />
-                  Payment Details
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Base Price</p>
-                    <p className="font-medium">₹{test.charges.basePrice.toFixed(2)}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Tax</p>
-                    <p className="font-medium">₹{test.charges.tax.toFixed(2)}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Discount</p>
-                    <p className="font-medium">₹{test.charges.discount.toFixed(2)}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Other Charges</p>
-                    <p className="font-medium">₹{test.charges.otherCharges.toFixed(2)}</p>
-                  </div>
-                </div>
-                
-                <Separator />
-                
-                <div className="space-y-2">
-                  <div className="flex justify-between">
-                    <p className="font-medium">Total Amount</p>
-                    <p className="font-bold">₹{test.charges.totalAmount.toFixed(2)}</p>
-                  </div>
-                  <div className="flex justify-between">
-                    <p className="font-medium">Paid Amount</p>
-                    <p className="font-bold text-green-600">₹{test.charges.paid.toFixed(2)}</p>
-                  </div>
-                  <div className="flex justify-between">
-                    <p className="font-medium">Due Amount</p>
-                    <p className={`font-bold ${test.charges.due > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                      ₹{test.charges.due.toFixed(2)}
-                    </p>
-                  </div>
-                </div>
-                
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">Payment Status</p>
-                  <div className="flex items-center gap-2">
-                    <Badge className={getPaymentColor(test.paymentVerified, test.charges.paymentStatus)}>
-                      {test.paymentVerified ? "Verified" : test.charges.paymentStatus}
-                    </Badge>
-                    {test.paymentVerified && (
-                      <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                        <CheckCircle className="h-3 w-3 mr-1" />
-                        Payment Verified
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-                
-                {test.charges.paymentMethod && (
-                  <div>
-                    <p className="text-sm text-muted-foreground">Payment Method</p>
-                    <p className="font-medium">{test.charges.paymentMethod}</p>
-                  </div>
-                )}
-                
-                {test.charges.transactionId && (
-                  <div>
-                    <p className="text-sm text-muted-foreground">Transaction ID</p>
-                    <p className="font-medium">{test.charges.transactionId}</p>
-                  </div>
-                )}
-                
-                {test.charges.paymentDate && (
-                  <div>
-                    <p className="text-sm text-muted-foreground">Payment Date</p>
-                    <p className="font-medium">
-                      {format(new Date(test.charges.paymentDate), "MMM dd, yyyy HH:mm")}
-                    </p>
-                  </div>
-                )}
-                
-                {test.charges.collectedBy && (
-                  <div>
-                    <p className="text-sm text-muted-foreground">Collected By</p>
-                    <p className="font-medium">{test.charges.collectedBy.name}</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Payment Verification */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Payment Verification</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">Payment Verified</p>
-                  <div className="flex items-center gap-2">
-                    {test.paymentVerified ? (
-                      <Badge className="bg-green-100 text-green-800">
-                        <CheckCircle className="h-3 w-3 mr-1" />
-                        Verified
-                      </Badge>
-                    ) : (
-                      <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
-                        <AlertTriangle className="h-3 w-3 mr-1" />
-                        Not Verified
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-                
-                {test.paymentVerifiedBy && (
-                  <div>
-                    <p className="text-sm text-muted-foreground">Verified By</p>
-                    <p className="font-medium">{test.paymentVerifiedBy.name}</p>
-                  </div>
-                )}
-                
-                {test.paymentVerifiedAt && (
-                  <div>
-                    <p className="text-sm text-muted-foreground">Verified At</p>
-                    <p className="font-medium">
-                      {format(new Date(test.paymentVerifiedAt), "MMM dd, yyyy HH:mm")}
-                    </p>
-                  </div>
-                )}
-                
-                {test.verificationDetails?.verificationNotes && (
-                  <div>
-                    <p className="text-sm text-muted-foreground">Verification Notes</p>
-                    <p className="font-medium">{test.verificationDetails.verificationNotes}</p>
-                  </div>
-                )}
-                
-                {!test.paymentVerified && (
-                  <>
-                    <Separator />
-                    <div className="space-y-3">
-                      <p className="text-sm text-muted-foreground">
-                        This test requires payment verification before sample collection can proceed.
-                      </p>
-                      <Button asChild className="w-full">
-                        <Link href={`/laboratory/tests/${params.id}/verify-payment`}>
-                          <CreditCard className="h-4 w-4 mr-2" />
-                          Verify Payment
-                        </Link>
-                      </Button>
-                      <Button variant="outline" asChild className="w-full">
-                        <Link href={`/reception/lab-tests/${params.id}/charges`}>
-                          Update Payment
-                        </Link>
-                      </Button>
-                    </div>
-                  </>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        {/* Timeline Tab */}
-        <TabsContent value="timeline" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Test Timeline</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <CreditCard className="h-5 w-5" />
+                Payment Details
+              </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="relative pl-6 space-y-8">
-                {/* Timeline line */}
-                <div className="absolute left-3 top-0 bottom-0 w-0.5 bg-muted"></div>
-                
-                {/* Ordered */}
-                <div className="relative">
-                  <div className="absolute -left-6.5 top-1 h-4 w-4 rounded-full bg-blue-500 border-4 border-background"></div>
-                  <div className="space-y-1">
-                    <p className="font-medium">Test Ordered</p>
-                    <p className="text-sm text-muted-foreground">
-                      {format(new Date(test.orderedAt), "MMM dd, yyyy HH:mm")}
-                    </p>
-                    <p className="text-sm">Ordered by: {test.orderedBy.name}</p>
-                  </div>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">Base Price</p>
+                  <p className="font-medium">₹{safeTest.charges.basePrice.toFixed(2)}</p>
                 </div>
-                
-                {/* Payment */}
-                <div className="relative">
-                  <div className={`absolute -left-6.5 top-1 h-4 w-4 rounded-full border-4 border-background ${
-                    test.charges.paid > 0 ? 'bg-green-500' : 'bg-gray-300'
-                  }`}></div>
-                  <div className="space-y-1">
-                    <p className="font-medium">Payment</p>
-                    <p className="text-sm text-muted-foreground">
-                      {test.charges.paymentDate 
-                        ? format(new Date(test.charges.paymentDate), "MMM dd, yyyy HH:mm")
-                        : "Pending"}
-                    </p>
-                    <p className="text-sm">
-                      Status: {test.charges.paymentStatus} | 
-                      Paid: ₹{test.charges.paid} | 
-                      Due: ₹{test.charges.due}
-                    </p>
-                    {test.charges.collectedBy && (
-                      <p className="text-sm">Collected by: {test.charges.collectedBy.name}</p>
-                    )}
-                  </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Tax</p>
+                  <p className="font-medium">₹{safeTest.charges.tax.toFixed(2)}</p>
                 </div>
-                
-                {/* Collection */}
-                <div className="relative">
-                  <div className={`absolute -left-6.5 top-1 h-4 w-4 rounded-full border-4 border-background ${
-                    test.collectionStatus === "collected" ? 'bg-green-500' :
-                    test.collectionStatus === "pending" ? 'bg-yellow-500' : 'bg-gray-300'
-                  }`}></div>
-                  <div className="space-y-1">
-                    <p className="font-medium">Sample Collection</p>
-                    <p className="text-sm text-muted-foreground">
-                      {test.collectionStatus === "collected" && test.specimen?.collectionTime
-                        ? format(new Date(test.specimen.collectionTime), "MMM dd, yyyy HH:mm")
-                        : test.collectionStatus.charAt(0).toUpperCase() + test.collectionStatus.slice(1)}
-                    </p>
-                    {test.specimen?.collectedBy && (
-                      <p className="text-sm">Collected by: {test.specimen.collectedBy.name}</p>
-                    )}
-                    {test.specimen?.type && (
-                      <p className="text-sm">Type: {test.specimen.type}</p>
-                    )}
-                  </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Discount</p>
+                  <p className="font-medium">₹{safeTest.charges.discount.toFixed(2)}</p>
                 </div>
-                
-                {/* Processing */}
-                <div className="relative">
-                  <div className={`absolute -left-6.5 top-1 h-4 w-4 rounded-full border-4 border-background ${
-                    test.processingStatus === "completed" ? 'bg-green-500' :
-                    test.processingStatus === "processing" ? 'bg-blue-500' :
-                    test.processingStatus === "failed" ? 'bg-red-500' : 'bg-gray-300'
-                  }`}></div>
-                  <div className="space-y-1">
-                    <p className="font-medium">Test Processing</p>
-                    <p className="text-sm text-muted-foreground">
-                      {test.processingStatus.charAt(0).toUpperCase() + test.processingStatus.slice(1)}
-                    </p>
-                    {test.processingDetails?.processedBy && (
-                      <p className="text-sm">Processed by: {test.processingDetails.processedBy.name}</p>
-                    )}
-                    {test.processingDetails?.equipmentUsed && (
-                      <p className="text-sm">Equipment: {test.processingDetails.equipmentUsed}</p>
-                    )}
-                  </div>
-                </div>
-                
-                {/* Results */}
-                <div className="relative">
-                  <div className={`absolute -left-6.5 top-1 h-4 w-4 rounded-full border-4 border-background ${
-                    test.verificationStatus === "verified" ? 'bg-green-500' :
-                    test.verificationStatus === "preliminary" ? 'bg-yellow-500' : 'bg-gray-300'
-                  }`}></div>
-                  <div className="space-y-1">
-                    <p className="font-medium">Results & Verification</p>
-                    <p className="text-sm text-muted-foreground">
-                      {test.verificationStatus.charAt(0).toUpperCase() + test.verificationStatus.slice(1)}
-                    </p>
-                    {test.results?.reportedBy && (
-                      <p className="text-sm">Reported by: {test.results.reportedBy.name}</p>
-                    )}
-                    {test.results?.verifiedBy && (
-                      <p className="text-sm">Verified by: {test.results.verifiedBy.name}</p>
-                    )}
-                  </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Other Charges</p>
+                  <p className="font-medium">₹{safeTest.charges.otherCharges.toFixed(2)}</p>
                 </div>
               </div>
+              
+              <Separator />
+              
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <p className="font-medium">Total Amount</p>
+                  <p className="font-bold">₹{safeTest.charges.totalAmount.toFixed(2)}</p>
+                </div>
+                <div className="flex justify-between">
+                  <p className="font-medium">Paid Amount</p>
+                  <p className="font-bold text-green-600">₹{safeTest.charges.paid.toFixed(2)}</p>
+                </div>
+                <div className="flex justify-between">
+                  <p className="font-medium">Due Amount</p>
+                  <p className={`font-bold ${safeTest.charges.due > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                    ₹{safeTest.charges.due.toFixed(2)}
+                  </p>
+                </div>
+              </div>
+              
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">Payment Status</p>
+                <div className="flex items-center gap-2">
+                  <Badge className={getPaymentColor(safeTest.paymentVerified, safeTest.charges.paymentStatus)}>
+                    {safeTest.paymentVerified ? "Verified" : safeUpperCaseFirst(safeTest.charges.paymentStatus)}
+                  </Badge>
+                  {safeTest.paymentVerified && (
+                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                      <CheckCircle className="h-3 w-3 mr-1" />
+                      Payment Verified
+                    </Badge>
+                  )}
+                </div>
+              </div>
+              
+              {safeTest.charges.paymentMethod && (
+                <div>
+                  <p className="text-sm text-muted-foreground">Payment Method</p>
+                  <p className="font-medium">{safeTest.charges.paymentMethod}</p>
+                </div>
+              )}
+              
+              {safeTest.charges.transactionId && (
+                <div>
+                  <p className="text-sm text-muted-foreground">Transaction ID</p>
+                  <p className="font-medium">{safeTest.charges.transactionId}</p>
+                </div>
+              )}
+              
+              {safeTest.charges.paymentDate && (
+                <div>
+                  <p className="text-sm text-muted-foreground">Payment Date</p>
+                  <p className="font-medium">
+                    {safeFormatDate(safeTest.charges.paymentDate)}
+                  </p>
+                </div>
+              )}
+              
+              {!safeTest.paymentVerified && (
+                <div className="pt-4">
+                  <Button asChild className="w-full">
+                    <Link href={`/laboratory/tests/${params.id}/verify-payment`}>
+                      <CreditCard className="h-4 w-4 mr-2" />
+                      Verify Payment
+                    </Link>
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
