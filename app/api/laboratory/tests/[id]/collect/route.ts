@@ -3,146 +3,134 @@
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
 import { LabTest } from "@/lib/models/LabTest";
-import { jwtVerify } from "jose";
+import { authenticateRequest, canAccessLaboratory, hasRequiredRole } from "@/lib/auth";
 import mongoose from "mongoose";
 
-const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-this";
-
-async function verifyToken(token: string) {
-  try {
-    const secret = new TextEncoder().encode(JWT_SECRET);
-    const { payload } = await jwtVerify(token, secret);
-    return payload;
-  } catch (error) {
-    return null;
-  }
-}
-
-// PUT: Collect sample for lab test
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await dbConnect();
-    
-    // Authentication
-    const authHeader = request.headers.get("authorization");
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+
+    const auth = await authenticateRequest(request);
+    if (!auth.success) {
       return NextResponse.json(
-        { success: false, error: "Unauthorized. No token provided." },
-        { status: 401 }
+        { success: false, error: auth.error },
+        { status: auth.status || 401 }
       );
     }
-    
-    const token = authHeader.split(" ")[1];
-    const payload = await verifyToken(token);
-    
-    if (!payload) {
+
+    if (!canAccessLaboratory(auth.userRole)) {
       return NextResponse.json(
-        { success: false, error: "Invalid or expired token." },
-        { status: 401 }
-      );
-    }
-    
-    const userId = payload.id as string;
-    const userRole = payload.role as string;
-    
-    // Only laboratory staff and admin can collect samples
-    if (!["lab_technician", "admin", "nurse", "doctor"].includes(userRole)) {
-      return NextResponse.json(
-        { success: false, error: "Forbidden. Only authorized staff can collect samples." },
+        { success: false, error: "Forbidden. You don't have permission to collect samples." },
         { status: 403 }
       );
     }
-    
+
+    // Only lab technicians and above can collect samples
+    const allowedRoles = ["lab_technician", "admin"];
+    if (!hasRequiredRole(auth.userRole, allowedRoles)) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden. Only lab staff can collect samples." },
+        { status: 403 }
+      );
+    }
+
     const { id: testId } = await params;
     const body = await request.json();
+    
     const {
       sampleId,
       sampleCondition = "satisfactory",
       collectionNotes,
       sampleConditionNotes,
+      specimen,
     } = body;
+
+    console.log("Sample collection payload:", body);
+
+    // Find the test
+    const test = await LabTest.findById(testId);
     
-    // Find lab test
-    const labTest = await LabTest.findById(testId);
-    
-    if (!labTest) {
+    if (!test) {
       return NextResponse.json(
         { success: false, error: "Lab test not found" },
         { status: 404 }
       );
     }
-    
-    // Check if test is cancelled
-    if (labTest.status === "cancelled") {
-      return NextResponse.json(
-        { success: false, error: "Cannot collect sample for cancelled test" },
-        { status: 400 }
-      );
-    }
-    
-    // Check payment verification for non-urgent tests
-    if (labTest.priority === "routine" && !labTest.paymentVerified) {
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: "Payment not verified. Please verify payment before collecting sample.",
-          requiresPaymentVerification: true 
-        },
-        { status: 400 }
-      );
-    }
-    
+
     // Check if sample can be collected
-    if (!labTest.canCollectSample) {
+    if (!test.canCollectSample) {
       return NextResponse.json(
         { 
           success: false, 
-          error: "Sample cannot be collected. Check collection status and payment verification." 
+          error: "Sample cannot be collected",
+          details: {
+            status: test.status,
+            collectionStatus: test.collectionStatus,
+            paymentVerified: test.paymentVerified,
+            priority: test.priority,
+            canCollectSample: test.canCollectSample
+          }
         },
         { status: 400 }
       );
     }
+
+    // Convert string userId to ObjectId
+    const collectedBy = new mongoose.Types.ObjectId(auth.userId);
+
+    // Update the test with collection details
+    test.collectionStatus = "collected";
+    test.status = "collected";
     
-    // Update collection details
-    const updates: any = {
-      collectionStatus: "collected",
-      "collectionDetails.collectionTime": new Date(),
-      "collectionDetails.collectedBy": new mongoose.Types.ObjectId(userId),
-      "collectionDetails.sampleId": sampleId,
-      "collectionDetails.sampleCondition": sampleCondition,
+    // Basic collection details
+    test.collectionDetails = {
+      collectionTime: new Date(),
+      collectedBy: collectedBy,
+      collectionNotes: collectionNotes || "",
+      sampleId: sampleId || "",
+      sampleCondition: sampleCondition || "satisfactory",
+      sampleConditionNotes: sampleConditionNotes || "",
     };
     
-    if (collectionNotes) updates["collectionDetails.collectionNotes"] = collectionNotes;
-    if (sampleConditionNotes) updates["collectionDetails.sampleConditionNotes"] = sampleConditionNotes;
-    
-    // If sample condition is not satisfactory, update status
-    if (sampleCondition !== "satisfactory") {
-      updates.collectionStatus = "rejected";
-      updates.status = "cancelled";
-      updates.cancelledAt = new Date();
+    // Update specimen details
+    if (specimen) {
+      test.specimen = {
+        type: specimen.type,
+        quantity: specimen.quantity || "",
+        container: specimen.container || "",
+        remarks: specimen.remarks || "",
+        collectedBy: collectedBy,
+        ...(specimen.parameters && specimen.parameters.length > 0 && {
+          parameters: specimen.parameters.map((param: any) => ({
+            name: param.name || "",
+            value: param.value || "",
+            unit: param.unit || "",
+            remarks: param.remarks || "",
+          })),
+        }),
+      };
     }
     
-    const updatedTest = await LabTest.findByIdAndUpdate(
-      testId,
-      { $set: updates },
-      { new: true, runValidators: true }
-    ).populate([
-      { path: "patient", select: "name patientId phone" },
-      { path: "doctor", select: "name specialization" },
-      { path: "collectionDetails.collectedBy", select: "name" },
-    ]);
-    
+    test.collectedAt = new Date();
+
+    await test.save();
+
+    // Populate for response
+    const updatedTest = await LabTest.findById(testId)
+      .populate("patient", "name patientId")
+      .populate("doctor", "name")
+      .populate("collectionDetails.collectedBy", "name")
+      .lean();
+
     return NextResponse.json({
       success: true,
       data: updatedTest,
-      message: sampleCondition === "satisfactory" 
-        ? "Sample collected successfully" 
-        : "Sample rejected due to unsatisfactory condition",
+      message: "Sample collected successfully",
     });
-    
+
   } catch (error: any) {
     console.error("Error collecting sample:", error);
     return NextResponse.json(

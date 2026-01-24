@@ -424,8 +424,20 @@ export function LabTestManagement() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div>{test.doctor.name}</div>
-                          <div className="text-sm text-gray-500">{test.doctor.specialization}</div>
+                          <div>
+                            {test.doctor?.name 
+                              ? test.doctor.name 
+                              : test.doctor 
+                                ? test.doctor.toString() 
+                                : 'Doctor not assigned'
+                            }
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            {test.doctor?.specialization 
+                              ? test.doctor.specialization 
+                              : 'Specialization not available'
+                            }
+                          </div>
                         </TableCell>
                         <TableCell>
                           <div className="font-medium">${totalAmount.toFixed(2)}</div>

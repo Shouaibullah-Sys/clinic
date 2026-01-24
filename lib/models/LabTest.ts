@@ -20,7 +20,7 @@ export interface ILabTestCharges {
 
 export interface ILabTest extends mongoose.Document {
   testId: string;
-  appointment: mongoose.Types.ObjectId;
+  appointment?: mongoose.Types.ObjectId;
   patient: mongoose.Types.ObjectId;
   doctor: mongoose.Types.ObjectId;
   testName: string;
@@ -69,14 +69,24 @@ export interface ILabTest extends mongoose.Document {
   paymentVerifiedBy?: mongoose.Types.ObjectId;
   paymentVerifiedAt?: Date;
   
-  specimen?: {
-    type?: string;
-    collectionTime?: Date;
-    collectedBy?: mongoose.Types.ObjectId;
-    quantity?: string;
-    container?: string;
-    remarks?: string;
-  };
+  specimen: {
+  type: {
+    type: String,
+    enum: ["blood", "urine", "stool", "tissue", "saliva", "other"],
+  },
+  collectionTime: Date,
+  collectedBy: { type: Schema.Types.ObjectId, ref: "User" },
+  quantity: String,
+  container: String,
+  remarks: String,
+  // Add parameters field
+  parameters: [{
+    name: { type: String, required: true },
+    value: { type: String, required: true },
+    unit: { type: String },
+    remarks: { type: String },
+  }],
+},
   results?: {
     parameters: Array<{
       name: string;
@@ -149,7 +159,6 @@ const labTestSchema = new Schema<ILabTest>(
     appointment: {
       type: Schema.Types.ObjectId,
       ref: "Appointment",
-      required: true,
     },
     patient: {
       type: Schema.Types.ObjectId,
@@ -296,16 +305,23 @@ const labTestSchema = new Schema<ILabTest>(
     },
     
     specimen: {
-      type: {
-        type: String,
-        enum: ["blood", "urine", "stool", "tissue", "saliva", "other"],
-      },
-      collectionTime: Date,
-      collectedBy: { type: Schema.Types.ObjectId, ref: "User" },
-      quantity: String,
-      container: String,
-      remarks: String,
-    },
+  type: {
+    type: String,
+    enum: ["blood", "urine", "stool", "tissue", "saliva", "other"],
+  },
+  collectionTime: Date,
+  collectedBy: { type: Schema.Types.ObjectId, ref: "User" },
+  quantity: String,
+  container: String,
+  remarks: String,
+  // Add parameters field
+  parameters: [{
+    name: { type: String, required: true },
+    value: { type: String, required: true },
+    unit: { type: String },
+    remarks: { type: String },
+  }],
+},
     results: {
       parameters: [
         {
@@ -399,11 +415,14 @@ labTestSchema.virtual("canCollectSample").get(function () {
   // 1. Test is not cancelled
   // 2. Payment is verified OR test doesn't require payment verification (urgent/emergency)
   // 3. Collection status is pending or scheduled
-  return (
-    this.status !== "cancelled" &&
-    (this.paymentVerified || this.priority !== "routine") &&
-    ["pending", "scheduled"].includes(this.collectionStatus)
-  );
+
+  const condition1 = this.status !== "cancelled";
+  const condition2 = (this.paymentVerified || this.priority !== "routine");
+  // Handle undefined/null collectionStatus as "pending" (default)
+  const effectiveCollectionStatus = this.collectionStatus || "pending";
+  const condition3 = ["pending", "scheduled"].includes(effectiveCollectionStatus);
+
+  return condition1 && condition2 && condition3;
 });
 
 // Virtual for canProcess

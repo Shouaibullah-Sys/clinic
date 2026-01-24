@@ -36,11 +36,14 @@ export async function GET(request: NextRequest) {
     
     // Build query
     const query: any = {};
-    
+
+    // Only show tests that have been paid and verified
+    query.paymentVerified = true;
+
     if (status && status !== "all") {
       query.status = status;
     }
-    
+
     if (priority && priority !== "all") {
       query.priority = priority;
     }
@@ -59,7 +62,13 @@ export async function GET(request: NextRequest) {
       .sort({ [sort]: -1 })
       .limit(limit)
       .lean();
-    
+
+    console.log(`Lab tests query:`, query);
+    console.log(`Found ${tests.length} tests for ${auth.userRole}`);
+    tests.forEach(test => {
+      console.log(`Test ${test.testId}: paymentVerified=${test.paymentVerified}, status=${test.status}, charges=${JSON.stringify(test.charges)}`);
+    });
+
     return NextResponse.json({
       success: true,
       data: tests,

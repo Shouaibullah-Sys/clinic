@@ -304,7 +304,7 @@ export default function AppointmentsPage() {
       appointment.patient.name.toLowerCase().includes(query) ||
       appointment.patient.phone.toLowerCase().includes(query) ||
       appointment.appointmentId.toLowerCase().includes(query) ||
-      appointment.doctor.name.toLowerCase().includes(query) ||
+      (appointment.doctor?.name || '').toLowerCase().includes(query) ||
       appointment.reason.toLowerCase().includes(query)
     );
   });
@@ -508,7 +508,14 @@ export default function AppointmentsPage() {
                       </TableCell>
                       <TableCell>
                         <div>
-                          <p className="font-medium">Dr. {appointment.doctor.name}</p>
+                          <p className="font-medium">
+                            {appointment.doctor?.name 
+                              ? `Dr. ${appointment.doctor.name}`
+                              : appointment.doctor 
+                                ? appointment.doctor.toString() 
+                                : 'Doctor not assigned'
+                            }
+                          </p>
                           <p className="text-sm text-gray-500">{appointment.doctor.specialization}</p>
                         </div>
                       </TableCell>

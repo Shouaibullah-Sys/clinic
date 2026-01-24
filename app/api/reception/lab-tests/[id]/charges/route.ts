@@ -182,6 +182,8 @@ export async function PUT(
         { status: 500 }
       );
     }
+
+    console.log(`Payment update for test ${testId}: paid=${updatedLabTest.charges.paid}, paymentStatus=${updatedLabTest.charges.paymentStatus}, paymentVerified=${updatedLabTest.paymentVerified}`);
     
     // Check if sample collection can now proceed
     let canCollectSample = false;

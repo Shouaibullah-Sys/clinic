@@ -1071,8 +1071,15 @@ export default function AdmissionsPage() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <div className="font-medium">Dr. {admission.doctor.name}</div>
-                        {admission.doctor.specialization && (
+                        <div className="font-medium">
+                          {admission.doctor?.name 
+                            ? `Dr. ${admission.doctor.name}`
+                            : admission.doctor 
+                              ? admission.doctor.toString() 
+                              : 'Doctor not assigned'
+                          }
+                        </div>
+                        {admission.doctor?.specialization && (
                           <div className="text-sm text-gray-500">
                             {admission.doctor.specialization}
                           </div>

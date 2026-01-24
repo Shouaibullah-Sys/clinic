@@ -245,7 +245,7 @@ export default function LaboratoryDashboard() {
         test.testName.toLowerCase().includes(query) ||
         test.patient.name.toLowerCase().includes(query) ||
         test.patient.patientId.toLowerCase().includes(query) ||
-        test.doctor.name.toLowerCase().includes(query)
+        (test.doctor?.name || '').toLowerCase().includes(query)
       );
     }
 

@@ -344,7 +344,14 @@ export default function AdmissionDetailsPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <h4 className="font-semibold">{admission.doctor.name}</h4>
+                  <h4 className="font-semibold">
+                    {admission.doctor?.name 
+                      ? admission.doctor.name 
+                      : admission.doctor 
+                        ? admission.doctor.toString() 
+                        : 'Doctor not assigned'
+                    }
+                  </h4>
                   <div className="space-y-1 text-sm">
                     {admission.doctor.specialization && (
                       <div>
