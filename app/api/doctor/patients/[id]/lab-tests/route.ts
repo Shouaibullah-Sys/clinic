@@ -1,5 +1,3 @@
-// app/api/doctor/patients/[id]/lab-tests/route.ts - UPDATED WITH POST
-
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
 import { LabTest } from "@/lib/models/LabTest";
@@ -63,16 +61,24 @@ export async function GET(
     
     const doctorId = new mongoose.Types.ObjectId(userId);
     
+    // Get lab tests for this patient, either ordered by this doctor or linked to appointments with this doctor
     const labTests = await LabTest.find({
-      patient: patientId,
-      doctor: doctorId,
+      $or: [
+        { patient: patientId, doctor: doctorId },
+        { 
+          patient: patientId,
+          appointment: { $exists: true },
+          doctor: doctorId 
+        }
+      ]
     })
-      .select("testId testName category orderedAt status collectionStatus priority instructions results reportedDate")
+      .select("_id testId testName category orderedAt status collectionStatus priority instructions results reportedDate charges price discountedPrice")
       .populate("doctor", "name")
+      .populate("appointment", "appointmentId date")
       .sort({ orderedAt: -1 })
       .lean();
     
-    console.log(`Found ${labTests.length} lab tests`);
+    console.log(`Found ${labTests.length} lab tests for patient ${patientId}`);
     
     return NextResponse.json({
       success: true,
@@ -165,8 +171,9 @@ export async function POST(
     }
     
     // Check if appointment exists and belongs to patient (if provided)
+    let appointment = null;
     if (appointmentId) {
-      const appointment = await Appointment.findOne({
+      appointment = await Appointment.findOne({
         _id: appointmentId,
         patient: patientId,
       });
@@ -199,6 +206,16 @@ export async function POST(
       processingStatus: "pending",
       verificationStatus: "pending",
       paymentVerified: false,
+      charges: {
+        basePrice: priceNum,
+        tax: 0,
+        discount: 0,
+        otherCharges: 0,
+        totalAmount: priceNum,
+        paid: 0,
+        due: priceNum,
+        paymentStatus: "pending",
+      }
     };
     
     // Add appointment if provided
@@ -211,6 +228,9 @@ export async function POST(
       const discountedNum = parseFloat(discountedPrice);
       if (!isNaN(discountedNum) && discountedNum >= 0) {
         labTestData.discountedPrice = discountedNum;
+        labTestData.charges.basePrice = discountedNum;
+        labTestData.charges.totalAmount = discountedNum;
+        labTestData.charges.due = discountedNum;
       }
     }
     
@@ -228,6 +248,15 @@ export async function POST(
     const labTest = new LabTest(labTestData);
     await labTest.save();
     
+    // If appointment exists, update it to reference this lab test
+    if (appointmentId && appointment) {
+      await Appointment.findByIdAndUpdate(
+        appointmentId,
+        { $addToSet: { labTests: labTest._id } },
+        { new: true }
+      );
+    }
+    
     // Populate response data
     await labTest.populate([
       { path: "patient", select: "name patientId" },
@@ -236,7 +265,7 @@ export async function POST(
       ...(appointmentId ? [{ path: "appointment", select: "appointmentId date" }] : []),
     ]);
     
-    console.log(`Lab test ordered successfully: ${labTest.testId}`);
+    console.log(`Lab test ordered successfully: ${labTest.testId} for appointment: ${appointmentId || 'No appointment linked'}`);
     
     return NextResponse.json({
       success: true,

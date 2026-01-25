@@ -1,8 +1,7 @@
-// app/api/doctor/patients/[id]/prescriptions/route.ts - UPDATED
-
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
 import { Prescription } from "@/lib/models/Prescription";
+import { Appointment } from "@/lib/models/Appointment";
 import { jwtVerify } from "jose";
 import mongoose from "mongoose";
 
@@ -62,16 +61,25 @@ export async function GET(
     
     const doctorId = new mongoose.Types.ObjectId(userId);
     
+    // Get prescriptions for this patient, either prescribed by this doctor or linked to appointments
     const prescriptions = await Prescription.find({
-      patient: patientId,
-      doctor: doctorId,
+      $or: [
+        { patient: patientId, doctor: doctorId },
+        { 
+          patient: patientId,
+          appointment: { $exists: true },
+          doctor: doctorId 
+        }
+      ]
     })
-      .select("prescriptionId prescribedDate medications diagnosis instructions notes status expiryDate")
+      .select("_id prescriptionId prescribedDate medications diagnosis instructions notes status expiryDate")
       .populate("doctor", "name specialization")
+      .populate("appointment", "appointmentId date")
+      .populate("patient", "name patientId")
       .sort({ prescribedDate: -1 })
       .lean();
     
-    console.log(`Found ${prescriptions.length} prescriptions`);
+    console.log(`Found ${prescriptions.length} prescriptions for patient ${patientId}`);
     
     return NextResponse.json({
       success: true,
@@ -122,7 +130,7 @@ export async function POST(
     console.log(`Creating prescription for patient ${patientId} by doctor ${userId}`);
     
     // Only doctors can create prescriptions
-    if (userRole !== "doctor") {
+    if (!["doctor", "admin"].includes(userRole)) {
       return NextResponse.json(
         { success: false, error: "Forbidden. Doctor access required." },
         { status: 403 }
@@ -187,6 +195,7 @@ export async function POST(
         duration: med.duration.toString().trim(),
         instructions: med.instructions?.toString().trim() || "",
         quantity: med.quantity ? parseInt(med.quantity) || 1 : 1,
+        price: med.price ? parseFloat(med.price) || 0 : 0,
         route: route,
         refills: med.refills ? parseInt(med.refills) || 0 : 0,
         refillsRemaining: med.refills ? parseInt(med.refills) || 0 : 0,
@@ -194,6 +203,22 @@ export async function POST(
     });
     
     const doctorId = new mongoose.Types.ObjectId(userId);
+    
+    // Check if appointment exists and belongs to patient (if provided)
+    let appointment = null;
+    if (appointmentId) {
+      appointment = await Appointment.findOne({
+        _id: appointmentId,
+        patient: patientId,
+      });
+      
+      if (!appointment) {
+        return NextResponse.json(
+          { success: false, error: "Appointment not found or does not belong to this patient" },
+          { status: 404 }
+        );
+      }
+    }
     
     // Create prescription using the model's pre-save hook to generate prescriptionId
     const prescriptionData: any = {
@@ -204,6 +229,7 @@ export async function POST(
       instructions: patientInstructions?.trim() || "",
       notes: notes?.trim() || "",
       status: "active",
+      prescribedDate: new Date(),
     };
     
     // Add expiry date
@@ -225,7 +251,16 @@ export async function POST(
     const prescription = new Prescription(prescriptionData);
     await prescription.save();
     
-    console.log(`Prescription created successfully: ${prescription.prescriptionId}`);
+    // If appointment exists, update it to reference this prescription
+    if (appointmentId && appointment) {
+      await Appointment.findByIdAndUpdate(
+        appointmentId,
+        { $addToSet: { prescriptions: prescription._id } },
+        { new: true }
+      );
+    }
+    
+    console.log(`Prescription created successfully: ${prescription.prescriptionId} for appointment: ${appointmentId || 'No appointment linked'}`);
     
     return NextResponse.json({
       success: true,

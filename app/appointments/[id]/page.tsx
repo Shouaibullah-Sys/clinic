@@ -1,5 +1,3 @@
-// app/appointments/[id]/page.tsx - SIMPLIFIED WORKING VERSION
-
 "use client";
 
 import { useState, useEffect } from "react";
@@ -181,6 +179,10 @@ export default function AppointmentDetailPage() {
   const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("overview");
+  const [dataSource, setDataSource] = useState<{
+    labTests: 'appointment' | 'patient' | 'mixed';
+    prescriptions: 'appointment' | 'patient' | 'mixed';
+  }>({ labTests: 'appointment', prescriptions: 'appointment' });
   
   // Dialog states
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
@@ -204,6 +206,42 @@ export default function AppointmentDetailPage() {
     try {
       setLoading(true);
       
+      // Use the combined medical records endpoint
+      const response = await fetch(`/api/appointments/${params.id}/medical-records`, {
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        console.log("📊 Medical records source:", data.data.source);
+        setAppointment(data.data.appointment);
+        setLabTests(data.data.labTests || []);
+        setPrescriptions(data.data.prescriptions || []);
+        setDataSource(data.data.source || { labTests: 'appointment', prescriptions: 'appointment' });
+        
+        // Log counts for debugging
+        console.log(`✅ Loaded: ${data.data.labTests?.length || 0} lab tests, ${data.data.prescriptions?.length || 0} prescriptions`);
+      } else {
+        console.warn("⚠️ Medical records endpoint failed, falling back to separate endpoints");
+        toast.error(data.error || "Failed to fetch appointment details");
+        // Fallback to old method if new endpoint fails
+        await fetchAppointmentWithAllDataFallback();
+      }
+    } catch (error) {
+      console.error("Error fetching medical records:", error);
+      console.warn("⚠️ Medical records endpoint failed, falling back to separate endpoints");
+      await fetchAppointmentWithAllDataFallback();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchAppointmentWithAllDataFallback = async () => {
+    try {
       // Fetch appointment with all related data
       const response = await fetch(`/api/appointments/${params.id}`, {
         headers: {
@@ -217,84 +255,172 @@ export default function AppointmentDetailPage() {
       if (data.success) {
         setAppointment(data.data);
         
-        // Check if lab tests are included in the response
-        if (data.data.labTests && Array.isArray(data.data.labTests)) {
-          setLabTests(data.data.labTests);
-        } else {
-          // If not included, fetch lab tests separately
-          await fetchLabTestsSeparately();
-        }
-        
-        // Check if prescriptions are included in the response
-        if (data.data.prescriptions && Array.isArray(data.data.prescriptions)) {
-          setPrescriptions(data.data.prescriptions);
-        } else {
-          // If not included, fetch prescriptions separately
-          await fetchPrescriptionsSeparately();
-        }
+        // Fetch ALL data in parallel for better performance
+        await Promise.all([
+          fetchLabTests(data.data.patient._id),
+          fetchPrescriptions(data.data.patient._id)
+        ]);
       } else {
         toast.error(data.error || "Failed to fetch appointment details");
       }
     } catch (error) {
-      console.error("Error fetching appointment:", error);
+      console.error("Error fetching appointment fallback:", error);
       toast.error("Network error. Please try again.");
-    } finally {
-      setLoading(false);
     }
   };
 
-  // Fetch lab tests separately if not included in appointment data
-  const fetchLabTestsSeparately = async () => {
+  // Unified lab tests fetcher
+  const fetchLabTests = async (patientId: string) => {
     try {
-      console.log("Fetching lab tests separately for appointment:", params.id);
-      const response = await fetch(`/api/appointments/${params.id}/lab-tests`, {
+      console.log(`🔍 FETCHING LAB TESTS for appointment ${params.id} and patient ${patientId}`);
+      
+      // Try appointment-specific lab tests first
+      const appointmentResponse = await fetch(`/api/appointments/${params.id}/lab-tests`, {
         headers: {
           "Content-Type": "application/json",
           ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         },
       });
       
-      const data = await response.json();
-      console.log("Lab tests API response:", data);
+      const appointmentData = await appointmentResponse.json();
       
-      if (data.success && Array.isArray(data.data)) {
-        console.log("Setting lab tests:", data.data);
-        setLabTests(data.data);
-      } else {
-        console.log("No lab tests found or invalid response");
-        setLabTests([]);
+      let labTestsData = [];
+      let source: 'appointment' | 'patient' | 'mixed' = 'appointment';
+      
+      if (appointmentData.success && Array.isArray(appointmentData.data)) {
+        console.log(`✅ Found ${appointmentData.data.length} appointment-specific lab tests`);
+        labTestsData = appointmentData.data;
+        source = 'appointment';
       }
+      
+      // If no appointment-specific lab tests, fetch patient-specific ones
+      if (labTestsData.length === 0) {
+        console.log(`⚠️ No appointment-specific lab tests, fetching patient-specific lab tests`);
+        const patientResponse = await fetch(`/api/doctor/patients/${patientId}/lab-tests`, {
+          headers: {
+            "Content-Type": "application/json",
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
+        });
+        
+        const patientData = await patientResponse.json();
+        
+        if (patientData.success && Array.isArray(patientData.data)) {
+          console.log(`✅ Found ${patientData.data.length} patient-specific lab tests`);
+          labTestsData = patientData.data;
+          source = 'patient';
+        }
+      }
+      
+      // Filter to show only relevant tests (recent or appointment-specific)
+      const filteredTests = filterLabTestsByRelevance(labTestsData);
+      console.log(`📊 Setting ${filteredTests.length} lab tests to display (source: ${source})`);
+      setLabTests(filteredTests);
+      setDataSource(prev => ({ ...prev, labTests: source }));
+      
     } catch (error) {
-      console.error("Error fetching lab tests:", error);
+      console.error("💥 Error fetching lab tests:", error);
       setLabTests([]);
     }
   };
 
-  // Fetch prescriptions separately if not included in appointment data
-  const fetchPrescriptionsSeparately = async () => {
+  // Unified prescriptions fetcher
+  const fetchPrescriptions = async (patientId: string) => {
     try {
-      console.log("Fetching prescriptions separately for appointment:", params.id);
-      const response = await fetch(`/api/appointments/${params.id}/prescriptions`, {
+      console.log(`🔍 FETCHING PRESCRIPTIONS for appointment ${params.id} and patient ${patientId}`);
+      
+      // Try appointment-specific prescriptions first
+      const appointmentResponse = await fetch(`/api/appointments/${params.id}/prescriptions`, {
         headers: {
           "Content-Type": "application/json",
           ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         },
       });
       
-      const data = await response.json();
-      console.log("Prescriptions API response:", data);
+      const appointmentData = await appointmentResponse.json();
       
-      if (data.success && Array.isArray(data.data)) {
-        console.log("Setting prescriptions:", data.data);
-        setPrescriptions(data.data);
-      } else {
-        console.log("No prescriptions found or invalid response");
-        setPrescriptions([]);
+      let prescriptionsData = [];
+      let source: 'appointment' | 'patient' | 'mixed' = 'appointment';
+      
+      if (appointmentData.success && Array.isArray(appointmentData.data)) {
+        console.log(`✅ Found ${appointmentData.data.length} appointment-specific prescriptions`);
+        prescriptionsData = appointmentData.data;
+        source = 'appointment';
       }
+      
+      // If no appointment-specific prescriptions, fetch patient-specific ones
+      if (prescriptionsData.length === 0) {
+        console.log(`⚠️ No appointment-specific prescriptions, fetching patient-specific prescriptions`);
+        const patientResponse = await fetch(`/api/doctor/patients/${patientId}/prescriptions`, {
+          headers: {
+            "Content-Type": "application/json",
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
+        });
+        
+        const patientData = await patientResponse.json();
+        
+        if (patientData.success && Array.isArray(patientData.data)) {
+          console.log(`✅ Found ${patientData.data.length} patient-specific prescriptions`);
+          prescriptionsData = patientData.data;
+          source = 'patient';
+        }
+      }
+      
+      // Filter to show only relevant prescriptions
+      const filteredPrescriptions = filterPrescriptionsByRelevance(prescriptionsData);
+      console.log(`📊 Setting ${filteredPrescriptions.length} prescriptions to display (source: ${source})`);
+      setPrescriptions(filteredPrescriptions);
+      setDataSource(prev => ({ ...prev, prescriptions: source }));
+      
     } catch (error) {
-      console.error("Error fetching prescriptions:", error);
+      console.error("💥 Error fetching prescriptions:", error);
       setPrescriptions([]);
     }
+  };
+
+  // Helper: Filter lab tests to show relevant ones
+  const filterLabTestsByRelevance = (tests: LabTest[]) => {
+    if (!tests || tests.length === 0) return [];
+    
+    // Sort by most recent first
+    const sortedTests = [...tests].sort((a, b) => 
+      new Date(b.orderedAt).getTime() - new Date(a.orderedAt).getTime()
+    );
+    
+    // Return only tests from the last 30 days or all if less than 10
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    
+    const recentTests = sortedTests.filter(test => 
+      new Date(test.orderedAt) >= thirtyDaysAgo
+    );
+    
+    return recentTests.length > 0 ? recentTests : sortedTests.slice(0, 10);
+  };
+
+  // Helper: Filter prescriptions to show relevant ones
+  const filterPrescriptionsByRelevance = (prescriptions: Prescription[]) => {
+    if (!prescriptions || prescriptions.length === 0) return [];
+    
+    // Sort by most recent first
+    const sortedPrescriptions = [...prescriptions].sort((a, b) => 
+      new Date(b.prescribedDate).getTime() - new Date(a.prescribedDate).getTime()
+    );
+    
+    // Return only active or recent prescriptions
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    
+    const relevantPrescriptions = sortedPrescriptions.filter(prescription => {
+      const isActive = prescription.status === 'active';
+      const isRecent = new Date(prescription.prescribedDate) >= thirtyDaysAgo;
+      const isNotExpired = new Date(prescription.expiryDate) > new Date();
+      
+      return isActive && isNotExpired && isRecent;
+    });
+    
+    return relevantPrescriptions.length > 0 ? relevantPrescriptions : sortedPrescriptions.slice(0, 10);
   };
 
   // Process payment for lab test
@@ -700,8 +826,14 @@ export default function AppointmentDetailPage() {
                 <FlaskConical className="h-5 w-5" />
                 Laboratory Tests
               </CardTitle>
-              <CardDescription>
+              <CardDescription className="flex items-center gap-2">
                 Manage and process payments for laboratory tests
+                {labTests.length > 0 && (
+                  <Badge variant="outline" className="ml-2">
+                    {dataSource.labTests === 'appointment' ? 'Appointment-specific' : 
+                     dataSource.labTests === 'patient' ? 'Patient history' : 'Mixed sources'}
+                  </Badge>
+                )}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -789,8 +921,14 @@ export default function AppointmentDetailPage() {
                 <Pill className="h-5 w-5" />
                 Prescriptions
               </CardTitle>
-              <CardDescription>
-                All prescriptions issued for this appointment
+              <CardDescription className="flex items-center gap-2">
+                All prescriptions issued for this patient
+                {prescriptions.length > 0 && (
+                  <Badge variant="outline" className="ml-2">
+                    {dataSource.prescriptions === 'appointment' ? 'Appointment-specific' : 
+                     dataSource.prescriptions === 'patient' ? 'Patient history' : 'Mixed sources'}
+                  </Badge>
+                )}
               </CardDescription>
             </CardHeader>
             <CardContent>

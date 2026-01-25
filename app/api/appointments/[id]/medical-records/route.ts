@@ -1,0 +1,200 @@
+import { NextRequest, NextResponse } from "next/server";
+import dbConnect from "@/lib/dbConnect";
+import { LabTest } from "@/lib/models/LabTest";
+import { Prescription } from "@/lib/models/Prescription";
+import { Appointment } from "@/lib/models/Appointment";
+import { jwtVerify } from "jose";
+import mongoose from "mongoose";
+
+const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-this";
+
+async function verifyToken(token: string) {
+  try {
+    const secret = new TextEncoder().encode(JWT_SECRET);
+    const { payload } = await jwtVerify(token, secret);
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id: appointmentId } = await params;
+    
+    await dbConnect();
+    
+    // Authentication
+    const authHeader = request.headers.get("authorization");
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized. No token provided." },
+        { status: 401 }
+      );
+    }
+    
+    const token = authHeader.split(" ")[1];
+    const payload = await verifyToken(token);
+    
+    if (!payload) {
+      return NextResponse.json(
+        { success: false, error: "Invalid or expired token." },
+        { status: 401 }
+      );
+    }
+    
+    const userRole = payload.role as string;
+    
+    // Only receptionists, doctors, and admins can access
+    if (!["receptionist", "doctor", "admin"].includes(userRole)) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden. Insufficient permissions." },
+        { status: 403 }
+      );
+    }
+    
+    // Get the appointment to access patient ID
+    const appointment = await Appointment.findById(appointmentId)
+      .select("-__v")
+      .populate("patient", "_id name patientId phone email dateOfBirth gender address bloodGroup allergies")
+      .populate("doctor", "_id name specialization department")
+      .lean();
+    
+    if (!appointment) {
+      return NextResponse.json(
+        { success: false, error: "Appointment not found" },
+        { status: 404 }
+      );
+    }
+    
+    const patientId = appointment.patient._id;
+    const appointmentDate = new Date(appointment.date);
+    
+    // Get appointment-specific lab tests
+    const appointmentLabTests = await LabTest.find({ appointment: appointmentId })
+      .select("_id testId testName category price discountedPrice status priority charges orderedAt")
+      .sort({ orderedAt: -1 })
+      .lean();
+    
+    // Get patient-specific lab tests (from last 30 days if no appointment-specific tests)
+    let patientLabTests = [];
+    let labTestsSource: 'appointment' | 'patient' | 'mixed' = 'appointment';
+    
+    if (appointmentLabTests.length === 0) {
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      
+      patientLabTests = await LabTest.find({
+        patient: patientId,
+        orderedAt: { $gte: thirtyDaysAgo },
+        status: { $ne: "cancelled" }
+      })
+        .select("_id testId testName category price discountedPrice status priority charges orderedAt")
+        .sort({ orderedAt: -1 })
+        .limit(20)
+        .lean();
+      
+      if (patientLabTests.length > 0) {
+        labTestsSource = 'patient';
+      }
+    } else {
+      // If we have appointment-specific tests, still get recent patient tests for context
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      
+      patientLabTests = await LabTest.find({
+        patient: patientId,
+        appointment: { $ne: appointmentId }, // Exclude current appointment tests
+        orderedAt: { $gte: thirtyDaysAgo },
+        status: { $ne: "cancelled" }
+      })
+        .select("_id testId testName category price discountedPrice status priority charges orderedAt")
+        .sort({ orderedAt: -1 })
+        .limit(10)
+        .lean();
+      
+      if (patientLabTests.length > 0) {
+        labTestsSource = 'mixed';
+      }
+    }
+    
+    // Get appointment-specific prescriptions
+    const appointmentPrescriptions = await Prescription.find({ appointment: appointmentId })
+      .select("_id prescriptionId prescribedDate medications diagnosis instructions notes status expiryDate")
+      .populate("patient", "_id name patientId")
+      .populate("doctor", "_id name specialization")
+      .sort({ prescribedDate: -1 })
+      .lean();
+    
+    // Get patient-specific prescriptions
+    let patientPrescriptions = [];
+    let prescriptionsSource: 'appointment' | 'patient' | 'mixed' = 'appointment';
+    
+    if (appointmentPrescriptions.length === 0) {
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      
+      patientPrescriptions = await Prescription.find({
+        patient: patientId,
+        prescribedDate: { $gte: thirtyDaysAgo },
+        status: "active",
+        expiryDate: { $gt: new Date() }
+      })
+        .select("_id prescriptionId prescribedDate medications diagnosis instructions notes status expiryDate")
+        .populate("patient", "_id name patientId")
+        .populate("doctor", "_id name specialization")
+        .sort({ prescribedDate: -1 })
+        .limit(10)
+        .lean();
+      
+      if (patientPrescriptions.length > 0) {
+        prescriptionsSource = 'patient';
+      }
+    } else {
+      // If we have appointment-specific prescriptions, still get recent patient prescriptions
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      
+      patientPrescriptions = await Prescription.find({
+        patient: patientId,
+        appointment: { $ne: appointmentId }, // Exclude current appointment prescriptions
+        prescribedDate: { $gte: thirtyDaysAgo },
+        status: "active",
+        expiryDate: { $gt: new Date() }
+      })
+        .select("_id prescriptionId prescribedDate medications diagnosis instructions notes status expiryDate")
+        .populate("patient", "_id name patientId")
+        .populate("doctor", "_id name specialization")
+        .sort({ prescribedDate: -1 })
+        .limit(5)
+        .lean();
+      
+      if (patientPrescriptions.length > 0) {
+        prescriptionsSource = 'mixed';
+      }
+    }
+    
+    return NextResponse.json({
+      success: true,
+      data: {
+        appointment,
+        labTests: [...appointmentLabTests, ...patientLabTests],
+        prescriptions: [...appointmentPrescriptions, ...patientPrescriptions],
+        source: {
+          labTests: labTestsSource,
+          prescriptions: prescriptionsSource
+        }
+      },
+    });
+    
+  } catch (error: any) {
+    console.error("Error fetching appointment medical records:", error);
+    return NextResponse.json(
+      { success: false, error: error.message || "Failed to fetch medical records" },
+      { status: 500 }
+    );
+  }
+}
