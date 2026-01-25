@@ -58,6 +58,8 @@
     import { format, parseISO, differenceInYears } from "date-fns";
     import { cn } from "@/lib/utils";
     import { LabTestOrderDialog } from "@/app/components/doctor/LabTestOrderDialog";
+    import { MedicalRecordDialog } from "@/app/components/doctor/MedicalRecordDialog";
+    import { PrescriptionDialog } from "@/app/components/doctor/PrescriptionDialog";
 
   interface Patient {
     _id: string;
@@ -191,8 +193,9 @@ export default function DoctorPatientDetailPage() {
       }
 
       const patientData = await patientRes.json();
+
       if (patientData.success) {
-        setPatient(patientData.data);
+        setPatient(patientData.data.patient);
       }
 
       // Fetch medical records
@@ -283,6 +286,46 @@ export default function DoctorPatientDetailPage() {
     }
   };
 
+  const handleRecordCreated = async () => {
+    try {
+      const recordsRes = await fetch(`/api/doctor/patients/${patientId}/medical-records`, {
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+      });
+
+      if (recordsRes.ok) {
+        const recordsData = await recordsRes.json();
+        if (recordsData.success) {
+          setMedicalRecords(recordsData.data);
+        }
+      }
+    } catch (error) {
+      console.error("Error refetching medical records:", error);
+    }
+  };
+
+  const handlePrescriptionCreated = async () => {
+    try {
+      const prescriptionsRes = await fetch(`/api/doctor/patients/${patientId}/prescriptions`, {
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+      });
+
+      if (prescriptionsRes.ok) {
+        const prescriptionsData = await prescriptionsRes.json();
+        if (prescriptionsData.success) {
+          setPrescriptions(prescriptionsData.data);
+        }
+      }
+    } catch (error) {
+      console.error("Error refetching prescriptions:", error);
+    }
+  };
+
   const calculateAge = (dateOfBirth: string) => {
     try {
       return differenceInYears(new Date(), parseISO(dateOfBirth));
@@ -336,7 +379,7 @@ export default function DoctorPatientDetailPage() {
     return (
       <div className="container mx-auto p-6">
         <div className="flex items-center gap-4 mb-6">
-          <Button variant="outline" size="icon" onClick={() => router.push("/doctor/patients")}>
+          <Button variant="outline" size="icon" onClick={() => router.push("/doctor/dashboard")}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
           <div>
@@ -377,10 +420,17 @@ export default function DoctorPatientDetailPage() {
             <Printer className="h-4 w-4 mr-2" />
             Print
           </Button>
-          <Button onClick={() => router.push(`/doctor/patients/${patientId}/medical-record/new`)}>
-            <Plus className="h-4 w-4 mr-2" />
-            New Medical Record
-          </Button>
+          <MedicalRecordDialog
+            patientId={patientId}
+            patientName={patient?.name || "Patient"}
+            onRecordCreated={handleRecordCreated}
+            trigger={
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                New Medical Record
+              </Button>
+            }
+          />
         </div>
       </div>
 
@@ -543,14 +593,17 @@ export default function DoctorPatientDetailPage() {
                   <div className="text-center py-8">
                     <FileText className="h-12 w-12 text-gray-300 mx-auto mb-3" />
                     <p className="text-gray-500">No medical records found</p>
-                    <Button
-                      variant="outline"
-                      className="mt-3"
-                      onClick={() => router.push(`/doctor/patients/${patientId}/medical-record/new`)}
-                    >
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add Medical Record
-                    </Button>
+                    <MedicalRecordDialog
+                      patientId={patientId}
+                      patientName={patient?.name || "Patient"}
+                      onRecordCreated={handleRecordCreated}
+                      trigger={
+                        <Button variant="outline" className="mt-3">
+                          <Plus className="h-4 w-4 mr-2" />
+                          Add Medical Record
+                        </Button>
+                      }
+                    />
                   </div>
                 ) : (
                   <div className="space-y-4">
@@ -610,22 +663,34 @@ export default function DoctorPatientDetailPage() {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <Button
-                  variant="outline"
-                  className="h-auto py-4 flex flex-col items-center gap-2"
-                  onClick={() => router.push(`/doctor/patients/${patientId}/medical-record/new`)}
-                >
-                  <Stethoscope className="h-5 w-5" />
-                  <span>New Medical Record</span>
-                </Button>
-                <Button
-                  variant="outline"
-                  className="h-auto py-4 flex flex-col items-center gap-2"
-                  onClick={() => router.push(`/doctor/patients/${patientId}/prescription/new`)}
-                >
-                  <Pill className="h-5 w-5" />
-                  <span>New Prescription</span>
-                </Button>
+                <MedicalRecordDialog
+                  patientId={patientId}
+                  patientName={patient?.name || "Patient"}
+                  onRecordCreated={handleRecordCreated}
+                  trigger={
+                    <Button
+                      variant="outline"
+                      className="h-auto py-4 flex flex-col items-center gap-2"
+                    >
+                      <Stethoscope className="h-5 w-5" />
+                      <span>Medical Record</span>
+                    </Button>
+                  }
+                />
+                <PrescriptionDialog
+                  patientId={patientId}
+                  patientName={patient?.name || "Patient"}
+                  onPrescriptionCreated={handlePrescriptionCreated}
+                  trigger={
+                    <Button
+                      variant="outline"
+                      className="h-auto py-4 flex flex-col items-center gap-2"
+                    >
+                      <Pill className="h-5 w-5" />
+                      <span>Prescription</span>
+                    </Button>
+                  }
+                />
                 <LabTestOrderDialog
                   patientId={patientId}
                   patientName={patient?.name || "Patient"}
@@ -636,7 +701,7 @@ export default function DoctorPatientDetailPage() {
                       className="h-auto py-4 flex flex-col items-center gap-2"
                     >
                       <TestTube className="h-5 w-5" />
-                      <span>Order Lab Test</span>
+                      <span>Lab Test Order</span>
                     </Button>
                   }
                 />
@@ -664,10 +729,17 @@ export default function DoctorPatientDetailPage() {
                     Complete medical history of the patient
                   </CardDescription>
                 </div>
-                <Button onClick={() => router.push(`/doctor/patients/${patientId}/medical-record/new`)}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  New Record
-                </Button>
+                <MedicalRecordDialog
+                  patientId={patientId}
+                  patientName={patient?.name || "Patient"}
+                  onRecordCreated={handleRecordCreated}
+                  trigger={
+                    <Button>
+                      <Plus className="h-4 w-4 mr-2" />
+                      New Record
+                    </Button>
+                  }
+                />
               </div>
             </CardHeader>
             <CardContent>
@@ -678,10 +750,17 @@ export default function DoctorPatientDetailPage() {
                   <p className="text-gray-500 mb-4">
                     Start by creating a new medical record for this patient
                   </p>
-                  <Button onClick={() => router.push(`/doctor/patients/${patientId}/medical-record/new`)}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Create First Record
-                  </Button>
+                  <MedicalRecordDialog
+                    patientId={patientId}
+                    patientName={patient?.name || "Patient"}
+                    onRecordCreated={handleRecordCreated}
+                    trigger={
+                      <Button>
+                        <Plus className="h-4 w-4 mr-2" />
+                        Create First Record
+                      </Button>
+                    }
+                  />
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -776,10 +855,17 @@ export default function DoctorPatientDetailPage() {
                     All prescriptions issued to this patient
                   </CardDescription>
                 </div>
-                <Button onClick={() => router.push(`/doctor/patients/${patientId}/prescription/new`)}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  New Prescription
-                </Button>
+                <PrescriptionDialog
+                  patientId={patientId}
+                  patientName={patient?.name || "Patient"}
+                  onPrescriptionCreated={handlePrescriptionCreated}
+                  trigger={
+                    <Button>
+                      <Plus className="h-4 w-4 mr-2" />
+                      New Prescription
+                    </Button>
+                  }
+                />
               </div>
             </CardHeader>
             <CardContent>
@@ -790,10 +876,17 @@ export default function DoctorPatientDetailPage() {
                   <p className="text-gray-500 mb-4">
                     Create a new prescription for this patient
                   </p>
-                  <Button onClick={() => router.push(`/doctor/patients/${patientId}/prescription/new`)}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Create First Prescription
-                  </Button>
+                  <PrescriptionDialog
+                    patientId={patientId}
+                    patientName={patient?.name || "Patient"}
+                    onPrescriptionCreated={handlePrescriptionCreated}
+                    trigger={
+                      <Button>
+                        <Plus className="h-4 w-4 mr-2" />
+                        Create First Prescription
+                      </Button>
+                    }
+                  />
                 </div>
               ) : (
                 <div className="space-y-4">

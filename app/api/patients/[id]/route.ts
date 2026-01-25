@@ -74,13 +74,15 @@ const userName = auth.userName as string;
 
     // If user is a doctor, check if they have treated this patient
     if (auth.userRole === "doctor") {
+      console.log(`Doctor access check: userRole=${auth.userRole}, userId=${auth.userId}, patientId=${patientId}`);
       const hasAccess = await Appointment.exists({
         patient: patientId,
         doctor: auth.userId,
         status: { $nin: ["cancelled", "no-show"] }
       });
+      console.log(`Doctor access check result: hasAccess=${hasAccess}`);
 
-      if (!hasAccess && auth.userRole !== "admin") {
+      if (!hasAccess) {
         return NextResponse.json(
           { 
             success: false, 
@@ -107,7 +109,6 @@ const userName = auth.userName as string;
 
     // Get medical records
     const medicalRecords = await MedicalRecord.find({ patient: patientId })
-      .populate("createdBy", "name role")
       .populate("doctor", "name specialization")
       .sort({ visitDate: -1 })
       .limit(10)
@@ -115,7 +116,7 @@ const userName = auth.userName as string;
 
     // Get prescriptions
     const prescriptions = await Prescription.find({ patient: patientId })
-      .populate("prescribedBy", "name specialization")
+      .populate("doctor", "name specialization")
       .sort({ prescribedDate: -1 })
       .limit(10)
       .lean();
@@ -153,9 +154,7 @@ const userName = auth.userName as string;
       patient: {
         ...patient,
         age,
-        fullAddress: patient.address 
-          ? `${patient.address.street || ''}, ${patient.address.city || ''}, ${patient.address.state || ''}, ${patient.address.postalCode || ''}, ${patient.address.country || ''}`.replace(/, ,/g, ',').replace(/^,\s*|\s*,$/g, '')
-          : null
+        fullAddress: patient.address || null
       },
       statistics: {
         totalAppointments: await Appointment.countDocuments({ patient: patientId, status: { $nin: ["cancelled", "no-show"] } }),
@@ -316,36 +315,19 @@ export async function PUT(
       }
     }
 
-    // If updating address, ensure it's a proper object
-    if (body.address && typeof body.address === 'object') {
-      updateData.address = {
-        street: body.address.street || existingPatient.address?.street,
-        city: body.address.city || existingPatient.address?.city,
-        state: body.address.state || existingPatient.address?.state,
-        postalCode: body.address.postalCode || existingPatient.address?.postalCode,
-        country: body.address.country || existingPatient.address?.country
-      };
+    // If updating address, ensure it's a string (address is stored as string in the model)
+    if (body.address !== undefined) {
+      updateData.address = body.address;
     }
 
     // If updating emergency contact
-    if (body.emergencyContact && typeof body.emergencyContact === 'object') {
-      updateData.emergencyContact = {
-        name: body.emergencyContact.name || existingPatient.emergencyContact?.name,
-        relationship: body.emergencyContact.relationship || existingPatient.emergencyContact?.relationship,
-        phone: body.emergencyContact.phone || existingPatient.emergencyContact?.phone,
-        address: body.emergencyContact.address || existingPatient.emergencyContact?.address
-      };
+    if (body.emergencyContact !== undefined) {
+      updateData.emergencyContact = body.emergencyContact;
     }
 
     // If updating insurance
-    if (body.insurance && typeof body.insurance === 'object') {
-      updateData.insurance = {
-        provider: body.insurance.provider || existingPatient.insurance?.provider,
-        policyNumber: body.insurance.policyNumber || existingPatient.insurance?.policyNumber,
-        groupNumber: body.insurance.groupNumber || existingPatient.insurance?.groupNumber,
-        expiryDate: body.insurance.expiryDate || existingPatient.insurance?.expiryDate,
-        coverageDetails: body.insurance.coverageDetails || existingPatient.insurance?.coverageDetails
-      };
+    if (body.insurance !== undefined) {
+      updateData.insurance = body.insurance;
     }
 
     // Update the patient

@@ -2,7 +2,7 @@
 "use client";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import LoginForm from "./LoginFrom";
+import LoginForm from "./LoginForm";
 import RegisterForm from "./RegisterForm";
 import { useSearchParams } from "next/navigation";
 

@@ -46,11 +46,9 @@ const emergencyContactSchema = new Schema({
 }, { _id: false });
 
 const patientSchema = new Schema<IPatient>(
-  { 
+  {
     patientId: {
       type: String,
-      unique: true,
-      sparse: true,
     },
     name: {
       type: String,
@@ -60,7 +58,6 @@ const patientSchema = new Schema<IPatient>(
     phone: {
       type: String,
       required: [true, "Phone number is required"],
-      unique: true,
       trim: true,
       validate: {
         validator: function(v: string) {

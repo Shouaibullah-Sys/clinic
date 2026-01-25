@@ -1,8 +1,7 @@
-// app/api/doctor/patients/[id]/lab-tests/route.ts
-
+// app/api/appointments/[id]/prescriptions/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
-import { LabTest } from "@/lib/models/LabTest";
+import { Prescription } from "@/lib/models/Prescription";
 import { jwtVerify } from "jose";
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-this";
@@ -12,16 +11,18 @@ async function verifyToken(token: string) {
     const secret = new TextEncoder().encode(JWT_SECRET);
     const { payload } = await jwtVerify(token, secret);
     return payload;
-  } catch (error) {
+  } catch {
     return null;
   }
 }
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id: appointmentId } = await params;
+    
     await dbConnect();
     
     // Authentication
@@ -46,34 +47,31 @@ export async function GET(
     const userId = payload.id as string;
     const userRole = payload.role as string;
     
-    // Only doctors can access
-    if (userRole !== "doctor") {
+    // Only receptionists, doctors, and admins can access
+    if (!["receptionist", "doctor", "admin"].includes(userRole)) {
       return NextResponse.json(
-        { success: false, error: "Forbidden. Doctor access required." },
+        { success: false, error: "Forbidden. Insufficient permissions." },
         { status: 403 }
       );
     }
     
-    const patientId = params.id;
-    
-    const labTests = await LabTest.find({
-      patient: patientId,
-      doctor: userId,
-    })
-      .select("testId testName category orderedAt status results")
-      .populate("doctor", "name")
-      .sort({ orderedAt: -1 })
+    // Get prescriptions for this specific appointment
+    const prescriptions = await Prescription.find({ appointment: appointmentId })
+      .populate("patient", "name patientId")
+      .populate("doctor", "name specialization")
+      .select("prescriptionId prescribedDate diagnosis medications instructions notes status expiryDate")
+      .sort({ prescribedDate: -1 })
       .lean();
     
     return NextResponse.json({
       success: true,
-      data: labTests,
+      data: prescriptions,
     });
     
   } catch (error: any) {
-    console.error("Error fetching lab tests:", error);
+    console.error("Error fetching appointment prescriptions:", error);
     return NextResponse.json(
-      { success: false, error: error.message || "Failed to fetch lab tests" },
+      { success: false, error: error.message || "Failed to fetch prescriptions" },
       { status: 500 }
     );
   }
