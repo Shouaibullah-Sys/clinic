@@ -1,4 +1,4 @@
-// app/laboratory/tests/[id]/collect/page.tsx
+//app/laboratory/tests/[id]/collect/page.tsx
 
 "use client";
 
@@ -46,9 +46,17 @@ interface TestInfo {
   patient: {
     name: string;
     patientId: string;
+    dateOfBirth?: string;
+    age?: number;
+    gender?: string;
+    phone?: string;
   };
-  doctor: {
+  doctor?: {
     name: string;
+  };
+  orderedBy?: {
+    name: string;
+    role?: string;
   };
   priority: string;
   status: string;
@@ -65,6 +73,7 @@ interface TestInfo {
     container?: string;
     remarks?: string;
   };
+  [key: string]: any; // Allow additional properties
 }
 
 interface SampleParameter {
@@ -114,6 +123,56 @@ const DEFAULT_PARAMETERS: Record<string, SampleParameter[]> = {
     { id: "2", name: "Quantity", value: "", unit: "", remarks: "" },
     { id: "3", name: "Appearance", value: "", unit: "", remarks: "" },
   ],
+};
+
+// Helper function to calculate age
+const calculateAge = (dateOfBirth: string | Date): number => {
+  if (!dateOfBirth) return 0;
+  const dob = new Date(dateOfBirth);
+  const today = new Date();
+  let age = today.getFullYear() - dob.getFullYear();
+  const monthDiff = today.getMonth() - dob.getMonth();
+  
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
+    age--;
+  }
+  
+  return age;
+};
+
+// Helper function to get doctor name
+const getDoctorName = (test: TestInfo | null): string => {
+  if (!test) return "Doctor not available";
+  
+  // Try doctor field first
+  if (test.doctor?.name) {
+    return test.doctor.name.startsWith('Dr. ') 
+      ? test.doctor.name 
+      : `Dr. ${test.doctor.name}`;
+  }
+  
+  // Try orderedBy if they are a doctor
+  if (test.orderedBy?.name && test.orderedBy?.role === 'doctor') {
+    const name = test.orderedBy.name;
+    return name.startsWith('Dr. ') ? name : `Dr. ${name}`;
+  }
+  
+  // Check if orderedBy has a name (might be a receptionist who ordered it)
+  if (test.orderedBy?.name) {
+    return test.orderedBy.name;
+  }
+  
+  return "Doctor not assigned";
+};
+
+// Format date for display
+const formatDate = (dateString?: string): string => {
+  if (!dateString) return "N/A";
+  try {
+    return format(new Date(dateString), 'dd/MM/yyyy');
+  } catch {
+    return "Invalid date";
+  }
 };
 
 export default function CollectSamplePage() {
@@ -167,6 +226,8 @@ export default function CollectSamplePage() {
         return;
       }
 
+      console.log(`Fetching test info for ID: ${params.id}`);
+      
       const response = await fetch(`/api/laboratory/tests/${params.id}/collect/info`, {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
@@ -180,12 +241,48 @@ export default function CollectSamplePage() {
       }
       
       if (!response.ok) {
-        throw new Error('Failed to fetch test information');
+        const errorText = await response.text();
+        console.error('API Error Response:', errorText);
+        throw new Error(`Failed to fetch test information: ${response.status}`);
       }
       
       const data = await response.json();
-      setTest(data.data);
+      console.log("API Response data:", data);
       
+      if (!data.success) {
+        throw new Error(data.error || "API returned unsuccessful response");
+      }
+      
+      // Process the data
+      const processedData: TestInfo = {
+        ...data.data,
+        doctor: data.data.doctor || { name: "Not Assigned" },
+        patient: {
+          name: data.data.patient?.name || "Unknown Patient",
+          patientId: data.data.patient?.patientId || "N/A",
+          phone: data.data.patient?.phone || null,
+          dateOfBirth: data.data.patient?.dateOfBirth || null,
+          age: data.data.patient?.age || 
+               (data.data.patient?.dateOfBirth 
+                 ? calculateAge(data.data.patient.dateOfBirth) 
+                 : undefined),
+          gender: data.data.patient?.gender || null
+        },
+        orderedBy: data.data.orderedBy || null,
+        collectionStatus: data.data.collectionStatus || "pending",
+        priority: data.data.priority || "routine",
+        status: data.data.status || "pending",
+        paymentVerified: data.data.paymentVerified || false,
+        charges: data.data.charges || {
+          paymentStatus: "pending",
+          paid: 0,
+          due: 0
+        }
+      };
+      
+      console.log("Processed test data:", processedData);
+      setTest(processedData);
+
       // Pre-fill specimen type if exists
       if (data.data.specimen?.type) {
         setSpecimenType(data.data.specimen.type);
@@ -203,7 +300,8 @@ export default function CollectSamplePage() {
         setSpecimenRemarks(data.data.specimen.remarks);
       }
     } catch (err: any) {
-      setError(err.message);
+      console.error("Error fetching test info:", err);
+      setError(err.message || "Failed to load test information");
     } finally {
       setLoading(false);
     }
@@ -301,13 +399,11 @@ export default function CollectSamplePage() {
   // Check conditions
   const condition1 = test?.status !== "cancelled";
   const condition2 = (test?.paymentVerified || test?.priority !== "routine");
-  // Handle undefined/null collectionStatus as "pending" (default)
   const effectiveCollectionStatus = test?.collectionStatus || "pending";
   const condition3 = ["pending", "scheduled"].includes(effectiveCollectionStatus);
 
   const canCollectSample = condition1 && condition2 && condition3;
   const requiresPaymentVerification = test?.priority === "routine" && !test?.paymentVerified;
-  const canProceed = test?.priority !== "routine" || test?.paymentVerified;
 
   if (loading) {
     return (
@@ -359,60 +455,59 @@ export default function CollectSamplePage() {
         </div>
       </div>
 
-      {/* Debug Information */}
-      <Card className="mb-6 bg-blue-50 border-blue-200">
-        <CardContent className="pt-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Info className="h-5 w-5 text-blue-600" />
-              <h3 className="font-semibold text-blue-800">Collection Status</h3>
+      {/* Debug Information (only in development) */}
+      {process.env.NODE_ENV === 'development' && (
+        <Card className="mb-6 border border-blue-200 dark:border-blue-800 bg-card">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Info className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                <h3 className="font-semibold text-blue-800 dark:text-blue-300">Debug Information</h3>
+              </div>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={fetchTestInfo}
+                className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
+              >
+                <RefreshCw className="h-4 w-4 mr-1" />
+                Refresh
+              </Button>
             </div>
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              onClick={fetchTestInfo}
-              className="text-blue-600 hover:text-blue-800"
-            >
-              <RefreshCw className="h-4 w-4 mr-1" />
-              Refresh
-            </Button>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 text-sm">
-            <div>
-              <span className="text-blue-600">Collection Status:</span>
-              <span className={`font-medium ml-2 ${test.collectionStatus === "pending" ? "text-yellow-600" : "text-green-600"}`}>
-                {test.collectionStatus}
-              </span>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 text-sm">
+              <div>
+                <p className="text-blue-600 dark:text-blue-400">Doctor Found:</p>
+                <p className="font-medium text-foreground">{getDoctorName(test)}</p>
+              </div>
+              <div>
+                <p className="text-blue-600 dark:text-blue-400">Patient Age:</p>
+                <p className="font-medium text-foreground">
+                  {test.patient.age ? `${test.patient.age} years` : "N/A"}
+                  {test.patient.dateOfBirth && ` (DOB: ${formatDate(test.patient.dateOfBirth)})`}
+                </p>
+              </div>
+              <div>
+                <p className="text-blue-600 dark:text-blue-400">Data Source:</p>
+                <p className="font-medium text-foreground">
+                  {test.doctor?.name ? "From doctor field" : 
+                   test.orderedBy?.role === 'doctor' ? "From orderedBy" : 
+                   "Not found"}
+                </p>
+              </div>
             </div>
-            <div>
-              <span className="text-blue-600">Payment Verified:</span>
-              <span className={`font-medium ml-2 ${test.paymentVerified ? "text-green-600" : "text-red-600"}`}>
-                {test.paymentVerified ? "Yes" : "No"}
-              </span>
-            </div>
-            <div>
-              <span className="text-blue-600">Priority:</span>
-              <span className="font-medium ml-2 capitalize">{test.priority}</span>
-            </div>
-            <div>
-              <span className="text-blue-600">Can Collect:</span>
-              <span className={`font-medium ml-2 ${canCollectSample ? "text-green-600" : "text-red-600"}`}>
-                {canCollectSample ? "Yes" : "No"}
-              </span>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Form - ALWAYS SHOW THIS */}
+        {/* Main Form */}
         <div className="lg:col-span-2 space-y-6">
           {/* Show warnings but don't hide form */}
           {requiresPaymentVerification && (
-            <Alert className="bg-yellow-50 border-yellow-200">
-              <CreditCard className="h-4 w-4 text-yellow-600" />
-              <AlertTitle className="text-yellow-800">Payment Verification Required</AlertTitle>
-              <AlertDescription className="text-yellow-700">
+            <Alert className="border border-yellow-200 dark:border-yellow-800 bg-card">
+              <CreditCard className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
+              <AlertTitle className="text-yellow-800 dark:text-yellow-300">Payment Verification Required</AlertTitle>
+              <AlertDescription className="text-yellow-700 dark:text-yellow-400">
                 This routine test requires payment verification before sample collection.
                 {test.charges.due > 0 && (
                   <span className="block mt-1 font-medium">
@@ -422,7 +517,7 @@ export default function CollectSamplePage() {
               </AlertDescription>
               <Button 
                 variant="outline" 
-                className="mt-2 border-yellow-300 text-yellow-700 hover:bg-yellow-100"
+                className="mt-2 border-yellow-300 dark:border-yellow-700 text-yellow-700 dark:text-yellow-400 hover:bg-yellow-50 dark:hover:bg-yellow-900/30"
                 onClick={() => router.push(`/laboratory/tests/${params.id}/verify-payment`)}
               >
                 Verify Payment Now
@@ -441,19 +536,28 @@ export default function CollectSamplePage() {
                   <li>Collection status is "pending" or "scheduled"</li>
                   <li>Test is not cancelled</li>
                 </ul>
+                <div className="mt-2 text-sm">
+                  <p>Current status:</p>
+                  <ul className="list-disc pl-5">
+                    <li>Payment Verified: {test.paymentVerified ? "Yes" : "No"}</li>
+                    <li>Collection Status: {test.collectionStatus}</li>
+                    <li>Test Status: {test.status}</li>
+                    <li>Priority: {test.priority}</li>
+                  </ul>
+                </div>
               </AlertDescription>
             </Alert>
           )}
 
-          {/* FORM - ALWAYS VISIBLE */}
+          {/* FORM */}
           <form onSubmit={handleSubmit} className="space-y-6 relative">
             {/* Disabled overlay when can't collect */}
             {!canCollectSample && (
-              <div className="absolute inset-0 bg-white/70 backdrop-blur-sm z-10 rounded-lg flex items-center justify-center">
-                <div className="text-center p-6 bg-white border rounded-lg shadow-lg">
+              <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-10 rounded-lg flex items-center justify-center">
+                <div className="text-center p-6 bg-card border rounded-lg shadow-lg">
                   <AlertTriangle className="h-12 w-12 mx-auto text-yellow-500 mb-4" />
                   <h3 className="text-lg font-semibold mb-2">Form Disabled</h3>
-                  <p className="text-gray-600 mb-4">
+                  <p className="text-muted-foreground mb-4">
                     Complete the requirements above to enable sample collection
                   </p>
                   {requiresPaymentVerification && (
@@ -661,7 +765,7 @@ export default function CollectSamplePage() {
                             onClick={() => removeParameter(param.id)}
                             variant="ghost"
                             size="sm"
-                            className="text-red-600 hover:text-red-700"
+                            className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
                             disabled={!canCollectSample}
                           >
                             <Trash2 className="h-4 w-4" />
@@ -824,20 +928,20 @@ export default function CollectSamplePage() {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Status</p>
-                <Badge className={
-                  test.collectionStatus === "pending" ? "bg-yellow-100 text-yellow-800" :
-                  test.collectionStatus === "scheduled" ? "bg-blue-100 text-blue-800" :
-                  "bg-gray-100 text-gray-800"
+                <Badge variant={
+                  test.collectionStatus === "pending" ? "secondary" :
+                  test.collectionStatus === "scheduled" ? "default" :
+                  "outline"
                 }>
                   {test.collectionStatus}
                 </Badge>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Priority</p>
-                <Badge className={
-                  test.priority === "emergency" ? "bg-red-100 text-red-800 border-red-300" :
-                  test.priority === "urgent" ? "bg-orange-100 text-orange-800 border-orange-300" :
-                  "bg-blue-100 text-blue-800 border-blue-300"
+                <Badge variant={
+                  test.priority === "emergency" ? "destructive" :
+                  test.priority === "urgent" ? "default" :
+                  "secondary"
                 }>
                   {test.priority}
                 </Badge>
@@ -845,7 +949,7 @@ export default function CollectSamplePage() {
               {test.specimen?.type && (
                 <div>
                   <p className="text-sm text-muted-foreground">Specimen Type</p>
-                  <p className="font-medium">{test.specimen.type}</p>
+                  <p className="font-medium capitalize">{test.specimen.type}</p>
                 </div>
               )}
             </CardContent>
@@ -867,6 +971,30 @@ export default function CollectSamplePage() {
                 <p className="text-sm text-muted-foreground">Patient ID</p>
                 <p className="font-medium">{test.patient.patientId}</p>
               </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Age</p>
+                <p className="font-medium">
+                  {test.patient.age ? `${test.patient.age} years` : "N/A"}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Gender</p>
+                <p className="font-medium capitalize">{test.patient.gender || "N/A"}</p>
+              </div>
+              {test.patient.phone && (
+                <div>
+                  <p className="text-sm text-muted-foreground">Phone</p>
+                  <p className="font-medium">{test.patient.phone}</p>
+                </div>
+              )}
+              {test.patient.dateOfBirth && (
+                <div>
+                  <p className="text-sm text-muted-foreground">Date of Birth</p>
+                  <p className="font-medium">
+                    {formatDate(test.patient.dateOfBirth)}
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -881,14 +1009,18 @@ export default function CollectSamplePage() {
               <div>
                 <p className="text-sm text-muted-foreground">Doctor</p>
                 <p className="font-medium">
-                  {test.doctor?.name 
-                    ? `Dr. ${test.doctor.name}`
-                    : test.doctor 
-                      ? test.doctor.toString() 
-                      : 'Doctor not assigned'
-                  }
+                  {getDoctorName(test)}
                 </p>
               </div>
+              {test.orderedBy && (
+                <div>
+                  <p className="text-sm text-muted-foreground">Ordered By</p>
+                  <p className="font-medium">
+                    {test.orderedBy.name}
+                    {test.orderedBy.role && ` (${test.orderedBy.role})`}
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -903,11 +1035,11 @@ export default function CollectSamplePage() {
               <div>
                 <p className="text-sm text-muted-foreground">Payment Status</p>
                 <div className="flex items-center gap-2">
-                  <Badge className={
-                    test.paymentVerified ? "bg-green-100 text-green-800" :
-                    test.charges.paymentStatus === "paid" ? "bg-green-100 text-green-800" :
-                    test.charges.paymentStatus === "partial" ? "bg-yellow-100 text-yellow-800" :
-                    "bg-red-100 text-red-800"
+                  <Badge variant={
+                    test.paymentVerified ? "default" :
+                    test.charges.paymentStatus === "paid" ? "default" :
+                    test.charges.paymentStatus === "partial" ? "secondary" :
+                    "destructive"
                   }>
                     {test.paymentVerified ? "Verified" : test.charges.paymentStatus}
                   </Badge>
@@ -918,12 +1050,12 @@ export default function CollectSamplePage() {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Paid Amount</p>
-                <p className="font-medium text-green-600">₹{test.charges.paid}</p>
+                <p className="font-medium text-green-600 dark:text-green-400">₹{test.charges.paid}</p>
               </div>
               {test.charges.due > 0 && (
                 <div>
                   <p className="text-sm text-muted-foreground">Due Amount</p>
-                  <p className="font-medium text-red-600">₹{test.charges.due}</p>
+                  <p className="font-medium text-red-600 dark:text-red-400">₹{test.charges.due}</p>
                 </div>
               )}
               {test.priority === "routine" && !test.paymentVerified && (

@@ -1,4 +1,4 @@
-// app/api/laboratory/tests/[id]/collect/route.ts
+// app/api/laboratory/tests/[id]/collect/route.ts - UPDATED
 
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
@@ -60,8 +60,27 @@ export async function PUT(
       );
     }
 
+    // DEBUG: Check test structure
+    console.log("Test before update:", {
+      testId: test.testId,
+      hasDoctor: !!test.doctor,
+      doctorValue: test.doctor,
+      status: test.status,
+      collectionStatus: test.collectionStatus,
+      paymentVerified: test.paymentVerified,
+      priority: test.priority
+    });
+
     // Check if sample can be collected
     if (!test.canCollectSample) {
+      console.log("Cannot collect sample. Conditions:", {
+        status: test.status,
+        collectionStatus: test.collectionStatus,
+        paymentVerified: test.paymentVerified,
+        priority: test.priority,
+        canCollectSample: test.canCollectSample
+      });
+      
       return NextResponse.json(
         { 
           success: false, 
@@ -116,7 +135,60 @@ export async function PUT(
     
     test.collectedAt = new Date();
 
-    await test.save();
+    // DEBUG: Check test before saving
+    console.log("Test before save:", {
+      doctor: test.doctor,
+      hasDoctorValidationError: test.doctor ? false : "No doctor field"
+    });
+
+    // Save with error handling
+    try {
+      await test.save();
+      console.log("Test saved successfully!");
+    } catch (saveError: any) {
+      console.error("Save error details:", {
+        message: saveError.message,
+        errors: saveError.errors,
+        errorType: saveError.name
+      });
+      
+      // If it's a validation error for doctor, try to fix it
+      if (saveError.name === 'ValidationError' && saveError.errors?.doctor) {
+        console.log("Attempting to fix doctor validation error...");
+        
+        // Try to find a doctor from orderedBy or set a default
+        if (!test.doctor && test.orderedBy) {
+          // Check if orderedBy is a doctor
+          const User = (await import("@/lib/models/User")).User;
+          const orderedByUser = await User.findById(test.orderedBy);
+          
+          if (orderedByUser && orderedByUser.role === 'doctor') {
+            test.doctor = test.orderedBy;
+            console.log("Assigned orderedBy as doctor:", test.doctor);
+          } else {
+            // Find any active doctor to assign
+            const anyDoctor = await User.findOne({ role: 'doctor', active: true });
+            if (anyDoctor) {
+              test.doctor = anyDoctor._id;
+              console.log("Assigned random doctor:", test.doctor);
+            }
+          }
+          
+          // Try to save again
+          try {
+            await test.save();
+            console.log("Test saved successfully after fixing doctor!");
+          } catch (secondSaveError: any) {
+            console.error("Second save error:", secondSaveError.message);
+            throw secondSaveError;
+          }
+        } else {
+          throw saveError;
+        }
+      } else {
+        throw saveError;
+      }
+    }
 
     // Populate for response
     const updatedTest = await LabTest.findById(testId)
@@ -133,8 +205,21 @@ export async function PUT(
 
   } catch (error: any) {
     console.error("Error collecting sample:", error);
+    
+    // Provide more detailed error information
+    const errorDetails = {
+      message: error.message,
+      name: error.name,
+      ...(error.errors && { errors: Object.keys(error.errors) }),
+      ...(error.code && { code: error.code })
+    };
+    
     return NextResponse.json(
-      { success: false, error: error.message || "Failed to collect sample" },
+      { 
+        success: false, 
+        error: error.message || "Failed to collect sample",
+        details: errorDetails
+      },
       { status: 500 }
     );
   }

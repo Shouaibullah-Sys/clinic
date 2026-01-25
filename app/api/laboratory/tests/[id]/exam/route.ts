@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
 import { LabTest } from "@/lib/models/LabTest";
 import { authenticateRequest, canAccessLaboratory } from "@/lib/auth";
+import mongoose from "mongoose";
 
 export async function POST(
   request: NextRequest,
@@ -77,9 +78,8 @@ export async function POST(
         remarks: param.remarks || "",
       })),
       interpretation: interpretation || "",
-      reportedBy: auth.userId,
+      reportedBy: new mongoose.Types.ObjectId(auth.userId),
       reportedAt: new Date(),
-      technicianNotes: technicianNotes || "",
     };
 
     await test.save();

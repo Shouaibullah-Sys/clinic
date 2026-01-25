@@ -1,4 +1,4 @@
-// lib/models/LabTest.ts
+// lib/models/LabTest.ts - COMPLETE FIXED VERSION
 
 import mongoose, { Schema, model, models } from "mongoose";
 
@@ -22,7 +22,7 @@ export interface ILabTest extends mongoose.Document {
   testId: string;
   appointment?: mongoose.Types.ObjectId;
   patient: mongoose.Types.ObjectId;
-  doctor: mongoose.Types.ObjectId;
+  doctor?: mongoose.Types.ObjectId;
   testName: string;
   category: string;
   description?: string;
@@ -70,23 +70,19 @@ export interface ILabTest extends mongoose.Document {
   paymentVerifiedAt?: Date;
   
   specimen: {
-  type: {
-    type: String,
-    enum: ["blood", "urine", "stool", "tissue", "saliva", "other"],
-  },
-  collectionTime: Date,
-  collectedBy: { type: Schema.Types.ObjectId, ref: "User" },
-  quantity: String,
-  container: String,
-  remarks: String,
-  // Add parameters field
-  parameters: [{
-    name: { type: String, required: true },
-    value: { type: String, required: true },
-    unit: { type: String },
-    remarks: { type: String },
-  }],
-},
+    type: string;
+    collectionTime?: Date;
+    collectedBy?: mongoose.Types.ObjectId;
+    quantity?: string;
+    container?: string;
+    remarks?: string;
+    parameters?: Array<{
+      name: string;
+      value: string;
+      unit?: string;
+      remarks?: string;
+    }>;
+  };
   results?: {
     parameters: Array<{
       name: string;
@@ -118,6 +114,7 @@ export interface ILabTest extends mongoose.Document {
   isUrgent: boolean;
   canCollectSample: boolean;
   canProcess: boolean;
+  formattedOrderedDate: string;
 }
 
 // Define static methods interface
@@ -131,30 +128,49 @@ interface LabTestModel extends mongoose.Model<ILabTest> {
 }
 
 const labTestChargesSchema = new Schema<ILabTestCharges>({
-  basePrice: { type: Number, default: 0 },
-  tax: { type: Number, default: 0 },
-  discount: { type: Number, default: 0 },
-  otherCharges: { type: Number, default: 0 },
-  totalAmount: { type: Number, default: 0 },
-  paid: { type: Number, default: 0 },
-  due: { type: Number, default: 0 },
+  basePrice: { type: Number, default: 0, min: 0 },
+  tax: { type: Number, default: 0, min: 0 },
+  discount: { type: Number, default: 0, min: 0 },
+  otherCharges: { type: Number, default: 0, min: 0 },
+  totalAmount: { type: Number, default: 0, min: 0 },
+  paid: { type: Number, default: 0, min: 0 },
+  due: { type: Number, default: 0, min: 0 },
   paymentStatus: {
     type: String,
     enum: ["pending", "partial", "paid", "cancelled"],
     default: "pending",
   },
-  paymentMethod: String,
-  transactionId: String,
-  paymentDate: Date,
+  paymentMethod: { type: String, trim: true },
+  transactionId: { type: String, trim: true },
+  paymentDate: { type: Date },
   collectedBy: { type: Schema.Types.ObjectId, ref: "User" },
 });
 
-const labTestSchema = new Schema<ILabTest>(
+const specimenSchema = new Schema({
+  type: {
+    type: String,
+    enum: ["blood", "urine", "stool", "tissue", "saliva", "other"],
+  },
+  collectionTime: { type: Date },
+  collectedBy: { type: Schema.Types.ObjectId, ref: "User" },
+  quantity: { type: String, trim: true },
+  container: { type: String, trim: true },
+  remarks: { type: String, trim: true },
+  parameters: [{
+    name: { type: String, required: true, trim: true },
+    value: { type: String, required: true, trim: true },
+    unit: { type: String, trim: true },
+    remarks: { type: String, trim: true },
+  }],
+});
+
+const labTestSchema = new Schema<ILabTest, LabTestModel>(
   {
     testId: {
       type: String,
       required: true,
       uppercase: true,
+      // NO index: true here - we'll define index separately
     },
     appointment: {
       type: Schema.Types.ObjectId,
@@ -168,7 +184,6 @@ const labTestSchema = new Schema<ILabTest>(
     doctor: {
       type: Schema.Types.ObjectId,
       ref: "User",
-      required: true,
     },
     testName: {
       type: String,
@@ -245,6 +260,7 @@ const labTestSchema = new Schema<ILabTest>(
       type: String,
       unique: true,
       sparse: true,
+      // NO index: true here
     },
     collectionStatus: {
       type: String,
@@ -252,15 +268,15 @@ const labTestSchema = new Schema<ILabTest>(
       default: "pending",
     },
     collectionDetails: {
-      collectionTime: Date,
+      collectionTime: { type: Date },
       collectedBy: { type: Schema.Types.ObjectId, ref: "User" },
-      collectionNotes: String,
-      sampleId: String,
+      collectionNotes: { type: String, trim: true },
+      sampleId: { type: String, trim: true },
       sampleCondition: {
         type: String,
         enum: ["satisfactory", "hemolyzed", "clotted", "insufficient", "contaminated", "other"],
       },
-      sampleConditionNotes: String,
+      sampleConditionNotes: { type: String, trim: true },
     },
     processingStatus: {
       type: String,
@@ -268,18 +284,18 @@ const labTestSchema = new Schema<ILabTest>(
       default: "pending",
     },
     processingDetails: {
-      processingStartTime: Date,
-      processingEndTime: Date,
+      processingStartTime: { type: Date },
+      processingEndTime: { type: Date },
       processedBy: { type: Schema.Types.ObjectId, ref: "User" },
-      equipmentUsed: String,
-      reagentsUsed: [String],
+      equipmentUsed: { type: String, trim: true },
+      reagentsUsed: [{ type: String, trim: true }],
       qualityControl: {
-        passed: Boolean,
-        notes: String,
+        passed: { type: Boolean },
+        notes: { type: String, trim: true },
         performedBy: { type: Schema.Types.ObjectId, ref: "User" },
-        performedAt: Date,
+        performedAt: { type: Date },
       },
-      processingNotes: String,
+      processingNotes: { type: String, trim: true },
     },
     verificationStatus: {
       type: String,
@@ -288,13 +304,12 @@ const labTestSchema = new Schema<ILabTest>(
     },
     verificationDetails: {
       verifiedBy: { type: Schema.Types.ObjectId, ref: "User" },
-      verifiedAt: Date,
-      verificationNotes: String,
+      verifiedAt: { type: Date },
+      verificationNotes: { type: String, trim: true },
     },
     paymentVerified: {
       type: Boolean,
       default: false,
-      required: true,
     },
     paymentVerifiedBy: {
       type: Schema.Types.ObjectId,
@@ -305,44 +320,30 @@ const labTestSchema = new Schema<ILabTest>(
     },
     
     specimen: {
-  type: {
-    type: String,
-    enum: ["blood", "urine", "stool", "tissue", "saliva", "other"],
-  },
-  collectionTime: Date,
-  collectedBy: { type: Schema.Types.ObjectId, ref: "User" },
-  quantity: String,
-  container: String,
-  remarks: String,
-  // Add parameters field
-  parameters: [{
-    name: { type: String, required: true },
-    value: { type: String, required: true },
-    unit: { type: String },
-    remarks: { type: String },
-  }],
-},
+      type: specimenSchema,
+      default: () => ({}),
+    },
     results: {
       parameters: [
         {
-          name: { type: String, required: true },
+          name: { type: String, required: true, trim: true },
           value: { type: Schema.Types.Mixed, required: true },
-          unit: String,
-          normalRange: String,
+          unit: { type: String, trim: true },
+          normalRange: { type: String, trim: true },
           flag: {
             type: String,
             enum: ["normal", "low", "high", "critical"],
             default: "normal",
           },
-          remarks: String,
+          remarks: { type: String, trim: true },
         },
       ],
-      interpretation: String,
+      interpretation: { type: String, trim: true },
       reportedBy: { type: Schema.Types.ObjectId, ref: "User" },
-      reportedAt: Date,
+      reportedAt: { type: Date },
       verifiedBy: { type: Schema.Types.ObjectId, ref: "User" },
-      verifiedAt: Date,
-      reportUrl: String,
+      verifiedAt: { type: Date },
+      reportUrl: { type: String, trim: true },
     },
     orderedBy: {
       type: Schema.Types.ObjectId,
@@ -353,10 +354,10 @@ const labTestSchema = new Schema<ILabTest>(
       type: Date,
       default: Date.now,
     },
-    collectedAt: Date,
-    completedAt: Date,
-    reportedAt: Date,
-    cancelledAt: Date,
+    collectedAt: { type: Date },
+    completedAt: { type: Date },
+    reportedAt: { type: Date },
+    cancelledAt: { type: Date },
   },
   {
     timestamps: true,
@@ -365,7 +366,7 @@ const labTestSchema = new Schema<ILabTest>(
   }
 );
 
-// Indexes for performance
+// Indexes for performance - ONLY schema.index() method (NO index: true in fields)
 labTestSchema.index({ testId: 1 }, { unique: true });
 labTestSchema.index({ appointment: 1 });
 labTestSchema.index({ patient: 1 });
@@ -380,6 +381,7 @@ labTestSchema.index({ processingStatus: 1 });
 labTestSchema.index({ verificationStatus: 1 });
 labTestSchema.index({ paymentVerified: 1 });
 labTestSchema.index({ priority: 1 });
+labTestSchema.index({ labReferenceId: 1 }, { unique: true, sparse: true });
 
 // Compound indexes
 labTestSchema.index({ patient: 1, status: 1 });
@@ -388,20 +390,21 @@ labTestSchema.index({ appointment: 1, status: 1 });
 labTestSchema.index({ "charges.paymentStatus": 1, status: 1 });
 labTestSchema.index({ priority: 1, paymentVerified: 1 });
 labTestSchema.index({ collectionStatus: 1, processingStatus: 1 });
+labTestSchema.index({ patient: 1, orderedAt: -1 });
 
 // Virtual for calculated total amount
 labTestSchema.virtual("calculatedTotal").get(function () {
   const base = this.discountedPrice || this.price;
-  const tax = this.charges.tax;
-  const other = this.charges.otherCharges;
-  const discount = this.charges.discount;
+  const tax = this.charges?.tax || 0;
+  const other = this.charges?.otherCharges || 0;
+  const discount = this.charges?.discount || 0;
   
   return base + tax + other - discount;
 });
 
 // Virtual for isPaid
 labTestSchema.virtual("isPaid").get(function () {
-  return this.charges.paymentStatus === "paid";
+  return this.charges?.paymentStatus === "paid";
 });
 
 // Virtual for isUrgent
@@ -411,14 +414,8 @@ labTestSchema.virtual("isUrgent").get(function () {
 
 // Virtual for canCollectSample
 labTestSchema.virtual("canCollectSample").get(function () {
-  // Sample can be collected if:
-  // 1. Test is not cancelled
-  // 2. Payment is verified OR test doesn't require payment verification (urgent/emergency)
-  // 3. Collection status is pending or scheduled
-
   const condition1 = this.status !== "cancelled";
   const condition2 = (this.paymentVerified || this.priority !== "routine");
-  // Handle undefined/null collectionStatus as "pending" (default)
   const effectiveCollectionStatus = this.collectionStatus || "pending";
   const condition3 = ["pending", "scheduled"].includes(effectiveCollectionStatus);
 
@@ -427,15 +424,35 @@ labTestSchema.virtual("canCollectSample").get(function () {
 
 // Virtual for canProcess
 labTestSchema.virtual("canProcess").get(function () {
-  // Test can be processed if:
-  // 1. Sample is collected
-  // 2. Payment is verified
-  // 3. Processing status is pending
   return (
     this.collectionStatus === "collected" &&
     this.paymentVerified &&
     this.processingStatus === "pending"
   );
+});
+
+// Virtual for formatted ordered date
+labTestSchema.virtual("formattedOrderedDate").get(function () {
+  return this.orderedAt.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+});
+
+// Virtual for test status color
+labTestSchema.virtual("statusColor").get(function () {
+  switch (this.status) {
+    case "completed":
+    case "reported":
+      return "success";
+    case "cancelled":
+      return "error";
+    case "processing":
+      return "warning";
+    default:
+      return "default";
+  }
 });
 
 // Pre-save hook to update charges and payment verification
@@ -453,7 +470,6 @@ labTestSchema.pre("save", function (next) {
   // Update payment status
   if (labTest.charges.due === 0 && labTest.charges.totalAmount > 0) {
     labTest.charges.paymentStatus = "paid";
-    // Auto-verify payment if fully paid
     if (!labTest.paymentVerified) {
       labTest.paymentVerified = true;
       labTest.paymentVerifiedAt = new Date();
@@ -497,6 +513,18 @@ labTestSchema.pre("save", function (next) {
     labTest.reportedAt = new Date();
   }
   
+  next();
+});
+
+// Pre-validate hook
+labTestSchema.pre("validate", function (next) {
+  if (!this.testId) {
+    const date = new Date();
+    const year = date.getFullYear().toString().slice(-2);
+    const month = (date.getMonth() + 1).toString().padStart(2, "0");
+    const random = Math.floor(1000 + Math.random() * 9000);
+    this.testId = `LAB${year}${month}${random}`;
+  }
   next();
 });
 
@@ -582,6 +610,82 @@ labTestSchema.statics.unverifyPayment = async function (
     },
     { new: true }
   );
+};
+
+// Instance method to update collection status
+labTestSchema.methods.updateCollectionStatus = function (status: string, details?: any) {
+  this.collectionStatus = status;
+  if (details) {
+    this.collectionDetails = { ...this.collectionDetails, ...details };
+  }
+  if (status === "collected" && !this.collectedAt) {
+    this.collectedAt = new Date();
+  }
+  return this.save();
+};
+
+// Instance method to update processing status
+labTestSchema.methods.updateProcessingStatus = function (status: string, details?: any) {
+  this.processingStatus = status;
+  if (details) {
+    this.processingDetails = { ...this.processingDetails, ...details };
+  }
+  if (status === "completed" && !this.completedAt) {
+    this.completedAt = new Date();
+  }
+  return this.save();
+};
+
+// Instance method to update verification status
+labTestSchema.methods.updateVerificationStatus = function (status: string, details?: any) {
+  this.verificationStatus = status;
+  if (details) {
+    this.verificationDetails = { ...this.verificationDetails, ...details };
+  }
+  if (status === "verified" && !this.reportedAt) {
+    this.reportedAt = new Date();
+    this.status = "reported";
+  }
+  return this.save();
+};
+
+// Instance method to add results
+labTestSchema.methods.addResults = function (results: any, reportedBy: string) {
+  this.results = results;
+  this.results.reportedBy = reportedBy;
+  this.results.reportedAt = new Date();
+  this.status = "completed";
+  return this.save();
+};
+
+// Instance method to get test summary
+labTestSchema.methods.getSummary = function () {
+  return {
+    testId: this.testId,
+    patientId: this.patient,
+    doctorId: this.doctor,
+    testName: this.testName,
+    category: this.category,
+    status: this.status,
+    priority: this.priority,
+    orderedAt: this.orderedAt,
+    price: this.price,
+    paymentStatus: this.charges?.paymentStatus,
+    paymentVerified: this.paymentVerified,
+    collectionStatus: this.collectionStatus,
+    processingStatus: this.processingStatus,
+    verificationStatus: this.verificationStatus,
+  };
+};
+
+// Instance method to cancel test
+labTestSchema.methods.cancel = function (reason?: string) {
+  this.status = "cancelled";
+  this.cancelledAt = new Date();
+  if (reason) {
+    this.notes = this.notes ? `${this.notes}\nCancelled: ${reason}` : `Cancelled: ${reason}`;
+  }
+  return this.save();
 };
 
 export const LabTest = (models.LabTest || model<ILabTest, LabTestModel>("LabTest", labTestSchema)) as LabTestModel;

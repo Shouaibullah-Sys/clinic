@@ -9,6 +9,7 @@ import {
   Menu,
   X,
   HandCoins,
+  FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeProvider } from "@/providers/ThemeProvider";
@@ -20,6 +21,8 @@ import { Metadata } from "next";
 
 const navLinks = [
   { href: "/laboratory/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/laboratory/tests", label: "Tests", icon: ClipboardList },
+  { href: "/laboratory/templates", label: "Templates", icon: FileText },
 ];
 
 export default function LaboratoryLayout({
@@ -68,7 +71,7 @@ export default function LaboratoryLayout({
           <div className="flex h-full flex-col gap-2">
             <div className="flex h-14 items-center border-b px-4 lg:h-15">
               <Link
-                href="laboratory/dashboard"
+                href="/laboratory/dashboard"
                 className="flex items-center gap-2 font-semibold"
               >
                 <span className="text-lg">Laboratory Module</span>
@@ -141,7 +144,7 @@ export default function LaboratoryLayout({
               <SheetContent side="left" className="sm:max-w-xs">
                 <nav className="grid gap-6 text-lg font-medium">
                   <div className="flex items-center justify-between mb-4">
-                    <span className="font-semibold">Pharmacy</span>
+                    <span className="font-semibold">Laboratory Module</span>
                     <Button
                       variant="ghost"
                       size="icon"

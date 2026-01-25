@@ -69,13 +69,16 @@ export async function POST(
     }
     
     // Check if appointment exists
-    const appointment = await Appointment.findById(appointmentId);
+    const appointment = await Appointment.findById(appointmentId)
+      .populate("doctor", "name");
     if (!appointment) {
       return NextResponse.json(
         { success: false, error: "Appointment not found" },
         { status: 404 }
       );
     }
+
+    console.log(`Creating lab test for appointment ${appointmentId}, appointment doctor:`, appointment.doctor);
     
     // Generate test ID
     const date = new Date();
