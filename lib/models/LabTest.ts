@@ -392,6 +392,22 @@ labTestSchema.index({ priority: 1, paymentVerified: 1 });
 labTestSchema.index({ collectionStatus: 1, processingStatus: 1 });
 labTestSchema.index({ patient: 1, orderedAt: -1 });
 
+// Add these indexes for better laboratory query performance
+labTestSchema.index({ paymentVerified: 1, collectionStatus: 1 });
+labTestSchema.index({ paymentVerified: 1, processingStatus: 1 });
+labTestSchema.index({ collectionStatus: 1, processingStatus: 1, status: 1 });
+labTestSchema.index({ priority: 1, collectionStatus: 1 });
+labTestSchema.index({ orderedAt: -1, collectionStatus: 1 });
+labTestSchema.index({ "charges.paymentStatus": 1, collectionStatus: 1 });
+
+// For technician queries
+labTestSchema.index({ 
+  paymentVerified: 1, 
+  priority: 1, 
+  collectionStatus: 1,
+  processingStatus: 1 
+});
+
 // Virtual for calculated total amount
 labTestSchema.virtual("calculatedTotal").get(function () {
   const base = this.discountedPrice || this.price;

@@ -6,7 +6,7 @@ import { z } from 'zod';
 
 const JwtPayloadSchema = z.object({
   id: z.string(),
-  role: z.enum(['admin', 'doctor', 'nurse', 'staff', 'receptionist']),
+  role: z.enum(['admin', 'staff', 'doctor', 'nurse', 'receptionist', 'pharmacist', 'lab_technician', 'radiologist', 'admission']),
   name: z.string().optional(),
   email: z.string().email().optional(),
   employeeId: z.string().optional(),

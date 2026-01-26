@@ -1,4 +1,4 @@
-// app/api/pharmacy/prescriptions/route.ts
+// app/api/pharmacy/prescriptions/route.ts - UPDATED
 import { NextRequest, NextResponse } from "next/server";
 import { Prescription } from "@/lib/models/Prescription";
 import { MedicineStock } from "@/lib/models/MedicineStock";
@@ -10,7 +10,7 @@ const PrescriptionSchema = z.object({
   patientName: z.string().min(2),
   patientPhone: z.string().min(10),
   invoiceNumber: z.string().min(1),
-  items: z.array(
+  medications: z.array(
     z.object({
       medicine: z.string(),
       quantity: z.number().min(1),
@@ -28,14 +28,14 @@ export async function GET(req: NextRequest) {
   await dbConnect();
   const payload = await getTokenPayload(req);
 
-  if (!payload || !(payload.role === "pharmacy" || payload.role === "admin")) {
+  if (!payload || !(payload.role === "pharmacist" || payload.role === "admin")) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
     const { searchParams } = new URL(req.url);
     const page = parseInt(searchParams.get("page") || "1");
-    const limit = Math.min(parseInt(searchParams.get("limit") || "20"), 100); // Max 100 records
+    const limit = Math.min(parseInt(searchParams.get("limit") || "20"), 100);
     const search = searchParams.get("search") || "";
     const skip = (page - 1) * limit;
 
@@ -53,7 +53,11 @@ export async function GET(req: NextRequest) {
 
     // Use regular query with pagination for better TypeScript compatibility
     const prescriptions = await Prescription.find(query)
-      .populate("items.medicine", "name batchNumber")
+      .populate({
+        path: "medications.medicine",
+        select: "name batchNumber currentQuantity sellingPrice unitPrice",
+        model: "MedicineStock" // Explicitly specify the model
+      })
       .populate("issuedBy", "name")
       .sort({ createdAt: -1 })
       .skip(skip)
@@ -88,7 +92,7 @@ export async function POST(req: NextRequest) {
   await dbConnect();
   const payload = await getTokenPayload(req);
 
-  if (!payload || !(payload.role === "pharmacy" || payload.role === "admin")) {
+  if (!payload || !(payload.role === "pharmacist" || payload.role === "admin")) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -100,8 +104,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(validation.error, { status: 400 });
     }
 
-    // Process each item and update stock
-    for (const item of validation.data.items) {
+    // Process each medication and update stock
+    for (const item of validation.data.medications) {
       const medicine = await MedicineStock.findById(item.medicine);
       if (!medicine) {
         return NextResponse.json(

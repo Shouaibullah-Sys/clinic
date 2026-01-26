@@ -1,8 +1,10 @@
-// store/useAuthStore.ts
+// store/useAuthStore.ts - UPDATED
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-export type UserRole = "admin" | "staff" | "doctor" | "nurse" | "receptionist" | "pharmacist" | "lab_technician" | "radiologist" | "admission"; 
+// ADD "pharmacy" to the UserRole type
+export type UserRole = "admin" | "staff" | "doctor" | "nurse" | "receptionist" | "pharmacist" | "lab_technician" | "radiologist" | "admission" | "pharmacy"; // Added "pharmacy"
+
 export interface User {
   _id: string;
   name: string;
@@ -46,7 +48,6 @@ export const useAuthStore = create<AuthState>()(
       error: null,
 
       login: (user, accessToken, refreshToken) => {
-        // Set HTTP-only cookies via API call (handled by server)
         set({
           user,
           accessToken,
@@ -63,7 +64,6 @@ export const useAuthStore = create<AuthState>()(
 
       logout: async () => {
         try {
-          // Call logout API to clear server-side cookies
           await fetch("/api/auth/logout", {
             method: "POST",
             credentials: "include",
@@ -72,7 +72,6 @@ export const useAuthStore = create<AuthState>()(
           console.error("Logout API call failed:", error);
         }
 
-        // Clear client-side state
         set({
           user: null,
           accessToken: null,
@@ -85,12 +84,10 @@ export const useAuthStore = create<AuthState>()(
 
       initialize: async () => {
         try {
-          // Check if we have a token in localStorage
           const storedToken = localStorage.getItem("auth-storage");
           if (storedToken) {
             const parsed = JSON.parse(storedToken);
             if (parsed.state.accessToken) {
-              // Verify token is still valid by calling /api/auth/me
               const response = await fetch("/api/auth/me", {
                 headers: {
                   Authorization: `Bearer ${parsed.state.accessToken}`,
@@ -111,7 +108,6 @@ export const useAuthStore = create<AuthState>()(
             }
           }
 
-          // If no token in localStorage, try to get from cookies via /api/auth/me
           try {
             const response = await fetch("/api/auth/me", {
               credentials: "include",
@@ -119,11 +115,9 @@ export const useAuthStore = create<AuthState>()(
 
             if (response.ok) {
               const data = await response.json();
-              // Decode the token to get user info (since we don't have it in cookies)
-              // For now, we'll set a placeholder and let the API handle auth
               set({
                 user: data.user,
-                accessToken: null, // We'll rely on cookies for API calls
+                accessToken: null,
                 isAuthenticated: true,
                 isLoading: false,
               });
@@ -133,7 +127,6 @@ export const useAuthStore = create<AuthState>()(
             console.log("No valid session in cookies either");
           }
 
-          // If no valid token, try to refresh
           const refreshToken = get().refreshToken;
           if (refreshToken) {
             try {

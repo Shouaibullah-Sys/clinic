@@ -25,6 +25,7 @@ const navLinks = [
   { href: "/pharmacy", label: "Dashboard", icon: LayoutDashboard },
   { href: "/pharmacy/stock", label: "Stock Management", icon: Package },
   { href: "/pharmacy/issue", label: "Issue Medicine", icon: Pill },
+  { href: "/pharmacy/dispense", label: "Dispense Medicine", icon: HandCoins },
   { href: "/pharmacy/inventory", label: "Inventory", icon: CheckCheck },
 ];
 
@@ -73,7 +74,7 @@ export default function PharmacyLayout({
         {/* Desktop Sidebar */}
         <aside className="hidden md:block w-64 border-r bg-muted/40">
           <div className="flex h-full flex-col gap-2">
-            <div className="flex h-14 items-center border-b px-4 lg:h-[60px]">
+            <div className="flex h-14 items-center border-b px-4 lg:h-15">
               <Link
                 href="/pharmacy"
                 className="flex items-center gap-2 font-semibold"

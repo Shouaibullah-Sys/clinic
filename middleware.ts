@@ -75,7 +75,10 @@ const roleRoutes: Record<string, string[]> = {
     "/medications",
     "/pharmacy/dashboard",
     "/pharmacy/stock",
-    "/pharmacy/prescriptions"
+    "/pharmacy/prescriptions",
+      "/pharmacy/select-prescription", 
+      "/pharmacy/dispense", 
+  "/pharmacy/pending-prescriptions"
   ],
   lab_technician: [
     "/laboratory",

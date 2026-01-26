@@ -79,7 +79,7 @@ interface Prescription {
   invoiceNumber: string;
   patientName: string;
   patientPhone: string;
-  items: PrescriptionItem[];
+  medications: PrescriptionItem[];
   totalAmount?: number;
   amountPaid?: number;
   paymentMethod: string;
@@ -523,8 +523,8 @@ export default function PharmacyPage() {
     doc.text("Prescribed Items:", 14, 80);
 
     const itemData =
-      prescription.items && Array.isArray(prescription.items)
-        ? prescription.items.map((item) => [
+      prescription.medications && Array.isArray(prescription.medications)
+        ? prescription.medications.map((item) => [
             item.medicine?.name || "Unknown",
             item.quantity?.toString() || "0",
             `AFN ${(item.unitPrice || 0).toFixed(2)}`,

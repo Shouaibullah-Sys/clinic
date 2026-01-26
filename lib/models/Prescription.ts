@@ -1,39 +1,46 @@
-// lib/models/Prescription.ts - CORRECTED VERSION
+// lib/models/Prescription.ts - UPDATED
+import mongoose, { Schema, model, models, Document } from "mongoose";
 
-import mongoose, { Schema, model, models } from "mongoose";
-
-export interface IPrescription extends mongoose.Document {
+export interface IPrescription extends Document {
   prescriptionId: string;
   patient: mongoose.Types.ObjectId;
   doctor: mongoose.Types.ObjectId;
   appointment?: mongoose.Types.ObjectId;
-  prescribedDate: Date;
   medications: {
+    medicine: mongoose.Types.ObjectId;
     name: string;
     dosage: string;
     frequency: string;
     duration: string;
-    route: string;
-    instructions?: string;
+    instructions: string;
     quantity: number;
+    price: number;
+    route: string;
     refills: number;
     refillsRemaining: number;
   }[];
   diagnosis: string;
-  instructions: string;
   notes?: string;
-  status: "active" | "completed" | "cancelled" | "expired";
+  instructions?: string;
+  prescribedDate: Date;
   expiryDate: Date;
+  followUpDate?: Date;
+  status: "active" | "completed" | "cancelled" | "expired";
+  dispensedBy?: mongoose.Types.ObjectId; // Pharmacist who dispensed
+  dispensedDate?: Date;
+  dispensingStatus: "pending" | "partial" | "full" | "cancelled";
+  pharmacyNotes?: string;
   createdAt: Date;
   updatedAt: Date;
 }
 
-const prescriptionSchema = new Schema<IPrescription>(
+const PrescriptionSchema = new Schema<IPrescription>(
   {
     prescriptionId: {
       type: String,
       required: true,
       unique: true,
+      uppercase: true,
     },
     patient: {
       type: Schema.Types.ObjectId,
@@ -49,82 +56,64 @@ const prescriptionSchema = new Schema<IPrescription>(
       type: Schema.Types.ObjectId,
       ref: "Appointment",
     },
+    medications: [{
+      medicine: { type: Schema.Types.ObjectId, ref: "MedicineStock", required: true },
+      name: { type: String, required: true },
+      dosage: { type: String, required: true },
+      frequency: { type: String, required: true },
+      duration: { type: String, required: true },
+      instructions: { type: String, default: "" },
+      quantity: { type: Number, required: true, min: 1 },
+      price: { type: Number, required: true, min: 0 },
+      route: { 
+        type: String, 
+        enum: ["oral", "topical", "inhalation", "injection", "rectal", "vaginal", "ophthalmic", "otic", "nasal", "transdermal"],
+        default: "oral"
+      },
+      refills: { type: Number, default: 0, min: 0 },
+      refillsRemaining: { type: Number, default: 0, min: 0 },
+    }],
+    diagnosis: {
+      type: String,
+      required: true,
+    },
+    notes: {
+      type: String,
+    },
+    instructions: {
+      type: String,
+    },
     prescribedDate: {
       type: Date,
       required: true,
       default: Date.now,
     },
-    medications: [{
-      name: { 
-        type: String, 
-        required: true,
-        trim: true,
-      },
-      dosage: { 
-        type: String, 
-        required: true,
-        trim: true,
-      },
-      frequency: { 
-        type: String, 
-        required: true,
-        trim: true,
-      },
-      duration: { 
-        type: String, 
-        required: true,
-        trim: true,
-      },
-      route: { 
-        type: String, 
-        required: true,
-        trim: true,
-        enum: ["oral", "topical", "inhalation", "injection", "rectal", "vaginal", "ophthalmic", "otic", "nasal", "transdermal"],
-        lowercase: true,
-        default: "oral",
-      },
-      instructions: { 
-        type: String,
-        trim: true,
-      },
-      quantity: { 
-        type: Number, 
-        required: true, 
-        min: 1,
-        default: 1,
-      },
-      refills: { 
-        type: Number, 
-        default: 0, 
-        min: 0,
-      },
-      refillsRemaining: { 
-        type: Number, 
-        default: 0, 
-        min: 0,
-      },
-    }],
-    diagnosis: {
-      type: String,
+    expiryDate: {
+      type: Date,
       required: true,
-      trim: true,
     },
-    instructions: {
-      type: String,
-      trim: true,
-    },
-    notes: {
-      type: String,
-      trim: true,
+    followUpDate: {
+      type: Date,
     },
     status: {
       type: String,
       enum: ["active", "completed", "cancelled", "expired"],
       default: "active",
     },
-    expiryDate: {
+    dispensedBy: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+    },
+    dispensedDate: {
       type: Date,
-      required: true,
+    },
+    dispensingStatus: {
+      type: String,
+      enum: ["pending", "partial", "full", "cancelled"],
+      default: "pending",
+    },
+    pharmacyNotes: {
+      type: String,
     },
   },
   {
@@ -132,77 +121,31 @@ const prescriptionSchema = new Schema<IPrescription>(
   }
 );
 
-// Only add indexes that don't duplicate the unique constraint
-prescriptionSchema.index({ patient: 1 });
-prescriptionSchema.index({ doctor: 1 });
-prescriptionSchema.index({ appointment: 1 }, { sparse: true });
-prescriptionSchema.index({ prescribedDate: -1 });
-prescriptionSchema.index({ status: 1 });
-prescriptionSchema.index({ expiryDate: 1 });
-prescriptionSchema.index({ createdAt: -1 });
-prescriptionSchema.index({ patient: 1, status: 1 });
-prescriptionSchema.index({ doctor: 1, status: 1 });
+// Indexes for better query performance
+PrescriptionSchema.index({ prescriptionId: 1 });
+PrescriptionSchema.index({ patient: 1 });
+PrescriptionSchema.index({ doctor: 1 });
+PrescriptionSchema.index({ status: 1 });
+PrescriptionSchema.index({ dispensingStatus: 1 });
+PrescriptionSchema.index({ expiryDate: 1 });
+PrescriptionSchema.index({ createdAt: -1 });
 
-// Pre-save hook
-prescriptionSchema.pre("save", function (next) {
-  const prescription = this;
-  
-  // Generate prescription ID if not exists
-  if (!prescription.prescriptionId || prescription.isNew) {
+// Pre-save hook to generate prescription ID
+PrescriptionSchema.pre("save", function (next) {
+  if (!this.prescriptionId) {
     const date = new Date();
     const year = date.getFullYear().toString().slice(-2);
     const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    const random = Math.floor(10000 + Math.random() * 90000);
-    prescription.prescriptionId = `RX${year}${month}${random}`;
+    const random = Math.floor(1000 + Math.random() * 9000);
+    this.prescriptionId = `RX${year}${month}${random}`;
   }
   
-  // Ensure medications have valid values
-  if (prescription.medications && prescription.medications.length > 0) {
-    prescription.medications.forEach(med => {
-      // Ensure route is lowercase
-      if (med.route) {
-        med.route = med.route.toLowerCase();
-      } else {
-        med.route = "oral";
-      }
-      
-      // Ensure numeric fields are numbers
-      med.quantity = Number(med.quantity) || 1;
-      med.refills = Number(med.refills) || 0;
-      med.refillsRemaining = Number(med.refillsRemaining) || med.refills;
-    });
-  }
-  
-  // Set expiry date if not provided
-  if (!prescription.expiryDate) {
-    const expiry = new Date(prescription.prescribedDate || new Date());
-    expiry.setDate(expiry.getDate() + 30);
-    prescription.expiryDate = expiry;
+  // Check if prescription is expired
+  if (this.expiryDate && this.expiryDate < new Date() && this.status === "active") {
+    this.status = "expired";
   }
   
   next();
 });
 
-// Pre-validate hook
-prescriptionSchema.pre("validate", function (next) {
-  const prescription = this;
-  
-  if (!prescription.prescriptionId) {
-    const date = new Date();
-    const year = date.getFullYear().toString().slice(-2);
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    const random = Math.floor(10000 + Math.random() * 90000);
-    prescription.prescriptionId = `RX${year}${month}${random}`;
-  }
-  
-  if (!prescription.expiryDate) {
-    const expiry = new Date(prescription.prescribedDate || new Date());
-    expiry.setDate(expiry.getDate() + 30);
-    prescription.expiryDate = expiry;
-  }
-  
-  next();
-});
-
-// Check if the model already exists to prevent overwriting
-export const Prescription = models.Prescription || model<IPrescription>("Prescription", prescriptionSchema);
+export const Prescription = models.Prescription || model<IPrescription>("Prescription", PrescriptionSchema);

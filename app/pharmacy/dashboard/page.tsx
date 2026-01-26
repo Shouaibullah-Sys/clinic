@@ -1,5 +1,4 @@
-// app/pharmacy/dashboard/page.tsx
-
+// app/pharmacy/dashboard/page.tsx - UPDATED
 "use client";
 
 import { useState, useEffect } from "react";
@@ -19,6 +18,8 @@ import {
   ArrowRight,
   Plus,
   RefreshCw,
+  Users,
+  FileText,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -33,11 +34,25 @@ interface MedicineStock {
   unitPrice: number;
 }
 
+interface Prescription {
+  _id: string;
+  prescriptionId: string;
+  patient: {
+    name: string;
+  };
+  doctor: {
+    name: string;
+  };
+  status: string;
+  prescribedDate: string;
+}
+
 export default function PharmacyDashboardPage() {
   const router = useRouter();
   const { user, accessToken } = useAuthStore();
   const [loading, setLoading] = useState(true);
   const [medicines, setMedicines] = useState<MedicineStock[]>([]);
+  const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   // Check if user has pharmacy access
@@ -77,9 +92,29 @@ export default function PharmacyDashboardPage() {
     }
   };
 
+  // Fetch recent prescriptions
+  const fetchPrescriptions = async () => {
+    try {
+      const response = await fetch("/api/pharmacy/pending-prescriptions?limit=5", {
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setPrescriptions(data.data || []);
+      }
+    } catch (error) {
+      console.error("Error fetching prescriptions:", error);
+    }
+  };
+
   useEffect(() => {
     if (user && ["admin", "pharmacist"].includes(user.role) && accessToken) {
-      fetchMedicines();
+      Promise.all([fetchMedicines(), fetchPrescriptions()]);
     }
   }, [user, accessToken]);
 
@@ -92,6 +127,7 @@ export default function PharmacyDashboardPage() {
       expiringSoon: 0,
       expired: 0,
       outOfStock: 0,
+      pendingPrescriptions: prescriptions.length,
     };
 
     medicines.forEach(medicine => {
@@ -146,7 +182,10 @@ export default function PharmacyDashboardPage() {
           <p className="text-gray-500 mt-1">Welcome back, {user.name}!</p>
         </div>
         <div className="flex items-center gap-3">
-          <Button variant="outline" size="sm" onClick={fetchMedicines}>
+          <Button variant="outline" size="sm" onClick={() => {
+            fetchMedicines();
+            fetchPrescriptions();
+          }}>
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh
           </Button>
@@ -201,11 +240,11 @@ export default function PharmacyDashboardPage() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Low Stock</p>
-                <p className="text-2xl font-bold mt-1">{stats.lowStock}</p>
+                <p className="text-sm font-medium text-gray-600">Pending Prescriptions</p>
+                <p className="text-2xl font-bold mt-1">{stats.pendingPrescriptions}</p>
               </div>
-              <div className="h-10 w-10 rounded-full bg-orange-100 flex items-center justify-center">
-                <TrendingDown className="h-5 w-5 text-orange-600" />
+              <div className="h-10 w-10 rounded-full bg-purple-100 flex items-center justify-center">
+                <FileText className="h-5 w-5 text-purple-600" />
               </div>
             </div>
           </CardContent>
@@ -240,6 +279,18 @@ export default function PharmacyDashboardPage() {
           </CardContent>
         </Card>
         
+        <Card className="cursor-pointer hover:bg-gray-50 transition-colors" onClick={() => router.push("/pharmacy/select-prescription")}>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Dispense Medicines</p>
+                <p className="text-lg font-bold mt-1">{stats.pendingPrescriptions} Pending</p>
+              </div>
+              <Package className="h-5 w-5 text-green-500" />
+            </div>
+          </CardContent>
+        </Card>
+        
         <Card className="cursor-pointer hover:bg-gray-50 transition-colors" onClick={() => router.push("/pharmacy/stock?status=low_stock")}>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
@@ -252,30 +303,78 @@ export default function PharmacyDashboardPage() {
           </CardContent>
         </Card>
         
-        <Card className="cursor-pointer hover:bg-gray-50 transition-colors" onClick={() => router.push("/pharmacy/stock?status=expiring_soon")}>
+        <Card className="cursor-pointer hover:bg-gray-50 transition-colors" onClick={() => router.push("/pharmacy/issue")}>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Expiring Soon</p>
-                <p className="text-lg font-bold mt-1">{stats.expiringSoon} Items</p>
+                <p className="text-sm font-medium text-gray-600">Issue Medicine</p>
+                <p className="text-lg font-bold mt-1">Direct Sale</p>
               </div>
-              <Calendar className="h-5 w-5 text-yellow-500" />
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card className="cursor-pointer hover:bg-gray-50 transition-colors" onClick={() => router.push("/appointments")}>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Appointments</p>
-                <p className="text-lg font-bold mt-1">View Prescriptions</p>
-              </div>
-              <ArrowRight className="h-5 w-5 text-gray-400" />
+              <Plus className="h-5 w-5 text-blue-500" />
             </div>
           </CardContent>
         </Card>
       </div>
+
+      {/* Recent Prescriptions */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <span className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              Recent Prescriptions
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => router.push("/pharmacy/select-prescription")}
+            >
+              View All
+              <ArrowRight className="h-4 w-4 ml-2" />
+            </Button>
+          </CardTitle>
+          <CardDescription>
+            Prescriptions waiting to be dispensed
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {prescriptions.length === 0 ? (
+            <p className="text-gray-500 text-center py-4">No pending prescriptions</p>
+          ) : (
+            <div className="space-y-3">
+              {prescriptions.map((prescription) => (
+                <div 
+                  key={prescription._id}
+                  className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 cursor-pointer"
+                  onClick={() => router.push(`/pharmacy/dispense?prescriptionId=${prescription._id}`)}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
+                      <FileText className="h-5 w-5 text-blue-600" />
+                    </div>
+                    <div>
+                      <p className="font-medium">{prescription.patient.name}</p>
+                      <div className="flex items-center gap-2 text-sm text-gray-500">
+                        <span>Prescription: {prescription.prescriptionId}</span>
+                        <span>•</span>
+                        <span>Dr. {prescription.doctor.name}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <Badge variant="outline">
+                      {format(new Date(prescription.prescribedDate), "MMM d")}
+                    </Badge>
+                    <Button size="sm" className="mt-2">
+                      Dispense
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Alerts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -299,7 +398,11 @@ export default function PharmacyDashboardPage() {
                   const stockPercentage = (medicine.currentQuantity / medicine.originalQuantity) * 100;
                   
                   return (
-                    <div key={medicine._id} className="flex items-center justify-between p-3 border rounded-lg">
+                    <div 
+                      key={medicine._id} 
+                      className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 cursor-pointer"
+                      onClick={() => router.push(`/pharmacy/stock?search=${medicine.name}`)}
+                    >
                       <div>
                         <p className="font-medium">{medicine.name}</p>
                         <p className="text-sm text-gray-500">{medicine.batchNumber}</p>
@@ -353,7 +456,11 @@ export default function PharmacyDashboardPage() {
                   const daysToExpiry = Math.ceil((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
                   
                   return (
-                    <div key={medicine._id} className="flex items-center justify-between p-3 border rounded-lg">
+                    <div 
+                      key={medicine._id} 
+                      className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 cursor-pointer"
+                      onClick={() => router.push(`/pharmacy/stock?search=${medicine.name}`)}
+                    >
                       <div>
                         <p className="font-medium">{medicine.name}</p>
                         <p className="text-sm text-gray-500">{medicine.batchNumber}</p>
@@ -384,88 +491,6 @@ export default function PharmacyDashboardPage() {
           </CardContent>
         </Card>
       </div>
-
-      {/* Recent Medicines */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent Medicines</CardTitle>
-          <CardDescription>
-            Recently added medicines to the inventory
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="flex items-center justify-center h-32">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-            </div>
-          ) : medicines.length === 0 ? (
-            <p className="text-gray-500 text-center py-8">No medicines found</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b">
-                    <th className="text-left py-3 px-4">Medicine</th>
-                    <th className="text-left py-3 px-4">Batch</th>
-                    <th className="text-left py-3 px-4">Stock</th>
-                    <th className="text-left py-3 px-4">Expiry</th>
-                    <th className="text-left py-3 px-4">Price</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {medicines.slice(0, 5).map((medicine) => {
-                    const stockPercentage = (medicine.currentQuantity / medicine.originalQuantity) * 100;
-                    const expiryDate = new Date(medicine.expiryDate);
-                    
-                    return (
-                      <tr key={medicine._id} className="border-b hover:bg-gray-50">
-                        <td className="py-3 px-4">
-                          <p className="font-medium">{medicine.name}</p>
-                          <p className="text-sm text-gray-500">{medicine.originalQuantity}</p>
-                        </td>
-                        <td className="py-3 px-4">
-                          <Badge variant="outline" className="font-mono">
-                            {medicine.batchNumber}
-                          </Badge>
-                        </td>
-                        <td className="py-3 px-4">
-                          <div className="flex items-center gap-2">
-                            <Progress value={stockPercentage} className="h-2 w-24" />
-                            <span className="text-sm">
-                              {medicine.currentQuantity}/{medicine.originalQuantity}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="py-3 px-4">
-                          <div className="flex items-center gap-2">
-                            <Calendar className="h-4 w-4 text-gray-400" />
-                            {format(expiryDate, "MMM d, yyyy")}
-                          </div>
-                        </td>
-                        <td className="py-3 px-4">
-                          <p className="font-medium">${medicine.sellingPrice.toFixed(2)}</p>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-          {medicines.length > 5 && (
-            <div className="mt-4">
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => router.push("/pharmacy/stock")}
-              >
-                View All Medicines
-                <ArrowRight className="h-4 w-4 ml-2" />
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
     </div>
   );
 }
