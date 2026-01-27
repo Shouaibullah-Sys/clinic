@@ -58,8 +58,6 @@ const medicalRecordSchema = new Schema<IMedicalRecord>(
     recordId: {
       type: String,
       required: true,
-      unique: true, // OK - but make sure you don't have index: true here
-      // Remove if present: index: true // <-- THIS CAUSES DUPLICATE WARNING
     },
     patient: {
       type: Schema.Types.ObjectId,

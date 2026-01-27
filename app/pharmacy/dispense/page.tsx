@@ -101,6 +101,7 @@ interface DispensingItem {
   totalPrice: number;
   availableStock: number;
   instructions: string;
+  currentStock?: number;
 }
 
 export default function DispensePage() {
@@ -231,81 +232,143 @@ export default function DispensePage() {
     }
   }, [prescription]);
 
-  const autoFillMedicines = () => {
-  if (!prescription || !prescription.medications) {
-    console.error("No medications found in prescription");
-    toast.error("Prescription has no medicines");
-    return;
-  }
+  const autoFillMedicines = async () => {
+    if (!prescription || !prescription.medications) {
+      console.error("No medications found in prescription");
+      toast.error("Prescription has no medicines");
+      return;
+    }
 
-  try {
-    const items: DispensingItem[] = prescription.medications.map((med) => {
-      // Check if medicine data is available
-      if (!med.medicine || !med.medicine._id) {
-        console.warn("Medicine data missing for:", med.name);
-        return {
-          medicineId: med.name, // Use name as fallback ID
-          name: med.name,
-          prescribedQuantity: med.quantity || 1,
-          dispensedQuantity: 0,
-          batchNumber: med.medicine?.batchNumber || "N/A",
-          unitPrice: med.medicine?.sellingPrice || med.price || 0,
-          totalPrice: 0,
-          availableStock: med.medicine?.currentQuantity || 0,
-          instructions: med.instructions || "",
-        };
+    try {
+      const items: DispensingItem[] = [];
+      
+      for (const med of prescription.medications) {
+        let medicineData = null;
+        
+        // Try to find medicine by name in the database
+        if (med.name) {
+          try {
+            const searchResponse = await fetch(`/api/pharmacy/medicines/search?q=${encodeURIComponent(med.name)}`, {
+              headers: { Authorization: `Bearer ${accessToken}` }
+            });
+            
+            if (searchResponse.ok) {
+              const searchData = await searchResponse.json();
+              if (searchData.success && searchData.data && searchData.data.length > 0) {
+                // Find the best match
+                medicineData = searchData.data.find((m: any) => m.name.toLowerCase() === med.name.toLowerCase());
+                if (!medicineData && searchData.data.length > 0) {
+                  medicineData = searchData.data[0]; // Use first match if exact name doesn't match
+                }
+              }
+            }
+          } catch (searchError) {
+            console.warn("Error searching for medicine:", searchError);
+          }
+        }
+
+        // If medicine data found, use it; otherwise use prescription data
+        if (medicineData) {
+          const availableStock = medicineData.currentQuantity || 0;
+          const prescribedQty = med.quantity || 1;
+          const dispensedQty = Math.min(prescribedQty, availableStock);
+          const unitPrice = medicineData.sellingPrice || med.price || 0;
+          
+          items.push({
+            medicineId: medicineData._id,
+            name: med.name,
+            prescribedQuantity: prescribedQty,
+            dispensedQuantity: dispensedQty,
+            batchNumber: medicineData.batchNumber || "N/A",
+            unitPrice: unitPrice,
+            totalPrice: dispensedQty * unitPrice,
+            availableStock: availableStock,
+            instructions: med.instructions || "",
+          });
+        } else {
+          // Fallback to prescription data if no medicine found in database
+          console.warn("Medicine data missing for:", med.name);
+          items.push({
+            medicineId: med.name, // Use name as fallback ID
+            name: med.name,
+            prescribedQuantity: med.quantity || 1,
+            dispensedQuantity: 0,
+            batchNumber: "N/A",
+            unitPrice: med.price || 0,
+            totalPrice: 0,
+            availableStock: 0,
+            instructions: med.instructions || "",
+          });
+        }
       }
 
-      const medicine = med.medicine;
-      const availableStock = medicine.currentQuantity || 0;
-      const prescribedQty = med.quantity || 1;
-      const dispensedQty = Math.min(prescribedQty, availableStock);
-      const unitPrice = medicine.sellingPrice || med.price || 0;
+      console.log("Auto-filled items:", items);
+      setDispensingItems(items);
       
-      return {
-        medicineId: medicine._id,
-        name: med.name,
-        prescribedQuantity: prescribedQty,
-        dispensedQuantity: dispensedQty,
-        batchNumber: medicine.batchNumber,
-        unitPrice: unitPrice,
-        totalPrice: dispensedQty * unitPrice,
-        availableStock: availableStock,
-        instructions: med.instructions || "",
-      };
+      // Set patient instructions from prescription
+      if (prescription.instructions) {
+        setPatientInstructions(prescription.instructions);
+      }
+      
+      if (prescription.notes) {
+        setPharmacyNotes(prescription.notes);
+      }
+    } catch (error) {
+      console.error("Error auto-filling medicines:", error);
+      toast.error("Error preparing medicines for dispensing");
+    }
+  };
+
+  const updateDispensedQuantity = async (medicineId: string, quantity: number) => {
+    try {
+      // Fetch current stock
+      const stockResponse = await fetch(`/api/pharmacy/medicines/${medicineId}/stock`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      
+      if (stockResponse.ok) {
+        const stockData = await stockResponse.json();
+        const availableStock = stockData.data?.currentQuantity || 0;
+        
+        setDispensingItems(items =>
+          items.map(item => {
+            if (item.medicineId === medicineId) {
+              const dispensedQty = Math.max(0, Math.min(quantity, availableStock));
+              return {
+                ...item,
+                dispensedQuantity: dispensedQty,
+                totalPrice: dispensedQty * item.unitPrice,
+                availableStock // Update with latest stock
+              };
+            }
+            return item;
+          })
+        );
+      }
+    } catch (error) {
+      console.error("Error checking stock:", error);
+      toast.error("Failed to check stock availability");
+    }
+  };
+
+  // Add real-time stock check
+  const checkStockBeforeDispense = async () => {
+    const stockPromises = dispensingItems.map(async (item) => {
+      const response = await fetch(`/api/pharmacy/medicines/${item.medicineId}/stock`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        return {
+          ...item,
+          currentStock: data.data?.currentQuantity || 0
+        };
+      }
+      return item;
     });
-
-    console.log("Auto-filled items:", items);
-    setDispensingItems(items);
     
-    // Set patient instructions from prescription
-    if (prescription.instructions) {
-      setPatientInstructions(prescription.instructions);
-    }
-    
-    if (prescription.notes) {
-      setPharmacyNotes(prescription.notes);
-    }
-  } catch (error) {
-    console.error("Error auto-filling medicines:", error);
-    toast.error("Error preparing medicines for dispensing");
-  }
-};
-
-  const updateDispensedQuantity = (medicineId: string, quantity: number) => {
-    setDispensingItems(items =>
-      items.map(item => {
-        if (item.medicineId === medicineId) {
-          const dispensedQty = Math.max(0, Math.min(quantity, item.availableStock));
-          return {
-            ...item,
-            dispensedQuantity: dispensedQty,
-            totalPrice: dispensedQty * item.unitPrice,
-          };
-        }
-        return item;
-      })
-    );
+    const updatedItems = await Promise.all(stockPromises);
+    return updatedItems.every(item => item.dispensedQuantity <= item.currentStock);
   };
 
   const calculateTotal = () => {

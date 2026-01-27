@@ -34,9 +34,7 @@ const discountRequestSchema = new Schema<IDiscountRequest>(
     discountId: {
       type: String,
       required: true,
-      unique: true,
       uppercase: true,
-      // REMOVED index: true HERE since we define it below
     },
     patient: {
       type: Schema.Types.ObjectId,

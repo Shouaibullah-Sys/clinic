@@ -58,7 +58,7 @@ export async function GET(req: NextRequest) {
         select: "name batchNumber currentQuantity sellingPrice unitPrice",
         model: "MedicineStock" // Explicitly specify the model
       })
-      .populate("issuedBy", "name")
+      .populate("dispensedBy", "name")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit);
@@ -129,7 +129,6 @@ export async function POST(req: NextRequest) {
     // Create prescription
     const newPrescription = await Prescription.create({
       ...validation.data,
-      issuedBy: payload.id,
     });
 
     return NextResponse.json(newPrescription, { status: 201 });

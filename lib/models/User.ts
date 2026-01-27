@@ -75,7 +75,6 @@ const userSchema = new Schema<IUser>(
     employeeId: {
       type: String,
       unique: true,
-      sparse: true,
     },
     // Doctor-specific fields
     department: {
@@ -87,7 +86,6 @@ const userSchema = new Schema<IUser>(
     licenseNumber: {
       type: String,
       unique: true,
-      sparse: true,
     },
     qualifications: [{
       type: String,

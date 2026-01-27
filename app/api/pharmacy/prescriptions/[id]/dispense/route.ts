@@ -1,3 +1,5 @@
+// app/api/pharmacy/prescriptions/[id]/dispense/route.ts
+
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
 import { Prescription } from "@/lib/models/Prescription";
@@ -53,7 +55,41 @@ export async function POST(
       );
     }
 
-    // Update medicine stock
+    // NEW: Validate that dispensed items match prescription
+    const prescriptionMedications = prescription.medications;
+    for (const item of items) {
+      const prescribedMed = prescriptionMedications.find(
+        (med: any) => med.medicine.toString() === item.medicine
+      );
+      
+      if (!prescribedMed) {
+        return NextResponse.json(
+          { error: `Medicine ${item.medicine} not found in prescription` },
+          { status: 400 }
+        );
+      }
+      
+      if (item.dispensedQuantity > prescribedMed.quantity) {
+        return NextResponse.json(
+          { error: `Cannot dispense more than prescribed quantity for ${prescribedMed.name}. Prescribed: ${prescribedMed.quantity}, Requested: ${item.dispensedQuantity}` },
+          { status: 400 }
+        );
+      }
+    }
+
+    // NEW: Calculate dispensing status based on actual quantities
+    const calculateDispensingStatus = (items: any[], prescription: any) => {
+      const totalPrescribed = prescription.medications.reduce((sum: number, med: any) => sum + med.quantity, 0);
+      const totalDispensed = items.reduce((sum: number, item: any) => sum + item.dispensedQuantity, 0);
+      
+      if (totalDispensed === 0) return "pending";
+      if (totalDispensed < totalPrescribed) return "partial";
+      return "full";
+    };
+
+    const actualDispensingStatus = calculateDispensingStatus(items, prescription);
+
+    // Update medicine stock and track partial dispensing
     for (const item of items) {
       const medicine = await MedicineStock.findById(item.medicine);
       if (!medicine) {
@@ -65,7 +101,7 @@ export async function POST(
 
       if (medicine.currentQuantity < item.dispensedQuantity) {
         return NextResponse.json(
-          { error: `Insufficient stock for ${medicine.name}` },
+          { error: `Insufficient stock for ${medicine.name}. Available: ${medicine.currentQuantity}, Requested: ${item.dispensedQuantity}` },
           { status: 400 }
         );
       }
@@ -86,18 +122,29 @@ export async function POST(
       await medicine.save();
     }
 
-    // Update prescription
+    // Update prescription with partial dispensing logic
     prescription.dispensedBy = dispensedBy;
     prescription.dispensedDate = new Date();
-    prescription.dispensingStatus = dispensingStatus;
+    prescription.dispensingStatus = actualDispensingStatus;
     prescription.pharmacyNotes = pharmacyNotes;
     prescription.instructions = patientInstructions || prescription.instructions;
     
-    // Update status based on dispensing
-    if (dispensingStatus === "full") {
+    // Update status based on actual dispensing
+    if (actualDispensingStatus === "full") {
       prescription.status = "completed";
-    } else if (dispensingStatus === "partial") {
+      // Update medication refills remaining
+      prescription.medications.forEach((med: any) => {
+        med.refillsRemaining = Math.max(0, med.refillsRemaining - 1);
+      });
+    } else if (actualDispensingStatus === "partial") {
       prescription.status = "active"; // Keep active for partial dispensing
+      // Update medication quantities to reflect what was dispensed
+      prescription.medications.forEach((med: any) => {
+        const dispensedItem = items.find((item: any) => item.medicine.toString() === med.medicine.toString());
+        if (dispensedItem) {
+          med.quantity -= dispensedItem.dispensedQuantity;
+        }
+      });
     }
 
     await prescription.save();

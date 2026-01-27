@@ -1,7 +1,9 @@
 // app/api/pharmacy/pending-prescriptions/route.ts - ENHANCED
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
+import "@/lib/models"; // Import all models to ensure they are registered
 import { Prescription } from "@/lib/models/Prescription";
+import { Patient } from "@/lib/models/Patient";
 import { getTokenPayload } from "@/lib/auth/jwt";
 
 export async function GET(req: NextRequest) {

@@ -258,9 +258,6 @@ const labTestSchema = new Schema<ILabTest, LabTestModel>(
     // Laboratory module fields
     labReferenceId: {
       type: String,
-      unique: true,
-      sparse: true,
-      // NO index: true here
     },
     collectionStatus: {
       type: String,

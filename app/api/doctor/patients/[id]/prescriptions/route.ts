@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
 import { Prescription } from "@/lib/models/Prescription";
 import { Appointment } from "@/lib/models/Appointment";
+import { MedicineStock } from "@/lib/models/MedicineStock";
 import { jwtVerify } from "jose";
 import mongoose from "mongoose";
 
@@ -21,7 +22,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  try {
+  try { 
     // Await params for Next.js 16
     const { id: patientId } = await params;
     
@@ -129,13 +130,16 @@ export async function POST(
     
     console.log(`Creating prescription for patient ${patientId} by doctor ${userId}`);
     
-    // Only doctors can create prescriptions
+    // Only doctors and admins can create prescriptions
     if (!["doctor", "admin"].includes(userRole)) {
       return NextResponse.json(
         { success: false, error: "Forbidden. Doctor access required." },
         { status: 403 }
       );
     }
+    
+    // Create doctorId before using it
+    const doctorId = new mongoose.Types.ObjectId(userId);
     
     // Check if request body can be parsed
     let body;
@@ -173,11 +177,43 @@ export async function POST(
         { status: 400 }
       );
     }
+
+    // NEW: Check for duplicate prescriptions
+    const existingPrescription = await Prescription.findOne({
+      patient: patientId,
+      doctor: doctorId,
+      diagnosis: { $regex: new RegExp(diagnosis.trim(), 'i') },
+      prescribedDate: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } // Within 24 hours
+    });
+
+    if (existingPrescription) {
+      return NextResponse.json({
+        success: false,
+        error: "Similar prescription created recently. Please edit existing prescription instead.",
+        existingPrescriptionId: existingPrescription._id,
+        existingPrescription: {
+          prescriptionId: existingPrescription.prescriptionId,
+          prescribedDate: existingPrescription.prescribedDate,
+          diagnosis: existingPrescription.diagnosis
+        }
+      }, { status: 400 });
+    }
     
     // Validate each medication
     const validatedMedications = medications.map((med: any, index: number) => {
       if (!med.name || !med.dosage || !med.frequency || !med.duration) {
         throw new Error(`Medication ${index + 1} is missing required fields (name, dosage, frequency, duration)`);
+      }
+      
+      // Check if medicine ID is provided (from SmartMedicineSearch)
+      // Note: Medicine ID is optional for manual entries, but recommended for inventory tracking
+      if (med._id || med.medicine) {
+        // If medicine ID is provided, use it
+        // (The medicine ID will be set in the return statement below)
+      }
+      // If no medicine ID is provided, we'll still allow the prescription but log a warning
+      else {
+        console.warn(`Medication ${index + 1}: No medicine ID provided. This medication won't be linked to inventory.`);
       }
       
       // Convert route to lowercase and validate
@@ -189,6 +225,7 @@ export async function POST(
       }
       
       return {
+        medicine: med._id || med.medicine || undefined, // Use medicine ID from search results, optional
         name: med.name.trim(),
         dosage: med.dosage.toString().trim(),
         frequency: med.frequency.toString().trim(),
@@ -201,8 +238,6 @@ export async function POST(
         refillsRemaining: med.refills ? parseInt(med.refills) || 0 : 0,
       };
     });
-    
-    const doctorId = new mongoose.Types.ObjectId(userId);
     
     // Check if appointment exists and belongs to patient (if provided)
     let appointment = null;
@@ -218,6 +253,28 @@ export async function POST(
           { status: 404 }
         );
       }
+    }
+    
+    // Check inventory availability for each medication
+    const MedicineStock = mongoose.model("MedicineStock");
+    const insufficientStock: string[] = [];
+    
+    for (const med of validatedMedications) {
+      // Find medicine by name (since we don't have medicine ID in prescription creation)
+      const medicine = await MedicineStock.findOne({
+        name: { $regex: new RegExp(`^${med.name}$`, 'i') }
+      });
+      
+      if (!medicine) {
+        insufficientStock.push(`${med.name} (not found in inventory)`);
+      } else if (medicine.currentQuantity < med.quantity) {
+        insufficientStock.push(`${med.name} (available: ${medicine.currentQuantity}, requested: ${med.quantity})`);
+      }
+    }
+    
+    // Return warning if stock is insufficient (but don't block prescription creation)
+    if (insufficientStock.length > 0) {
+      console.warn(`Insufficient stock for prescription: ${insufficientStock.join(', ')}`);
     }
     
     // Create prescription using the model's pre-save hook to generate prescriptionId
@@ -248,7 +305,19 @@ export async function POST(
     }
     
     // Create and save prescription
+    console.log("Prescription data before save:", JSON.stringify(prescriptionData, null, 2));
     const prescription = new Prescription(prescriptionData);
+    
+    // Ensure prescriptionId is generated if pre-save hook fails
+    if (!prescription.prescriptionId) {
+      const date = new Date();
+      const year = date.getFullYear().toString().slice(-2);
+      const month = (date.getMonth() + 1).toString().padStart(2, '0');
+      const random = Math.floor(1000 + Math.random() * 9000);
+      prescription.prescriptionId = `RX${year}${month}${random}`;
+    }
+    
+    console.log("Prescription instance before save:", prescription);
     await prescription.save();
     
     // If appointment exists, update it to reference this prescription
@@ -270,10 +339,17 @@ export async function POST(
     
   } catch (error: any) {
     console.error("Error creating prescription:", error);
-    
+    console.error("Error name:", error.name);
+    console.error("Error message:", error.message);
+    console.error("Error stack:", error.stack);
+    if (error.errors) {
+      console.error("Validation errors:", error.errors);
+    }
+
     // Handle validation errors
     if (error.name === 'ValidationError') {
       const errors = Object.values(error.errors).map((err: any) => err.message);
+      console.error("Validation error details:", errors);
       return NextResponse.json(
         { success: false, error: "Validation failed", details: errors },
         { status: 400 }

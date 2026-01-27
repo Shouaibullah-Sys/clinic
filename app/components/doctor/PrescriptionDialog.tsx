@@ -27,10 +27,11 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Loader2, Plus, Pill, Trash2, Copy } from "lucide-react";
+import { Loader2, Plus, Pill, Trash2, Copy, RefreshCw } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { SmartMedicineSearch } from "./SmartMedicineSearch";
 
 // Define validation schema with Zod
 const prescriptionSchema = z.object({
@@ -45,6 +46,7 @@ const prescriptionSchema = z.object({
     instructions: z.string().optional(),
     quantity: z.string().optional(),
     route: z.string().optional(),
+    medicine: z.string().optional(), // Add medicine ID field for API validation
   })).min(1, "At least one medication is required"),
   
   // Patient Instructions
@@ -440,6 +442,44 @@ export function PrescriptionDialog({
                 </div>
               </div>
 
+              {/* Smart Medicine Search */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">Smart Medicine Search</Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      // Refresh the search results
+                      console.log("Refreshing medicine search");
+                    }}
+                    title="Refresh"
+                  >
+                    <RefreshCw className="h-3 w-3 mr-1" />
+                    Refresh
+                  </Button>
+                </div>
+                
+                <SmartMedicineSearch
+                  onSelectMedicine={(medicine) => {
+                    // Add the selected medicine to the form with proper medicine ID
+                    append({
+                      name: medicine.name,
+                      dosage: medicine.sellingPrice.toString(), // Use selling price as default dosage
+                      frequency: "Twice daily", // Default frequency
+                      duration: "7 days", // Default duration
+                      instructions: `Take as prescribed. Price: $${medicine.sellingPrice.toFixed(2)}`,
+                      quantity: "1", // Default quantity
+                      route: "oral",
+                      medicine: medicine._id, // Add the medicine ID for API validation
+                    });
+                  }}
+                  selectedMedicines={[]}
+                  placeholder="Search medicines from pharmacy inventory..."
+                />
+              </div>
+
               {/* Medications Forms */}
               <div className="space-y-4">
                 {fields.map((field, index) => (
@@ -635,7 +675,7 @@ export function PrescriptionDialog({
                 <Button 
                   type="submit" 
                   disabled={loading}
-                  className="min-w-[120px]"
+                  className="min-w-30"
                 >
                   {loading ? (
                     <>
