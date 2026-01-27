@@ -1,24 +1,27 @@
-// lib/models/Prescription.ts - UPDATED WITH EXPIRY AUTOMATION
+// lib/models/Prescription.ts
+
 import mongoose, { Schema, model, models, Document } from "mongoose";
+
+export interface IPrescriptionMedication {
+  medicine: mongoose.Types.ObjectId;
+  name: string;
+  dosage: string;
+  frequency: string;
+  duration: string;
+  instructions: string;
+  quantity: number;
+  price: number;
+  route: string;
+  refills: number;
+  refillsRemaining: number;
+}
 
 export interface IPrescription extends Document {
   prescriptionId: string;
   patient: mongoose.Types.ObjectId;
   doctor: mongoose.Types.ObjectId;
   appointment?: mongoose.Types.ObjectId;
-  medications: {
-    medicine: mongoose.Types.ObjectId;
-    name: string;
-    dosage: string;
-    frequency: string;
-    duration: string;
-    instructions: string;
-    quantity: number;
-    price: number;
-    route: string;
-    refills: number;
-    refillsRemaining: number;
-  }[];
+  medications: IPrescriptionMedication[];
   diagnosis: string;
   notes?: string;
   instructions?: string;
@@ -26,7 +29,7 @@ export interface IPrescription extends Document {
   expiryDate: Date;
   followUpDate?: Date;
   status: "active" | "completed" | "cancelled" | "expired";
-  dispensedBy?: mongoose.Types.ObjectId; // Pharmacist who dispensed
+  dispensedBy?: mongoose.Types.ObjectId;
   dispensedDate?: Date;
   dispensingStatus: "pending" | "partial" | "full" | "cancelled";
   pharmacyNotes?: string;
@@ -39,6 +42,7 @@ const PrescriptionSchema = new Schema<IPrescription>(
     prescriptionId: {
       type: String,
       required: true,
+      unique: true,
       uppercase: true,
     },
     patient: {
@@ -56,7 +60,11 @@ const PrescriptionSchema = new Schema<IPrescription>(
       ref: "Appointment",
     },
     medications: [{
-      medicine: { type: Schema.Types.ObjectId, ref: "MedicineStock", required: false }, // Made optional for manual prescriptions
+      medicine: { 
+        type: Schema.Types.ObjectId, 
+        ref: "MedicineStock", 
+        required: true 
+      },
       name: { type: String, required: true },
       dosage: { type: String, required: true },
       frequency: { type: String, required: true },
@@ -90,6 +98,11 @@ const PrescriptionSchema = new Schema<IPrescription>(
     expiryDate: {
       type: Date,
       required: true,
+      default: () => {
+        const date = new Date();
+        date.setDate(date.getDate() + 30); // Default 30 days validity
+        return date;
+      },
     },
     followUpDate: {
       type: Date,
@@ -142,12 +155,13 @@ PrescriptionSchema.pre("save", function (next) {
   // Check if prescription is expired
   if (this.expiryDate && this.expiryDate < new Date() && this.status === "active") {
     this.status = "expired";
+    this.dispensingStatus = "cancelled";
   }
   
   next();
 });
 
-// NEW: Static method to update expired prescriptions
+// Static method to update expired prescriptions
 PrescriptionSchema.statics.updateExpiredPrescriptions = async function() {
   const result = await this.updateMany(
     {
@@ -162,77 +176,60 @@ PrescriptionSchema.statics.updateExpiredPrescriptions = async function() {
   return result;
 };
 
-// NEW: Static method to get prescriptions by status with pagination
-PrescriptionSchema.statics.getPrescriptionsByStatus = async function(status: string, options: { page?: number; limit?: number; search?: string } = {}) {
-  const { page = 1, limit = 20, search = "" } = options;
-  const skip = (page - 1) * limit;
+// Static method to find active prescriptions
+PrescriptionSchema.statics.findActivePrescriptions = async function(patientId?: string) {
+  const query: any = { 
+    status: "active",
+    dispensingStatus: { $in: ["pending", "partial"] }
+  };
   
-  let query: any = { status };
-  
-  if (search) {
-    query.$or = [
-      { prescriptionId: { $regex: search, $options: "i" } },
-      { diagnosis: { $regex: search, $options: "i" } },
-    ];
+  if (patientId) {
+    query.patient = patientId;
   }
   
-  const prescriptions = await this.find(query)
-    .populate({
-      path: "patient",
-      select: "name patientId phone",
-      match: search ? {
-        $or: [
-          { name: { $regex: search, $options: "i" } },
-          { patientId: { $regex: search, $options: "i" } },
-        ]
-      } : {}
-    })
-    .populate({
-      path: "doctor",
-      select: "name specialization",
-      match: search ? { name: { $regex: search, $options: "i" } } : {}
-    })
+  return this.find(query)
+    .populate("patient", "name patientId phone")
+    .populate("doctor", "name specialization")
     .populate({
       path: "medications.medicine",
-      select: "name batchNumber currentQuantity sellingPrice unitPrice",
-      model: "MedicineStock"
+      select: "name batchNumber currentQuantity sellingPrice unitPrice expiryDate supplier",
     })
-    .select("prescriptionId patient doctor medications diagnosis notes instructions prescribedDate expiryDate status dispensingStatus")
-    .sort({ prescribedDate: -1 })
-    .skip(skip)
-    .limit(limit);
-
-  const total = await this.countDocuments(query);
-  
-  // Filter prescriptions to ensure patient and doctor are populated when searching
-  const filteredPrescriptions = search 
-    ? prescriptions.filter((p: any) => p.patient && p.doctor)
-    : prescriptions;
-  
-  return {
-    prescriptions: filteredPrescriptions,
-    total,
-    pages: Math.ceil(total / limit),
-    currentPage: page
-  };
+    .sort({ prescribedDate: -1 });
 };
 
-// NEW: Instance method to process refill
-PrescriptionSchema.methods.processRefill = async function(pharmacistId: string) {
-  if (this.refillsRemaining <= 0) {
-    throw new Error("No refills remaining");
+// Instance method to process dispensing
+PrescriptionSchema.methods.processDispensing = async function(
+  items: Array<{ medicine: string; dispensedQuantity: number }>,
+  pharmacistId: string
+) {
+  let totalDispensed = 0;
+  let totalPrescribed = 0;
+  
+  // Calculate totals
+  this.medications.forEach((med: IPrescriptionMedication) => {
+    totalPrescribed += med.quantity;
+    const item = items.find(i => i.medicine === med.medicine.toString());
+    if (item) {
+      totalDispensed += item.dispensedQuantity;
+    }
+  });
+  
+  // Update dispensing status
+  if (totalDispensed === 0) {
+    this.dispensingStatus = "pending";
+  } else if (totalDispensed < totalPrescribed) {
+    this.dispensingStatus = "partial";
+  } else {
+    this.dispensingStatus = "full";
+    this.status = "completed";
   }
   
-  this.refillsRemaining -= 1;
+  // Update dispensed info
   this.dispensedBy = pharmacistId;
   this.dispensedDate = new Date();
-  
-  if (this.refillsRemaining === 0) {
-    this.status = "completed";
-    this.dispensingStatus = "full";
-  }
   
   return this.save();
 };
 
 export const Prescription = models.Prescription || model<IPrescription>("Prescription", PrescriptionSchema);
+

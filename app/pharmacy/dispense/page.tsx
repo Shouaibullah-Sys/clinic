@@ -1,4 +1,6 @@
-// app/pharmacy/dispense/page.tsx - COMPLETE FIXED VERSION
+
+// app/pharmacy/dispense/page.tsx
+
 "use client";
 
 import { useState, useEffect } from "react";
@@ -36,6 +38,9 @@ import {
   Calendar,
   AlertTriangle,
   Loader2,
+  Info,
+  Check,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -45,12 +50,19 @@ interface Medicine {
   name: string;
   batchNumber: string;
   currentQuantity: number;
-  sellingPrice: number;
+  originalQuantity: number;
   unitPrice: number;
+  sellingPrice: number;
+  expiryDate: string;
+  supplier: string;
+  remainingPercentage: number;
+  isLowStock: boolean;
+  isExpiringSoon: boolean;
+  status: string;
 }
 
 interface PrescriptionItem {
-  medicine: Medicine;
+  medicine?: string | Medicine;
   name: string;
   dosage: string;
   frequency: string;
@@ -93,7 +105,7 @@ interface Prescription {
 
 interface DispensingItem {
   medicineId: string;
-  name: string;
+  medicineName: string;
   prescribedQuantity: number;
   dispensedQuantity: number;
   batchNumber: string;
@@ -101,7 +113,12 @@ interface DispensingItem {
   totalPrice: number;
   availableStock: number;
   instructions: string;
-  currentStock?: number;
+  expiryDate?: string;
+  supplier?: string;
+  isLowStock: boolean;
+  isExpiringSoon: boolean;
+  status: "available" | "low-stock" | "expiring-soon" | "out-of-stock";
+  foundInStock: boolean;
 }
 
 export default function DispensePage() {
@@ -119,60 +136,16 @@ export default function DispensePage() {
   const [pharmacyNotes, setPharmacyNotes] = useState("");
   const [patientInstructions, setPatientInstructions] = useState("");
   const [dispensing, setDispensing] = useState(false);
+  const [stockLoading, setStockLoading] = useState(false);
 
-  // Debug logging
-  useEffect(() => {
-    console.log("Dispense page state:", { 
-      prescriptionId, 
-      accessToken: !!accessToken, 
-      user: !!user,
-      userRole: user?.role,
-      authLoading 
-    });
-  }, [prescriptionId, accessToken, user, authLoading]);
-
-  // Check if no prescription ID
-  useEffect(() => {
-    if (!prescriptionId) {
-      setError("No prescription selected. Please select a prescription first.");
-      setLoading(false);
-    }
-  }, [prescriptionId]);
-
-  // Role check
-  useEffect(() => {
-    if (!authLoading && user && !["admin", "pharmacist"].includes(user.role)) {
-      toast.error("You don't have permission to access this page");
-      router.push("/unauthorized");
-    }
-  }, [user, authLoading, router]);
-
-  // Fetch prescription when we have ID and access token
-  useEffect(() => {
-    const fetchData = async () => {
-      if (!prescriptionId || !accessToken) {
-        return;
-      }
-
-      if (user && !["admin", "pharmacist"].includes(user.role)) {
-        return;
-      }
-
-      await fetchPrescription();
-    };
-
-    if (prescriptionId && accessToken) {
-      fetchData();
-    }
-  }, [prescriptionId, accessToken, user]);
-
+  // Fetch prescription
   const fetchPrescription = async () => {
+    if (!prescriptionId || !accessToken) return;
+    
     try {
       setLoading(true);
       setError(null);
-      console.log("Fetching prescription with ID:", prescriptionId);
 
-      // Try pharmacy API endpoint first
       const response = await fetch(`/api/pharmacy/prescriptions/${prescriptionId}`, {
         headers: {
           "Content-Type": "application/json",
@@ -180,103 +153,92 @@ export default function DispensePage() {
         },
       });
 
-      console.log("Response status:", response.status);
-
       if (!response.ok) {
-        // Try doctor API as fallback
-        const doctorResponse = await fetch(`/api/doctor/prescriptions/${prescriptionId}`, {
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${accessToken}`,
-          },
-        });
+        throw new Error(`Failed to fetch prescription (${response.status})`);
+      }
 
-        if (!doctorResponse.ok) {
-          const errorData = await doctorResponse.json().catch(() => ({}));
-          console.error("Error response:", errorData);
-          throw new Error(errorData.error || `Failed to fetch prescription (${doctorResponse.status})`);
-        }
-
-        const doctorData = await doctorResponse.json();
-        console.log("Success from doctor API:", doctorData);
-        
-        if (doctorData.success && doctorData.data) {
-          setPrescription(doctorData.data);
-        } else {
-          throw new Error("Invalid data structure from API");
-        }
+      const data = await response.json();
+      
+      if (data.success && data.data) {
+        console.log("✅ Prescription loaded:", data.data);
+        setPrescription(data.data);
       } else {
-        const data = await response.json();
-        console.log("Success from pharmacy API:", data);
-        
-        if (data.success && data.data) {
-          setPrescription(data.data);
-        } else {
-          throw new Error("Invalid data structure from API");
-        }
+        throw new Error("Invalid prescription data");
       }
     } catch (error: any) {
       console.error("Error fetching prescription:", error);
-      setError(error.message || "Failed to load prescription. Please try again.");
+      setError(error.message || "Failed to load prescription");
       toast.error("Error loading prescription");
     } finally {
       setLoading(false);
     }
   };
 
-  // Auto-fill medicines when prescription loads
-  useEffect(() => {
-    if (prescription) {
-      console.log("Prescription loaded, auto-filling medicines");
-      autoFillMedicines();
+  // Find medicine in stock
+  const findMedicineInStock = async (medicineName: string): Promise<Medicine | null> => {
+    try {
+      setStockLoading(true);
+      
+      // First try exact search
+      const searchResponse = await fetch(
+        `/api/pharmacy/medicines/search?q=${encodeURIComponent(medicineName)}`,
+        {
+          headers: { Authorization: `Bearer ${accessToken}` }
+        }
+      );
+      
+      if (searchResponse.ok) {
+        const searchData = await searchResponse.json();
+        
+        if (searchData.success && searchData.data && searchData.data.length > 0) {
+          console.log(`✅ Found medicine "${medicineName}" in stock:`, searchData.data[0]);
+          return searchData.data[0];
+        }
+      }
+      
+      return null;
+    } catch (error) {
+      console.error(`Error finding medicine "${medicineName}":`, error);
+      return null;
+    } finally {
+      setStockLoading(false);
     }
-  }, [prescription]);
+  };
 
-  const autoFillMedicines = async () => {
-    if (!prescription || !prescription.medications) {
-      console.error("No medications found in prescription");
-      toast.error("Prescription has no medicines");
+  // Load medicines from prescription and link to stock
+  const loadAndLinkMedicines = async () => {
+    if (!prescription || !prescription.medications || !accessToken) {
+      toast.error("Cannot load medicines from prescription");
       return;
     }
 
     try {
+      console.log("🔄 Loading medicines from prescription and linking to stock...");
       const items: DispensingItem[] = [];
       
       for (const med of prescription.medications) {
-        let medicineData = null;
+        console.log(`Processing: ${med.name}`);
         
-        // Try to find medicine by name in the database
-        if (med.name) {
-          try {
-            const searchResponse = await fetch(`/api/pharmacy/medicines/search?q=${encodeURIComponent(med.name)}`, {
-              headers: { Authorization: `Bearer ${accessToken}` }
-            });
-            
-            if (searchResponse.ok) {
-              const searchData = await searchResponse.json();
-              if (searchData.success && searchData.data && searchData.data.length > 0) {
-                // Find the best match
-                medicineData = searchData.data.find((m: any) => m.name.toLowerCase() === med.name.toLowerCase());
-                if (!medicineData && searchData.data.length > 0) {
-                  medicineData = searchData.data[0]; // Use first match if exact name doesn't match
-                }
-              }
-            }
-          } catch (searchError) {
-            console.warn("Error searching for medicine:", searchError);
-          }
-        }
-
-        // If medicine data found, use it; otherwise use prescription data
+        let medicineData: Medicine | null = null;
+        let foundInStock = false;
+        
+        // Search for medicine in stock by name
+        medicineData = await findMedicineInStock(med.name);
+        
         if (medicineData) {
+          foundInStock = true;
+          console.log(`✅ Linked "${med.name}" to stock item "${medicineData.name}"`);
+          
           const availableStock = medicineData.currentQuantity || 0;
           const prescribedQty = med.quantity || 1;
           const dispensedQty = Math.min(prescribedQty, availableStock);
           const unitPrice = medicineData.sellingPrice || med.price || 0;
+          const isLowStock = medicineData.currentQuantity <= 20;
+          const isExpiringSoon = medicineData.isExpiringSoon || false;
           
           items.push({
             medicineId: medicineData._id,
-            name: med.name,
+            medicineName: med.name,
             prescribedQuantity: prescribedQty,
             dispensedQuantity: dispensedQty,
             batchNumber: medicineData.batchNumber || "N/A",
@@ -284,28 +246,48 @@ export default function DispensePage() {
             totalPrice: dispensedQty * unitPrice,
             availableStock: availableStock,
             instructions: med.instructions || "",
+            expiryDate: medicineData.expiryDate,
+            supplier: medicineData.supplier,
+            isLowStock,
+            isExpiringSoon,
+            status: availableStock === 0 ? "out-of-stock" : 
+                   isLowStock ? "low-stock" :
+                   isExpiringSoon ? "expiring-soon" : "available",
+            foundInStock: true
           });
+          
+          // Show warnings
+          if (availableStock === 0) {
+            toast.warning(`${med.name} is out of stock`);
+          } else if (availableStock < prescribedQty) {
+            toast.warning(`${med.name}: ${availableStock} available, ${prescribedQty} prescribed`);
+          }
         } else {
-          // Fallback to prescription data if no medicine found in database
-          console.warn("Medicine data missing for:", med.name);
+          // Medicine not found in stock
+          console.log(`❌ "${med.name}" not found in stock`);
+          
           items.push({
-            medicineId: med.name, // Use name as fallback ID
-            name: med.name,
+            medicineId: med.name,
+            medicineName: med.name,
             prescribedQuantity: med.quantity || 1,
             dispensedQuantity: 0,
-            batchNumber: "N/A",
+            batchNumber: "NOT IN STOCK",
             unitPrice: med.price || 0,
             totalPrice: 0,
             availableStock: 0,
             instructions: med.instructions || "",
+            isLowStock: false,
+            isExpiringSoon: false,
+            status: "out-of-stock",
+            foundInStock: false
           });
         }
       }
-
-      console.log("Auto-filled items:", items);
+      
+      console.log("📦 Final dispensing items:", items);
       setDispensingItems(items);
       
-      // Set patient instructions from prescription
+      // Set instructions from prescription
       if (prescription.instructions) {
         setPatientInstructions(prescription.instructions);
       }
@@ -313,117 +295,87 @@ export default function DispensePage() {
       if (prescription.notes) {
         setPharmacyNotes(prescription.notes);
       }
-    } catch (error) {
-      console.error("Error auto-filling medicines:", error);
-      toast.error("Error preparing medicines for dispensing");
-    }
-  };
-
-  const updateDispensedQuantity = async (medicineId: string, quantity: number) => {
-    try {
-      // Fetch current stock
-      const stockResponse = await fetch(`/api/pharmacy/medicines/${medicineId}/stock`, {
-        headers: { Authorization: `Bearer ${accessToken}` }
-      });
       
-      if (stockResponse.ok) {
-        const stockData = await stockResponse.json();
-        const availableStock = stockData.data?.currentQuantity || 0;
-        
-        setDispensingItems(items =>
-          items.map(item => {
-            if (item.medicineId === medicineId) {
-              const dispensedQty = Math.max(0, Math.min(quantity, availableStock));
-              return {
-                ...item,
-                dispensedQuantity: dispensedQty,
-                totalPrice: dispensedQty * item.unitPrice,
-                availableStock // Update with latest stock
-              };
-            }
-            return item;
-          })
-        );
-      }
     } catch (error) {
-      console.error("Error checking stock:", error);
-      toast.error("Failed to check stock availability");
+      console.error("Error loading medicines:", error);
+      toast.error("Failed to load medicines");
     }
   };
 
-  // Add real-time stock check
-  const checkStockBeforeDispense = async () => {
-    const stockPromises = dispensingItems.map(async (item) => {
-      const response = await fetch(`/api/pharmacy/medicines/${item.medicineId}/stock`, {
-        headers: { Authorization: `Bearer ${accessToken}` }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        return {
-          ...item,
-          currentStock: data.data?.currentQuantity || 0
-        };
-      }
-      return item;
-    });
-    
-    const updatedItems = await Promise.all(stockPromises);
-    return updatedItems.every(item => item.dispensedQuantity <= item.currentStock);
+  // Update dispensed quantity
+  const updateDispensedQuantity = (medicineId: string, quantity: number) => {
+    setDispensingItems(items =>
+      items.map(item => {
+        if (item.medicineId === medicineId) {
+          const dispensedQty = Math.max(0, Math.min(quantity, item.availableStock));
+          return {
+            ...item,
+            dispensedQuantity: dispensedQty,
+            totalPrice: dispensedQty * item.unitPrice
+          };
+        }
+        return item;
+      })
+    );
   };
 
-  const calculateTotal = () => {
-    return dispensingItems.reduce((sum, item) => sum + item.totalPrice, 0);
-  };
-
+  // Handle dispense
   const handleDispense = async () => {
-    if (!prescription || !user) {
-      toast.error("Prescription or user information missing");
+    if (!prescription || !user || !accessToken) {
+      toast.error("Missing information");
+      return;
+    }
+
+    // Validate
+    const totalDispensed = dispensingItems.reduce((sum, item) => sum + item.dispensedQuantity, 0);
+    if (totalDispensed === 0) {
+      toast.error("Please select quantities to dispense");
+      return;
+    }
+
+    // Check if any items are out of stock
+    const outOfStockItems = dispensingItems.filter(
+      item => item.dispensedQuantity > 0 && item.status === "out-of-stock"
+    );
+    
+    if (outOfStockItems.length > 0) {
+      toast.error(`Cannot dispense: ${outOfStockItems.map(i => i.medicineName).join(', ')} not in stock`);
       return;
     }
 
     try {
       setDispensing(true);
 
-      // Validation
-      const totalDispensed = dispensingItems.reduce((sum, item) => sum + item.dispensedQuantity, 0);
-      if (totalDispensed === 0) {
-        toast.error("Please select quantities to dispense");
-        setDispensing(false);
-        return;
-      }
-
-      const outOfStockItems = dispensingItems.filter(
-        item => item.dispensedQuantity > item.availableStock
-      );
-
-      if (outOfStockItems.length > 0) {
-        toast.error("Some items exceed available stock");
-        setDispensing(false);
-        return;
-      }
-
-      console.log("Dispensing medicines:", dispensingItems);
-
-      // Prepare dispense data
-      const dispenseData = {
-        dispensedBy: user._id,
-        items: dispensingItems.map(item => ({
+      // Prepare items for dispensing
+      const itemsToDispense = dispensingItems
+        .filter(item => item.dispensedQuantity > 0 && item.foundInStock)
+        .map(item => ({
           medicine: item.medicineId,
           dispensedQuantity: item.dispensedQuantity,
           batchNumber: item.batchNumber,
-          unitPrice: item.unitPrice,
-        })),
+          unitPrice: item.unitPrice
+        }));
+
+      if (itemsToDispense.length === 0) {
+        toast.error("No valid items to dispense");
+        setDispensing(false);
+        return;
+      }
+
+      const dispenseData = {
+        dispensedBy: user._id,
+        items: itemsToDispense,
         totalAmount: calculateTotal(),
         paymentMethod,
         pharmacyNotes,
         patientInstructions,
-        dispensingStatus: "full",
+        dispensingStatus: "full"
       };
 
-      console.log("Dispense data:", dispenseData);
+      console.log("🚀 Dispensing:", dispenseData);
 
-      // Update prescription status
-      const updateResponse = await fetch(`/api/pharmacy/prescriptions/${prescription._id}/dispense`, {
+      // Call dispense API
+      const response = await fetch(`/api/pharmacy/prescriptions/${prescription._id}/dispense`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -432,39 +384,19 @@ export default function DispensePage() {
         body: JSON.stringify(dispenseData),
       });
 
-      const updateResult = await updateResponse.json();
+      const result = await response.json();
       
-      if (updateResponse.ok) {
-        toast.success("Medicines dispensed successfully");
-        
-        // Create dispensing record (optional)
-        try {
-          await fetch("/api/pharmacy/dispensing", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${accessToken}`,
-            },
-            body: JSON.stringify({
-              prescription: prescription._id,
-              patient: prescription.patient._id,
-              items: dispensingItems,
-              totalAmount: calculateTotal(),
-              paymentMethod,
-              notes: pharmacyNotes,
-            }),
-          });
-        } catch (dispensingError) {
-          console.error("Error creating dispensing record:", dispensingError);
-        }
-
-        // Redirect after success
-        setTimeout(() => {
-          router.push("/pharmacy");
-        }, 1500);
-      } else {
-        throw new Error(updateResult.error || "Failed to dispense medicines");
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to dispense");
       }
+
+      toast.success("✅ Medicines dispensed successfully!");
+      
+      // Redirect after success
+      setTimeout(() => {
+        router.push("/pharmacy");
+      }, 1500);
+      
     } catch (error: any) {
       console.error("Dispensing failed:", error);
       toast.error(error.message || "Dispensing failed");
@@ -473,9 +405,36 @@ export default function DispensePage() {
     }
   };
 
-  // ========== RENDER LOGIC ==========
+  // Calculate total
+  const calculateTotal = () => {
+    return dispensingItems.reduce((sum, item) => sum + item.totalPrice, 0);
+  };
 
-  // If no prescription ID
+  // Load prescription on mount
+  useEffect(() => {
+    if (prescriptionId && accessToken) {
+      fetchPrescription();
+    }
+  }, [prescriptionId, accessToken]);
+
+  // Load medicines when prescription loads
+  useEffect(() => {
+    if (prescription) {
+      loadAndLinkMedicines();
+    }
+  }, [prescription]);
+
+  // Calculate dispensing status
+  const totalDispensed = dispensingItems.reduce((sum, item) => sum + item.dispensedQuantity, 0);
+  const totalPrescribed = dispensingItems.reduce((sum, item) => sum + item.prescribedQuantity, 0);
+  const dispensingStatus = totalDispensed === 0 
+    ? "pending" 
+    : totalDispensed < totalPrescribed 
+      ? "partial" 
+      : "full";
+
+  // ========== RENDER ==========
+
   if (!prescriptionId) {
     return (
       <div className="container mx-auto px-4 py-8">
@@ -483,54 +442,38 @@ export default function DispensePage() {
           <CardContent className="p-6 text-center">
             <AlertTriangle className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
             <h2 className="text-2xl font-bold mb-2">No Prescription Selected</h2>
-            <p className="text-muted-foreground mb-6">
-              Please go back to the pharmacy page and select a prescription to dispense.
-            </p>
-            <div className="flex gap-3 justify-center">
-              <Button onClick={() => router.push("/pharmacy")}>
-                Return to Pharmacy
-              </Button>
-              <Button onClick={() => router.push("/pharmacy/select-prescription")} variant="outline">
-                Select Prescription
-              </Button>
-            </div>
+            <Button onClick={() => router.push("/pharmacy/select-prescription")}>
+              Select Prescription
+            </Button>
           </CardContent>
         </Card>
       </div>
     );
   }
 
-  // Loading state
-  if (loading || authLoading) {
+  if (loading) {
     return (
       <div className="flex justify-center items-center h-screen">
         <div className="text-center">
           <Loader2 className="h-12 w-12 animate-spin text-blue-600 mx-auto mb-4" />
-          <p className="text-muted-foreground">Loading prescription details...</p>
+          <p className="text-muted-foreground">Loading prescription...</p>
         </div>
       </div>
     );
   }
 
-  // Error state
-  if (error) {
+  if (error || !prescription) {
     return (
       <div className="container mx-auto px-4 py-8">
         <Card className="border-red-200">
           <CardContent className="p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <AlertCircle className="h-8 w-8 text-red-500" />
-              <div>
-                <h2 className="text-xl font-semibold text-red-800">Error Loading Prescription</h2>
-                <p className="text-red-700 mt-1">{error}</p>
-              </div>
-            </div>
+            <AlertCircle className="h-8 w-8 text-red-500 mb-4" />
+            <h2 className="text-xl font-semibold text-red-800 mb-2">Error</h2>
+            <p className="text-red-700 mb-4">{error || "Prescription not found"}</p>
             <div className="flex gap-3">
+              <Button onClick={fetchPrescription}>Retry</Button>
               <Button onClick={() => router.push("/pharmacy")} variant="outline">
-                Return to Pharmacy
-              </Button>
-              <Button onClick={fetchPrescription}>
-                Try Again
+                Back to Pharmacy
               </Button>
             </div>
           </CardContent>
@@ -539,32 +482,6 @@ export default function DispensePage() {
     );
   }
 
-  // No prescription found
-  if (!prescription) {
-    return (
-      <div className="container mx-auto px-4 py-8">
-        <Card>
-          <CardContent className="p-6 text-center">
-            <AlertTriangle className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
-            <h2 className="text-xl font-semibold mb-2">Prescription Not Found</h2>
-            <p className="text-muted-foreground mb-6">
-              The prescription with ID {prescriptionId} could not be found.
-            </p>
-            <div className="flex gap-3 justify-center">
-              <Button onClick={() => router.push("/pharmacy")}>
-                Return to Pharmacy
-              </Button>
-              <Button onClick={fetchPrescription} variant="outline">
-                Retry Loading
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  // ========== MAIN RENDER ==========
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="flex items-center gap-4 mb-6">
@@ -572,7 +489,15 @@ export default function DispensePage() {
           <ArrowLeft className="mr-2 h-4 w-4" />
           Back to Pharmacy
         </Button>
-        <h1 className="text-3xl font-bold">Dispense Medicines</h1>
+        <div>
+          <h1 className="text-3xl font-bold">Dispense Medicines</h1>
+          <p className="text-muted-foreground">
+            Prescription: {prescription.prescriptionId} • Patient: {prescription.patient.name}
+          </p>
+        </div>
+        <Badge variant={dispensingStatus === "full" ? "default" : "secondary"}>
+          {dispensingStatus.toUpperCase()}
+        </Badge>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -588,9 +513,9 @@ export default function DispensePage() {
             <CardContent className="space-y-4">
               <div>
                 <Label className="text-sm text-muted-foreground">Prescription ID</Label>
-                <p className="font-mono font-bold mt-1">{prescription.prescriptionId}</p>
+                <p className="font-mono font-bold">{prescription.prescriptionId}</p>
               </div>
-
+              
               <div>
                 <Label className="text-sm text-muted-foreground">Patient</Label>
                 <div className="flex items-center gap-2 mt-1">
@@ -647,7 +572,7 @@ export default function DispensePage() {
                 <Label>Payment Method</Label>
                 <Select value={paymentMethod} onValueChange={setPaymentMethod}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Select payment method" />
+                    <SelectValue placeholder="Select method" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="cash">Cash</SelectItem>
@@ -660,11 +585,18 @@ export default function DispensePage() {
               <div>
                 <Label>Total Amount</Label>
                 <div className="text-2xl font-bold text-green-600">
-                  AFN {calculateTotal().toFixed(2)}
+                  ${calculateTotal().toFixed(2)}
                 </div>
               </div>
             </CardContent>
           </Card>
+
+          {stockLoading && (
+            <Alert>
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              <AlertDescription>Checking stock availability...</AlertDescription>
+            </Alert>
+          )}
         </div>
 
         {/* Right Column: Medicines */}
@@ -674,19 +606,18 @@ export default function DispensePage() {
               <CardTitle className="flex items-center justify-between">
                 <span className="flex items-center gap-2">
                   <Package className="h-5 w-5" />
-                  Medicines to Dispense
+                  Medicines from Stock
                 </span>
                 <Badge variant="outline">
-                  {dispensingItems.filter(item => item.dispensedQuantity > 0).length} of{" "}
-                  {dispensingItems.length} items
+                  {dispensingItems.filter(i => i.dispensedQuantity > 0).length} / {dispensingItems.length}
                 </Badge>
               </CardTitle>
             </CardHeader>
             <CardContent>
               {dispensingItems.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
-                  <AlertCircle className="h-12 w-12 mx-auto mb-4" />
-                  <p>No medicines found in this prescription</p>
+                  <Package className="h-12 w-12 mx-auto mb-4" />
+                  <p>No medicines to dispense</p>
                 </div>
               ) : (
                 <div className="overflow-x-auto">
@@ -695,8 +626,9 @@ export default function DispensePage() {
                       <TableRow>
                         <TableHead>Medicine</TableHead>
                         <TableHead>Batch</TableHead>
+                        <TableHead>Supplier</TableHead>
                         <TableHead>Prescribed</TableHead>
-                        <TableHead>Available</TableHead>
+                        <TableHead>In Stock</TableHead>
                         <TableHead>Dispense</TableHead>
                         <TableHead>Price</TableHead>
                         <TableHead>Total</TableHead>
@@ -704,42 +636,103 @@ export default function DispensePage() {
                     </TableHeader>
                     <TableBody>
                       {dispensingItems.map((item) => (
-                        <TableRow key={item.medicineId}>
+                        <TableRow key={item.medicineId} className={
+                          !item.foundInStock ? "bg-red-50" :
+                          item.status === "low-stock" ? "bg-orange-50" :
+                          item.status === "expiring-soon" ? "bg-yellow-50" : ""
+                        }>
                           <TableCell>
                             <div>
-                              <p className="font-medium">{item.name}</p>
-                              {item.instructions && (
-                                <p className="text-xs text-muted-foreground">
-                                  {item.instructions}
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium">{item.medicineName}</p>
+                                {item.foundInStock ? (
+                                  <span title="Found in stock">
+                                    <Check className="h-4 w-4 text-green-500" />
+                                  </span>
+                                ) : (
+                                  <span title="Not in stock">
+                                    <X className="h-4 w-4 text-red-500" />
+                                  </span>
+                                )}
+                              </div>
+                              {!item.foundInStock && (
+                                <Badge variant="destructive" className="mt-1 text-xs">
+                                  Not in stock
+                                </Badge>
+                              )}
+                              {item.foundInStock && item.status === "low-stock" && (
+                                <Badge className="bg-orange-500 text-xs mt-1">
+                                  Low Stock
+                                </Badge>
+                              )}
+                              {item.expiryDate && (
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  Expires: {format(new Date(item.expiryDate), "MMM d, yyyy")}
                                 </p>
                               )}
                             </div>
                           </TableCell>
-                          <TableCell>{item.batchNumber}</TableCell>
-                          <TableCell>{item.prescribedQuantity}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="text-xs">
+                              {item.batchNumber}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <p className="text-sm">{item.supplier || "N/A"}</p>
+                          </TableCell>
+                          <TableCell>
+                            <div className="font-medium">{item.prescribedQuantity}</div>
+                          </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
-                              {item.availableStock}
-                              {item.availableStock < item.prescribedQuantity && (
+                              <span className={
+                                !item.foundInStock ? "text-red-600 font-bold" :
+                                item.availableStock === 0 ? "text-red-600" :
+                                item.availableStock < item.prescribedQuantity ? "text-orange-500" : "text-green-600"
+                              }>
+                                {item.foundInStock ? item.availableStock : "0"}
+                              </span>
+                              {!item.foundInStock && (
                                 <AlertCircle className="h-4 w-4 text-red-500" />
+                              )}
+                              {item.foundInStock && item.availableStock === 0 && (
+                                <AlertCircle className="h-4 w-4 text-red-500" />
+                              )}
+                              {item.foundInStock && item.availableStock > 0 && item.availableStock < item.prescribedQuantity && (
+                                <Info className="h-4 w-4 text-orange-500" />
                               )}
                             </div>
                           </TableCell>
                           <TableCell>
-                            <Input
-                              type="number"
-                              min="0"
-                              max={item.availableStock}
-                              value={item.dispensedQuantity}
-                              onChange={(e) =>
-                                updateDispensedQuantity(item.medicineId, parseInt(e.target.value) || 0)
-                              }
-                              className="w-20"
-                            />
+                            <div className="flex items-center gap-2">
+                              <Input
+                                type="number"
+                                min="0"
+                                max={item.foundInStock ? item.availableStock : 0}
+                                value={item.dispensedQuantity}
+                                onChange={(e) =>
+                                  updateDispensedQuantity(item.medicineId, parseInt(e.target.value) || 0)
+                                }
+                                className="w-20"
+                                disabled={!item.foundInStock || item.availableStock === 0}
+                              />
+                              {item.foundInStock && item.availableStock > 0 && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => updateDispensedQuantity(item.medicineId, Math.min(item.prescribedQuantity, item.availableStock))}
+                                  className="text-xs"
+                                >
+                                  Max
+                                </Button>
+                              )}
+                            </div>
                           </TableCell>
-                          <TableCell>AFN {item.unitPrice.toFixed(2)}</TableCell>
+                          <TableCell>
+                            <div className="text-sm">${item.unitPrice.toFixed(2)}</div>
+                          </TableCell>
                           <TableCell className="font-medium">
-                            AFN {item.totalPrice.toFixed(2)}
+                            ${item.totalPrice.toFixed(2)}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -760,7 +753,7 @@ export default function DispensePage() {
                 <Textarea
                   value={patientInstructions}
                   onChange={(e) => setPatientInstructions(e.target.value)}
-                  placeholder="Additional instructions for the patient..."
+                  placeholder="Instructions for the patient..."
                   rows={3}
                 />
               </div>
@@ -776,18 +769,34 @@ export default function DispensePage() {
             </CardContent>
           </Card>
 
-          {dispensingItems.length > 0 && (
-            <Alert>
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                Review the quantities before dispensing. Ensure all information is correct.
-              </AlertDescription>
-            </Alert>
-          )}
+          {/* Summary Alert */}
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              <div className="space-y-2">
+                <p>Review before dispensing:</p>
+                <div className="text-sm grid grid-cols-2 gap-2">
+                  <div>
+                    <span className="font-medium">Total Prescribed:</span> {totalPrescribed} units
+                  </div>
+                  <div>
+                    <span className="font-medium">To Dispense:</span> {totalDispensed} units
+                  </div>
+                  <div>
+                    <span className="font-medium">Status:</span> {dispensingStatus.toUpperCase()}
+                  </div>
+                  <div>
+                    <span className="font-medium">Found in Stock:</span> {dispensingItems.filter(i => i.foundInStock).length} / {dispensingItems.length}
+                  </div>
+                </div>
+              </div>
+            </AlertDescription>
+          </Alert>
 
+          {/* Action Buttons */}
           <div className="flex justify-end gap-4">
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={() => router.push("/pharmacy")}
               disabled={dispensing}
             >
@@ -795,7 +804,7 @@ export default function DispensePage() {
             </Button>
             <Button
               onClick={handleDispense}
-              disabled={dispensing || calculateTotal() === 0 || dispensingItems.length === 0}
+              disabled={dispensing || totalDispensed === 0}
             >
               {dispensing ? (
                 <>
@@ -805,7 +814,7 @@ export default function DispensePage() {
               ) : (
                 <>
                   <CheckCircle className="mr-2 h-4 w-4" />
-                  Dispense Medicines
+                  Dispense Medicines (${calculateTotal().toFixed(2)})
                 </>
               )}
             </Button>
