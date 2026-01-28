@@ -510,7 +510,7 @@ export default function RadiologyDashboardPage() {
                   className="flex items-start gap-4 p-4 rounded-lg border hover:bg-accent/50 transition-colors cursor-pointer"
                   onClick={() => handleViewRequest(request._id)}
                 >
-                  <div className="flex-shrink-0">
+                  <div className="shrink-0">
                     <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
                       <FileText className="h-5 w-5 text-primary" />
                     </div>
@@ -536,7 +536,7 @@ export default function RadiologyDashboardPage() {
                       )}
                     </div>
                   </div>
-                  <ArrowRight className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-2" />
+                  <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0 mt-2" />
                 </div>
               ))}
               {recentActivity.length === 0 && (

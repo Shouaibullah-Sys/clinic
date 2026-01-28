@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
 import { LabTest } from "@/lib/models/LabTest";
 import { Prescription } from "@/lib/models/Prescription";
+import { RadiologyService } from "@/lib/models/RadiologyService";
 import { Appointment } from "@/lib/models/Appointment";
 import { jwtVerify } from "jose";
-import mongoose from "mongoose";
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-this";
 
@@ -60,8 +60,7 @@ export async function GET(
     const appointment = await Appointment.findById(appointmentId)
       .select("-__v")
       .populate("patient", "_id name patientId phone email dateOfBirth gender address bloodGroup allergies")
-      .populate("doctor", "_id name specialization department")
-      .lean();
+      .populate("doctor", "_id name specialization department");
     
     if (!appointment) {
       return NextResponse.json(
@@ -76,8 +75,7 @@ export async function GET(
     // Get appointment-specific lab tests
     const appointmentLabTests = await LabTest.find({ appointment: appointmentId })
       .select("_id testId testName category price discountedPrice status priority charges orderedAt")
-      .sort({ orderedAt: -1 })
-      .lean();
+      .sort({ orderedAt: -1 });
     
     // Get patient-specific lab tests (from last 30 days if no appointment-specific tests)
     let patientLabTests = [];
@@ -94,8 +92,7 @@ export async function GET(
       })
         .select("_id testId testName category price discountedPrice status priority charges orderedAt")
         .sort({ orderedAt: -1 })
-        .limit(20)
-        .lean();
+        .limit(20);
       
       if (patientLabTests.length > 0) {
         labTestsSource = 'patient';
@@ -126,8 +123,7 @@ export async function GET(
       .select("_id prescriptionId prescribedDate medications diagnosis instructions notes status expiryDate")
       .populate("patient", "_id name patientId")
       .populate("doctor", "_id name specialization")
-      .sort({ prescribedDate: -1 })
-      .lean();
+      .sort({ prescribedDate: -1 });
     
     // Get patient-specific prescriptions
     let patientPrescriptions = [];
@@ -147,8 +143,7 @@ export async function GET(
         .populate("patient", "_id name patientId")
         .populate("doctor", "_id name specialization")
         .sort({ prescribedDate: -1 })
-        .limit(10)
-        .lean();
+        .limit(10);
       
       if (patientPrescriptions.length > 0) {
         prescriptionsSource = 'patient';
@@ -169,11 +164,65 @@ export async function GET(
         .populate("patient", "_id name patientId")
         .populate("doctor", "_id name specialization")
         .sort({ prescribedDate: -1 })
-        .limit(5)
-        .lean();
+        .limit(5);
       
       if (patientPrescriptions.length > 0) {
         prescriptionsSource = 'mixed';
+      }
+    }
+    
+    // Get appointment-specific imaging services
+    const appointmentImagingServices = await RadiologyService.find({ appointment: appointmentId })
+      .select("_id serviceId serviceType bodyPart view status priority reportStatus billingStatus charges paymentVerified requestDate scheduledDate performedDate")
+      .populate("referringDoctor", "name")
+      .populate("radiologist", "name")
+      .populate("technician", "name")
+      .sort({ requestDate: -1 });
+    
+    // Get patient-specific imaging services (from last 30 days if no appointment-specific services)
+    let patientImagingServices = [];
+    let imagingSource: 'appointment' | 'patient' | 'mixed' = 'appointment';
+    
+    if (appointmentImagingServices.length === 0) {
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      
+      patientImagingServices = await RadiologyService.find({
+        patient: patientId,
+        requestDate: { $gte: thirtyDaysAgo },
+        status: { $ne: "cancelled" }
+      })
+        .select("_id serviceId serviceType bodyPart view status priority reportStatus billingStatus charges paymentVerified requestDate scheduledDate performedDate")
+        .populate("referringDoctor", "name")
+        .populate("radiologist", "name")
+        .populate("technician", "name")
+        .sort({ requestDate: -1 })
+        .limit(20);
+      
+      if (patientImagingServices.length > 0) {
+        imagingSource = 'patient';
+      }
+    } else {
+      // If we have appointment-specific services, still get recent patient services for context
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      
+      patientImagingServices = await RadiologyService.find({
+        patient: patientId,
+        appointment: { $ne: appointmentId }, // Exclude current appointment services
+        requestDate: { $gte: thirtyDaysAgo },
+        status: { $ne: "cancelled" }
+      })
+        .select("_id serviceId serviceType bodyPart view status priority reportStatus billingStatus charges paymentVerified requestDate scheduledDate performedDate")
+        .populate("referringDoctor", "name")
+        .populate("radiologist", "name")
+        .populate("technician", "name")
+        .sort({ requestDate: -1 })
+        .limit(10)
+        .lean();
+      
+      if (patientImagingServices.length > 0) {
+        imagingSource = 'mixed';
       }
     }
     
@@ -183,9 +232,11 @@ export async function GET(
         appointment,
         labTests: [...appointmentLabTests, ...patientLabTests],
         prescriptions: [...appointmentPrescriptions, ...patientPrescriptions],
+        imagingServices: [...appointmentImagingServices, ...patientImagingServices],
         source: {
           labTests: labTestsSource,
-          prescriptions: prescriptionsSource
+          prescriptions: prescriptionsSource,
+          imaging: imagingSource
         }
       },
     });

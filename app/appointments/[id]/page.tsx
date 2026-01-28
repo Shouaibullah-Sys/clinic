@@ -1,3 +1,5 @@
+// app/appointments/[id]/page.tsx
+
 "use client";
 
 import { useState, useEffect } from "react";
@@ -73,6 +75,7 @@ import {
   Clock4,
   TrendingUp,
   BarChart3,
+  Scan,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { toast } from "sonner";
@@ -170,6 +173,43 @@ interface Prescription {
   expiryDate: string;
 }
 
+interface ImagingService {
+  _id: string;
+  serviceId: string;
+  serviceType: "x-ray" | "ct-scan" | "mri" | "ultrasound";
+  bodyPart: string;
+  view: string;
+  status: string;
+  priority: string;
+  reportStatus?: string;
+  billingStatus?: string;
+  charges?: {
+    basePrice?: number;
+    tax?: number;
+    discount?: number;
+    otherCharges?: number;
+    totalAmount?: number;
+    paid?: number;
+    due?: number;
+    paymentStatus: string;
+    paymentMethod?: string;
+    transactionId?: string;
+  };
+  paymentVerified?: boolean;
+  requestDate: string;
+  scheduledDate?: string;
+  performedDate?: string;
+  referringDoctor?: {
+    name: string;
+  };
+  radiologist?: {
+    name: string;
+  };
+  technician?: {
+    name: string;
+  };
+}
+
 export default function AppointmentDetailPage() {
   const router = useRouter();
   const params = useParams();
@@ -177,16 +217,19 @@ export default function AppointmentDetailPage() {
   const [appointment, setAppointment] = useState<Appointment | null>(null);
   const [labTests, setLabTests] = useState<LabTest[]>([]);
   const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
+  const [imagingServices, setImagingServices] = useState<ImagingService[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("overview");
   const [dataSource, setDataSource] = useState<{
     labTests: 'appointment' | 'patient' | 'mixed';
     prescriptions: 'appointment' | 'patient' | 'mixed';
-  }>({ labTests: 'appointment', prescriptions: 'appointment' });
+    imaging: 'appointment' | 'patient' | 'mixed';
+  }>({ labTests: 'appointment', prescriptions: 'appointment', imaging: 'appointment' });
   
   // Dialog states
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [selectedLabTest, setSelectedLabTest] = useState<LabTest | null>(null);
+  const [selectedImagingService, setSelectedImagingService] = useState<ImagingService | null>(null);
   const [paymentForm, setPaymentForm] = useState({
     paymentMethod: "cash",
     amount: 0,
@@ -194,6 +237,7 @@ export default function AppointmentDetailPage() {
     notes: ""
   });
   const [processingPayment, setProcessingPayment] = useState(false);
+  const [paymentType, setPaymentType] = useState<'lab' | 'imaging'>('lab');
 
   useEffect(() => {
     if (params.id && accessToken) {
@@ -221,10 +265,11 @@ export default function AppointmentDetailPage() {
         setAppointment(data.data.appointment);
         setLabTests(data.data.labTests || []);
         setPrescriptions(data.data.prescriptions || []);
-        setDataSource(data.data.source || { labTests: 'appointment', prescriptions: 'appointment' });
+        setImagingServices(data.data.imagingServices || []);
+        setDataSource(data.data.source || { labTests: 'appointment', prescriptions: 'appointment', imaging: 'appointment' });
         
         // Log counts for debugging
-        console.log(`✅ Loaded: ${data.data.labTests?.length || 0} lab tests, ${data.data.prescriptions?.length || 0} prescriptions`);
+        console.log(`✅ Loaded: ${data.data.labTests?.length || 0} lab tests, ${data.data.prescriptions?.length || 0} prescriptions, ${data.data.imagingServices?.length || 0} imaging services`);
       } else {
         console.warn("⚠️ Medical records endpoint failed, falling back to separate endpoints");
         toast.error(data.error || "Failed to fetch appointment details");
@@ -258,7 +303,8 @@ export default function AppointmentDetailPage() {
         // Fetch ALL data in parallel for better performance
         await Promise.all([
           fetchLabTests(data.data.patient._id),
-          fetchPrescriptions(data.data.patient._id)
+          fetchPrescriptions(data.data.patient._id),
+          fetchImagingServices()
         ]);
       } else {
         toast.error(data.error || "Failed to fetch appointment details");
@@ -266,6 +312,34 @@ export default function AppointmentDetailPage() {
     } catch (error) {
       console.error("Error fetching appointment fallback:", error);
       toast.error("Network error. Please try again.");
+    }
+  };
+
+  // Unified imaging services fetcher
+  const fetchImagingServices = async () => {
+    try {
+      console.log(`🔍 FETCHING IMAGING SERVICES for appointment ${params.id}`);
+      
+      const response = await fetch(`/api/appointments/${params.id}/imaging`, {
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+      });
+      
+      const data = await response.json();
+      
+      if (data.success && Array.isArray(data.data)) {
+        console.log(`✅ Found ${data.data.length} imaging services`);
+        setImagingServices(data.data);
+        setDataSource(prev => ({ ...prev, imaging: 'appointment' }));
+      } else {
+        console.warn("⚠️ No imaging services found");
+        setImagingServices([]);
+      }
+    } catch (error) {
+      console.error("💥 Error fetching imaging services:", error);
+      setImagingServices([]);
     }
   };
 
@@ -425,23 +499,41 @@ export default function AppointmentDetailPage() {
 
   // Process payment for lab test
   const handleProcessPayment = async () => {
-    if (!selectedLabTest) return;
+    if (paymentType === 'lab' && !selectedLabTest) return;
+    if (paymentType === 'imaging' && !selectedImagingService) return;
     
     try {
       setProcessingPayment(true);
       
-      const response = await fetch(`/api/reception/lab-tests/${selectedLabTest._id}/charges`, {
+      let url, body;
+      
+      if (paymentType === 'lab' && selectedLabTest) {
+        url = `/api/reception/lab-tests/${selectedLabTest._id}/charges`;
+        body = {
+          paymentMethod: paymentForm.paymentMethod,
+          paidAmount: paymentForm.amount,
+          transactionId: paymentForm.transactionId,
+          verifyPayment: true
+        };
+      } else if (paymentType === 'imaging' && selectedImagingService) {
+        url = `/api/radiology/services/${selectedImagingService._id}/charges`;
+        body = {
+          paymentMethod: paymentForm.paymentMethod,
+          paidAmount: paymentForm.amount,
+          transactionId: paymentForm.transactionId,
+          verifyPayment: true
+        };
+      } else {
+        return;
+      }
+      
+      const response = await fetch(url, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
           ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         },
-        body: JSON.stringify({
-          paymentMethod: paymentForm.paymentMethod,
-          paidAmount: paymentForm.amount,
-          transactionId: paymentForm.transactionId,
-          verifyPayment: true
-        }),
+        body: JSON.stringify(body),
       });
       
       const data = await response.json();
@@ -498,6 +590,69 @@ export default function AppointmentDetailPage() {
       <html>
         <head>
           <title>Receipt - ${labTest.testName}</title>
+          <style>
+            body { font-family: monospace; padding: 20px; }
+            h1 { text-align: center; }
+            .receipt { max-width: 400px; margin: 0 auto; }
+            .total { font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <div class="receipt">
+            <pre>${receiptContent}</pre>
+          </div>
+          <script>
+            window.onload = function() {
+              window.print();
+              window.close();
+            }
+          </script>
+        </body>
+      </html>
+    `);
+  };
+
+  // Print imaging receipt
+  const handlePrintImagingReceipt = (service: ImagingService) => {
+    const receiptContent = `
+      HOSPITAL RECEIPT
+      =================
+      Receipt #: ${service.charges?.transactionId || `TXN-${Date.now()}`}
+      Date: ${format(new Date(), "yyyy-MM-dd HH:mm")}
+      
+      Patient: ${appointment?.patient?.name}
+      Patient ID: ${appointment?.patient?.patientId}
+      
+      Imaging Service: ${service.serviceType === 'x-ray' ? 'X-Ray' :
+                       service.serviceType === 'ct-scan' ? 'CT Scan' :
+                       service.serviceType === 'mri' ? 'MRI' : 'Ultrasound'}
+      Service ID: ${service.serviceId}
+      Body Part: ${service.bodyPart}
+      View: ${service.view}
+      
+      Charges:
+        Base Price: $${(service.charges?.basePrice || 0).toFixed(2)}
+        Tax: $${service.charges?.tax?.toFixed(2) || "0.00"}
+        Other Charges: $${service.charges?.otherCharges?.toFixed(2) || "0.00"}
+        Discount: -$${service.charges?.discount?.toFixed(2) || "0.00"}
+        -----------------
+        Total: ${(service.charges?.totalAmount || 0).toFixed(2)}
+      
+      Payment:
+        Method: ${service.charges?.paymentMethod || "cash"}
+        Amount Paid: $${(service.charges?.paid || 0).toFixed(2)}
+        Due: $${(service.charges?.due || (service.charges?.totalAmount || 0)).toFixed(2)}
+      
+      Processed by: ${user?.name}
+      =================
+      Thank you for your payment!
+    `;
+    
+    const printWindow = window.open('', '_blank');
+    printWindow?.document.write(`
+      <html>
+        <head>
+          <title>Receipt - ${service.serviceType}</title>
           <style>
             body { font-family: monospace; padding: 20px; }
             h1 { text-align: center; }
@@ -755,6 +910,9 @@ export default function AppointmentDetailPage() {
           <TabsTrigger value="prescriptions">
             Prescriptions {prescriptions.length > 0 && `(${prescriptions.length})`}
           </TabsTrigger>
+          <TabsTrigger value="imaging">
+            Imaging {imagingServices.length > 0 && `(${imagingServices.length})`}
+          </TabsTrigger>
           <TabsTrigger value="billing">Billing</TabsTrigger>
         </TabsList>
 
@@ -994,6 +1152,110 @@ export default function AppointmentDetailPage() {
           </Card>
         </TabsContent>
 
+        {/* Imaging Tab */}
+        <TabsContent value="imaging" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Scan className="h-5 w-5" />
+                Imaging Services
+              </CardTitle>
+              <CardDescription className="flex items-center gap-2">
+                Manage and process payments for imaging services (X-Ray, CT Scan, MRI, Ultrasound)
+                {imagingServices.length > 0 && (
+                  <Badge variant="outline" className="ml-2">
+                    {dataSource.imaging === 'appointment' ? 'Appointment-specific' : 
+                     dataSource.imaging === 'patient' ? 'Patient history' : 'Mixed sources'}
+                  </Badge>
+                )}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {imagingServices.length === 0 ? (
+                <div className="text-center py-12">
+                  <Scan className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+                  <p>No imaging services ordered</p>
+                </div>
+              ) : (
+                <div className="rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Service ID</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Body Part</TableHead>
+                        <TableHead>View</TableHead>
+                        <TableHead>Total</TableHead>
+                        <TableHead>Payment Status</TableHead>
+                        <TableHead>Due</TableHead>
+                        <TableHead>Service Status</TableHead>
+                        <TableHead>Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {imagingServices.map((service) => (
+                        <TableRow key={service._id}>
+                          <TableCell className="font-medium">{service.serviceId}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline">
+                              {service.serviceType === 'x-ray' ? 'X-Ray' :
+                               service.serviceType === 'ct-scan' ? 'CT Scan' :
+                               service.serviceType === 'mri' ? 'MRI' : 'Ultrasound'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>{service.bodyPart}</TableCell>
+                          <TableCell>{service.view}</TableCell>
+                          <TableCell>${(service.charges?.totalAmount || 0).toFixed(2)}</TableCell>
+                          <TableCell>
+                            {getPaymentStatusBadge(service.charges?.paymentStatus || "pending")}
+                          </TableCell>
+                          <TableCell className="font-bold text-red-600">
+                            ${service.charges?.due?.toFixed(2) || (service.charges?.totalAmount || 0).toFixed(2)}
+                          </TableCell>
+                          <TableCell>
+                            {getLabStatusBadge(service.status)}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setSelectedImagingService(service);
+                                  setPaymentType('imaging');
+                                  setPaymentForm({
+                                    paymentMethod: service.charges?.paymentMethod || "cash",
+                                    amount: service.charges?.due || (service.charges?.totalAmount || 0),
+                                    transactionId: service.charges?.transactionId || "",
+                                    notes: ""
+                                  });
+                                  setPaymentDialogOpen(true);
+                                }}
+                                disabled={service.charges?.paymentStatus === "paid"}
+                              >
+                                <CreditCard className="h-3 w-3 mr-1" />
+                                Pay
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handlePrintImagingReceipt(service)}
+                              >
+                                <Receipt className="h-3 w-3 mr-1" />
+                                Receipt
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         {/* Billing Tab */}
         <TabsContent value="billing" className="space-y-6">
           <Card>
@@ -1096,15 +1358,76 @@ export default function AppointmentDetailPage() {
           <DialogHeader>
             <DialogTitle>Process Payment</DialogTitle>
             <DialogDescription>
-              Process payment for {selectedLabTest?.testName}
+              {paymentType === 'lab' 
+                ? `Process payment for ${selectedLabTest?.testName}`
+                : `Process payment for ${selectedImagingService?.serviceType === 'x-ray' ? 'X-Ray' :
+                    selectedImagingService?.serviceType === 'ct-scan' ? 'CT Scan' :
+                    selectedImagingService?.serviceType === 'mri' ? 'MRI' : 'Ultrasound'}`
+              }
             </DialogDescription>
           </DialogHeader>
           
-          {selectedLabTest && (
+          {(paymentType === 'lab' && selectedLabTest) && (
             <div className="space-y-4">
-              <div className="p-3 bg-gray-50 rounded-lg">
+              <div className="p-3 rounded-lg">
                 <p className="font-medium">Test: {selectedLabTest.testName}</p>
                 <p className="text-sm">Total Due: ${selectedLabTest.charges?.due?.toFixed(2) || calculateTestTotal(selectedLabTest).toFixed(2)}</p>
+              </div>
+              
+              <div className="space-y-3">
+                <div>
+                  <Label>Payment Method</Label>
+                  <Select
+                    value={paymentForm.paymentMethod}
+                    onValueChange={(value) => setPaymentForm(prev => ({ ...prev, paymentMethod: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="cash">Cash</SelectItem>
+                      <SelectItem value="card">Credit/Debit Card</SelectItem>
+                      <SelectItem value="upi">UPI</SelectItem>
+                      <SelectItem value="insurance">Insurance</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div>
+                  <Label>Amount</Label>
+                  <Input
+                    type="number"
+                    value={paymentForm.amount}
+                    onChange={(e) => setPaymentForm(prev => ({ 
+                      ...prev, 
+                      amount: parseFloat(e.target.value) || 0 
+                    }))}
+                    placeholder="Enter amount"
+                  />
+                </div>
+                
+                <div>
+                  <Label>Transaction/Reference ID</Label>
+                  <Input
+                    value={paymentForm.transactionId}
+                    onChange={(e) => setPaymentForm(prev => ({ ...prev, transactionId: e.target.value }))}
+                    placeholder="Optional"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {(paymentType === 'imaging' && selectedImagingService) && (
+            <div className="space-y-4">
+              <div className="p-3 rounded-lg">
+                <p className="font-medium">
+                  Service: {selectedImagingService.serviceType === 'x-ray' ? 'X-Ray' :
+                           selectedImagingService.serviceType === 'ct-scan' ? 'CT Scan' :
+                           selectedImagingService.serviceType === 'mri' ? 'MRI' : 'Ultrasound'}
+                </p>
+                <p className="text-sm">Body Part: {selectedImagingService.bodyPart}</p>
+                <p className="text-sm">Total Due: ${(selectedImagingService.charges?.due || (selectedImagingService.charges?.totalAmount || 0)).toFixed(2)}</p>
               </div>
               
               <div className="space-y-3">

@@ -31,6 +31,13 @@ interface ImagingRecord {
   performedDate?: string;
   reportStatus?: string;
   billingStatus?: string;
+  paymentStatus?: string;
+  paymentVerified?: boolean;
+  charges?: {
+    totalAmount?: number;
+    due?: number;
+    paymentStatus?: string;
+  };
   referringDoctor?: string;
   radiologist?: string;
   technician?: string;
@@ -104,15 +111,25 @@ const columns: ColumnDef<ImagingRecord>[] = [
     },
   },
   {
-    accessorKey: "billingStatus",
-    header: "Billing",
+    accessorKey: "paymentStatus",
+    header: "Payment",
     cell: ({ row }) => {
-      const billingStatus = row.getValue("billingStatus") as string;
-      if (!billingStatus) return <span className="text-muted-foreground">-</span>;
-      const variant = billingStatus === "paid" ? "default" :
-                     billingStatus === "billed" ? "secondary" : "outline";
-      const label = billingStatus.charAt(0).toUpperCase() + billingStatus.slice(1);
-      return <Badge variant={variant}>{label}</Badge>;
+      const paymentStatus = row.getValue("paymentStatus") as string || row.getValue("billingStatus") as string;
+      const paymentVerified = row.getValue("paymentVerified") as boolean;
+      if (!paymentStatus) return <span className="text-muted-foreground">-</span>;
+      
+      const variant = paymentStatus === "paid" ? "default" :
+                     paymentStatus === "partial" ? "secondary" : "outline";
+      const label = paymentStatus.charAt(0).toUpperCase() + paymentStatus.slice(1);
+      
+      return (
+        <div className="flex items-center gap-2">
+          <Badge variant={variant}>{label}</Badge>
+          {paymentVerified && (
+            <span className="text-xs text-green-600 font-medium">✓ Verified</span>
+          )}
+        </div>
+      );
     },
   },
   {

@@ -1,5 +1,21 @@
-// lib/models/RadiologyService.ts - For X-Ray, CT-Scan, MRI
+// lib/models/RadiologyService.ts
 import mongoose, { Schema, model, models, Document } from "mongoose";
+
+// Define the charges sub-schema interface
+export interface IRadiologyServiceCharges {
+  basePrice: number;
+  tax: number;
+  discount: number;
+  otherCharges: number;
+  totalAmount: number;
+  paid: number;
+  due: number;
+  paymentStatus: "pending" | "partial" | "paid" | "cancelled";
+  paymentMethod?: string;
+  transactionId?: string;
+  paymentDate?: Date;
+  collectedBy?: mongoose.Types.ObjectId;
+}
 
 export interface IRadiologyService extends Document {
   serviceId: string;
@@ -38,12 +54,50 @@ export interface IRadiologyService extends Document {
   priority: "routine" | "urgent" | "emergency";
   status: "scheduled" | "in-progress" | "completed" | "cancelled";
   billingStatus: "pending" | "billed" | "paid";
+  charges: IRadiologyServiceCharges;
+  paymentVerified: boolean;
+  paymentVerifiedBy?: mongoose.Types.ObjectId;
+  paymentVerifiedAt?: Date;
   notes?: string;
   createdAt: Date;
   updatedAt: Date;
+  
+  // Virtuals
+  calculatedTotal: number;
+  isPaid: boolean;
+  canPerform: boolean;
 }
 
-const RadiologyServiceSchema = new Schema<IRadiologyService>(
+// Define the charges sub-schema
+const radiologyServiceChargesSchema = new Schema<IRadiologyServiceCharges>({
+  basePrice: { type: Number, default: 0, min: 0 },
+  tax: { type: Number, default: 0, min: 0 },
+  discount: { type: Number, default: 0, min: 0 },
+  otherCharges: { type: Number, default: 0, min: 0 },
+  totalAmount: { type: Number, default: 0, min: 0 },
+  paid: { type: Number, default: 0, min: 0 },
+  due: { type: Number, default: 0, min: 0 },
+  paymentStatus: {
+    type: String,
+    enum: ["pending", "partial", "paid", "cancelled"],
+    default: "pending",
+  },
+  paymentMethod: { type: String, trim: true },
+  transactionId: { type: String, trim: true },
+  paymentDate: { type: Date },
+  collectedBy: { type: Schema.Types.ObjectId, ref: "User" },
+});
+
+// Define static methods interface
+interface RadiologyServiceModel extends mongoose.Model<IRadiologyService> {
+  findByAppointmentId(appointmentId: string): Promise<IRadiologyService[]>;
+  findByPatientId(patientId: string): Promise<IRadiologyService[]>;
+  getUnpaidServices(patientId?: string): Promise<IRadiologyService[]>;
+  verifyPayment(serviceId: string, verifiedBy: string, notes?: string): Promise<IRadiologyService | null>;
+  unverifyPayment(serviceId: string): Promise<IRadiologyService | null>;
+}
+
+const RadiologyServiceSchema = new Schema<IRadiologyService, RadiologyServiceModel>(
   {
     serviceId: {
       type: String,
@@ -172,6 +226,30 @@ const RadiologyServiceSchema = new Schema<IRadiologyService>(
       enum: ["pending", "billed", "paid"],
       default: "pending",
     },
+    charges: {
+      type: radiologyServiceChargesSchema,
+      default: () => ({
+        basePrice: 0,
+        tax: 0,
+        discount: 0,
+        otherCharges: 0,
+        totalAmount: 0,
+        paid: 0,
+        due: 0,
+        paymentStatus: "pending" as const,
+      }),
+    },
+    paymentVerified: {
+      type: Boolean,
+      default: false,
+    },
+    paymentVerifiedBy: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+    },
+    paymentVerifiedAt: {
+      type: Date,
+    },
     notes: {
       type: String,
       trim: true,
@@ -179,6 +257,8 @@ const RadiologyServiceSchema = new Schema<IRadiologyService>(
   },
   {
     timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
   }
 );
 
@@ -188,24 +268,158 @@ RadiologyServiceSchema.index({ serviceType: 1 });
 RadiologyServiceSchema.index({ scheduledDate: -1 });
 RadiologyServiceSchema.index({ status: 1 });
 RadiologyServiceSchema.index({ referringDoctor: 1 });
+RadiologyServiceSchema.index({ "charges.paymentStatus": 1 });
+RadiologyServiceSchema.index({ paymentVerified: 1 });
+RadiologyServiceSchema.index({ appointment: 1 });
 
-// Pre-save hook
-RadiologyServiceSchema.pre("save", function (next) {
-  if (!this.serviceId) {
-    const prefixMap = {
-      "x-ray": "XRAY",
-      "ct-scan": "CT",
-      "mri": "MRI",
-      "ultrasound": "US",
-    };
-    const prefix = prefixMap[this.serviceType] || "RAD";
-    const date = new Date();
-    const year = date.getFullYear().toString().slice(-2);
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    const random = Math.floor(1000 + Math.random() * 9000);
-    this.serviceId = `${prefix}${year}${month}${random}`;
+// Compound indexes
+RadiologyServiceSchema.index({ patient: 1, status: 1 });
+RadiologyServiceSchema.index({ "charges.paymentStatus": 1, status: 1 });
+RadiologyServiceSchema.index({ priority: 1, paymentVerified: 1 });
+RadiologyServiceSchema.index({ appointment: 1, status: 1 });
+
+// Virtual for calculated total amount
+RadiologyServiceSchema.virtual("calculatedTotal").get(function () {
+  const base = this.charges?.basePrice || 0;
+  const tax = this.charges?.tax || 0;
+  const other = this.charges?.otherCharges || 0;
+  const discount = this.charges?.discount || 0;
+  
+  return base + tax + other - discount;
+});
+
+// Virtual for isPaid
+RadiologyServiceSchema.virtual("isPaid").get(function () {
+  return this.charges?.paymentStatus === "paid";
+});
+
+// Virtual for canPerform
+RadiologyServiceSchema.virtual("canPerform").get(function () {
+  const condition1 = this.status !== "cancelled";
+  const condition2 = this.paymentVerified || this.priority !== "routine";
+  const condition3 = this.status === "scheduled";
+
+  return condition1 && condition2 && condition3;
+});
+
+  // Pre-save hook
+  RadiologyServiceSchema.pre("save", function (next) {
+    // Generate service ID if not exists
+    if (!this.serviceId) {
+      const prefixMap = {
+        "x-ray": "XRAY",
+        "ct-scan": "CT",
+        "mri": "MRI",
+        "ultrasound": "US",
+      };
+      const prefix = prefixMap[this.serviceType] || "RAD";
+      const date = new Date();
+      const year = date.getFullYear().toString().slice(-2);
+      const month = (date.getMonth() + 1).toString().padStart(2, '0');
+      const random = Math.floor(1000 + Math.random() * 9000);
+      this.serviceId = `${prefix}${year}${month}${random}`;
+    }
+  
+  // Calculate total amount and update charges
+  if (this.isModified("charges") || this.isNew) {
+    const base = this.charges?.basePrice || 0;
+    this.charges.totalAmount = base + this.charges.tax + this.charges.otherCharges - this.charges.discount;
+    
+    // Update due amount
+    this.charges.due = Math.max(0, this.charges.totalAmount - this.charges.paid);
+    
+    // Update payment status
+    if (this.charges.due === 0 && this.charges.totalAmount > 0) {
+      this.charges.paymentStatus = "paid";
+      this.billingStatus = "paid";
+      if (!this.paymentVerified) {
+        this.paymentVerified = true;
+        this.paymentVerifiedAt = new Date();
+      }
+    } else if (this.charges.paid > 0) {
+      this.charges.paymentStatus = "partial";
+      this.billingStatus = "billed";
+    } else {
+      this.charges.paymentStatus = "pending";
+      this.billingStatus = "pending";
+    }
   }
+  
   next();
 });
 
-export const RadiologyService = models.RadiologyService || model<IRadiologyService>("RadiologyService", RadiologyServiceSchema);
+// Static methods
+RadiologyServiceSchema.statics.findByAppointmentId = function (appointmentId: string) {
+  return this.find({ appointment: appointmentId })
+    .populate("patient", "name patientId")
+    .populate("referringDoctor", "name specialization")
+    .populate("radiologist", "name")
+    .populate("technician", "name")
+    .populate("charges.collectedBy", "name")
+    .populate("paymentVerifiedBy", "name")
+    .sort({ requestDate: -1 });
+};
+
+RadiologyServiceSchema.statics.findByPatientId = function (patientId: string) {
+  return this.find({ patient: patientId })
+    .populate("appointment", "appointmentId date")
+    .populate("referringDoctor", "name specialization")
+    .populate("charges.collectedBy", "name")
+    .populate("paymentVerifiedBy", "name")
+    .sort({ requestDate: -1 });
+};
+
+RadiologyServiceSchema.statics.getUnpaidServices = function (patientId?: string) {
+  const query: any = { 
+    "charges.paymentStatus": { $in: ["pending", "partial"] },
+    status: { $ne: "cancelled" }
+  };
+  if (patientId) {
+    query.patient = patientId;
+  }
+  
+  return this.find(query)
+    .populate("patient", "name patientId phone")
+    .populate("referringDoctor", "name")
+    .populate("charges.collectedBy", "name")
+    .sort({ requestDate: 1 });
+};
+
+// Payment verification static methods
+RadiologyServiceSchema.statics.verifyPayment = async function (
+  serviceId: string,
+  verifiedBy: string,
+  notes?: string
+): Promise<IRadiologyService | null> {
+  return this.findByIdAndUpdate(
+    serviceId,
+    {
+      $set: {
+        paymentVerified: true,
+        paymentVerifiedBy: verifiedBy,
+        paymentVerifiedAt: new Date(),
+        billingStatus: "paid",
+      },
+    },
+    { new: true }
+  );
+};
+
+RadiologyServiceSchema.statics.unverifyPayment = async function (
+  serviceId: string
+): Promise<IRadiologyService | null> {
+  return this.findByIdAndUpdate(
+    serviceId,
+    {
+      $set: {
+        paymentVerified: false,
+        paymentVerifiedBy: null,
+        paymentVerifiedAt: null,
+        billingStatus: "pending",
+      },
+    },
+    { new: true }
+  );
+};
+
+export const RadiologyService = (models.RadiologyService || model<IRadiologyService, RadiologyServiceModel>("RadiologyService", RadiologyServiceSchema)) as RadiologyServiceModel;
