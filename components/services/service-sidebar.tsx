@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useAuthStore } from "@/store/useAuthStore";
 
 const serviceItems = [
   {
@@ -51,6 +52,8 @@ const serviceItems = [
       { label: "CT Scan", href: "/services/imaging?type=ct_scan" },
       { label: "MRI", href: "/services/imaging?type=mri" },
       { label: "Ultrasound", href: "/services/imaging?type=ultrasound" },
+      { label: "Radiologist Dashboard", href: "/services/imaging/radiologist", role: "radiologist" },
+      { label: "Reception Radiology", href: "/services/imaging/reception", role: "receptionist" },
     ],
   },
   {
@@ -124,6 +127,7 @@ interface ServiceSidebarProps {
 
 export function ServiceSidebar({ className }: ServiceSidebarProps) {
   const pathname = usePathname();
+  const { user } = useAuthStore();
 
   return (
     <div className={`pb-12 ${className}`}>
@@ -151,17 +155,23 @@ export function ServiceSidebar({ className }: ServiceSidebarProps) {
                   </Link>
                   {item.children && isActive && (
                     <div className="ml-6 space-y-1">
-                      {item.children.map((child) => (
-                        <Link key={child.href} href={child.href}>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="w-full justify-start"
-                          >
-                            {child.label}
-                          </Button>
-                        </Link>
-                      ))}
+                      {item.children
+                        .filter((child) => {
+                          // Show child if no role restriction or user has the required role
+                          if (!child.role) return true;
+                          return user?.role === child.role || user?.role === "admin";
+                        })
+                        .map((child) => (
+                          <Link key={child.href} href={child.href}>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="w-full justify-start"
+                            >
+                              {child.label}
+                            </Button>
+                          </Link>
+                        ))}
                     </div>
                   )}
                 </div>

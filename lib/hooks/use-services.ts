@@ -15,7 +15,7 @@ export const useServiceList = <T>(serviceType: string, filters = {}) => {
   return useQuery({
     queryKey: [serviceType, "list", filters],
     queryFn: async () => {
-      const response = await apiRequest(`/api/services/${serviceType}`, {
+      const response = await apiRequest(`/services/${serviceType}`, {
         params: filters,
       });
       return response.data as { records: T[]; total: number; page: number; totalPages: number };
@@ -27,7 +27,7 @@ export const useServiceDetail = <T>(serviceType: string, id: string) => {
   return useQuery({
     queryKey: [serviceType, "detail", id],
     queryFn: async () => {
-      const response = await apiRequest(`/api/services/${serviceType}/${id}`);
+      const response = await apiRequest(`/services/${serviceType}/${id}`);
       return response.data as T;
     },
     enabled: !!id,
@@ -39,7 +39,7 @@ export const useCreateService = <T>(serviceType: string) => {
   
   return useMutation({
     mutationFn: async (data: Partial<T>) => {
-      const response = await apiRequest(`/api/services/${serviceType}`, {
+      const response = await apiRequest(`/services/${serviceType}`, {
         method: "POST",
         data,
       });
@@ -56,7 +56,7 @@ export const useUpdateService = <T>(serviceType: string) => {
   
   return useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<T> }) => {
-      const response = await apiRequest(`/api/services/${serviceType}/${id}`, {
+      const response = await apiRequest(`/services/${serviceType}/${id}`, {
         method: "PUT",
         data,
       });
@@ -74,7 +74,7 @@ export const useDeleteService = (serviceType: string) => {
   
   return useMutation({
     mutationFn: async (id: string) => {
-      await apiRequest(`/api/services/${serviceType}/${id}`, {
+      await apiRequest(`/services/${serviceType}/${id}`, {
         method: "DELETE",
       });
     },

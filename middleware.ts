@@ -48,7 +48,8 @@ const roleRoutes: Record<string, string[]> = {
     "/doctor/patients",
     "/doctor/appointments",
     "/doctor/prescriptions",
-      "/doctor/lab-tests"
+      "/doctor/lab-tests",
+      "/services/imaging"
   ],
   nurse: [
     "/nurse",
@@ -65,7 +66,8 @@ const roleRoutes: Record<string, string[]> = {
   "/admissions",
   "/appointments",
   "/billing",
-  "/reception/lab-tests", 
+  "/reception/lab-tests",
+  "/services/imaging/reception"
 ],
   pharmacist: [ 
     "/pharmacy",
@@ -90,7 +92,8 @@ const roleRoutes: Record<string, string[]> = {
     "/radiology",
     "/dashboard",
     "/imaging",
-    "/radiology-reports"
+    "/radiology-reports",
+    "/services/imaging/radiologist"
   ],
   admission: [
     "/admissions",
@@ -190,6 +193,16 @@ export async function middleware(request: NextRequest) {
     }
 
     if (pathname.startsWith("/radiology/") && !["admin", "radiologist"].includes(userRole)) {
+      return NextResponse.redirect(new URL("/unauthorized", request.url));
+    }
+
+    // Protect radiologist dashboard
+    if (pathname.startsWith("/services/imaging/radiologist") && !["admin", "radiologist"].includes(userRole)) {
+      return NextResponse.redirect(new URL("/unauthorized", request.url));
+    }
+
+    // Protect reception radiology dashboard
+    if (pathname.startsWith("/services/imaging/reception") && !["admin", "receptionist"].includes(userRole)) {
       return NextResponse.redirect(new URL("/unauthorized", request.url));
     }
 

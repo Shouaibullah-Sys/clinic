@@ -3,7 +3,7 @@
 import mongoose, { Schema, model, models, Document } from "mongoose";
 
 export interface IPrescriptionMedication {
-  medicine: mongoose.Types.ObjectId;
+  medicine?: mongoose.Types.ObjectId;
   name: string;
   dosage: string;
   frequency: string;
@@ -60,10 +60,10 @@ const PrescriptionSchema = new Schema<IPrescription>(
       ref: "Appointment",
     },
     medications: [{
-      medicine: { 
-        type: Schema.Types.ObjectId, 
-        ref: "MedicineStock", 
-        required: true 
+      medicine: {
+        type: Schema.Types.ObjectId,
+        ref: "MedicineStock",
+        required: false
       },
       name: { type: String, required: true },
       dosage: { type: String, required: true },
@@ -72,8 +72,8 @@ const PrescriptionSchema = new Schema<IPrescription>(
       instructions: { type: String, default: "" },
       quantity: { type: Number, required: true, min: 1 },
       price: { type: Number, required: true, min: 0 },
-      route: { 
-        type: String, 
+      route: {
+        type: String,
         enum: ["oral", "topical", "inhalation", "injection", "rectal", "vaginal", "ophthalmic", "otic", "nasal", "transdermal"],
         default: "oral"
       },
@@ -197,20 +197,28 @@ PrescriptionSchema.statics.findActivePrescriptions = async function(patientId?: 
     .sort({ prescribedDate: -1 });
 };
 
-// Instance method to process dispensing
+// Instance method to process dispensing - FIXED TYPE ERROR
 PrescriptionSchema.methods.processDispensing = async function(
   items: Array<{ medicine: string; dispensedQuantity: number }>,
   pharmacistId: string
 ) {
   let totalDispensed = 0;
   let totalPrescribed = 0;
-  
-  // Calculate totals
+
+  // Calculate totals - FIX: Check if medicine exists before accessing
   this.medications.forEach((med: IPrescriptionMedication) => {
     totalPrescribed += med.quantity;
-    const item = items.find(i => i.medicine === med.medicine.toString());
-    if (item) {
-      totalDispensed += item.dispensedQuantity;
+    
+    // Check if medicine exists and is a valid ObjectId
+    if (med.medicine && mongoose.Types.ObjectId.isValid(med.medicine)) {
+      const item = items.find(i => i.medicine === med.medicine!.toString());
+      if (item) {
+        totalDispensed += item.dispensedQuantity;
+      }
+    }
+    // Alternative: try to match by medicine name if no ID
+    else if (med.name) {
+      // You could add logic here to match by name if needed
     }
   });
   
@@ -225,11 +233,10 @@ PrescriptionSchema.methods.processDispensing = async function(
   }
   
   // Update dispensed info
-  this.dispensedBy = pharmacistId;
+  this.dispensedBy = new mongoose.Types.ObjectId(pharmacistId);
   this.dispensedDate = new Date();
   
   return this.save();
 };
 
 export const Prescription = models.Prescription || model<IPrescription>("Prescription", PrescriptionSchema);
-

@@ -18,26 +18,13 @@
     TableHeader,
     TableRow,
   } from "@/components/ui/table";
-  import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-    DialogTrigger,
-  } from "@/components/ui/dialog";
   import { Alert, AlertDescription } from "@/components/ui/alert";
-  import { Textarea } from "@/components/ui/textarea";
-  import { Label } from "@/components/ui/label";
-  import { Input } from "@/components/ui/input";
   import {
     User,
     Calendar,
     FileText,
     TestTube,
     Pill,
-    Clock,
     Phone,
     Mail,
     CalendarDays,
@@ -50,16 +37,15 @@
     AlertCircle,
     ChevronLeft,
     Stethoscope,
-    Thermometer,
-    Weight,
-    Ruler,
     PersonStandingIcon,
+    Activity,
     } from "lucide-react";
     import { format, parseISO, differenceInYears } from "date-fns";
-    import { cn } from "@/lib/utils";
-    import { LabTestOrderDialog } from "@/app/components/doctor/LabTestOrderDialog";
-    import { MedicalRecordDialog } from "@/app/components/doctor/MedicalRecordDialog";
-    import { PrescriptionDialog } from "@/app/components/doctor/PrescriptionDialog";
+    import { LabTestOrderDialog } from "@/components/doctor/LabTestOrderDialog";
+import { MedicalRecordDialog } from "@/components/doctor/MedicalRecordDialog";
+import { PrescriptionDialog } from "@/components/doctor/PrescriptionDialog";
+import { ImagingOrderDialog } from "@/components/doctor/ImagingOrderDialog";
+import { ImagingResultsDialog } from "@/components/doctor/ImagingResultsDialog";
 
   interface Patient {
     _id: string;
@@ -145,6 +131,25 @@
     doctorNotes?: string;
   }
 
+  interface ImagingStudy {
+    _id: string;
+    serviceId: string;
+    serviceType: "x-ray" | "ct-scan" | "mri" | "ultrasound";
+    bodyPart: string;
+    view: string;
+    requestDate: string;
+    scheduledDate: string;
+    performedDate?: string;
+    status: string;
+    priority: string;
+    reportStatus: string;
+    findings?: string;
+    impression?: string;
+    referringDoctor: {
+      name: string;
+    };
+  }
+
 export default function DoctorPatientDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -155,6 +160,7 @@ export default function DoctorPatientDetailPage() {
   const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
   const [labTests, setLabTests] = useState<LabTest[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [imagingStudies, setImagingStudies] = useState<ImagingStudy[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
 
@@ -258,6 +264,21 @@ export default function DoctorPatientDetailPage() {
         }
       }
 
+      // Fetch imaging studies
+      const imagingRes = await fetch(`/api/doctor/patients/${patientId}/imaging`, {
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+      });
+
+      if (imagingRes.ok) {
+        const imagingData = await imagingRes.json();
+        if (imagingData.success) {
+          setImagingStudies(imagingData.data);
+        }
+      }
+
     } catch (error) {
       console.error("Error fetching patient data:", error);
       setError("Failed to load patient information");
@@ -326,6 +347,26 @@ export default function DoctorPatientDetailPage() {
     }
   };
 
+  const handleImagingOrdered = async () => {
+    try {
+      const imagingRes = await fetch(`/api/doctor/patients/${patientId}/imaging`, {
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+      });
+
+      if (imagingRes.ok) {
+        const imagingData = await imagingRes.json();
+        if (imagingData.success) {
+          setImagingStudies(imagingData.data);
+        }
+      }
+    } catch (error) {
+      console.error("Error refetching imaging studies:", error);
+    }
+  };
+
   const calculateAge = (dateOfBirth: string) => {
     try {
       return differenceInYears(new Date(), parseISO(dateOfBirth));
@@ -391,7 +432,7 @@ export default function DoctorPatientDetailPage() {
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>{error || "Patient not found"}</AlertDescription>
         </Alert>
-        <Button onClick={() => router.push("/doctor/patients")} className="mt-4">
+        <Button onClick={() => router.push("/doctor/dashboard")} className="mt-4">
           Back to Patients
         </Button>
       </div>
@@ -405,7 +446,7 @@ export default function DoctorPatientDetailPage() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <Button variant="outline" size="icon" onClick={() => router.push("/doctor/patients")}>
+          <Button variant="outline" size="icon" onClick={() => router.push("/doctor/dashboard")}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
           <div>
@@ -526,11 +567,12 @@ export default function DoctorPatientDetailPage() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid grid-cols-5 lg:grid-cols-5">
+        <TabsList className="grid grid-cols-6 lg:grid-cols-6">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="medical">Medical Records</TabsTrigger>
           <TabsTrigger value="prescriptions">Prescriptions</TabsTrigger>
           <TabsTrigger value="lab">Lab Tests</TabsTrigger>
+          <TabsTrigger value="imaging">Imaging</TabsTrigger>
           <TabsTrigger value="appointments">Appointments</TabsTrigger>
         </TabsList>
 
@@ -559,6 +601,13 @@ export default function DoctorPatientDetailPage() {
                   <span className="text-sm text-muted-foreground">Pending Tests</span>
                   <span className="font-semibold">
                     {labTests.filter(t => t.status === "pending").length}
+                  </span>
+                </div>
+                <Separator />
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">Pending Imaging</span>
+                  <span className="font-semibold">
+                    {imagingStudies.filter(i => i.status === "scheduled").length}
                   </span>
                 </div>
                 <Separator />
@@ -662,7 +711,7 @@ export default function DoctorPatientDetailPage() {
               <CardTitle>Quick Actions</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                 <MedicalRecordDialog
                   patientId={patientId}
                   patientName={patient?.name || "Patient"}
@@ -702,6 +751,20 @@ export default function DoctorPatientDetailPage() {
                     >
                       <TestTube className="h-5 w-5" />
                       <span>Lab Test Order</span>
+                    </Button>
+                  }
+                />
+                <ImagingOrderDialog
+                  patientId={patientId}
+                  patientName={patient?.name || "Patient"}
+                  onImagingOrdered={handleImagingOrdered}
+                  trigger={
+                    <Button
+                      variant="outline"
+                      className="h-auto py-4 flex flex-col items-center gap-2"
+                    >
+                      <Activity className="h-5 w-5" />
+                      <span>Imaging Order</span>
                     </Button>
                   }
                 />
@@ -1024,6 +1087,126 @@ export default function DoctorPatientDetailPage() {
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      </TabsContent>
+
+      {/* Imaging Tab */}
+      <TabsContent value="imaging" className="space-y-6">
+        <Card>
+          <CardHeader>
+            <div className="flex justify-between items-center">
+              <div>
+                <CardTitle>Imaging Studies</CardTitle>
+                <CardDescription>
+                  Radiology studies ordered for this patient
+                </CardDescription>
+              </div>
+              <ImagingOrderDialog
+                patientId={patientId}
+                patientName={patient?.name || "Patient"}
+                onImagingOrdered={handleImagingOrdered}
+              />
+            </div>
+          </CardHeader>
+          <CardContent>
+            {imagingStudies.length === 0 ? (
+              <div className="text-center py-12">
+                <Activity className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                <h3 className="text-lg font-semibold mb-2">No Imaging Studies</h3>
+                <p className="text-gray-500 mb-4">
+                  Order an imaging study for this patient
+                </p>
+                <ImagingOrderDialog
+                  patientId={patientId}
+                  patientName={patient?.name || "Patient"}
+                  onImagingOrdered={handleImagingOrdered}
+                  trigger={
+                    <Button>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Order First Study
+                    </Button>
+                  }
+                />
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Service ID</TableHead>
+                    <TableHead>Service Type</TableHead>
+                    <TableHead>Body Part</TableHead>
+                    <TableHead>View</TableHead>
+                    <TableHead>Requested Date</TableHead>
+                    <TableHead>Scheduled Date</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Report Status</TableHead>
+                    <TableHead>Results</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {imagingStudies.map((study) => (
+                    <TableRow key={study._id}>
+                      <TableCell className="font-medium">{study.serviceId}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="capitalize">
+                          {study.serviceType.replace('-', ' ')}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{study.bodyPart}</TableCell>
+                      <TableCell>{study.view}</TableCell>
+                      <TableCell>{formatDate(study.requestDate)}</TableCell>
+                      <TableCell>{formatDate(study.scheduledDate)}</TableCell>
+                      <TableCell>
+                        {getStatusBadge(study.status)}
+                      </TableCell>
+                      <TableCell>
+                        {study.reportStatus === "completed" ? (
+                          <Badge variant="default">Completed</Badge>
+                        ) : (
+                          <Badge variant="secondary">Pending</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {study.reportStatus === "completed" ? (
+                          <Badge variant="default">Available</Badge>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">Pending</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          {study.reportStatus === "completed" && (
+                            <ImagingResultsDialog
+                              patientId={patientId}
+                              studyId={study._id}
+                              trigger={
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  title="View Results"
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                              }
+                            />
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => router.push(`/services/imaging/${study._id}`)}
+                            title="View Details"
+                          >
+                            <FileText className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}

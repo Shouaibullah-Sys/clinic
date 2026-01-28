@@ -4,6 +4,8 @@ import jwt, { JwtPayload } from "jsonwebtoken";
 import { cookies } from "next/headers";
 import dbConnect from "@/lib/dbConnect";
 import { RadiologyService } from "@/lib/models/RadiologyService";
+import { User } from "@/lib/models/User";
+import { Patient } from "@/lib/models/Patient";
 
 export async function GET(req: NextRequest) {
   if (!process.env.JWT_SECRET) {
@@ -101,6 +103,109 @@ export async function GET(req: NextRequest) {
     console.error("Error fetching imaging records:", error);
     return NextResponse.json(
       { error: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function POST(req: NextRequest) {
+  if (!process.env.JWT_SECRET) {
+    return NextResponse.json(
+      { error: "Server configuration error" },
+      { status: 500 }
+    );
+  }
+
+  try {
+    const cookieStore = await cookies();
+    const accessToken = cookieStore.get("accessToken")?.value;
+
+    if (!accessToken) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    let decoded: JwtPayload;
+    try {
+      decoded = jwt.verify(accessToken, process.env.JWT_SECRET) as JwtPayload;
+    } catch (error) {
+      return NextResponse.json({ error: "Invalid token" }, { status: 401 });
+    }
+
+    await dbConnect();
+
+    const body = await req.json();
+
+    // Validate required fields
+    if (!body.patientId || !body.imagingType || !body.bodyPart) {
+      return NextResponse.json(
+        { error: "Missing required fields: patientId, imagingType, bodyPart" },
+        { status: 400 }
+      );
+    }
+
+    // Find patient
+    const patient = await Patient.findById(body.patientId);
+    if (!patient) {
+      return NextResponse.json(
+        { error: "Patient not found" },
+        { status: 404 }
+      );
+    }
+
+    // Find referring doctor (current user)
+    const referringDoctor = await User.findById(decoded.userId);
+    if (!referringDoctor) {
+      return NextResponse.json(
+        { error: "User not found" },
+        { status: 404 }
+      );
+    }
+
+    // Map imaging type to service type
+    const serviceTypeMap: Record<string, "x-ray" | "ct-scan" | "mri" | "ultrasound"> = {
+      xray: "x-ray",
+      ct_scan: "ct-scan",
+      mri: "mri",
+      ultrasound: "ultrasound",
+    };
+
+    const serviceType = serviceTypeMap[body.imagingType] || body.imagingType;
+
+    // Create imaging record
+    const imagingRecord = new RadiologyService({
+      patient: body.patientId,
+      referringDoctor: decoded.userId,
+      serviceType,
+      bodyPart: body.bodyPart,
+      view: body.view || "Standard",
+      priority: body.priority || "routine",
+      contrastUsed: body.contrast || false,
+      contrastType: body.contrastType,
+      scheduledDate: body.scheduledDate || new Date(),
+      requestDate: new Date(),
+      status: "scheduled",
+      reportStatus: "pending",
+      billingStatus: "pending",
+      notes: body.clinicalIndication,
+    });
+
+    await imagingRecord.save();
+
+    // Populate response
+    await imagingRecord.populate([
+      { path: "patient", select: "name patientId" },
+      { path: "referringDoctor", select: "name" },
+    ]);
+
+    return NextResponse.json({
+      success: true,
+      data: imagingRecord,
+      message: "Imaging record created successfully",
+    }, { status: 201 });
+  } catch (error: any) {
+    console.error("Error creating imaging record:", error);
+    return NextResponse.json(
+      { error: error.message || "Internal server error" },
       { status: 500 }
     );
   }

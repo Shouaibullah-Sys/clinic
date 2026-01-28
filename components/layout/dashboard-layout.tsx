@@ -1,6 +1,7 @@
+//components/layout/dashboard-layout.tsx
+
 'use client';
 
-import { ServiceSidebar } from '@/components/services/service-sidebar';
 import ClinicLoadingAnimation from '@/components/ClinicLoadingAnimation';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useRouter } from 'next/navigation';
@@ -37,7 +38,6 @@ export function DashboardLayout({
   if (isAuthenticated) {
     return (
       <div className="flex h-screen">
-        <ServiceSidebar />
         <main className="flex-1 overflow-y-auto p-6">
           {children}
         </main>

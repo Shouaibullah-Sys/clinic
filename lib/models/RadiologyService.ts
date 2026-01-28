@@ -47,7 +47,6 @@ const RadiologyServiceSchema = new Schema<IRadiologyService>(
   {
     serviceId: {
       type: String,
-      required: true,
       unique: true,
       uppercase: true,
     },
@@ -59,7 +58,6 @@ const RadiologyServiceSchema = new Schema<IRadiologyService>(
     department: {
       type: Schema.Types.ObjectId,
       ref: "ServiceDepartment",
-      required: true,
     },
     serviceType: {
       type: String,
@@ -96,7 +94,6 @@ const RadiologyServiceSchema = new Schema<IRadiologyService>(
     technician: {
       type: Schema.Types.ObjectId,
       ref: "User",
-      required: true,
     },
     appointment: {
       type: Schema.Types.ObjectId,
@@ -186,7 +183,6 @@ const RadiologyServiceSchema = new Schema<IRadiologyService>(
 );
 
 // Indexes
-RadiologyServiceSchema.index({ serviceId: 1 });
 RadiologyServiceSchema.index({ patient: 1 });
 RadiologyServiceSchema.index({ serviceType: 1 });
 RadiologyServiceSchema.index({ scheduledDate: -1 });

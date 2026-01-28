@@ -102,7 +102,10 @@ export async function POST(
 
     // Update prescription status
     const totalDispensed = items.reduce((sum: number, item: any) => sum + item.dispensedQuantity, 0);
-    const totalPrescribed = prescription.medications.reduce((sum: any, med: any) => sum + med.quantity, 0);
+const totalPrescribed = prescription.medications.reduce((sum: number, med: any) => {
+  // Check if medicine exists before accessing
+  return sum + (med.quantity || 0);
+}, 0);
     
     prescription.dispensedBy = dispensedBy;
     prescription.dispensedDate = new Date();
@@ -120,7 +123,7 @@ export async function POST(
       prescription.status = "completed";
     }
     
-    await prescription.save();
+    await prescription.save({ validateBeforeSave: false });
 
     console.log("✅ Dispensing completed successfully");
 

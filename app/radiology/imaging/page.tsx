@@ -1,6 +1,6 @@
 'use client';
 
-// app/(dashboard)/services/imaging/page.tsx
+// app/radiology/imaging/page.tsx
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { ImagingTable } from "@/components/data-table/imaging-table";
 import { Button } from "@/components/ui/button";
@@ -8,8 +8,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useImagingRecords } from "@/lib/hooks/use-services";
-import { Search, Plus, Filter, Download } from "lucide-react";
+import { Search, Plus, Filter, Download, RefreshCw } from "lucide-react";
 import { useState } from "react";
+import { useAuthStore } from "@/store/useAuthStore";
+import { toast } from "sonner";
 
 export default function ImagingServicesPage() {
   const [filters, setFilters] = useState({
@@ -17,30 +19,39 @@ export default function ImagingServicesPage() {
     type: "",
     search: "",
   });
-  const { data, isLoading } = useImagingRecords(filters);
+  const { data, isLoading, refetch } = useImagingRecords(filters);
+  const { accessToken } = useAuthStore();
 
-  // Mock data - replace with actual data from API
-  const mockData = [
-    {
-      id: "1",
-      imagingType: "xray",
-      patientName: "John Doe",
-      bodyPart: "Chest",
-      status: "completed",
-      priority: "routine",
-      createdAt: "2024-01-15T10:30:00Z",
-    },
-    {
-      id: "2",
-      imagingType: "ct_scan",
-      patientName: "Jane Smith",
-      bodyPart: "Head",
-      status: "in_progress",
-      priority: "urgent",
-      createdAt: "2024-01-15T11:15:00Z",
-    },
-    // Add more mock data...
-  ];
+  // Transform API data to match table format
+  const imagingRecords = data?.records || [];
+
+  // Calculate statistics from real data
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  const todayRecords = imagingRecords.filter(r => new Date(r.createdAt) >= today);
+  
+  const todaySchedule = {
+    xray: todayRecords.filter(r => r.imagingType === "x-ray").length,
+    ct: todayRecords.filter(r => r.imagingType === "ct-scan").length,
+    mri: todayRecords.filter(r => r.imagingType === "mri").length,
+    ultrasound: todayRecords.filter(r => r.imagingType === "ultrasound").length,
+  };
+  
+  const pendingReports = imagingRecords.filter(r => r.reportStatus === "pending").length;
+  
+  const handleRefresh = async () => {
+    try {
+      await refetch();
+      toast.success("Data Refreshed", {
+        description: "Imaging records have been updated",
+      });
+    } catch (error) {
+      toast.error("Refresh Failed", {
+        description: "Failed to refresh imaging records",
+      });
+    }
+  };
 
   return (
     <DashboardLayout>
@@ -52,10 +63,16 @@ export default function ImagingServicesPage() {
               Manage X-Ray, CT Scan, MRI, and Ultrasound services
             </p>
           </div>
-          <Button>
-            <Plus className="mr-2 h-4 w-4" />
-            New Imaging
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={handleRefresh} disabled={isLoading} variant="outline">
+              <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
+            <Button>
+              <Plus className="mr-2 h-4 w-4" />
+              New Imaging
+            </Button>
+          </div>
         </div>
 
         <Tabs defaultValue="all" className="space-y-4">
@@ -89,31 +106,31 @@ export default function ImagingServicesPage() {
             </div>
             <div className="flex gap-2">
               <Select
-                value={filters.status}
-                onValueChange={(value) => setFilters({ ...filters, status: value })}
+                value={filters.status || "all"}
+                onValueChange={(value) => setFilters({ ...filters, status: value === "all" ? "" : value })}
               >
                 <SelectTrigger className="w-35">
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all-status">All Status</SelectItem>
+                  <SelectItem value="all">All Status</SelectItem>
                   <SelectItem value="scheduled">Scheduled</SelectItem>
-                  <SelectItem value="in_progress">In Progress</SelectItem>
+                  <SelectItem value="in-progress">In Progress</SelectItem>
                   <SelectItem value="completed">Completed</SelectItem>
                   <SelectItem value="cancelled">Cancelled</SelectItem>
                 </SelectContent>
               </Select>
               <Select
-                value={filters.type}
-                onValueChange={(value) => setFilters({ ...filters, type: value })}
+                value={filters.type || "all"}
+                onValueChange={(value) => setFilters({ ...filters, type: value === "all" ? "" : value })}
               >
                 <SelectTrigger className="w-35">
                   <SelectValue placeholder="Type" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all-types">All Types</SelectItem>
-                  <SelectItem value="xray">X-Ray</SelectItem>
-                  <SelectItem value="ct_scan">CT Scan</SelectItem>
+                  <SelectItem value="all">All Types</SelectItem>
+                  <SelectItem value="x-ray">X-Ray</SelectItem>
+                  <SelectItem value="ct-scan">CT Scan</SelectItem>
                   <SelectItem value="mri">MRI</SelectItem>
                   <SelectItem value="ultrasound">Ultrasound</SelectItem>
                 </SelectContent>
@@ -125,19 +142,19 @@ export default function ImagingServicesPage() {
           </div>
 
           <TabsContent value="all" className="space-y-4">
-            <ImagingTable data={mockData} />
+            <ImagingTable data={imagingRecords} />
           </TabsContent>
           <TabsContent value="xray">
-            <ImagingTable data={mockData.filter(d => d.imagingType === "xray")} />
+            <ImagingTable data={imagingRecords.filter(d => d.imagingType === "x-ray")} />
           </TabsContent>
           <TabsContent value="ct">
-            <ImagingTable data={mockData.filter(d => d.imagingType === "ct_scan")} />
+            <ImagingTable data={imagingRecords.filter(d => d.imagingType === "ct-scan")} />
           </TabsContent>
           <TabsContent value="mri">
-            <ImagingTable data={mockData.filter(d => d.imagingType === "mri")} />
+            <ImagingTable data={imagingRecords.filter(d => d.imagingType === "mri")} />
           </TabsContent>
           <TabsContent value="ultrasound">
-            <ImagingTable data={mockData.filter(d => d.imagingType === "ultrasound")} />
+            <ImagingTable data={imagingRecords.filter(d => d.imagingType === "ultrasound")} />
           </TabsContent>
         </Tabs>
 
@@ -147,53 +164,37 @@ export default function ImagingServicesPage() {
             <div className="space-y-2">
               <div className="flex justify-between">
                 <span>X-Ray</span>
-                <span className="font-semibold">12</span>
+                <span className="font-semibold">{todaySchedule.xray}</span>
               </div>
               <div className="flex justify-between">
                 <span>CT Scan</span>
-                <span className="font-semibold">8</span>
+                <span className="font-semibold">{todaySchedule.ct}</span>
               </div>
               <div className="flex justify-between">
                 <span>MRI</span>
-                <span className="font-semibold">6</span>
+                <span className="font-semibold">{todaySchedule.mri}</span>
               </div>
               <div className="flex justify-between">
                 <span>Ultrasound</span>
-                <span className="font-semibold">15</span>
+                <span className="font-semibold">{todaySchedule.ultrasound}</span>
               </div>
             </div>
           </div>
 
           <div className="bg-card rounded-lg border p-6">
             <h3 className="font-semibold mb-2">Pending Reports</h3>
-            <div className="text-3xl font-bold mb-2">7</div>
+            <div className="text-3xl font-bold mb-2">{pendingReports}</div>
             <p className="text-sm text-muted-foreground">
               Reports awaiting radiologist review
             </p>
           </div>
 
           <div className="bg-card rounded-lg border p-6">
-            <h3 className="font-semibold mb-2">Equipment Status</h3>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span>X-Ray Machine 1</span>
-                <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800">
-                  Operational
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span>CT Scanner</span>
-                <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800">
-                  Operational
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span>MRI Machine</span>
-                <span className="inline-flex items-center rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-medium text-yellow-800">
-                  Maintenance
-                </span>
-              </div>
-            </div>
+            <h3 className="font-semibold mb-2">Total Records</h3>
+            <div className="text-3xl font-bold mb-2">{imagingRecords.length}</div>
+            <p className="text-sm text-muted-foreground">
+              Total imaging records in database
+            </p>
           </div>
         </div>
       </div>

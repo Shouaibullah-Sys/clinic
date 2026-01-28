@@ -20,23 +20,38 @@ import { Badge } from "@/components/ui/badge";
 
 interface ImagingRecord {
   id: string;
+  serviceId: string;
   imagingType: string;
   patientName: string;
   bodyPart: string;
   status: string;
   priority: string;
   createdAt: string;
+  scheduledDate?: string;
+  performedDate?: string;
+  reportStatus?: string;
+  billingStatus?: string;
+  referringDoctor?: string;
+  radiologist?: string;
+  technician?: string;
 }
 
 const columns: ColumnDef<ImagingRecord>[] = [
+  {
+    accessorKey: "serviceId",
+    header: "Service ID",
+    cell: ({ row }) => {
+      return <span className="font-mono text-sm">{row.getValue("serviceId")}</span>;
+    },
+  },
   {
     accessorKey: "imagingType",
     header: "Type",
     cell: ({ row }) => {
       const type = row.getValue("imagingType") as string;
       const typeMap: Record<string, string> = {
-        xray: "X-Ray",
-        ct_scan: "CT Scan",
+        "x-ray": "X-Ray",
+        "ct-scan": "CT Scan",
         mri: "MRI",
         ultrasound: "Ultrasound",
       };
@@ -57,9 +72,11 @@ const columns: ColumnDef<ImagingRecord>[] = [
     cell: ({ row }) => {
       const status = row.getValue("status") as string;
       const variant = status === "completed" ? "default" :
-                     status === "in_progress" ? "secondary" :
+                     status === "in-progress" ? "secondary" :
                      status === "scheduled" ? "outline" : "destructive";
-      return <Badge variant={variant}>{status}</Badge>;
+      const label = status === "in-progress" ? "In Progress" : 
+                   status.charAt(0).toUpperCase() + status.slice(1);
+      return <Badge variant={variant}>{label}</Badge>;
     },
   },
   {
@@ -69,14 +86,42 @@ const columns: ColumnDef<ImagingRecord>[] = [
       const priority = row.getValue("priority") as string;
       const variant = priority === "emergency" ? "destructive" :
                      priority === "urgent" ? "secondary" : "outline";
-      return <Badge variant={variant}>{priority}</Badge>;
+      const label = priority.charAt(0).toUpperCase() + priority.slice(1);
+      return <Badge variant={variant}>{label}</Badge>;
     },
   },
   {
-    accessorKey: "createdAt",
-    header: "Date",
+    accessorKey: "reportStatus",
+    header: "Report",
     cell: ({ row }) => {
-      return new Date(row.getValue("createdAt")).toLocaleDateString();
+      const reportStatus = row.getValue("reportStatus") as string;
+      if (!reportStatus) return <span className="text-muted-foreground">-</span>;
+      const variant = reportStatus === "completed" ? "default" :
+                     reportStatus === "reviewed" ? "secondary" :
+                     reportStatus === "approved" ? "outline" : "destructive";
+      const label = reportStatus.charAt(0).toUpperCase() + reportStatus.slice(1);
+      return <Badge variant={variant}>{label}</Badge>;
+    },
+  },
+  {
+    accessorKey: "billingStatus",
+    header: "Billing",
+    cell: ({ row }) => {
+      const billingStatus = row.getValue("billingStatus") as string;
+      if (!billingStatus) return <span className="text-muted-foreground">-</span>;
+      const variant = billingStatus === "paid" ? "default" :
+                     billingStatus === "billed" ? "secondary" : "outline";
+      const label = billingStatus.charAt(0).toUpperCase() + billingStatus.slice(1);
+      return <Badge variant={variant}>{label}</Badge>;
+    },
+  },
+  {
+    accessorKey: "scheduledDate",
+    header: "Scheduled",
+    cell: ({ row }) => {
+      const date = row.getValue("scheduledDate") as string;
+      if (!date) return <span className="text-muted-foreground">-</span>;
+      return new Date(date).toLocaleDateString();
     },
   },
 ];
