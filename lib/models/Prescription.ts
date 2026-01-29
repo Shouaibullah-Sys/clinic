@@ -59,27 +59,40 @@ const PrescriptionSchema = new Schema<IPrescription>(
       type: Schema.Types.ObjectId,
       ref: "Appointment",
     },
-    medications: [{
-      medicine: {
-        type: Schema.Types.ObjectId,
-        ref: "MedicineStock",
-        required: false
+    medications: [
+      {
+        medicine: {
+          type: Schema.Types.ObjectId,
+          ref: "MedicineStock",
+          required: false,
+        },
+        name: { type: String, required: true },
+        dosage: { type: String, required: true },
+        frequency: { type: String, required: true },
+        duration: { type: String, required: true },
+        instructions: { type: String, default: "" },
+        quantity: { type: Number, required: true, min: 1 },
+        price: { type: Number, required: true, min: 0 },
+        route: {
+          type: String,
+          enum: [
+            "oral",
+            "topical",
+            "inhalation",
+            "injection",
+            "rectal",
+            "vaginal",
+            "ophthalmic",
+            "otic",
+            "nasal",
+            "transdermal",
+          ],
+          default: "oral",
+        },
+        refills: { type: Number, default: 0, min: 0 },
+        refillsRemaining: { type: Number, default: 0, min: 0 },
       },
-      name: { type: String, required: true },
-      dosage: { type: String, required: true },
-      frequency: { type: String, required: true },
-      duration: { type: String, required: true },
-      instructions: { type: String, default: "" },
-      quantity: { type: Number, required: true, min: 1 },
-      price: { type: Number, required: true, min: 0 },
-      route: {
-        type: String,
-        enum: ["oral", "topical", "inhalation", "injection", "rectal", "vaginal", "ophthalmic", "otic", "nasal", "transdermal"],
-        default: "oral"
-      },
-      refills: { type: Number, default: 0, min: 0 },
-      refillsRemaining: { type: Number, default: 0, min: 0 },
-    }],
+    ],
     diagnosis: {
       type: String,
       required: true,
@@ -130,7 +143,7 @@ const PrescriptionSchema = new Schema<IPrescription>(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 // Indexes for better query performance
@@ -147,60 +160,67 @@ PrescriptionSchema.pre("save", function (next) {
   if (!this.prescriptionId) {
     const date = new Date();
     const year = date.getFullYear().toString().slice(-2);
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const month = (date.getMonth() + 1).toString().padStart(2, "0");
     const random = Math.floor(1000 + Math.random() * 9000);
     this.prescriptionId = `RX${year}${month}${random}`;
   }
-  
+
   // Check if prescription is expired
-  if (this.expiryDate && this.expiryDate < new Date() && this.status === "active") {
+  if (
+    this.expiryDate &&
+    this.expiryDate < new Date() &&
+    this.status === "active"
+  ) {
     this.status = "expired";
     this.dispensingStatus = "cancelled";
   }
-  
+
   next();
 });
 
 // Static method to update expired prescriptions
-PrescriptionSchema.statics.updateExpiredPrescriptions = async function() {
+PrescriptionSchema.statics.updateExpiredPrescriptions = async function () {
   const result = await this.updateMany(
     {
       expiryDate: { $lt: new Date() },
-      status: "active"
+      status: "active",
     },
-    { 
+    {
       status: "expired",
-      dispensingStatus: "cancelled"
-    }
+      dispensingStatus: "cancelled",
+    },
   );
   return result;
 };
 
 // Static method to find active prescriptions
-PrescriptionSchema.statics.findActivePrescriptions = async function(patientId?: string) {
-  const query: any = { 
+PrescriptionSchema.statics.findActivePrescriptions = async function (
+  patientId?: string,
+) {
+  const query: any = {
     status: "active",
-    dispensingStatus: { $in: ["pending", "partial"] }
+    dispensingStatus: { $in: ["pending", "partial"] },
   };
-  
+
   if (patientId) {
     query.patient = patientId;
   }
-  
+
   return this.find(query)
     .populate("patient", "name patientId phone")
     .populate("doctor", "name specialization")
     .populate({
       path: "medications.medicine",
-      select: "name batchNumber currentQuantity sellingPrice unitPrice expiryDate supplier",
+      select:
+        "name batchNumber currentQuantity sellingPrice unitPrice expiryDate supplier",
     })
     .sort({ prescribedDate: -1 });
 };
 
 // Instance method to process dispensing - FIXED TYPE ERROR
-PrescriptionSchema.methods.processDispensing = async function(
+PrescriptionSchema.methods.processDispensing = async function (
   items: Array<{ medicine: string; dispensedQuantity: number }>,
-  pharmacistId: string
+  pharmacistId: string,
 ) {
   let totalDispensed = 0;
   let totalPrescribed = 0;
@@ -208,10 +228,10 @@ PrescriptionSchema.methods.processDispensing = async function(
   // Calculate totals - FIX: Check if medicine exists before accessing
   this.medications.forEach((med: IPrescriptionMedication) => {
     totalPrescribed += med.quantity;
-    
+
     // Check if medicine exists and is a valid ObjectId
     if (med.medicine && mongoose.Types.ObjectId.isValid(med.medicine)) {
-      const item = items.find(i => i.medicine === med.medicine!.toString());
+      const item = items.find((i) => i.medicine === med.medicine!.toString());
       if (item) {
         totalDispensed += item.dispensedQuantity;
       }
@@ -221,7 +241,7 @@ PrescriptionSchema.methods.processDispensing = async function(
       // You could add logic here to match by name if needed
     }
   });
-  
+
   // Update dispensing status
   if (totalDispensed === 0) {
     this.dispensingStatus = "pending";
@@ -231,12 +251,14 @@ PrescriptionSchema.methods.processDispensing = async function(
     this.dispensingStatus = "full";
     this.status = "completed";
   }
-  
+
   // Update dispensed info
   this.dispensedBy = new mongoose.Types.ObjectId(pharmacistId);
   this.dispensedDate = new Date();
-  
+
   return this.save();
 };
 
-export const Prescription = models.Prescription || model<IPrescription>("Prescription", PrescriptionSchema);
+export const Prescription =
+  models.Prescription ||
+  model<IPrescription>("Prescription", PrescriptionSchema);

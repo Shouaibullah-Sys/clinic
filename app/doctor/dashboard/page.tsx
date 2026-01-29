@@ -6,9 +6,14 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/useAuthStore";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -126,7 +131,7 @@ export default function DoctorDashboardPage() {
     try {
       setLoading(true);
       setError(null);
-      
+
       // Fetch today's appointments
       const appointmentsRes = await fetch("/api/doctor/appointments/today", {
         headers: {
@@ -134,30 +139,33 @@ export default function DoctorDashboardPage() {
           ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         },
       });
-      
+
       const appointmentsData = await appointmentsRes.json();
-      
+
       if (appointmentsData.success) {
         setAppointments(appointmentsData.data);
-        
+
         // Calculate stats from appointments
-        const today = new Date().toISOString().split('T')[0];
-        const todayApps = appointmentsData.data.filter((a: Appointment) => 
-          a.date.split('T')[0] === today
+        const today = new Date().toISOString().split("T")[0];
+        const todayApps = appointmentsData.data.filter(
+          (a: Appointment) => a.date.split("T")[0] === today,
         );
-        
+
         setStats({
           todayAppointments: todayApps.length,
-          pendingAppointments: appointmentsData.data.filter((a: Appointment) => 
-            ["scheduled", "confirmed", "checked-in"].includes(a.status)
+          pendingAppointments: appointmentsData.data.filter((a: Appointment) =>
+            ["scheduled", "confirmed", "checked-in"].includes(a.status),
           ).length,
-          totalPatients: new Set(appointmentsData.data.map((a: Appointment) => a.patient._id)).size,
-          completedToday: appointmentsData.data.filter((a: Appointment) => 
-            a.status === "completed" && a.date.split('T')[0] === today
+          totalPatients: new Set(
+            appointmentsData.data.map((a: Appointment) => a.patient._id),
+          ).size,
+          completedToday: appointmentsData.data.filter(
+            (a: Appointment) =>
+              a.status === "completed" && a.date.split("T")[0] === today,
           ).length,
         });
       }
-      
+
       // Fetch doctor's patients
       const patientsRes = await fetch("/api/doctor/patients", {
         headers: {
@@ -165,13 +173,12 @@ export default function DoctorDashboardPage() {
           ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         },
       });
-      
+
       const patientsData = await patientsRes.json();
-      
+
       if (patientsData.success) {
         setPatients(patientsData.data);
       }
-      
     } catch (error) {
       console.error("Error fetching doctor data:", error);
       setError("Failed to load dashboard data");
@@ -180,9 +187,9 @@ export default function DoctorDashboardPage() {
     }
   };
 
-  const filteredAppointments = appointments.filter(appointment => {
+  const filteredAppointments = appointments.filter((appointment) => {
     if (!searchQuery) return true;
-    
+
     const query = searchQuery.toLowerCase();
     return (
       appointment.patient.name.toLowerCase().includes(query) ||
@@ -194,15 +201,50 @@ export default function DoctorDashboardPage() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "scheduled":
-        return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">Scheduled</Badge>;
+        return (
+          <Badge
+            variant="outline"
+            className="bg-blue-50 text-blue-700 border-blue-200"
+          >
+            Scheduled
+          </Badge>
+        );
       case "confirmed":
-        return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Confirmed</Badge>;
+        return (
+          <Badge
+            variant="outline"
+            className="bg-green-50 text-green-700 border-green-200"
+          >
+            Confirmed
+          </Badge>
+        );
       case "checked-in":
-        return <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">Checked In</Badge>;
+        return (
+          <Badge
+            variant="outline"
+            className="bg-purple-50 text-purple-700 border-purple-200"
+          >
+            Checked In
+          </Badge>
+        );
       case "in-progress":
-        return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">In Progress</Badge>;
+        return (
+          <Badge
+            variant="outline"
+            className="bg-yellow-50 text-yellow-700 border-yellow-200"
+          >
+            In Progress
+          </Badge>
+        );
       case "completed":
-        return <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-200">Completed</Badge>;
+        return (
+          <Badge
+            variant="outline"
+            className="bg-gray-50 text-gray-700 border-gray-200"
+          >
+            Completed
+          </Badge>
+        );
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
@@ -218,14 +260,17 @@ export default function DoctorDashboardPage() {
 
   const handleCheckIn = async (appointmentId: string) => {
     try {
-      const response = await fetch(`/api/appointments/${appointmentId}/checkin`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      const response = await fetch(
+        `/api/appointments/${appointmentId}/checkin`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
         },
-      });
-      
+      );
+
       const data = await response.json();
       if (data.success) {
         fetchDoctorData();
@@ -237,14 +282,17 @@ export default function DoctorDashboardPage() {
 
   const handleCheckOut = async (appointmentId: string) => {
     try {
-      const response = await fetch(`/api/appointments/${appointmentId}/checkout`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      const response = await fetch(
+        `/api/appointments/${appointmentId}/checkout`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
         },
-      });
-      
+      );
+
       const data = await response.json();
       if (data.success) {
         fetchDoctorData();
@@ -260,7 +308,9 @@ export default function DoctorDashboardPage() {
         <div className="text-center">
           <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
           <h2 className="text-xl font-semibold mb-2">Unauthorized Access</h2>
-          <p className="text-gray-600">You don't have permission to access this page.</p>
+          <p className="text-gray-600">
+            You don't have permission to access this page.
+          </p>
         </div>
       </div>
     );
@@ -272,9 +322,7 @@ export default function DoctorDashboardPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold">Doctor Dashboard</h1>
-          <p className="text-gray-500 mt-1">
-            Welcome back, Dr. {user.name}!
-          </p>
+          <p className="text-gray-500 mt-1">Welcome back, Dr. {user.name}!</p>
         </div>
         <div className="flex items-center gap-3">
           <Button variant="outline" size="sm" onClick={fetchDoctorData}>
@@ -302,8 +350,12 @@ export default function DoctorDashboardPage() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Today's Appointments</p>
-                <p className="text-2xl font-bold mt-1">{stats.todayAppointments}</p>
+                <p className="text-sm font-medium text-gray-600">
+                  Today's Appointments
+                </p>
+                <p className="text-2xl font-bold mt-1">
+                  {stats.todayAppointments}
+                </p>
               </div>
               <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
                 <Calendar className="h-5 w-5 text-blue-600" />
@@ -311,13 +363,15 @@ export default function DoctorDashboardPage() {
             </div>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Pending</p>
-                <p className="text-2xl font-bold mt-1">{stats.pendingAppointments}</p>
+                <p className="text-2xl font-bold mt-1">
+                  {stats.pendingAppointments}
+                </p>
               </div>
               <div className="h-10 w-10 rounded-full bg-yellow-100 flex items-center justify-center">
                 <Clock className="h-5 w-5 text-yellow-600" />
@@ -325,12 +379,14 @@ export default function DoctorDashboardPage() {
             </div>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Total Patients</p>
+                <p className="text-sm font-medium text-gray-600">
+                  Total Patients
+                </p>
                 <p className="text-2xl font-bold mt-1">{stats.totalPatients}</p>
               </div>
               <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center">
@@ -339,13 +395,17 @@ export default function DoctorDashboardPage() {
             </div>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Completed Today</p>
-                <p className="text-2xl font-bold mt-1">{stats.completedToday}</p>
+                <p className="text-sm font-medium text-gray-600">
+                  Completed Today
+                </p>
+                <p className="text-2xl font-bold mt-1">
+                  {stats.completedToday}
+                </p>
               </div>
               <div className="h-10 w-10 rounded-full bg-purple-100 flex items-center justify-center">
                 <CheckCircle className="h-5 w-5 text-purple-600" />
@@ -356,7 +416,11 @@ export default function DoctorDashboardPage() {
       </div>
 
       {/* Tabs */}
-      <Tabs value={selectedTab} onValueChange={setSelectedTab} className="space-y-6">
+      <Tabs
+        value={selectedTab}
+        onValueChange={setSelectedTab}
+        className="space-y-6"
+      >
         <TabsList>
           <TabsTrigger value="overview">Today's Schedule</TabsTrigger>
           <TabsTrigger value="patients">My Patients</TabsTrigger>
@@ -405,10 +469,12 @@ export default function DoctorDashboardPage() {
               ) : filteredAppointments.length === 0 ? (
                 <div className="text-center py-12">
                   <Calendar className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold mb-2">No Appointments Today</h3>
+                  <h3 className="text-lg font-semibold mb-2">
+                    No Appointments Today
+                  </h3>
                   <p className="text-gray-500">
-                    {searchQuery 
-                      ? "No appointments match your search" 
+                    {searchQuery
+                      ? "No appointments match your search"
                       : "You have no appointments scheduled for today"}
                   </p>
                 </div>
@@ -438,21 +504,29 @@ export default function DoctorDashboardPage() {
                           </TableCell>
                           <TableCell>
                             <div>
-                              <p className="font-medium">{appointment.patient.name}</p>
+                              <p className="font-medium">
+                                {appointment.patient.name}
+                              </p>
                               <p className="text-sm text-gray-500">
                                 {appointment.patient.phone}
                               </p>
                             </div>
                           </TableCell>
                           <TableCell>
-                            <p className="truncate max-w-xs">{appointment.reason}</p>
+                            <p className="truncate max-w-xs">
+                              {appointment.reason}
+                            </p>
                           </TableCell>
                           <TableCell>
-                            <Badge variant={
-                              appointment.priority === "emergency" ? "destructive" :
-                              appointment.priority === "high" ? "default" :
-                              "outline"
-                            }>
+                            <Badge
+                              variant={
+                                appointment.priority === "emergency"
+                                  ? "destructive"
+                                  : appointment.priority === "high"
+                                    ? "default"
+                                    : "outline"
+                              }
+                            >
                               {appointment.priority}
                             </Badge>
                           </TableCell>
@@ -464,11 +538,17 @@ export default function DoctorDashboardPage() {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => router.push(`/doctor/patients/${appointment.patient._id}`)}
+                                onClick={() =>
+                                  router.push(
+                                    `/doctor/patients/${appointment.patient._id}`,
+                                  )
+                                }
                               >
                                 <Eye className="h-4 w-4" />
                               </Button>
-                              {["scheduled", "confirmed"].includes(appointment.status) && (
+                              {["scheduled", "confirmed"].includes(
+                                appointment.status,
+                              ) && (
                                 <Button
                                   size="sm"
                                   onClick={() => handleCheckIn(appointment._id)}
@@ -480,7 +560,9 @@ export default function DoctorDashboardPage() {
                               {appointment.status === "checked-in" && (
                                 <Button
                                   size="sm"
-                                  onClick={() => handleCheckOut(appointment._id)}
+                                  onClick={() =>
+                                    handleCheckOut(appointment._id)
+                                  }
                                   className="bg-blue-600 hover:bg-blue-700"
                                 >
                                   Check Out
@@ -511,7 +593,11 @@ export default function DoctorDashboardPage() {
                       <span>Scheduled</span>
                     </div>
                     <span className="font-medium">
-                      {filteredAppointments.filter(a => a.status === "scheduled").length}
+                      {
+                        filteredAppointments.filter(
+                          (a) => a.status === "scheduled",
+                        ).length
+                      }
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
@@ -520,7 +606,11 @@ export default function DoctorDashboardPage() {
                       <span>Confirmed</span>
                     </div>
                     <span className="font-medium">
-                      {filteredAppointments.filter(a => a.status === "confirmed").length}
+                      {
+                        filteredAppointments.filter(
+                          (a) => a.status === "confirmed",
+                        ).length
+                      }
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
@@ -529,7 +619,11 @@ export default function DoctorDashboardPage() {
                       <span>Checked In</span>
                     </div>
                     <span className="font-medium">
-                      {filteredAppointments.filter(a => a.status === "checked-in").length}
+                      {
+                        filteredAppointments.filter(
+                          (a) => a.status === "checked-in",
+                        ).length
+                      }
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
@@ -538,7 +632,11 @@ export default function DoctorDashboardPage() {
                       <span>Completed</span>
                     </div>
                     <span className="font-medium">
-                      {filteredAppointments.filter(a => a.status === "completed").length}
+                      {
+                        filteredAppointments.filter(
+                          (a) => a.status === "completed",
+                        ).length
+                      }
                     </span>
                   </div>
                 </div>
@@ -555,11 +653,21 @@ export default function DoctorDashboardPage() {
                     <div className="flex justify-between text-sm mb-1">
                       <span>Emergency</span>
                       <span>
-                        {filteredAppointments.filter(a => a.priority === "emergency").length}
+                        {
+                          filteredAppointments.filter(
+                            (a) => a.priority === "emergency",
+                          ).length
+                        }
                       </span>
                     </div>
-                    <Progress 
-                      value={(filteredAppointments.filter(a => a.priority === "emergency").length / filteredAppointments.length) * 100} 
+                    <Progress
+                      value={
+                        (filteredAppointments.filter(
+                          (a) => a.priority === "emergency",
+                        ).length /
+                          filteredAppointments.length) *
+                        100
+                      }
                       className="h-2 bg-red-100"
                     />
                   </div>
@@ -567,11 +675,21 @@ export default function DoctorDashboardPage() {
                     <div className="flex justify-between text-sm mb-1">
                       <span>High</span>
                       <span>
-                        {filteredAppointments.filter(a => a.priority === "high").length}
+                        {
+                          filteredAppointments.filter(
+                            (a) => a.priority === "high",
+                          ).length
+                        }
                       </span>
                     </div>
-                    <Progress 
-                      value={(filteredAppointments.filter(a => a.priority === "high").length / filteredAppointments.length) * 100} 
+                    <Progress
+                      value={
+                        (filteredAppointments.filter(
+                          (a) => a.priority === "high",
+                        ).length /
+                          filteredAppointments.length) *
+                        100
+                      }
                       className="h-2 bg-orange-100"
                     />
                   </div>
@@ -579,11 +697,21 @@ export default function DoctorDashboardPage() {
                     <div className="flex justify-between text-sm mb-1">
                       <span>Medium</span>
                       <span>
-                        {filteredAppointments.filter(a => a.priority === "medium").length}
+                        {
+                          filteredAppointments.filter(
+                            (a) => a.priority === "medium",
+                          ).length
+                        }
                       </span>
                     </div>
-                    <Progress 
-                      value={(filteredAppointments.filter(a => a.priority === "medium").length / filteredAppointments.length) * 100} 
+                    <Progress
+                      value={
+                        (filteredAppointments.filter(
+                          (a) => a.priority === "medium",
+                        ).length /
+                          filteredAppointments.length) *
+                        100
+                      }
                       className="h-2 bg-yellow-100"
                     />
                   </div>
@@ -591,11 +719,21 @@ export default function DoctorDashboardPage() {
                     <div className="flex justify-between text-sm mb-1">
                       <span>Low</span>
                       <span>
-                        {filteredAppointments.filter(a => a.priority === "low").length}
+                        {
+                          filteredAppointments.filter(
+                            (a) => a.priority === "low",
+                          ).length
+                        }
                       </span>
                     </div>
-                    <Progress 
-                      value={(filteredAppointments.filter(a => a.priority === "low").length / filteredAppointments.length) * 100} 
+                    <Progress
+                      value={
+                        (filteredAppointments.filter(
+                          (a) => a.priority === "low",
+                        ).length /
+                          filteredAppointments.length) *
+                        100
+                      }
                       className="h-2 bg-green-100"
                     />
                   </div>
@@ -635,9 +773,12 @@ export default function DoctorDashboardPage() {
               ) : patients.length === 0 ? (
                 <div className="text-center py-12">
                   <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold mb-2">No Patients Yet</h3>
+                  <h3 className="text-lg font-semibold mb-2">
+                    No Patients Yet
+                  </h3>
                   <p className="text-gray-500">
-                    You haven't treated any patients yet. Patients will appear here after appointments.
+                    You haven't treated any patients yet. Patients will appear
+                    here after appointments.
                   </p>
                 </div>
               ) : (
@@ -664,7 +805,9 @@ export default function DoctorDashboardPage() {
                             <div>
                               <p className="font-medium">{patient.name}</p>
                               {patient.email && (
-                                <p className="text-sm text-gray-500">{patient.email}</p>
+                                <p className="text-sm text-gray-500">
+                                  {patient.email}
+                                </p>
                               )}
                             </div>
                           </TableCell>
@@ -677,13 +820,19 @@ export default function DoctorDashboardPage() {
                             </Badge>
                           </TableCell>
                           <TableCell>
-                            {format(parseISO(patient.dateOfBirth), "MMM d, yyyy")}
+                            {format(
+                              parseISO(patient.dateOfBirth),
+                              "MMM d, yyyy",
+                            )}
                           </TableCell>
                           <TableCell>
                             {patient.lastVisit ? (
                               <div className="flex items-center gap-2">
                                 <Calendar className="h-3 w-3 text-gray-400" />
-                                {format(parseISO(patient.lastVisit), "MMM d, yyyy")}
+                                {format(
+                                  parseISO(patient.lastVisit),
+                                  "MMM d, yyyy",
+                                )}
                               </div>
                             ) : (
                               <span className="text-gray-400">Never</span>
@@ -694,14 +843,20 @@ export default function DoctorDashboardPage() {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => router.push(`/doctor/patients/${patient._id}`)}
+                                onClick={() =>
+                                  router.push(`/doctor/patients/${patient._id}`)
+                                }
                               >
                                 <Eye className="h-4 w-4 mr-1" />
                                 View
                               </Button>
                               <Button
                                 size="sm"
-                                onClick={() => router.push(`/doctor/patients/${patient._id}/medical-record`)}
+                                onClick={() =>
+                                  router.push(
+                                    `/doctor/patients/${patient._id}/medical-record`,
+                                  )
+                                }
                               >
                                 <FileText className="h-4 w-4 mr-1" />
                                 Record
@@ -733,26 +888,34 @@ export default function DoctorDashboardPage() {
                   <div className="p-4 bg-blue-50 rounded-lg">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-medium text-gray-600">Total Consultations</p>
+                        <p className="text-sm font-medium text-gray-600">
+                          Total Consultations
+                        </p>
                         <p className="text-2xl font-bold mt-1">42</p>
                       </div>
                       <TrendingUp className="h-8 w-8 text-blue-600" />
                     </div>
-                    <p className="text-xs text-gray-500 mt-2">+12% from last month</p>
+                    <p className="text-xs text-gray-500 mt-2">
+                      +12% from last month
+                    </p>
                   </div>
-                  
+
                   <div className="p-4 bg-green-50 rounded-lg">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-medium text-gray-600">Revenue</p>
+                        <p className="text-sm font-medium text-gray-600">
+                          Revenue
+                        </p>
                         <p className="text-2xl font-bold mt-1">$4,200</p>
                       </div>
                       <DollarSign className="h-8 w-8 text-green-600" />
                     </div>
-                    <p className="text-xs text-gray-500 mt-2">+8% from last month</p>
+                    <p className="text-xs text-gray-500 mt-2">
+                      +8% from last month
+                    </p>
                   </div>
                 </div>
-                
+
                 <div className="md:col-span-2">
                   <h3 className="font-semibold mb-4">Patient Demographics</h3>
                   <div className="space-y-4">
@@ -801,35 +964,50 @@ export default function DoctorDashboardPage() {
 
       {/* Quick Actions */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="cursor-pointer hover:bg-gray-50 transition-colors" onClick={() => router.push("/doctor/appointments")}>
+        <Card
+          className="cursor-pointertransition-colors"
+          onClick={() => router.push("/doctor/appointments")}
+        >
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">All Appointments</p>
+                <p className="text-sm font-medium text-gray-600">
+                  All Appointments
+                </p>
                 <p className="text-lg font-bold mt-1">View Full Schedule</p>
               </div>
               <Calendar className="h-5 w-5 text-blue-500" />
             </div>
           </CardContent>
         </Card>
-        
-        <Card className="cursor-pointer hover:bg-gray-50 transition-colors" onClick={() => router.push("/doctor/prescriptions")}>
+
+        <Card
+          className="cursor-pointer hover:bg:dark:background transition-colors"
+          onClick={() => router.push("/doctor/prescriptions")}
+        >
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Prescriptions</p>
+                <p className="text-sm font-medium text-gray-600">
+                  Prescriptions
+                </p>
                 <p className="text-lg font-bold mt-1">Write Prescription</p>
               </div>
               <Pilcrow className="h-5 w-5 text-green-500" />
             </div>
           </CardContent>
         </Card>
-        
-        <Card className="cursor-pointer hover:bg-gray-50 transition-colors" onClick={() => router.push("/doctor/medical-records")}>
+
+        <Card
+          className="cursor-pointer transition-colors"
+          onClick={() => router.push("/doctor/medical-records")}
+        >
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Medical Records</p>
+                <p className="text-sm font-medium text-gray-600">
+                  Medical Records
+                </p>
                 <p className="text-lg font-bold mt-1">View Records</p>
               </div>
               <FileText className="h-5 w-5 text-purple-500" />

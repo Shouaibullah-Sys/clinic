@@ -308,17 +308,13 @@ export default function SelectPrescriptionPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-[140px]">
-                        Prescription ID
-                      </TableHead>
+                      <TableHead className="w-35">Prescription ID</TableHead>
                       <TableHead>Patient</TableHead>
                       <TableHead>Doctor</TableHead>
                       <TableHead>Medicines</TableHead>
-                      <TableHead className="w-[120px]">Date</TableHead>
-                      <TableHead className="w-[100px]">Status</TableHead>
-                      <TableHead className="w-[120px] text-right">
-                        Action
-                      </TableHead>
+                      <TableHead className="w-30">Date</TableHead>
+                      <TableHead className="w-25">Status</TableHead>
+                      <TableHead className="w-30 text-right">Action</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -361,7 +357,7 @@ export default function SelectPrescriptionPage() {
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
-                              <User className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                              <User className="h-4 w-4 text-muted-foreground shrink-0" />
                               <div className="min-w-0">
                                 <span className="truncate block">
                                   Dr. {prescription.doctor?.name || "Unknown"}
@@ -402,7 +398,7 @@ export default function SelectPrescriptionPage() {
                           <TableCell>
                             <div className="flex flex-col">
                               <div className="flex items-center gap-2">
-                                <Calendar className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                                <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
                                 <span className="text-sm">
                                   {format(
                                     new Date(prescription.prescribedDate),
