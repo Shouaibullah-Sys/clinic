@@ -6,10 +6,15 @@ import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useAuthStore } from "@/store/useAuthStore";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -28,7 +33,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -39,42 +43,20 @@ import {
 } from "@/components/ui/select";
 import {
   Calendar,
-  Clock,
   User,
   Stethoscope,
   DollarSign,
   FlaskConical,
-  FileText,
   Pill,
   Printer,
-  Download,
   ArrowLeft,
-  Plus,
-  Trash2,
-  Eye,
-  Edit,
   CheckCircle,
-  XCircle,
   CreditCard,
   RefreshCw,
   Loader2,
   Receipt,
-  Calculator,
-  Send,
   Copy,
   AlertCircle,
-  CalendarDays,
-  Activity,
-  Thermometer,
-  Heart,
-  Weight,
-  MapPin,
-  Phone,
-  Mail,
-  Hash,
-  Clock4,
-  TrendingUp,
-  BarChart3,
   Scan,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
@@ -221,23 +203,28 @@ export default function AppointmentDetailPage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("overview");
   const [dataSource, setDataSource] = useState<{
-    labTests: 'appointment' | 'patient' | 'mixed';
-    prescriptions: 'appointment' | 'patient' | 'mixed';
-    imaging: 'appointment' | 'patient' | 'mixed';
-  }>({ labTests: 'appointment', prescriptions: 'appointment', imaging: 'appointment' });
-  
+    labTests: "appointment" | "patient" | "mixed";
+    prescriptions: "appointment" | "patient" | "mixed";
+    imaging: "appointment" | "patient" | "mixed";
+  }>({
+    labTests: "appointment",
+    prescriptions: "appointment",
+    imaging: "appointment",
+  });
+
   // Dialog states
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [selectedLabTest, setSelectedLabTest] = useState<LabTest | null>(null);
-  const [selectedImagingService, setSelectedImagingService] = useState<ImagingService | null>(null);
+  const [selectedImagingService, setSelectedImagingService] =
+    useState<ImagingService | null>(null);
   const [paymentForm, setPaymentForm] = useState({
     paymentMethod: "cash",
     amount: 0,
     transactionId: "",
-    notes: ""
+    notes: "",
   });
   const [processingPayment, setProcessingPayment] = useState(false);
-  const [paymentType, setPaymentType] = useState<'lab' | 'imaging'>('lab');
+  const [paymentType, setPaymentType] = useState<"lab" | "imaging">("lab");
 
   useEffect(() => {
     if (params.id && accessToken) {
@@ -249,36 +236,51 @@ export default function AppointmentDetailPage() {
   const fetchAppointmentWithAllData = async () => {
     try {
       setLoading(true);
-      
-      // Use the combined medical records endpoint
-      const response = await fetch(`/api/appointments/${params.id}/medical-records`, {
-        headers: {
-          "Content-Type": "application/json",
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+
+      // Use the combined medical records endpoint with cache-busting
+      const response = await fetch(
+        `/api/appointments/${params.id}/medical-records?_t=${Date.now()}`,
+        {
+          headers: {
+            "Content-Type": "application/json",
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
         },
-      });
-      
+      );
+
       const data = await response.json();
-      
+
       if (data.success) {
         console.log("📊 Medical records source:", data.data.source);
         setAppointment(data.data.appointment);
         setLabTests(data.data.labTests || []);
         setPrescriptions(data.data.prescriptions || []);
         setImagingServices(data.data.imagingServices || []);
-        setDataSource(data.data.source || { labTests: 'appointment', prescriptions: 'appointment', imaging: 'appointment' });
-        
+        setDataSource(
+          data.data.source || {
+            labTests: "appointment",
+            prescriptions: "appointment",
+            imaging: "appointment",
+          },
+        );
+
         // Log counts for debugging
-        console.log(`✅ Loaded: ${data.data.labTests?.length || 0} lab tests, ${data.data.prescriptions?.length || 0} prescriptions, ${data.data.imagingServices?.length || 0} imaging services`);
+        console.log(
+          `✅ Loaded: ${data.data.labTests?.length || 0} lab tests, ${data.data.prescriptions?.length || 0} prescriptions, ${data.data.imagingServices?.length || 0} imaging services`,
+        );
       } else {
-        console.warn("⚠️ Medical records endpoint failed, falling back to separate endpoints");
+        console.warn(
+          "⚠️ Medical records endpoint failed, falling back to separate endpoints",
+        );
         toast.error(data.error || "Failed to fetch appointment details");
         // Fallback to old method if new endpoint fails
         await fetchAppointmentWithAllDataFallback();
       }
     } catch (error) {
       console.error("Error fetching medical records:", error);
-      console.warn("⚠️ Medical records endpoint failed, falling back to separate endpoints");
+      console.warn(
+        "⚠️ Medical records endpoint failed, falling back to separate endpoints",
+      );
       await fetchAppointmentWithAllDataFallback();
     } finally {
       setLoading(false);
@@ -294,17 +296,17 @@ export default function AppointmentDetailPage() {
           ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         },
       });
-      
+
       const data = await response.json();
-      
+
       if (data.success) {
         setAppointment(data.data);
-        
+
         // Fetch ALL data in parallel for better performance
         await Promise.all([
           fetchLabTests(data.data.patient._id),
           fetchPrescriptions(data.data.patient._id),
-          fetchImagingServices()
+          fetchImagingServices(),
         ]);
       } else {
         toast.error(data.error || "Failed to fetch appointment details");
@@ -319,20 +321,20 @@ export default function AppointmentDetailPage() {
   const fetchImagingServices = async () => {
     try {
       console.log(`🔍 FETCHING IMAGING SERVICES for appointment ${params.id}`);
-      
+
       const response = await fetch(`/api/appointments/${params.id}/imaging`, {
         headers: {
           "Content-Type": "application/json",
           ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         },
       });
-      
+
       const data = await response.json();
-      
+
       if (data.success && Array.isArray(data.data)) {
         console.log(`✅ Found ${data.data.length} imaging services`);
         setImagingServices(data.data);
-        setDataSource(prev => ({ ...prev, imaging: 'appointment' }));
+        setDataSource((prev) => ({ ...prev, imaging: "appointment" }));
       } else {
         console.warn("⚠️ No imaging services found");
         setImagingServices([]);
@@ -346,52 +348,69 @@ export default function AppointmentDetailPage() {
   // Unified lab tests fetcher
   const fetchLabTests = async (patientId: string) => {
     try {
-      console.log(`🔍 FETCHING LAB TESTS for appointment ${params.id} and patient ${patientId}`);
-      
+      console.log(
+        `🔍 FETCHING LAB TESTS for appointment ${params.id} and patient ${patientId}`,
+      );
+
       // Try appointment-specific lab tests first
-      const appointmentResponse = await fetch(`/api/appointments/${params.id}/lab-tests`, {
-        headers: {
-          "Content-Type": "application/json",
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-        },
-      });
-      
-      const appointmentData = await appointmentResponse.json();
-      
-      let labTestsData = [];
-      let source: 'appointment' | 'patient' | 'mixed' = 'appointment';
-      
-      if (appointmentData.success && Array.isArray(appointmentData.data)) {
-        console.log(`✅ Found ${appointmentData.data.length} appointment-specific lab tests`);
-        labTestsData = appointmentData.data;
-        source = 'appointment';
-      }
-      
-      // If no appointment-specific lab tests, fetch patient-specific ones
-      if (labTestsData.length === 0) {
-        console.log(`⚠️ No appointment-specific lab tests, fetching patient-specific lab tests`);
-        const patientResponse = await fetch(`/api/doctor/patients/${patientId}/lab-tests`, {
+      const appointmentResponse = await fetch(
+        `/api/appointments/${params.id}/lab-tests`,
+        {
           headers: {
             "Content-Type": "application/json",
             ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
           },
-        });
-        
+        },
+      );
+
+      const appointmentData = await appointmentResponse.json();
+
+      let labTestsData = [];
+      let source: "appointment" | "patient" | "mixed" = "appointment";
+
+      if (appointmentData.success && Array.isArray(appointmentData.data)) {
+        console.log(
+          `✅ Found ${appointmentData.data.length} appointment-specific lab tests`,
+        );
+        labTestsData = appointmentData.data;
+        source = "appointment";
+      }
+
+      // If no appointment-specific lab tests, fetch patient-specific ones
+      if (labTestsData.length === 0) {
+        console.log(
+          `⚠️ No appointment-specific lab tests, fetching patient-specific lab tests`,
+        );
+        const patientResponse = await fetch(
+          `/api/doctor/patients/${patientId}/lab-tests`,
+          {
+            headers: {
+              "Content-Type": "application/json",
+              ...(accessToken
+                ? { Authorization: `Bearer ${accessToken}` }
+                : {}),
+            },
+          },
+        );
+
         const patientData = await patientResponse.json();
-        
+
         if (patientData.success && Array.isArray(patientData.data)) {
-          console.log(`✅ Found ${patientData.data.length} patient-specific lab tests`);
+          console.log(
+            `✅ Found ${patientData.data.length} patient-specific lab tests`,
+          );
           labTestsData = patientData.data;
-          source = 'patient';
+          source = "patient";
         }
       }
-      
+
       // Filter to show only relevant tests (recent or appointment-specific)
       const filteredTests = filterLabTestsByRelevance(labTestsData);
-      console.log(`📊 Setting ${filteredTests.length} lab tests to display (source: ${source})`);
+      console.log(
+        `📊 Setting ${filteredTests.length} lab tests to display (source: ${source})`,
+      );
       setLabTests(filteredTests);
-      setDataSource(prev => ({ ...prev, labTests: source }));
-      
+      setDataSource((prev) => ({ ...prev, labTests: source }));
     } catch (error) {
       console.error("💥 Error fetching lab tests:", error);
       setLabTests([]);
@@ -401,52 +420,70 @@ export default function AppointmentDetailPage() {
   // Unified prescriptions fetcher
   const fetchPrescriptions = async (patientId: string) => {
     try {
-      console.log(`🔍 FETCHING PRESCRIPTIONS for appointment ${params.id} and patient ${patientId}`);
-      
+      console.log(
+        `🔍 FETCHING PRESCRIPTIONS for appointment ${params.id} and patient ${patientId}`,
+      );
+
       // Try appointment-specific prescriptions first
-      const appointmentResponse = await fetch(`/api/appointments/${params.id}/prescriptions`, {
-        headers: {
-          "Content-Type": "application/json",
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-        },
-      });
-      
-      const appointmentData = await appointmentResponse.json();
-      
-      let prescriptionsData = [];
-      let source: 'appointment' | 'patient' | 'mixed' = 'appointment';
-      
-      if (appointmentData.success && Array.isArray(appointmentData.data)) {
-        console.log(`✅ Found ${appointmentData.data.length} appointment-specific prescriptions`);
-        prescriptionsData = appointmentData.data;
-        source = 'appointment';
-      }
-      
-      // If no appointment-specific prescriptions, fetch patient-specific ones
-      if (prescriptionsData.length === 0) {
-        console.log(`⚠️ No appointment-specific prescriptions, fetching patient-specific prescriptions`);
-        const patientResponse = await fetch(`/api/doctor/patients/${patientId}/prescriptions`, {
+      const appointmentResponse = await fetch(
+        `/api/appointments/${params.id}/prescriptions`,
+        {
           headers: {
             "Content-Type": "application/json",
             ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
           },
-        });
-        
+        },
+      );
+
+      const appointmentData = await appointmentResponse.json();
+
+      let prescriptionsData = [];
+      let source: "appointment" | "patient" | "mixed" = "appointment";
+
+      if (appointmentData.success && Array.isArray(appointmentData.data)) {
+        console.log(
+          `✅ Found ${appointmentData.data.length} appointment-specific prescriptions`,
+        );
+        prescriptionsData = appointmentData.data;
+        source = "appointment";
+      }
+
+      // If no appointment-specific prescriptions, fetch patient-specific ones
+      if (prescriptionsData.length === 0) {
+        console.log(
+          `⚠️ No appointment-specific prescriptions, fetching patient-specific prescriptions`,
+        );
+        const patientResponse = await fetch(
+          `/api/doctor/patients/${patientId}/prescriptions`,
+          {
+            headers: {
+              "Content-Type": "application/json",
+              ...(accessToken
+                ? { Authorization: `Bearer ${accessToken}` }
+                : {}),
+            },
+          },
+        );
+
         const patientData = await patientResponse.json();
-        
+
         if (patientData.success && Array.isArray(patientData.data)) {
-          console.log(`✅ Found ${patientData.data.length} patient-specific prescriptions`);
+          console.log(
+            `✅ Found ${patientData.data.length} patient-specific prescriptions`,
+          );
           prescriptionsData = patientData.data;
-          source = 'patient';
+          source = "patient";
         }
       }
-      
+
       // Filter to show only relevant prescriptions
-      const filteredPrescriptions = filterPrescriptionsByRelevance(prescriptionsData);
-      console.log(`📊 Setting ${filteredPrescriptions.length} prescriptions to display (source: ${source})`);
+      const filteredPrescriptions =
+        filterPrescriptionsByRelevance(prescriptionsData);
+      console.log(
+        `📊 Setting ${filteredPrescriptions.length} prescriptions to display (source: ${source})`,
+      );
       setPrescriptions(filteredPrescriptions);
-      setDataSource(prev => ({ ...prev, prescriptions: source }));
-      
+      setDataSource((prev) => ({ ...prev, prescriptions: source }));
     } catch (error) {
       console.error("💥 Error fetching prescriptions:", error);
       setPrescriptions([]);
@@ -456,77 +493,82 @@ export default function AppointmentDetailPage() {
   // Helper: Filter lab tests to show relevant ones
   const filterLabTestsByRelevance = (tests: LabTest[]) => {
     if (!tests || tests.length === 0) return [];
-    
+
     // Sort by most recent first
-    const sortedTests = [...tests].sort((a, b) => 
-      new Date(b.orderedAt).getTime() - new Date(a.orderedAt).getTime()
+    const sortedTests = [...tests].sort(
+      (a, b) =>
+        new Date(b.orderedAt).getTime() - new Date(a.orderedAt).getTime(),
     );
-    
+
     // Return only tests from the last 30 days or all if less than 10
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    
-    const recentTests = sortedTests.filter(test => 
-      new Date(test.orderedAt) >= thirtyDaysAgo
+
+    const recentTests = sortedTests.filter(
+      (test) => new Date(test.orderedAt) >= thirtyDaysAgo,
     );
-    
+
     return recentTests.length > 0 ? recentTests : sortedTests.slice(0, 10);
   };
 
   // Helper: Filter prescriptions to show relevant ones
   const filterPrescriptionsByRelevance = (prescriptions: Prescription[]) => {
     if (!prescriptions || prescriptions.length === 0) return [];
-    
+
     // Sort by most recent first
-    const sortedPrescriptions = [...prescriptions].sort((a, b) => 
-      new Date(b.prescribedDate).getTime() - new Date(a.prescribedDate).getTime()
+    const sortedPrescriptions = [...prescriptions].sort(
+      (a, b) =>
+        new Date(b.prescribedDate).getTime() -
+        new Date(a.prescribedDate).getTime(),
     );
-    
+
     // Return only active or recent prescriptions
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    
-    const relevantPrescriptions = sortedPrescriptions.filter(prescription => {
-      const isActive = prescription.status === 'active';
+
+    const relevantPrescriptions = sortedPrescriptions.filter((prescription) => {
+      const isActive = prescription.status === "active";
       const isRecent = new Date(prescription.prescribedDate) >= thirtyDaysAgo;
       const isNotExpired = new Date(prescription.expiryDate) > new Date();
-      
+
       return isActive && isNotExpired && isRecent;
     });
-    
-    return relevantPrescriptions.length > 0 ? relevantPrescriptions : sortedPrescriptions.slice(0, 10);
+
+    return relevantPrescriptions.length > 0
+      ? relevantPrescriptions
+      : sortedPrescriptions.slice(0, 10);
   };
 
   // Process payment for lab test
   const handleProcessPayment = async () => {
-    if (paymentType === 'lab' && !selectedLabTest) return;
-    if (paymentType === 'imaging' && !selectedImagingService) return;
-    
+    if (paymentType === "lab" && !selectedLabTest) return;
+    if (paymentType === "imaging" && !selectedImagingService) return;
+
     try {
       setProcessingPayment(true);
-      
+
       let url, body;
-      
-      if (paymentType === 'lab' && selectedLabTest) {
+
+      if (paymentType === "lab" && selectedLabTest) {
         url = `/api/reception/lab-tests/${selectedLabTest._id}/charges`;
         body = {
           paymentMethod: paymentForm.paymentMethod,
           paidAmount: paymentForm.amount,
           transactionId: paymentForm.transactionId,
-          verifyPayment: true
+          verifyPayment: true,
         };
-      } else if (paymentType === 'imaging' && selectedImagingService) {
+      } else if (paymentType === "imaging" && selectedImagingService) {
         url = `/api/radiology/services/${selectedImagingService._id}/charges`;
         body = {
           paymentMethod: paymentForm.paymentMethod,
           paidAmount: paymentForm.amount,
           transactionId: paymentForm.transactionId,
-          verifyPayment: true
+          verifyPayment: true,
         };
       } else {
         return;
       }
-      
+
       const response = await fetch(url, {
         method: "PUT",
         headers: {
@@ -535,9 +577,9 @@ export default function AppointmentDetailPage() {
         },
         body: JSON.stringify(body),
       });
-      
+
       const data = await response.json();
-      
+
       if (data.success) {
         toast.success("Payment processed successfully");
         setPaymentDialogOpen(false);
@@ -550,7 +592,7 @@ export default function AppointmentDetailPage() {
       toast.error("Network error. Please try again.");
     } finally {
       setProcessingPayment(false);
-    }   
+    }
   };
 
   // Print receipt
@@ -584,8 +626,8 @@ export default function AppointmentDetailPage() {
       =================
       Thank you for your payment!
     `;
-    
-    const printWindow = window.open('', '_blank');
+
+    const printWindow = window.open("", "_blank");
     printWindow?.document.write(`
       <html>
         <head>
@@ -623,9 +665,15 @@ export default function AppointmentDetailPage() {
       Patient: ${appointment?.patient?.name}
       Patient ID: ${appointment?.patient?.patientId}
       
-      Imaging Service: ${service.serviceType === 'x-ray' ? 'X-Ray' :
-                       service.serviceType === 'ct-scan' ? 'CT Scan' :
-                       service.serviceType === 'mri' ? 'MRI' : 'Ultrasound'}
+      Imaging Service: ${
+        service.serviceType === "x-ray"
+          ? "X-Ray"
+          : service.serviceType === "ct-scan"
+            ? "CT Scan"
+            : service.serviceType === "mri"
+              ? "MRI"
+              : "Ultrasound"
+      }
       Service ID: ${service.serviceId}
       Body Part: ${service.bodyPart}
       View: ${service.view}
@@ -641,14 +689,14 @@ export default function AppointmentDetailPage() {
       Payment:
         Method: ${service.charges?.paymentMethod || "cash"}
         Amount Paid: $${(service.charges?.paid || 0).toFixed(2)}
-        Due: $${(service.charges?.due || (service.charges?.totalAmount || 0)).toFixed(2)}
+        Due: $${(service.charges?.due || service.charges?.totalAmount || 0).toFixed(2)}
       
       Processed by: ${user?.name}
       =================
       Thank you for your payment!
     `;
-    
-    const printWindow = window.open('', '_blank');
+
+    const printWindow = window.open("", "_blank");
     printWindow?.document.write(`
       <html>
         <head>
@@ -677,10 +725,13 @@ export default function AppointmentDetailPage() {
 
   // Copy prescription to clipboard
   const handleCopyToDispensary = (prescription: Prescription) => {
-    const medsText = prescription.medications.map(med => 
-      `${med.name} - ${med.dosage} - ${med.frequency} - ${med.duration} - Qty: ${med.quantity}`
-    ).join('\n');
-    
+    const medsText = prescription.medications
+      .map(
+        (med) =>
+          `${med.name} - ${med.dosage} - ${med.frequency} - ${med.duration} - Qty: ${med.quantity}`,
+      )
+      .join("\n");
+
     const fullText = `
       Prescription #: ${prescription.prescriptionId}
       Patient: ${prescription.patient.name} (${prescription.patient.patientId})
@@ -693,8 +744,9 @@ export default function AppointmentDetailPage() {
       
       Instructions: ${prescription.instructions}
     `;
-    
-    navigator.clipboard.writeText(fullText)
+
+    navigator.clipboard
+      .writeText(fullText)
       .then(() => toast.success("Copied to clipboard for dispensary"))
       .catch(() => toast.error("Failed to copy to clipboard"));
   };
@@ -710,19 +762,37 @@ export default function AppointmentDetailPage() {
 
   // Calculate billing totals
   const calculateTotals = () => {
-    const consultationFee = appointment?.appointmentType === "emergency" ? 150 :
-                          appointment?.appointmentType === "procedure" ? 200 : 100;
-    
-    const labTestsTotal = labTests.reduce((sum, test) => sum + calculateTestTotal(test), 0);
+    const consultationFee =
+      appointment?.appointmentType === "emergency"
+        ? 150
+        : appointment?.appointmentType === "procedure"
+          ? 200
+          : 100;
+
+    const labTestsTotal = labTests.reduce(
+      (sum, test) => sum + calculateTestTotal(test),
+      0,
+    );
     const prescriptionsTotal = prescriptions.reduce((sum, prescription) => {
-      return sum + (prescription.medications.reduce((medSum, med) => 
-        medSum + ((med.price || 0) * (med.quantity || 1)), 0) || 0);
+      return (
+        sum +
+        (prescription.medications.reduce(
+          (medSum, med) => medSum + (med.price || 0) * (med.quantity || 1),
+          0,
+        ) || 0)
+      );
     }, 0);
-    
+
     const totalAmount = consultationFee + labTestsTotal + prescriptionsTotal;
-    const paidAmount = labTests.reduce((sum, test) => sum + (test.charges?.paid || 0), 0);
-    const dueAmount = labTests.reduce((sum, test) => sum + (test.charges?.due || calculateTestTotal(test)), 0);
-    
+    const paidAmount = labTests.reduce(
+      (sum, test) => sum + (test.charges?.paid || 0),
+      0,
+    );
+    const dueAmount = labTests.reduce(
+      (sum, test) => sum + (test.charges?.due || calculateTestTotal(test)),
+      0,
+    );
+
     return {
       consultationFee,
       labTestsTotal,
@@ -730,7 +800,8 @@ export default function AppointmentDetailPage() {
       totalAmount,
       paidAmount,
       dueAmount,
-      paymentStatus: dueAmount === 0 ? "fully_paid" : paidAmount > 0 ? "partial" : "pending"
+      paymentStatus:
+        dueAmount === 0 ? "fully_paid" : paidAmount > 0 ? "partial" : "pending",
     };
   };
 
@@ -742,9 +813,9 @@ export default function AppointmentDetailPage() {
       pending: "bg-yellow-100 text-yellow-800 hover:bg-yellow-100",
       partial: "bg-blue-100 text-blue-800 hover:bg-blue-100",
       paid: "bg-green-100 text-green-800 hover:bg-green-100",
-      cancelled: "bg-red-100 text-red-800 hover:bg-red-100"
+      cancelled: "bg-red-100 text-red-800 hover:bg-red-100",
     };
-    
+
     return (
       <Badge className={variants[status] || "bg-gray-100"}>
         {status?.toUpperCase() || "PENDING"}
@@ -760,9 +831,9 @@ export default function AppointmentDetailPage() {
       processing: "bg-orange-100 text-orange-800 hover:bg-orange-100",
       completed: "bg-green-100 text-green-800 hover:bg-green-100",
       reported: "bg-emerald-100 text-emerald-800 hover:bg-emerald-100",
-      cancelled: "bg-red-100 text-red-800 hover:bg-red-100"
+      cancelled: "bg-red-100 text-red-800 hover:bg-red-100",
     };
-    
+
     return (
       <Badge className={variants[status] || "bg-gray-100"}>
         {status?.toUpperCase() || "UNKNOWN"}
@@ -777,9 +848,9 @@ export default function AppointmentDetailPage() {
       "checked-in": "bg-purple-50 text-purple-700 border-purple-200",
       "in-progress": "bg-yellow-50 text-yellow-700 border-yellow-200",
       completed: "bg-gray-50 text-gray-700 border-gray-200",
-      cancelled: "bg-red-50 text-red-700 border-red-200"
+      cancelled: "bg-red-50 text-red-700 border-red-200",
     };
-    
+
     return (
       <Badge variant="outline" className={variants[status] || ""}>
         {status?.toUpperCase()}
@@ -789,11 +860,28 @@ export default function AppointmentDetailPage() {
 
   const getPriorityBadge = (priority: string) => {
     switch (priority) {
-      case "emergency": return <Badge variant="destructive">Emergency</Badge>;
-      case "high": return <Badge className="bg-red-100 text-red-800 hover:bg-red-100">High</Badge>;
-      case "medium": return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Medium</Badge>;
-      case "low": return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Low</Badge>;
-      default: return <Badge variant="secondary">{priority}</Badge>;
+      case "emergency":
+        return <Badge variant="destructive">Emergency</Badge>;
+      case "high":
+        return (
+          <Badge className="bg-red-100 text-red-800 hover:bg-red-100">
+            High
+          </Badge>
+        );
+      case "medium":
+        return (
+          <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">
+            Medium
+          </Badge>
+        );
+      case "low":
+        return (
+          <Badge className="bg-green-100 text-green-800 hover:bg-green-100">
+            Low
+          </Badge>
+        );
+      default:
+        return <Badge variant="secondary">{priority}</Badge>;
     }
   };
 
@@ -814,7 +902,9 @@ export default function AppointmentDetailPage() {
         <Card>
           <CardContent className="pt-6 text-center">
             <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
-            <h2 className="text-xl font-semibold mb-2">Appointment Not Found</h2>
+            <h2 className="text-xl font-semibold mb-2">
+              Appointment Not Found
+            </h2>
             <Button onClick={() => router.push("/appointments")}>
               Back to Appointments
             </Button>
@@ -834,15 +924,14 @@ export default function AppointmentDetailPage() {
             Back
           </Button>
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold">Appointment Details</h1>
+            <h1 className="text-2xl md:text-3xl font-bold">
+              Appointment Details
+            </h1>
             <p className="text-gray-500">ID: {appointment.appointmentId}</p>
           </div>
         </div>
         <div className="flex gap-2">
-          <Button 
-            variant="outline" 
-            onClick={fetchAppointmentWithAllData}
-          >
+          <Button variant="outline" onClick={fetchAppointmentWithAllData}>
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh
           </Button>
@@ -871,7 +960,7 @@ export default function AppointmentDetailPage() {
                 )}
               </div>
             </div>
-            
+
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <Stethoscope className="h-4 w-4" />
@@ -883,14 +972,16 @@ export default function AppointmentDetailPage() {
                 <p>Department: {appointment.doctor.department}</p>
               </div>
             </div>
-            
+
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <Calendar className="h-4 w-4" />
                 <h3 className="font-semibold">Appointment Details</h3>
               </div>
               <div className="space-y-1 text-sm">
-                <p>Date: {format(parseISO(appointment.date), "MMMM d, yyyy")}</p>
+                <p>
+                  Date: {format(parseISO(appointment.date), "MMMM d, yyyy")}
+                </p>
                 <p>Type: {appointment.appointmentType}</p>
                 <p>Status: {getStatusBadge(appointment.status)}</p>
                 <p>Priority: {getPriorityBadge(appointment.priority)}</p>
@@ -908,10 +999,12 @@ export default function AppointmentDetailPage() {
             Lab Tests {labTests.length > 0 && `(${labTests.length})`}
           </TabsTrigger>
           <TabsTrigger value="prescriptions">
-            Prescriptions {prescriptions.length > 0 && `(${prescriptions.length})`}
+            Prescriptions{" "}
+            {prescriptions.length > 0 && `(${prescriptions.length})`}
           </TabsTrigger>
           <TabsTrigger value="imaging">
-            Imaging {imagingServices.length > 0 && `(${imagingServices.length})`}
+            Imaging{" "}
+            {imagingServices.length > 0 && `(${imagingServices.length})`}
           </TabsTrigger>
           <TabsTrigger value="billing">Billing</TabsTrigger>
         </TabsList>
@@ -937,11 +1030,15 @@ export default function AppointmentDetailPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label className="text-gray-500">Start Time</Label>
-                    <p className="font-medium">{format(parseISO(appointment.startTime), "h:mm a")}</p>
+                    <p className="font-medium">
+                      {format(parseISO(appointment.startTime), "h:mm a")}
+                    </p>
                   </div>
                   <div>
                     <Label className="text-gray-500">Duration</Label>
-                    <p className="font-medium">{appointment.duration} minutes</p>
+                    <p className="font-medium">
+                      {appointment.duration} minutes
+                    </p>
                   </div>
                 </div>
               </CardContent>
@@ -964,12 +1061,16 @@ export default function AppointmentDetailPage() {
                 <Separator />
                 <div className="flex justify-between items-center">
                   <span>Total Amount:</span>
-                  <span className="font-bold">${totals.totalAmount.toFixed(2)}</span>
+                  <span className="font-bold">
+                    ${totals.totalAmount.toFixed(2)}
+                  </span>
                 </div>
                 <Separator />
                 <div className="flex justify-between items-center">
                   <span>Amount Due:</span>
-                  <span className="font-bold text-red-600">${totals.dueAmount.toFixed(2)}</span>
+                  <span className="font-bold text-red-600">
+                    ${totals.dueAmount.toFixed(2)}
+                  </span>
                 </div>
               </CardContent>
             </Card>
@@ -988,8 +1089,11 @@ export default function AppointmentDetailPage() {
                 Manage and process payments for laboratory tests
                 {labTests.length > 0 && (
                   <Badge variant="outline" className="ml-2">
-                    {dataSource.labTests === 'appointment' ? 'Appointment-specific' : 
-                     dataSource.labTests === 'patient' ? 'Patient history' : 'Mixed sources'}
+                    {dataSource.labTests === "appointment"
+                      ? "Appointment-specific"
+                      : dataSource.labTests === "patient"
+                        ? "Patient history"
+                        : "Mixed sources"}
                   </Badge>
                 )}
               </CardDescription>
@@ -1018,15 +1122,28 @@ export default function AppointmentDetailPage() {
                     <TableBody>
                       {labTests.map((test) => (
                         <TableRow key={test._id}>
-                          <TableCell className="font-medium">{test.testId}</TableCell>
+                          <TableCell className="font-medium">
+                            {test.testId}
+                          </TableCell>
                           <TableCell>{test.testName}</TableCell>
-                          <TableCell>${(test.discountedPrice || test.price || 0).toFixed(2)}</TableCell>
-                          <TableCell>${calculateTestTotal(test).toFixed(2)}</TableCell>
                           <TableCell>
-                            {getPaymentStatusBadge(test.charges?.paymentStatus || "pending")}
+                            $
+                            {(test.discountedPrice || test.price || 0).toFixed(
+                              2,
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            ${calculateTestTotal(test).toFixed(2)}
+                          </TableCell>
+                          <TableCell>
+                            {getPaymentStatusBadge(
+                              test.charges?.paymentStatus || "pending",
+                            )}
                           </TableCell>
                           <TableCell className="font-bold text-red-600">
-                            ${test.charges?.due?.toFixed(2) || calculateTestTotal(test).toFixed(2)}
+                            $
+                            {test.charges?.due?.toFixed(2) ||
+                              calculateTestTotal(test).toFixed(2)}
                           </TableCell>
                           <TableCell>
                             {getLabStatusBadge(test.status)}
@@ -1039,14 +1156,20 @@ export default function AppointmentDetailPage() {
                                 onClick={() => {
                                   setSelectedLabTest(test);
                                   setPaymentForm({
-                                    paymentMethod: test.charges?.paymentMethod || "cash",
-                                    amount: test.charges?.due || calculateTestTotal(test),
-                                    transactionId: test.charges?.transactionId || "",
-                                    notes: ""
+                                    paymentMethod:
+                                      test.charges?.paymentMethod || "cash",
+                                    amount:
+                                      test.charges?.due ||
+                                      calculateTestTotal(test),
+                                    transactionId:
+                                      test.charges?.transactionId || "",
+                                    notes: "",
                                   });
                                   setPaymentDialogOpen(true);
                                 }}
-                                disabled={test.charges?.paymentStatus === "paid"}
+                                disabled={
+                                  test.charges?.paymentStatus === "paid"
+                                }
                               >
                                 <CreditCard className="h-3 w-3 mr-1" />
                                 Pay
@@ -1083,8 +1206,11 @@ export default function AppointmentDetailPage() {
                 All prescriptions issued for this patient
                 {prescriptions.length > 0 && (
                   <Badge variant="outline" className="ml-2">
-                    {dataSource.prescriptions === 'appointment' ? 'Appointment-specific' : 
-                     dataSource.prescriptions === 'patient' ? 'Patient history' : 'Mixed sources'}
+                    {dataSource.prescriptions === "appointment"
+                      ? "Appointment-specific"
+                      : dataSource.prescriptions === "patient"
+                        ? "Patient history"
+                        : "Mixed sources"}
                   </Badge>
                 )}
               </CardDescription>
@@ -1102,22 +1228,32 @@ export default function AppointmentDetailPage() {
                       <CardContent className="pt-6">
                         <div className="flex justify-between items-start mb-4">
                           <div>
-                            <h3 className="font-semibold">{prescription.prescriptionId}</h3>
+                            <h3 className="font-semibold">
+                              {prescription.prescriptionId}
+                            </h3>
                             <p className="text-sm text-gray-500">
-                              {format(parseISO(prescription.prescribedDate), "MMM d, yyyy")}
+                              {format(
+                                parseISO(prescription.prescribedDate),
+                                "MMM d, yyyy",
+                              )}
                             </p>
-                            <p className="mt-1">Diagnosis: {prescription.diagnosis}</p>
+                            <p className="mt-1">
+                              Diagnosis: {prescription.diagnosis}
+                            </p>
                           </div>
                           <Badge>{prescription.status}</Badge>
                         </div>
-                        
+
                         <div className="space-y-3">
                           <h4 className="font-medium">Medications:</h4>
                           {prescription.medications.map((med, index) => (
                             <div key={index} className="pl-4 border-l-2">
                               <div className="flex justify-between">
                                 <span className="font-medium">{med.name}</span>
-                                <span>${(med.price || 0).toFixed(2)} × {med.quantity}</span>
+                                <span>
+                                  ${(med.price || 0).toFixed(2)} ×{" "}
+                                  {med.quantity}
+                                </span>
                               </div>
                               <p className="text-sm text-gray-500">
                                 {med.dosage} • {med.frequency} • {med.duration}
@@ -1125,17 +1261,26 @@ export default function AppointmentDetailPage() {
                             </div>
                           ))}
                         </div>
-                        
+
                         <div className="mt-4 pt-4 border-t flex justify-between items-center">
                           <div>
-                            <p className="text-sm text-gray-500">Total Medications Cost:</p>
+                            <p className="text-sm text-gray-500">
+                              Total Medications Cost:
+                            </p>
                             <p className="font-bold">
-                              ${prescription.medications.reduce((sum, med) => 
-                                sum + (med.quantity || 1) * (med.price || 0), 0).toFixed(2)}
+                              $
+                              {prescription.medications
+                                .reduce(
+                                  (sum, med) =>
+                                    sum +
+                                    (med.quantity || 1) * (med.price || 0),
+                                  0,
+                                )
+                                .toFixed(2)}
                             </p>
                           </div>
-                          <Button 
-                            size="sm" 
+                          <Button
+                            size="sm"
                             variant="outline"
                             onClick={() => handleCopyToDispensary(prescription)}
                           >
@@ -1161,11 +1306,15 @@ export default function AppointmentDetailPage() {
                 Imaging Services
               </CardTitle>
               <CardDescription className="flex items-center gap-2">
-                Manage and process payments for imaging services (X-Ray, CT Scan, MRI, Ultrasound)
+                Manage and process payments for imaging services (X-Ray, CT
+                Scan, MRI, Ultrasound)
                 {imagingServices.length > 0 && (
                   <Badge variant="outline" className="ml-2">
-                    {dataSource.imaging === 'appointment' ? 'Appointment-specific' : 
-                     dataSource.imaging === 'patient' ? 'Patient history' : 'Mixed sources'}
+                    {dataSource.imaging === "appointment"
+                      ? "Appointment-specific"
+                      : dataSource.imaging === "patient"
+                        ? "Patient history"
+                        : "Mixed sources"}
                   </Badge>
                 )}
               </CardDescription>
@@ -1195,22 +1344,34 @@ export default function AppointmentDetailPage() {
                     <TableBody>
                       {imagingServices.map((service) => (
                         <TableRow key={service._id}>
-                          <TableCell className="font-medium">{service.serviceId}</TableCell>
+                          <TableCell className="font-medium">
+                            {service.serviceId}
+                          </TableCell>
                           <TableCell>
                             <Badge variant="outline">
-                              {service.serviceType === 'x-ray' ? 'X-Ray' :
-                               service.serviceType === 'ct-scan' ? 'CT Scan' :
-                               service.serviceType === 'mri' ? 'MRI' : 'Ultrasound'}
+                              {service.serviceType === "x-ray"
+                                ? "X-Ray"
+                                : service.serviceType === "ct-scan"
+                                  ? "CT Scan"
+                                  : service.serviceType === "mri"
+                                    ? "MRI"
+                                    : "Ultrasound"}
                             </Badge>
                           </TableCell>
                           <TableCell>{service.bodyPart}</TableCell>
                           <TableCell>{service.view}</TableCell>
-                          <TableCell>${(service.charges?.totalAmount || 0).toFixed(2)}</TableCell>
                           <TableCell>
-                            {getPaymentStatusBadge(service.charges?.paymentStatus || "pending")}
+                            ${(service.charges?.totalAmount || 0).toFixed(2)}
+                          </TableCell>
+                          <TableCell>
+                            {getPaymentStatusBadge(
+                              service.charges?.paymentStatus || "pending",
+                            )}
                           </TableCell>
                           <TableCell className="font-bold text-red-600">
-                            ${service.charges?.due?.toFixed(2) || (service.charges?.totalAmount || 0).toFixed(2)}
+                            $
+                            {service.charges?.due?.toFixed(2) ||
+                              (service.charges?.totalAmount || 0).toFixed(2)}
                           </TableCell>
                           <TableCell>
                             {getLabStatusBadge(service.status)}
@@ -1222,24 +1383,46 @@ export default function AppointmentDetailPage() {
                                 variant="outline"
                                 onClick={() => {
                                   setSelectedImagingService(service);
-                                  setPaymentType('imaging');
+                                  setPaymentType("imaging");
                                   setPaymentForm({
-                                    paymentMethod: service.charges?.paymentMethod || "cash",
-                                    amount: service.charges?.due || (service.charges?.totalAmount || 0),
-                                    transactionId: service.charges?.transactionId || "",
-                                    notes: ""
+                                    paymentMethod:
+                                      service.charges?.paymentMethod || "cash",
+                                    amount:
+                                      service.charges?.due ||
+                                      service.charges?.totalAmount ||
+                                      0,
+                                    transactionId:
+                                      service.charges?.transactionId || "",
+                                    notes: "",
                                   });
                                   setPaymentDialogOpen(true);
                                 }}
-                                disabled={service.charges?.paymentStatus === "paid"}
+                                disabled={
+                                  service.charges?.paymentStatus === "paid" ||
+                                  service.billingStatus === "paid" ||
+                                  service.paymentVerified === true
+                                }
                               >
-                                <CreditCard className="h-3 w-3 mr-1" />
-                                Pay
+                                {service.charges?.paymentStatus === "paid" ||
+                                service.billingStatus === "paid" ||
+                                service.paymentVerified === true ? (
+                                  <>
+                                    <CheckCircle className="h-3 w-3 mr-1" />
+                                    Paid
+                                  </>
+                                ) : (
+                                  <>
+                                    <CreditCard className="h-3 w-3 mr-1" />
+                                    Pay
+                                  </>
+                                )}
                               </Button>
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => handlePrintImagingReceipt(service)}
+                                onClick={() =>
+                                  handlePrintImagingReceipt(service)
+                                }
                               >
                                 <Receipt className="h-3 w-3 mr-1" />
                                 Receipt
@@ -1277,16 +1460,22 @@ export default function AppointmentDetailPage() {
                   </TableHeader>
                   <TableBody>
                     <TableRow>
-                      <TableCell className="font-medium">Consultation Fee</TableCell>
-                      <TableCell className="text-right">${totals.consultationFee.toFixed(2)}</TableCell>
+                      <TableCell className="font-medium">
+                        Consultation Fee
+                      </TableCell>
+                      <TableCell className="text-right">
+                        ${totals.consultationFee.toFixed(2)}
+                      </TableCell>
                     </TableRow>
-                    
+
                     {labTests.map((test) => (
                       <TableRow key={test._id}>
                         <TableCell>
                           <div>
                             <p>{test.testName}</p>
-                            <p className="text-sm text-gray-500">{test.testId}</p>
+                            <p className="text-sm text-gray-500">
+                              {test.testId}
+                            </p>
                           </div>
                         </TableCell>
                         <TableCell className="text-right">
@@ -1294,21 +1483,21 @@ export default function AppointmentDetailPage() {
                         </TableCell>
                       </TableRow>
                     ))}
-                    
+
                     <TableRow className="font-bold border-t">
                       <TableCell>Total Amount</TableCell>
                       <TableCell className="text-right">
                         ${totals.totalAmount.toFixed(2)}
                       </TableCell>
                     </TableRow>
-                    
+
                     <TableRow>
                       <TableCell>Total Paid</TableCell>
                       <TableCell className="text-right text-green-600">
                         ${totals.paidAmount.toFixed(2)}
                       </TableCell>
                     </TableRow>
-                    
+
                     <TableRow>
                       <TableCell className="font-bold">Balance Due</TableCell>
                       <TableCell className="text-right font-bold text-red-600">
@@ -1322,27 +1511,39 @@ export default function AppointmentDetailPage() {
               {/* Payment Actions */}
               <div className="flex gap-3 justify-center">
                 {totals.dueAmount > 0 && (
-                  <Button size="lg" onClick={() => {
-                    const unpaidTest = labTests.find(t => 
-                      !t.charges?.paymentStatus || 
-                      t.charges?.paymentStatus !== "paid"
-                    );
-                    if (unpaidTest) {
-                      setSelectedLabTest(unpaidTest);
-                      setPaymentForm({
-                        paymentMethod: unpaidTest.charges?.paymentMethod || "cash",
-                        amount: unpaidTest.charges?.due || calculateTestTotal(unpaidTest),
-                        transactionId: unpaidTest.charges?.transactionId || "",
-                        notes: ""
-                      });
-                      setPaymentDialogOpen(true);
-                    }
-                  }}>
+                  <Button
+                    size="lg"
+                    onClick={() => {
+                      const unpaidTest = labTests.find(
+                        (t) =>
+                          !t.charges?.paymentStatus ||
+                          t.charges?.paymentStatus !== "paid",
+                      );
+                      if (unpaidTest) {
+                        setSelectedLabTest(unpaidTest);
+                        setPaymentForm({
+                          paymentMethod:
+                            unpaidTest.charges?.paymentMethod || "cash",
+                          amount:
+                            unpaidTest.charges?.due ||
+                            calculateTestTotal(unpaidTest),
+                          transactionId:
+                            unpaidTest.charges?.transactionId || "",
+                          notes: "",
+                        });
+                        setPaymentDialogOpen(true);
+                      }
+                    }}
+                  >
                     <DollarSign className="h-4 w-4 mr-2" />
                     Process All Payments
                   </Button>
                 )}
-                <Button size="lg" variant="outline" onClick={() => window.print()}>
+                <Button
+                  size="lg"
+                  variant="outline"
+                  onClick={() => window.print()}
+                >
                   <Printer className="h-4 w-4 mr-2" />
                   Print Full Invoice
                 </Button>
@@ -1358,28 +1559,42 @@ export default function AppointmentDetailPage() {
           <DialogHeader>
             <DialogTitle>Process Payment</DialogTitle>
             <DialogDescription>
-              {paymentType === 'lab' 
+              {paymentType === "lab"
                 ? `Process payment for ${selectedLabTest?.testName}`
-                : `Process payment for ${selectedImagingService?.serviceType === 'x-ray' ? 'X-Ray' :
-                    selectedImagingService?.serviceType === 'ct-scan' ? 'CT Scan' :
-                    selectedImagingService?.serviceType === 'mri' ? 'MRI' : 'Ultrasound'}`
-              }
+                : `Process payment for ${
+                    selectedImagingService?.serviceType === "x-ray"
+                      ? "X-Ray"
+                      : selectedImagingService?.serviceType === "ct-scan"
+                        ? "CT Scan"
+                        : selectedImagingService?.serviceType === "mri"
+                          ? "MRI"
+                          : "Ultrasound"
+                  }`}
             </DialogDescription>
           </DialogHeader>
-          
-          {(paymentType === 'lab' && selectedLabTest) && (
+
+          {paymentType === "lab" && selectedLabTest && (
             <div className="space-y-4">
               <div className="p-3 rounded-lg">
                 <p className="font-medium">Test: {selectedLabTest.testName}</p>
-                <p className="text-sm">Total Due: ${selectedLabTest.charges?.due?.toFixed(2) || calculateTestTotal(selectedLabTest).toFixed(2)}</p>
+                <p className="text-sm">
+                  Total Due: $
+                  {selectedLabTest.charges?.due?.toFixed(2) ||
+                    calculateTestTotal(selectedLabTest).toFixed(2)}
+                </p>
               </div>
-              
+
               <div className="space-y-3">
                 <div>
                   <Label>Payment Method</Label>
                   <Select
                     value={paymentForm.paymentMethod}
-                    onValueChange={(value) => setPaymentForm(prev => ({ ...prev, paymentMethod: value }))}
+                    onValueChange={(value) =>
+                      setPaymentForm((prev) => ({
+                        ...prev,
+                        paymentMethod: value,
+                      }))
+                    }
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -1392,50 +1607,76 @@ export default function AppointmentDetailPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                
+
                 <div>
                   <Label>Amount</Label>
                   <Input
                     type="number"
                     value={paymentForm.amount}
-                    onChange={(e) => setPaymentForm(prev => ({ 
-                      ...prev, 
-                      amount: parseFloat(e.target.value) || 0 
-                    }))}
+                    onChange={(e) =>
+                      setPaymentForm((prev) => ({
+                        ...prev,
+                        amount: parseFloat(e.target.value) || 0,
+                      }))
+                    }
                     placeholder="Enter amount"
                   />
                 </div>
-                
+
                 <div>
                   <Label>Transaction/Reference ID</Label>
                   <Input
                     value={paymentForm.transactionId}
-                    onChange={(e) => setPaymentForm(prev => ({ ...prev, transactionId: e.target.value }))}
+                    onChange={(e) =>
+                      setPaymentForm((prev) => ({
+                        ...prev,
+                        transactionId: e.target.value,
+                      }))
+                    }
                     placeholder="Optional"
                   />
                 </div>
               </div>
             </div>
           )}
-          
-          {(paymentType === 'imaging' && selectedImagingService) && (
+
+          {paymentType === "imaging" && selectedImagingService && (
             <div className="space-y-4">
               <div className="p-3 rounded-lg">
                 <p className="font-medium">
-                  Service: {selectedImagingService.serviceType === 'x-ray' ? 'X-Ray' :
-                           selectedImagingService.serviceType === 'ct-scan' ? 'CT Scan' :
-                           selectedImagingService.serviceType === 'mri' ? 'MRI' : 'Ultrasound'}
+                  Service:{" "}
+                  {selectedImagingService.serviceType === "x-ray"
+                    ? "X-Ray"
+                    : selectedImagingService.serviceType === "ct-scan"
+                      ? "CT Scan"
+                      : selectedImagingService.serviceType === "mri"
+                        ? "MRI"
+                        : "Ultrasound"}
                 </p>
-                <p className="text-sm">Body Part: {selectedImagingService.bodyPart}</p>
-                <p className="text-sm">Total Due: ${(selectedImagingService.charges?.due || (selectedImagingService.charges?.totalAmount || 0)).toFixed(2)}</p>
+                <p className="text-sm">
+                  Body Part: {selectedImagingService.bodyPart}
+                </p>
+                <p className="text-sm">
+                  Total Due: $
+                  {(
+                    selectedImagingService.charges?.due ||
+                    selectedImagingService.charges?.totalAmount ||
+                    0
+                  ).toFixed(2)}
+                </p>
               </div>
-              
+
               <div className="space-y-3">
                 <div>
                   <Label>Payment Method</Label>
                   <Select
                     value={paymentForm.paymentMethod}
-                    onValueChange={(value) => setPaymentForm(prev => ({ ...prev, paymentMethod: value }))}
+                    onValueChange={(value) =>
+                      setPaymentForm((prev) => ({
+                        ...prev,
+                        paymentMethod: value,
+                      }))
+                    }
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -1448,34 +1689,44 @@ export default function AppointmentDetailPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                
+
                 <div>
                   <Label>Amount</Label>
                   <Input
                     type="number"
                     value={paymentForm.amount}
-                    onChange={(e) => setPaymentForm(prev => ({ 
-                      ...prev, 
-                      amount: parseFloat(e.target.value) || 0 
-                    }))}
+                    onChange={(e) =>
+                      setPaymentForm((prev) => ({
+                        ...prev,
+                        amount: parseFloat(e.target.value) || 0,
+                      }))
+                    }
                     placeholder="Enter amount"
                   />
                 </div>
-                
+
                 <div>
                   <Label>Transaction/Reference ID</Label>
                   <Input
                     value={paymentForm.transactionId}
-                    onChange={(e) => setPaymentForm(prev => ({ ...prev, transactionId: e.target.value }))}
+                    onChange={(e) =>
+                      setPaymentForm((prev) => ({
+                        ...prev,
+                        transactionId: e.target.value,
+                      }))
+                    }
                     placeholder="Optional"
                   />
                 </div>
               </div>
             </div>
           )}
-          
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setPaymentDialogOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setPaymentDialogOpen(false)}
+            >
               Cancel
             </Button>
             <Button onClick={handleProcessPayment} disabled={processingPayment}>

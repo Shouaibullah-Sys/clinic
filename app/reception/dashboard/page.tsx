@@ -1,23 +1,31 @@
+// app/reception/dashboard/page.tsx
+
 "use client";
 
 import { useAuthStore } from "@/store/useAuthStore";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { 
-  Users, 
-  Calendar, 
-  Clock, 
-  CheckCircle2, 
-  Plus, 
-  DollarSign, 
-  AlertCircle, 
-  Wallet, 
+import {
+  Users,
+  Calendar,
+  Clock,
+  CheckCircle2,
+  Plus,
+  DollarSign,
+  AlertCircle,
+  Wallet,
   RefreshCw,
   ArrowRight,
   TrendingUp,
   FileText,
-  UserCheck
+  UserCheck,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -81,65 +89,66 @@ export default function ReceptionDashboardPage() {
     systemCashTotal: 0,
     cashDifference: 0,
   });
-  const [discountRequests, setDiscountRequests] = useState<DiscountRequest[]>([]);
-  const [recentActivities, setRecentActivities] = useState<RecentActivity[]>([]);
+  const [discountRequests, setDiscountRequests] = useState<DiscountRequest[]>(
+    [],
+  );
+  const [recentActivities, setRecentActivities] = useState<RecentActivity[]>(
+    [],
+  );
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-
   // Add this helper function near the top of your component
-const getAuthHeaders = () => {
-  const { accessToken } = useAuthStore.getState();
-  return {
-    "Content-Type": "application/json",
-    ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-  };
-};
-
-// Then update your fetchDashboardData function:
-const fetchDashboardData = async () => {
-  try {
-    setLoading(true);
+  const getAuthHeaders = () => {
     const { accessToken } = useAuthStore.getState();
-    
-    const headers = {
+    return {
       "Content-Type": "application/json",
       ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
     };
-    
-    // Fetch stats
-    const statsResponse = await fetch("/api/dashboard/reception/stats", {
-      headers,
-    });
-    const statsData = await statsResponse.json();
-    
-    if (statsData.success) {
-      setStats(statsData.data);
-    } else {
-      console.error("Error fetching stats:", statsData.error);
-    }
+  };
 
-    // Fetch discount requests
-    const discountsResponse = await fetch(
-      "/api/dashboard/reception/discounts?status=pending&limit=5",
-      { headers }
-    );
-    const discountsData = await discountsResponse.json();
-    
-    if (discountsData.success) {
-      setDiscountRequests(discountsData.data);
-    } else {
-      console.error("Error fetching discounts:", discountsData.error);
-    }
-  } catch (error) {
-    console.error("Error fetching reception data:", error);
-  } finally {
-    setLoading(false);
-    setRefreshing(false);
-  }
-};
+  // Then update your fetchDashboardData function:
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+      const { accessToken } = useAuthStore.getState();
 
-  
+      const headers = {
+        "Content-Type": "application/json",
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      };
+
+      // Fetch stats
+      const statsResponse = await fetch("/api/dashboard/reception/stats", {
+        headers,
+      });
+      const statsData = await statsResponse.json();
+
+      if (statsData.success) {
+        setStats(statsData.data);
+      } else {
+        console.error("Error fetching stats:", statsData.error);
+      }
+
+      // Fetch discount requests
+      const discountsResponse = await fetch(
+        "/api/dashboard/reception/discounts?status=pending&limit=5",
+        { headers },
+      );
+      const discountsData = await discountsResponse.json();
+
+      if (discountsData.success) {
+        setDiscountRequests(discountsData.data);
+      } else {
+        console.error("Error fetching discounts:", discountsData.error);
+      }
+    } catch (error) {
+      console.error("Error fetching reception data:", error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
 
   useEffect(() => {
     fetchDashboardData();
@@ -184,7 +193,6 @@ const fetchDashboardData = async () => {
     const date = parseISO(timestamp);
     return format(date, "MMM d, yyyy");
   };
-  
 
   if (loading) {
     return (
@@ -240,10 +248,12 @@ const fetchDashboardData = async () => {
               Reception Dashboard
             </h1>
             <p className="text-gray-500 mt-1">
-              Welcome back, <span className="font-semibold text-gray-700">{user?.name}</span>! 
+              Welcome back,{" "}
+              <span className="font-semibold text-gray-700">{user?.name}</span>!
               {stats.waitingPatients > 0 && (
                 <span className="ml-2 text-amber-600 font-medium">
-                  {stats.waitingPatients} patient{stats.waitingPatients > 1 ? 's' : ''} waiting
+                  {stats.waitingPatients} patient
+                  {stats.waitingPatients > 1 ? "s" : ""} waiting
                 </span>
               )}
             </p>
@@ -255,7 +265,9 @@ const fetchDashboardData = async () => {
             disabled={refreshing}
             className="w-full sm:w-auto"
           >
-            <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />
+            <RefreshCw
+              className={`h-4 w-4 mr-2 ${refreshing ? "animate-spin" : ""}`}
+            />
             {refreshing ? "Refreshing..." : "Refresh"}
           </Button>
         </div>
@@ -265,7 +277,9 @@ const fetchDashboardData = async () => {
           {/* Daily Visitors */}
           <Card className="hover:shadow-md transition-shadow duration-200">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Daily Visitors</CardTitle>
+              <CardTitle className="text-sm font-medium">
+                Daily Visitors
+              </CardTitle>
               <div className="p-2 bg-blue-50 rounded-lg">
                 <Users className="h-4 w-4 text-blue-600" />
               </div>
@@ -282,7 +296,9 @@ const fetchDashboardData = async () => {
           {/* Appointments */}
           <Card className="hover:shadow-md transition-shadow duration-200">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Appointments</CardTitle>
+              <CardTitle className="text-sm font-medium">
+                Appointments
+              </CardTitle>
               <div className="p-2 bg-purple-50 rounded-lg">
                 <Calendar className="h-4 w-4 text-purple-600" />
               </div>
@@ -302,15 +318,25 @@ const fetchDashboardData = async () => {
           </Card>
 
           {/* Waiting Patients */}
-          <Card className={`hover:shadow-md transition-shadow duration-200 ${stats.waitingPatients > 0 ? 'border-amber-200' : ''}`}>
+          <Card
+            className={`hover:shadow-md transition-shadow duration-200 ${stats.waitingPatients > 0 ? "border-amber-200" : ""}`}
+          >
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Waiting Patients</CardTitle>
-              <div className={`p-2 rounded-lg ${stats.waitingPatients > 0 ? 'bg-amber-50' : 'bg-gray-50'}`}>
-                <Clock className={`h-4 w-4 ${stats.waitingPatients > 0 ? 'text-amber-600' : 'text-gray-600'}`} />
+              <CardTitle className="text-sm font-medium">
+                Waiting Patients
+              </CardTitle>
+              <div
+                className={`p-2 rounded-lg ${stats.waitingPatients > 0 ? "bg-amber-50" : "bg-gray-50"}`}
+              >
+                <Clock
+                  className={`h-4 w-4 ${stats.waitingPatients > 0 ? "text-amber-600" : "text-gray-600"}`}
+                />
               </div>
             </CardHeader>
             <CardContent>
-              <div className={`text-2xl font-bold ${stats.waitingPatients > 0 ? 'text-amber-600' : ''}`}>
+              <div
+                className={`text-2xl font-bold ${stats.waitingPatients > 0 ? "text-amber-600" : ""}`}
+              >
                 {stats.waitingPatients}
               </div>
               <p className="text-xs text-gray-500">Currently in waiting area</p>
@@ -334,13 +360,17 @@ const fetchDashboardData = async () => {
           {/* Today's Revenue */}
           <Card className="hover:shadow-md transition-shadow duration-200">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Today's Revenue</CardTitle>
+              <CardTitle className="text-sm font-medium">
+                Today's Revenue
+              </CardTitle>
               <div className="p-2 bg-emerald-50 rounded-lg">
                 <DollarSign className="h-4 w-4 text-emerald-600" />
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{formatCurrency(stats.todayRevenue)}</div>
+              <div className="text-2xl font-bold">
+                {formatCurrency(stats.todayRevenue)}
+              </div>
               <p className="text-xs text-gray-500">From all departments</p>
             </CardContent>
           </Card>
@@ -348,7 +378,9 @@ const fetchDashboardData = async () => {
           {/* Pending Discounts */}
           <Card className="hover:shadow-md transition-shadow duration-200">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Pending Discounts</CardTitle>
+              <CardTitle className="text-sm font-medium">
+                Pending Discounts
+              </CardTitle>
               <div className="p-2 bg-yellow-50 rounded-lg">
                 <AlertCircle className="h-4 w-4 text-yellow-600" />
               </div>
@@ -362,20 +394,30 @@ const fetchDashboardData = async () => {
           {/* Cash Balance */}
           <Card className="hover:shadow-md transition-shadow duration-200">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Cash Balance</CardTitle>
+              <CardTitle className="text-sm font-medium">
+                Cash Balance
+              </CardTitle>
               <div className="p-2 bg-indigo-50 rounded-lg">
                 <Wallet className="h-4 w-4 text-indigo-600" />
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{formatCurrency(stats.dailyCashBalance)}</div>
+              <div className="text-2xl font-bold">
+                {formatCurrency(stats.dailyCashBalance)}
+              </div>
               <div className="space-y-1 text-xs">
-                <p className="text-gray-500">System: {formatCurrency(stats.systemCashTotal)}</p>
-                {stats.cashDifference !== undefined && stats.cashDifference !== 0 && (
-                  <p className={`font-medium ${stats.cashDifference > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {stats.cashDifference > 0 ? '+' : ''}{formatCurrency(stats.cashDifference)}
-                  </p>
-                )}
+                <p className="text-gray-500">
+                  System: {formatCurrency(stats.systemCashTotal)}
+                </p>
+                {stats.cashDifference !== undefined &&
+                  stats.cashDifference !== 0 && (
+                    <p
+                      className={`font-medium ${stats.cashDifference > 0 ? "text-green-600" : "text-red-600"}`}
+                    >
+                      {stats.cashDifference > 0 ? "+" : ""}
+                      {formatCurrency(stats.cashDifference)}
+                    </p>
+                  )}
               </div>
             </CardContent>
           </Card>
@@ -394,7 +436,7 @@ const fetchDashboardData = async () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Button 
+                      <Button
                         className="justify-start h-auto py-3 px-4"
                         onClick={() => router.push("/appointments/new")}
                       >
@@ -404,7 +446,9 @@ const fetchDashboardData = async () => {
                           </div>
                           <div className="text-left">
                             <p className="font-medium">New Appointment</p>
-                            <p className="text-xs text-gray-500">Schedule patient</p>
+                            <p className="text-xs text-gray-500">
+                              Schedule patient
+                            </p>
                           </div>
                         </div>
                       </Button>
@@ -416,7 +460,7 @@ const fetchDashboardData = async () => {
 
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Button 
+                      <Button
                         variant="outline"
                         className="justify-start h-auto py-3 px-4"
                         onClick={() => router.push("/patients/checkin")}
@@ -427,7 +471,9 @@ const fetchDashboardData = async () => {
                           </div>
                           <div className="text-left">
                             <p className="font-medium">Check-in Patient</p>
-                            <p className="text-xs text-gray-500">Check in visitor</p>
+                            <p className="text-xs text-gray-500">
+                              Check in visitor
+                            </p>
                           </div>
                         </div>
                       </Button>
@@ -439,7 +485,7 @@ const fetchDashboardData = async () => {
 
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Button 
+                      <Button
                         variant="outline"
                         className="justify-start h-auto py-3 px-4"
                         onClick={() => router.push("/reception/discounts/new")}
@@ -450,7 +496,9 @@ const fetchDashboardData = async () => {
                           </div>
                           <div className="text-left">
                             <p className="font-medium">Request Discount</p>
-                            <p className="text-xs text-gray-500">Submit discount</p>
+                            <p className="text-xs text-gray-500">
+                              Submit discount
+                            </p>
                           </div>
                         </div>
                       </Button>
@@ -462,7 +510,7 @@ const fetchDashboardData = async () => {
 
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Button 
+                      <Button
                         variant="outline"
                         className="justify-start h-auto py-3 px-4"
                         onClick={() => router.push("/reception/cash")}
@@ -473,7 +521,9 @@ const fetchDashboardData = async () => {
                           </div>
                           <div className="text-left">
                             <p className="font-medium">Cash Reconciliation</p>
-                            <p className="text-xs text-gray-500">Update cash count</p>
+                            <p className="text-xs text-gray-500">
+                              Update cash count
+                            </p>
                           </div>
                         </div>
                       </Button>
@@ -485,7 +535,7 @@ const fetchDashboardData = async () => {
 
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Button 
+                      <Button
                         variant="outline"
                         className="justify-start h-auto py-3 px-4"
                         onClick={() => router.push("/appointments")}
@@ -496,7 +546,9 @@ const fetchDashboardData = async () => {
                           </div>
                           <div className="text-left">
                             <p className="font-medium">View Schedule</p>
-                            <p className="text-xs text-gray-500">Today's appointments</p>
+                            <p className="text-xs text-gray-500">
+                              Today's appointments
+                            </p>
                           </div>
                         </div>
                       </Button>
@@ -508,7 +560,7 @@ const fetchDashboardData = async () => {
 
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Button 
+                      <Button
                         variant="outline"
                         className="justify-start h-auto py-3 px-4"
                         onClick={() => router.push("/patients")}
@@ -519,7 +571,9 @@ const fetchDashboardData = async () => {
                           </div>
                           <div className="text-left">
                             <p className="font-medium">Manage Patients</p>
-                            <p className="text-xs text-gray-500">Patient directory</p>
+                            <p className="text-xs text-gray-500">
+                              Patient directory
+                            </p>
                           </div>
                         </div>
                       </Button>
@@ -544,31 +598,55 @@ const fetchDashboardData = async () => {
                 <div className="space-y-3">
                   {recentActivities.length > 0 ? (
                     recentActivities.map((activity) => (
-                      <div 
+                      <div
                         key={activity.id}
                         className="flex items-start space-x-3 p-3 border rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
-                        onClick={() => activity.patientName && handleViewPatient(activity.patientId)}
+                        onClick={() =>
+                          activity.patientName &&
+                          handleViewPatient(activity.patientId)
+                        }
                       >
-                        <div className={`p-2 rounded-lg ${
-                          activity.type === 'checkin' ? 'bg-blue-100 text-blue-600' :
-                          activity.type === 'payment' ? 'bg-green-100 text-green-600' :
-                          activity.type === 'discount' ? 'bg-yellow-100 text-yellow-600' :
-                          'bg-purple-100 text-purple-600'
-                        }`}>
-                          {activity.type === 'checkin' && <UserCheck className="h-4 w-4" />}
-                          {activity.type === 'payment' && <DollarSign className="h-4 w-4" />}
-                          {activity.type === 'discount' && <AlertCircle className="h-4 w-4" />}
-                          {activity.type === 'appointment' && <Calendar className="h-4 w-4" />}
+                        <div
+                          className={`p-2 rounded-lg ${
+                            activity.type === "checkin"
+                              ? "bg-blue-100 text-blue-600"
+                              : activity.type === "payment"
+                                ? "bg-green-100 text-green-600"
+                                : activity.type === "discount"
+                                  ? "bg-yellow-100 text-yellow-600"
+                                  : "bg-purple-100 text-purple-600"
+                          }`}
+                        >
+                          {activity.type === "checkin" && (
+                            <UserCheck className="h-4 w-4" />
+                          )}
+                          {activity.type === "payment" && (
+                            <DollarSign className="h-4 w-4" />
+                          )}
+                          {activity.type === "discount" && (
+                            <AlertCircle className="h-4 w-4" />
+                          )}
+                          {activity.type === "appointment" && (
+                            <Calendar className="h-4 w-4" />
+                          )}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-medium text-sm truncate">{activity.title}</p>
-                          <p className="text-xs text-gray-500 truncate">{activity.description}</p>
-                          <p className="text-xs text-gray-400 mt-1">{formatTime(activity.timestamp)}</p>
+                          <p className="font-medium text-sm truncate">
+                            {activity.title}
+                          </p>
+                          <p className="text-xs text-gray-500 truncate">
+                            {activity.description}
+                          </p>
+                          <p className="text-xs text-gray-400 mt-1">
+                            {formatTime(activity.timestamp)}
+                          </p>
                         </div>
                       </div>
                     ))
                   ) : (
-                    <p className="text-center py-4 text-gray-500">No recent activities</p>
+                    <p className="text-center py-4 text-gray-500">
+                      No recent activities
+                    </p>
                   )}
                 </div>
               </CardContent>
@@ -581,7 +659,9 @@ const fetchDashboardData = async () => {
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
               <CardTitle>Pending Discount Requests</CardTitle>
-              <CardDescription>Requests awaiting admin approval</CardDescription>
+              <CardDescription>
+                Requests awaiting admin approval
+              </CardDescription>
             </div>
             {discountRequests.length > 0 && (
               <Button
@@ -599,26 +679,35 @@ const fetchDashboardData = async () => {
             {discountRequests.length > 0 ? (
               <div className="space-y-3">
                 {discountRequests.slice(0, 3).map((request) => (
-                  <div 
-                    key={request.id} 
+                  <div
+                    key={request.id}
                     className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
                     onClick={() => handleViewAllDiscounts()}
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <p className="font-medium truncate">{request.patientName}</p>
-                        <Badge variant="outline" className={getStatusColor(request.status)}>
+                        <p className="font-medium truncate">
+                          {request.patientName}
+                        </p>
+                        <Badge
+                          variant="outline"
+                          className={getStatusColor(request.status)}
+                        >
                           {request.status}
                         </Badge>
                       </div>
-                      <p className="text-sm text-gray-600 truncate">{request.reason}</p>
+                      <p className="text-sm text-gray-600 truncate">
+                        {request.reason}
+                      </p>
                       <div className="flex items-center justify-between text-xs text-gray-500 mt-2">
                         <span>Requested by: {request.requestedBy}</span>
                         <span>{formatTime(request.requestedAt)}</span>
                       </div>
                     </div>
                     <div className="text-right ml-4">
-                      <p className="font-bold text-lg">{formatCurrency(request.requestedAmount)}</p>
+                      <p className="font-bold text-lg">
+                        {formatCurrency(request.requestedAmount)}
+                      </p>
                       <Button variant="ghost" size="sm" className="mt-1">
                         Review
                       </Button>
@@ -630,8 +719,8 @@ const fetchDashboardData = async () => {
               <div className="text-center py-8 space-y-2">
                 <FileText className="h-12 w-12 text-gray-300 mx-auto" />
                 <p className="text-gray-500">No pending discount requests</p>
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   size="sm"
                   onClick={() => router.push("/reception/discounts/new")}
                 >

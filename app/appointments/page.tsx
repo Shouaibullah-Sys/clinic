@@ -6,7 +6,13 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/useAuthStore";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -120,13 +126,16 @@ export default function AppointmentsPage() {
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(
+    new Date(),
+  );
   const [selectedStatus, setSelectedStatus] = useState("all");
   const [selectedDoctor, setSelectedDoctor] = useState("all");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
-  const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
+  const [selectedAppointment, setSelectedAppointment] =
+    useState<Appointment | null>(null);
   const [cancelReason, setCancelReason] = useState("");
 
   useEffect(() => {
@@ -137,33 +146,33 @@ export default function AppointmentsPage() {
   const fetchAppointments = async () => {
     try {
       setLoading(true);
-      
+
       const params = new URLSearchParams({
         page: page.toString(),
         limit: "20",
       });
-      
+
       if (selectedDate) {
         params.set("date", selectedDate.toISOString().split("T")[0]);
       }
-      
+
       if (selectedStatus !== "all") {
         params.set("status", selectedStatus);
       }
-      
+
       if (selectedDoctor !== "all") {
         params.set("doctorId", selectedDoctor);
       }
-      
+
       const response = await fetch(`/api/appointments?${params.toString()}`, {
         headers: {
           "Content-Type": "application/json",
           ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         },
       });
-      
+
       const data = await response.json();
-      
+
       if (data.success) {
         setAppointments(data.data);
         setTotalPages(data.pagination?.pages || 1);
@@ -183,9 +192,9 @@ export default function AppointmentsPage() {
           ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         },
       });
-      
+
       const data = await response.json();
-      
+
       if (data.success) {
         setDoctors(data.data);
       }
@@ -196,16 +205,19 @@ export default function AppointmentsPage() {
 
   const handleCheckIn = async (appointmentId: string) => {
     try {
-      const response = await fetch(`/api/appointments/${appointmentId}/checkin`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      const response = await fetch(
+        `/api/appointments/${appointmentId}/checkin`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
         },
-      });
-      
+      );
+
       const data = await response.json();
-      
+
       if (data.success) {
         fetchAppointments();
       }
@@ -216,16 +228,19 @@ export default function AppointmentsPage() {
 
   const handleCheckOut = async (appointmentId: string) => {
     try {
-      const response = await fetch(`/api/appointments/${appointmentId}/checkout`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      const response = await fetch(
+        `/api/appointments/${appointmentId}/checkout`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
         },
-      });
-      
+      );
+
       const data = await response.json();
-      
+
       if (data.success) {
         fetchAppointments();
       }
@@ -236,19 +251,22 @@ export default function AppointmentsPage() {
 
   const handleCancelAppointment = async () => {
     if (!selectedAppointment) return;
-    
+
     try {
-      const response = await fetch(`/api/appointments/${selectedAppointment._id}`, {
-        method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      const response = await fetch(
+        `/api/appointments/${selectedAppointment._id}`,
+        {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
+          body: JSON.stringify({ reason: cancelReason }),
         },
-        body: JSON.stringify({ reason: cancelReason }),
-      });
-      
+      );
+
       const data = await response.json();
-      
+
       if (data.success) {
         setCancelDialogOpen(false);
         setCancelReason("");
@@ -263,19 +281,68 @@ export default function AppointmentsPage() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "scheduled":
-        return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">Scheduled</Badge>;
+        return (
+          <Badge
+            variant="outline"
+            className="bg-blue-50 text-blue-700 border-blue-200"
+          >
+            Scheduled
+          </Badge>
+        );
       case "confirmed":
-        return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Confirmed</Badge>;
+        return (
+          <Badge
+            variant="outline"
+            className="bg-green-50 text-green-700 border-green-200"
+          >
+            Confirmed
+          </Badge>
+        );
       case "checked-in":
-        return <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">Checked In</Badge>;
+        return (
+          <Badge
+            variant="outline"
+            className="bg-purple-50 text-purple-700 border-purple-200"
+          >
+            Checked In
+          </Badge>
+        );
       case "in-progress":
-        return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">In Progress</Badge>;
+        return (
+          <Badge
+            variant="outline"
+            className="bg-yellow-50 text-yellow-700 border-yellow-200"
+          >
+            In Progress
+          </Badge>
+        );
       case "completed":
-        return <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-200">Completed</Badge>;
+        return (
+          <Badge
+            variant="outline"
+            className="bg-gray-50 text-gray-700 border-gray-200"
+          >
+            Completed
+          </Badge>
+        );
       case "cancelled":
-        return <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">Cancelled</Badge>;
+        return (
+          <Badge
+            variant="outline"
+            className="bg-red-50 text-red-700 border-red-200"
+          >
+            Cancelled
+          </Badge>
+        );
       case "no-show":
-        return <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">No Show</Badge>;
+        return (
+          <Badge
+            variant="outline"
+            className="bg-orange-50 text-orange-700 border-orange-200"
+          >
+            No Show
+          </Badge>
+        );
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
@@ -286,25 +353,37 @@ export default function AppointmentsPage() {
       case "emergency":
         return <Badge variant="destructive">Emergency</Badge>;
       case "high":
-        return <Badge className="bg-red-100 text-red-800 hover:bg-red-100">High</Badge>;
+        return (
+          <Badge className="bg-red-100 text-red-800 hover:bg-gray-900">
+            High
+          </Badge>
+        );
       case "medium":
-        return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Medium</Badge>;
+        return (
+          <Badge className="bg-yellow-100 text-yellow-800 hover:bg-gray-900">
+            Medium
+          </Badge>
+        );
       case "low":
-        return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Low</Badge>;
+        return (
+          <Badge className="bg-green-100 text-green-800 hover:bg-green-100">
+            Low
+          </Badge>
+        );
       default:
         return <Badge variant="secondary">{priority}</Badge>;
     }
   };
 
-  const filteredAppointments = appointments.filter(appointment => {
+  const filteredAppointments = appointments.filter((appointment) => {
     if (!searchQuery) return true;
-    
+
     const query = searchQuery.toLowerCase();
     return (
       appointment.patient.name.toLowerCase().includes(query) ||
       appointment.patient.phone.toLowerCase().includes(query) ||
       appointment.appointmentId.toLowerCase().includes(query) ||
-      (appointment.doctor?.name || '').toLowerCase().includes(query) ||
+      (appointment.doctor?.name || "").toLowerCase().includes(query) ||
       appointment.reason.toLowerCase().includes(query)
     );
   });
@@ -332,7 +411,9 @@ export default function AppointmentsPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold">Appointments</h1>
-          <p className="text-gray-500 mt-1">Manage and track patient appointments</p>
+          <p className="text-gray-500 mt-1">
+            Manage and track patient appointments
+          </p>
         </div>
         <div className="flex items-center gap-3">
           <Button variant="outline" size="sm" onClick={fetchAppointments}>
@@ -354,43 +435,45 @@ export default function AppointmentsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {appointments.filter(a => isToday(parseISO(a.date))).length}
+              {appointments.filter((a) => isToday(parseISO(a.date))).length}
             </div>
-            <p className="text-xs text-gray-500">Appointments scheduled for today</p>
+            <p className="text-xs text-gray-500">
+              Appointments scheduled for today
+            </p>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Waiting</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {appointments.filter(a => a.status === "checked-in").length}
+              {appointments.filter((a) => a.status === "checked-in").length}
             </div>
             <p className="text-xs text-gray-500">Patients waiting</p>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Completed</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {appointments.filter(a => a.status === "completed").length}
+              {appointments.filter((a) => a.status === "completed").length}
             </div>
             <p className="text-xs text-gray-500">Today's completed</p>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">No Shows</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {appointments.filter(a => a.status === "no-show").length}
+              {appointments.filter((a) => a.status === "no-show").length}
             </div>
             <p className="text-xs text-gray-500">Missed appointments</p>
           </CardContent>
@@ -413,7 +496,7 @@ export default function AppointmentsPage() {
                 />
               </div>
             </div>
-            
+
             <div className="space-y-2">
               <Label>Date</Label>
               <div className="relative">
@@ -421,12 +504,16 @@ export default function AppointmentsPage() {
                 <Input
                   type="date"
                   value={selectedDate?.toISOString().split("T")[0]}
-                  onChange={(e) => setSelectedDate(e.target.value ? new Date(e.target.value) : undefined)}
+                  onChange={(e) =>
+                    setSelectedDate(
+                      e.target.value ? new Date(e.target.value) : undefined,
+                    )
+                  }
                   className="pl-9"
                 />
               </div>
             </div>
-            
+
             <div className="space-y-2">
               <Label>Status</Label>
               <Select value={selectedStatus} onValueChange={setSelectedStatus}>
@@ -443,7 +530,7 @@ export default function AppointmentsPage() {
                 </SelectContent>
               </Select>
             </div>
-            
+
             <div className="space-y-2">
               <Label>Doctor</Label>
               <Select value={selectedDoctor} onValueChange={setSelectedDoctor}>
@@ -469,7 +556,8 @@ export default function AppointmentsPage() {
         <CardHeader>
           <CardTitle>Appointments List</CardTitle>
           <CardDescription>
-            Showing {filteredAppointments.length} of {appointments.length} appointments
+            Showing {filteredAppointments.length} of {appointments.length}{" "}
+            appointments
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -490,33 +578,47 @@ export default function AppointmentsPage() {
               <TableBody>
                 {filteredAppointments.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-gray-500">
+                    <TableCell
+                      colSpan={8}
+                      className="text-center py-8 text-gray-500"
+                    >
                       No appointments found
                     </TableCell>
                   </TableRow>
                 ) : (
                   filteredAppointments.map((appointment) => (
-                    <TableRow key={appointment._id} onClick={() => router.push(`/appointments/${appointment._id}`)} className="cursor-pointer hover:bg-gray-50">
+                    <TableRow
+                      key={appointment._id}
+                      onClick={() =>
+                        router.push(`/appointments/${appointment._id}`)
+                      }
+                      className="cursor-pointer hover:dark:--background"
+                    >
                       <TableCell className="font-medium">
                         {appointment.appointmentId}
                       </TableCell>
                       <TableCell>
                         <div>
-                          <p className="font-medium">{appointment.patient.name}</p>
-                          <p className="text-sm text-gray-500">{appointment.patient.phone}</p>
+                          <p className="font-medium">
+                            {appointment.patient.name}
+                          </p>
+                          <p className="text-sm text-gray-500">
+                            {appointment.patient.phone}
+                          </p>
                         </div>
                       </TableCell>
                       <TableCell>
                         <div>
                           <p className="font-medium">
-                            {appointment.doctor?.name 
+                            {appointment.doctor?.name
                               ? `Dr. ${appointment.doctor.name}`
-                              : appointment.doctor 
-                                ? appointment.doctor.toString() 
-                                : 'Doctor not assigned'
-                            }
+                              : appointment.doctor
+                                ? appointment.doctor.toString()
+                                : "Doctor not assigned"}
                           </p>
-                          <p className="text-sm text-gray-500">{appointment.doctor.specialization}</p>
+                          <p className="text-sm text-gray-500">
+                            {appointment.doctor.specialization}
+                          </p>
                         </div>
                       </TableCell>
                       <TableCell>
@@ -560,7 +662,7 @@ export default function AppointmentsPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setPage(p => Math.max(1, p - 1))}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page === 1}
             >
               Previous
@@ -568,7 +670,7 @@ export default function AppointmentsPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page === totalPages}
             >
               Next
@@ -583,7 +685,8 @@ export default function AppointmentsPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Cancel Appointment</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to cancel this appointment? This action cannot be undone.
+              Are you sure you want to cancel this appointment? This action
+              cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="space-y-4 py-4">
@@ -602,16 +705,23 @@ export default function AppointmentsPage() {
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   <div>
                     <p className="text-gray-500">Patient</p>
-                    <p className="font-medium">{selectedAppointment.patient.name}</p>
+                    <p className="font-medium">
+                      {selectedAppointment.patient.name}
+                    </p>
                   </div>
                   <div>
                     <p className="text-gray-500">Doctor</p>
-                    <p className="font-medium">Dr. {selectedAppointment.doctor.name}</p>
+                    <p className="font-medium">
+                      Dr. {selectedAppointment.doctor.name}
+                    </p>
                   </div>
                   <div>
                     <p className="text-gray-500">Date</p>
                     <p className="font-medium">
-                      {format(parseISO(selectedAppointment.date), "MMM d, yyyy")}
+                      {format(
+                        parseISO(selectedAppointment.date),
+                        "MMM d, yyyy",
+                      )}
                     </p>
                   </div>
                   <div>

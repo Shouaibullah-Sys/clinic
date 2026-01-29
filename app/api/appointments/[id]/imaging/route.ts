@@ -10,50 +10,58 @@ import mongoose from "mongoose";
 // GET: Get imaging studies for an appointment
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     await dbConnect();
-    
+
     // Authenticate request using centralized auth
     const auth = await authenticateRequest(request);
     if (!auth.success) {
       return NextResponse.json(
         { success: false, error: auth.error },
-        { status: auth.status || 401 }
+        { status: auth.status || 401 },
       );
     }
 
     // Check if user is authorized (doctor, receptionist, admin, radiology staff)
-    const allowedRoles = ["doctor", "receptionist", "admin", "radiologist", "technician"];
+    const allowedRoles = [
+      "doctor",
+      "receptionist",
+      "admin",
+      "radiologist",
+      "technician",
+    ];
     if (!hasRequiredRole(auth.userRole, allowedRoles)) {
       return NextResponse.json(
-        { 
-          success: false, 
+        {
+          success: false,
           error: "Forbidden. Access denied.",
           userRole: auth.userRole,
-          allowedRoles: allowedRoles
+          allowedRoles: allowedRoles,
         },
-        { status: 403 }
+        { status: 403 },
       );
     }
-    
+
     const { id: appointmentId } = await params;
-    
+
     // Verify appointment exists
     const appointment = await Appointment.findById(appointmentId);
     if (!appointment) {
       return NextResponse.json(
         { success: false, error: "Appointment not found" },
-        { status: 404 }
+        { status: 404 },
       );
     }
-    
+
     // Get imaging studies for this appointment
     const imagingStudies = await RadiologyService.find({
       appointment: appointmentId,
     })
-      .select("_id serviceId serviceType bodyPart view requestDate scheduledDate performedDate status priority reportStatus findings impression billingStatus charges paymentVerified")
+      .select(
+        "_id serviceId serviceType bodyPart view requestDate scheduledDate performedDate status priority reportStatus findings impression billingStatus charges paymentVerified",
+      )
       .populate("patient", "name patientId")
       .populate("referringDoctor", "name")
       .populate("radiologist", "name")
@@ -62,17 +70,28 @@ export async function GET(
       .populate("paymentVerifiedBy", "name")
       .sort({ requestDate: -1 })
       .lean();
-    
-    return NextResponse.json({
-      success: true,
-      data: imagingStudies,
-    });
-    
+
+    return NextResponse.json(
+      {
+        success: true,
+        data: imagingStudies,
+      },
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+        },
+      },
+    );
   } catch (error: any) {
     console.error("Error fetching imaging studies:", error);
     return NextResponse.json(
-      { success: false, error: error.message || "Failed to fetch imaging studies" },
-      { status: 500 }
+      {
+        success: false,
+        error: error.message || "Failed to fetch imaging studies",
+      },
+      { status: 500 },
     );
   }
 }

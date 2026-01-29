@@ -135,22 +135,27 @@ export async function PUT(
       updateData.billingStatus = "paid";
     }
     
-    // Update radiology service
-    const updatedService = await RadiologyService.findByIdAndUpdate(
+    // Update radiology service using findById and save() to trigger pre-save hook
+    await RadiologyService.findByIdAndUpdate(
       serviceId,
       { $set: updateData },
       { new: true }
     );
     
-    // Populate response
-    await updatedService?.populate([
-      { path: "patient", select: "name patientId phone" },
-      { path: "referringDoctor", select: "name specialization" },
-      { path: "charges.collectedBy", select: "name" },
-      { path: "paymentVerifiedBy", select: "name", strictPopulate: false },
-      { path: "radiologist", select: "name" },
-      { path: "technician", select: "name" },
-    ]);
+    // Force trigger pre-save hook by fetching and saving the document
+    const serviceDoc = await RadiologyService.findById(serviceId);
+    if (serviceDoc) {
+      await serviceDoc.save();
+    }
+    
+    // Fetch the updated service again for response
+    let updatedService = await RadiologyService.findById(serviceId)
+      .populate("patient", "name patientId phone")
+      .populate("referringDoctor", "name specialization")
+      .populate("charges.collectedBy", "name")
+      .populate({ path: "paymentVerifiedBy", select: "name", strictPopulate: false })
+      .populate("radiologist", "name")
+      .populate("technician", "name");
     
     return NextResponse.json({
       success: true,
