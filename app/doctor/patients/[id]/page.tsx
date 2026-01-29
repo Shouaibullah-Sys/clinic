@@ -1,154 +1,159 @@
-  // app/doctor/patients/[id]/page.tsx
+// app/doctor/patients/[id]/page.tsx
 
-  "use client";
+"use client";
 
-  import { useState, useEffect } from "react";
-  import { useParams, useRouter } from "next/navigation";
-  import { useAuthStore } from "@/store/useAuthStore";
-  import { Button } from "@/components/ui/button";
-  import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-  import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-  import { Badge } from "@/components/ui/badge";
-  import { Separator } from "@/components/ui/separator";
-  import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-  } from "@/components/ui/table";
-  import { Alert, AlertDescription } from "@/components/ui/alert";
-  import {
-    User,
-    Calendar,
-    FileText,
-    TestTube,
-    Pill,
-    Phone,
-    Mail,
-    CalendarDays,
-    Heart,
-    Plus,
-    Edit,
-    Eye,
-    Download,
-    Printer,
-    AlertCircle,
-    ChevronLeft,
-    Stethoscope,
-    PersonStandingIcon,
-    Activity,
-    } from "lucide-react";
-    import { format, parseISO, differenceInYears } from "date-fns";
-    import { LabTestOrderDialog } from "@/components/doctor/LabTestOrderDialog";
+import { useState, useEffect } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { useAuthStore } from "@/store/useAuthStore";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  User,
+  Calendar,
+  FileText,
+  TestTube,
+  Pill,
+  Phone,
+  Mail,
+  CalendarDays,
+  Heart,
+  Plus,
+  Edit,
+  Eye,
+  Download,
+  Printer,
+  AlertCircle,
+  ChevronLeft,
+  Stethoscope,
+  PersonStandingIcon,
+  Activity,
+} from "lucide-react";
+import { format, parseISO, differenceInYears } from "date-fns";
+import { LabTestOrderDialog } from "@/components/doctor/LabTestOrderDialog";
 import { MedicalRecordDialog } from "@/components/doctor/MedicalRecordDialog";
 import { PrescriptionDialog } from "@/components/doctor/PrescriptionDialog";
 import { ImagingOrderDialog } from "@/components/doctor/ImagingOrderDialog";
 import { ImagingResultsDialog } from "@/components/doctor/ImagingResultsDialog";
 
-  interface Patient {
-    _id: string;
+interface Patient {
+  _id: string;
+  name: string;
+  phone: string;
+  email?: string;
+  patientId: string;
+  dateOfBirth: string;
+  gender: string;
+  bloodGroup?: string;
+  allergies?: string[];
+  address?: string;
+  emergencyContact?: {
     name: string;
     phone: string;
-    email?: string;
-    patientId: string;
-    dateOfBirth: string;
-    gender: string;
-    bloodGroup?: string;
-    allergies?: string[];
-    address?: string;
-    emergencyContact?: {
-      name: string;
-      phone: string;
-      relationship: string;
-    };
-    createdAt: string;
-    updatedAt: string;
-  }
+    relationship: string;
+  };
+  createdAt: string;
+  updatedAt: string;
+}
 
-  interface MedicalRecord {
-    _id: string;
-    recordId: string;
-    date: string;
-    diagnosis: string;
-    symptoms: string[];
-    notes: string;
-    doctor: {
-      name: string;
-      specialization: string;
-    };
-    vitals?: {
-      bloodPressure: string;
-      heartRate: number;
-      temperature: number;
-      weight: number;
-      height: number;
-      bmi: number;
-    };
-  }
+interface MedicalRecord {
+  _id: string;
+  recordId: string;
+  date: string;
+  diagnosis: string;
+  symptoms: string[];
+  notes: string;
+  doctor: {
+    name: string;
+    specialization: string;
+  };
+  vitals?: {
+    bloodPressure: string;
+    heartRate: number;
+    temperature: number;
+    weight: number;
+    height: number;
+    bmi: number;
+  };
+}
 
-  interface Prescription {
-    _id: string;
-    prescriptionId: string;
-    date: string;
-    medications: {
-      name: string;
-      dosage: string;
-      frequency: string;
-      duration: string;
-      instructions?: string;
-    }[];
-    diagnosis: string;
-    notes?: string;
-    status: string;
-  }
+interface Prescription {
+  _id: string;
+  prescriptionId: string;
+  date: string;
+  medications: {
+    name: string;
+    dosage: string;
+    frequency: string;
+    duration: string;
+    instructions?: string;
+  }[];
+  notes?: string;
+  status: string;
+}
 
-  interface LabTest {
-    _id: string;
-    testId: string;
-    testName: string;
-    category: string;
-    orderedAt: string;
-    status: string;
-    results?: {
-      reportedAt?: string;
-      parameters?: any[];
-    };
-    doctor: {
-      name: string;
-    };
-  }
+interface LabTest {
+  _id: string;
+  testId: string;
+  testName: string;
+  category: string;
+  orderedAt: string;
+  status: string;
+  results?: {
+    reportedAt?: string;
+    parameters?: any[];
+  };
+  doctor: {
+    name: string;
+  };
+}
 
-  interface Appointment {
-    _id: string;
-    appointmentId: string;
-    date: string;
-    startTime: string;
-    status: string;
-    reason: string;
-    priority: string;
-    doctorNotes?: string;
-  }
+interface Appointment {
+  _id: string;
+  appointmentId: string;
+  date: string;
+  startTime: string;
+  status: string;
+  reason: string;
+  priority: string;
+  doctorNotes?: string;
+}
 
-  interface ImagingStudy {
-    _id: string;
-    serviceId: string;
-    serviceType: "x-ray" | "ct-scan" | "mri" | "ultrasound";
-    bodyPart: string;
-    view: string;
-    requestDate: string;
-    scheduledDate: string;
-    performedDate?: string;
-    status: string;
-    priority: string;
-    reportStatus: string;
-    findings?: string;
-    impression?: string;
-    referringDoctor: {
-      name: string;
-    };
-  }
+interface ImagingStudy {
+  _id: string;
+  serviceId: string;
+  serviceType: "x-ray" | "ct-scan" | "mri" | "ultrasound";
+  bodyPart: string;
+  view: string;
+  requestDate: string;
+  scheduledDate: string;
+  performedDate?: string;
+  status: string;
+  priority: string;
+  reportStatus: string;
+  findings?: string;
+  impression?: string;
+  referringDoctor: {
+    name: string;
+  };
+}
 
 export default function DoctorPatientDetailPage() {
   const params = useParams();
@@ -205,12 +210,15 @@ export default function DoctorPatientDetailPage() {
       }
 
       // Fetch medical records
-      const recordsRes = await fetch(`/api/doctor/patients/${patientId}/medical-records`, {
-        headers: {
-          "Content-Type": "application/json",
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      const recordsRes = await fetch(
+        `/api/doctor/patients/${patientId}/medical-records`,
+        {
+          headers: {
+            "Content-Type": "application/json",
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
         },
-      });
+      );
 
       if (recordsRes.ok) {
         const recordsData = await recordsRes.json();
@@ -220,12 +228,15 @@ export default function DoctorPatientDetailPage() {
       }
 
       // Fetch prescriptions
-      const prescriptionsRes = await fetch(`/api/doctor/patients/${patientId}/prescriptions`, {
-        headers: {
-          "Content-Type": "application/json",
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      const prescriptionsRes = await fetch(
+        `/api/doctor/patients/${patientId}/prescriptions`,
+        {
+          headers: {
+            "Content-Type": "application/json",
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
         },
-      });
+      );
 
       if (prescriptionsRes.ok) {
         const prescriptionsData = await prescriptionsRes.json();
@@ -235,12 +246,15 @@ export default function DoctorPatientDetailPage() {
       }
 
       // Fetch lab tests
-      const labTestsRes = await fetch(`/api/doctor/patients/${patientId}/lab-tests`, {
-        headers: {
-          "Content-Type": "application/json",
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      const labTestsRes = await fetch(
+        `/api/doctor/patients/${patientId}/lab-tests`,
+        {
+          headers: {
+            "Content-Type": "application/json",
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
         },
-      });
+      );
 
       if (labTestsRes.ok) {
         const labTestsData = await labTestsRes.json();
@@ -250,12 +264,15 @@ export default function DoctorPatientDetailPage() {
       }
 
       // Fetch appointments
-      const appointmentsRes = await fetch(`/api/doctor/patients/${patientId}/appointments`, {
-        headers: {
-          "Content-Type": "application/json",
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      const appointmentsRes = await fetch(
+        `/api/doctor/patients/${patientId}/appointments`,
+        {
+          headers: {
+            "Content-Type": "application/json",
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
         },
-      });
+      );
 
       if (appointmentsRes.ok) {
         const appointmentsData = await appointmentsRes.json();
@@ -265,12 +282,15 @@ export default function DoctorPatientDetailPage() {
       }
 
       // Fetch imaging studies
-      const imagingRes = await fetch(`/api/doctor/patients/${patientId}/imaging`, {
-        headers: {
-          "Content-Type": "application/json",
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      const imagingRes = await fetch(
+        `/api/doctor/patients/${patientId}/imaging`,
+        {
+          headers: {
+            "Content-Type": "application/json",
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
         },
-      });
+      );
 
       if (imagingRes.ok) {
         const imagingData = await imagingRes.json();
@@ -278,7 +298,6 @@ export default function DoctorPatientDetailPage() {
           setImagingStudies(imagingData.data);
         }
       }
-
     } catch (error) {
       console.error("Error fetching patient data:", error);
       setError("Failed to load patient information");
@@ -289,12 +308,15 @@ export default function DoctorPatientDetailPage() {
 
   const handleTestOrdered = async () => {
     try {
-      const labTestsRes = await fetch(`/api/doctor/patients/${patientId}/lab-tests`, {
-        headers: {
-          "Content-Type": "application/json",
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      const labTestsRes = await fetch(
+        `/api/doctor/patients/${patientId}/lab-tests`,
+        {
+          headers: {
+            "Content-Type": "application/json",
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
         },
-      });
+      );
 
       if (labTestsRes.ok) {
         const labTestsData = await labTestsRes.json();
@@ -309,12 +331,15 @@ export default function DoctorPatientDetailPage() {
 
   const handleRecordCreated = async () => {
     try {
-      const recordsRes = await fetch(`/api/doctor/patients/${patientId}/medical-records`, {
-        headers: {
-          "Content-Type": "application/json",
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      const recordsRes = await fetch(
+        `/api/doctor/patients/${patientId}/medical-records`,
+        {
+          headers: {
+            "Content-Type": "application/json",
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
         },
-      });
+      );
 
       if (recordsRes.ok) {
         const recordsData = await recordsRes.json();
@@ -329,12 +354,15 @@ export default function DoctorPatientDetailPage() {
 
   const handlePrescriptionCreated = async () => {
     try {
-      const prescriptionsRes = await fetch(`/api/doctor/patients/${patientId}/prescriptions`, {
-        headers: {
-          "Content-Type": "application/json",
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      const prescriptionsRes = await fetch(
+        `/api/doctor/patients/${patientId}/prescriptions`,
+        {
+          headers: {
+            "Content-Type": "application/json",
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
         },
-      });
+      );
 
       if (prescriptionsRes.ok) {
         const prescriptionsData = await prescriptionsRes.json();
@@ -349,12 +377,15 @@ export default function DoctorPatientDetailPage() {
 
   const handleImagingOrdered = async () => {
     try {
-      const imagingRes = await fetch(`/api/doctor/patients/${patientId}/imaging`, {
-        headers: {
-          "Content-Type": "application/json",
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      const imagingRes = await fetch(
+        `/api/doctor/patients/${patientId}/imaging`,
+        {
+          headers: {
+            "Content-Type": "application/json",
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
         },
-      });
+      );
 
       if (imagingRes.ok) {
         const imagingData = await imagingRes.json();
@@ -420,7 +451,11 @@ export default function DoctorPatientDetailPage() {
     return (
       <div className="container mx-auto p-6">
         <div className="flex items-center gap-4 mb-6">
-          <Button variant="outline" size="icon" onClick={() => router.push("/doctor/dashboard")}>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => router.push("/doctor/dashboard")}
+          >
             <ChevronLeft className="h-4 w-4" />
           </Button>
           <div>
@@ -432,7 +467,10 @@ export default function DoctorPatientDetailPage() {
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>{error || "Patient not found"}</AlertDescription>
         </Alert>
-        <Button onClick={() => router.push("/doctor/dashboard")} className="mt-4">
+        <Button
+          onClick={() => router.push("/doctor/dashboard")}
+          className="mt-4"
+        >
           Back to Patients
         </Button>
       </div>
@@ -446,11 +484,17 @@ export default function DoctorPatientDetailPage() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <Button variant="outline" size="icon" onClick={() => router.push("/doctor/dashboard")}>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => router.push("/doctor/dashboard")}
+          >
             <ChevronLeft className="h-4 w-4" />
           </Button>
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Patient Details</h1>
+            <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
+              Patient Details
+            </h1>
             <p className="text-muted-foreground">
               {patient?.name} - {patient?.patientId}
             </p>
@@ -481,7 +525,9 @@ export default function DoctorPatientDetailPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="space-y-4">
               <div>
-                <h3 className="text-sm font-medium text-muted-foreground mb-2">Personal Information</h3>
+                <h3 className="text-sm font-medium text-muted-foreground mb-2">
+                  Personal Information
+                </h3>
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <User className="h-4 w-4 text-gray-400" />
@@ -507,7 +553,9 @@ export default function DoctorPatientDetailPage() {
 
             <div className="space-y-4">
               <div>
-                <h3 className="text-sm font-medium text-muted-foreground mb-2">Contact Information</h3>
+                <h3 className="text-sm font-medium text-muted-foreground mb-2">
+                  Contact Information
+                </h3>
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <Phone className="h-4 w-4 text-gray-400" />
@@ -531,12 +579,18 @@ export default function DoctorPatientDetailPage() {
 
             <div className="space-y-4">
               <div>
-                <h3 className="text-sm font-medium text-muted-foreground mb-2">Emergency Contact</h3>
+                <h3 className="text-sm font-medium text-muted-foreground mb-2">
+                  Emergency Contact
+                </h3>
                 {patient?.emergencyContact ? (
                   <div className="space-y-2">
                     <div>
-                      <p className="font-medium">{patient.emergencyContact.name}</p>
-                      <p className="text-sm text-muted-foreground">{patient.emergencyContact.relationship}</p>
+                      <p className="font-medium">
+                        {patient.emergencyContact.name}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {patient.emergencyContact.relationship}
+                      </p>
                     </div>
                     <div className="flex items-center gap-2">
                       <Phone className="h-4 w-4 text-gray-400" />
@@ -544,7 +598,9 @@ export default function DoctorPatientDetailPage() {
                     </div>
                   </div>
                 ) : (
-                  <p className="text-muted-foreground">No emergency contact provided</p>
+                  <p className="text-muted-foreground">
+                    No emergency contact provided
+                  </p>
                 )}
               </div>
             </div>
@@ -552,7 +608,9 @@ export default function DoctorPatientDetailPage() {
 
           {patient?.allergies && patient.allergies.length > 0 && (
             <div className="mt-6 pt-6 border-t">
-              <h3 className="text-sm font-medium text-muted-foreground mb-2">Allergies</h3>
+              <h3 className="text-sm font-medium text-muted-foreground mb-2">
+                Allergies
+              </h3>
               <div className="flex flex-wrap gap-2">
                 {patient.allergies.map((allergy, index) => (
                   <Badge key={index} variant="destructive">
@@ -566,7 +624,11 @@ export default function DoctorPatientDetailPage() {
       </Card>
 
       {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+      <Tabs
+        value={activeTab}
+        onValueChange={setActiveTab}
+        className="space-y-6"
+      >
         <TabsList className="grid grid-cols-6 lg:grid-cols-6">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="medical">Medical Records</TabsTrigger>
@@ -586,38 +648,54 @@ export default function DoctorPatientDetailPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-muted-foreground">Total Visits</span>
+                  <span className="text-sm text-muted-foreground">
+                    Total Visits
+                  </span>
                   <span className="font-semibold">{medicalRecords.length}</span>
                 </div>
                 <Separator />
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-muted-foreground">Active Prescriptions</span>
+                  <span className="text-sm text-muted-foreground">
+                    Active Prescriptions
+                  </span>
                   <span className="font-semibold">
-                    {prescriptions.filter(p => p.status === "active").length}
+                    {prescriptions.filter((p) => p.status === "active").length}
                   </span>
                 </div>
                 <Separator />
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-muted-foreground">Pending Tests</span>
+                  <span className="text-sm text-muted-foreground">
+                    Pending Tests
+                  </span>
                   <span className="font-semibold">
-                    {labTests.filter(t => t.status === "pending").length}
+                    {labTests.filter((t) => t.status === "pending").length}
                   </span>
                 </div>
                 <Separator />
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-muted-foreground">Pending Imaging</span>
+                  <span className="text-sm text-muted-foreground">
+                    Pending Imaging
+                  </span>
                   <span className="font-semibold">
-                    {imagingStudies.filter(i => i.status === "scheduled").length}
+                    {
+                      imagingStudies.filter((i) => i.status === "scheduled")
+                        .length
+                    }
                   </span>
                 </div>
                 <Separator />
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-muted-foreground">Upcoming Appointments</span>
+                  <span className="text-sm text-muted-foreground">
+                    Upcoming Appointments
+                  </span>
                   <span className="font-semibold">
-                    {appointments.filter(a =>
-                      new Date(a.date) >= new Date() &&
-                      ["scheduled", "confirmed"].includes(a.status)
-                    ).length}
+                    {
+                      appointments.filter(
+                        (a) =>
+                          new Date(a.date) >= new Date() &&
+                          ["scheduled", "confirmed"].includes(a.status),
+                      ).length
+                    }
                   </span>
                 </div>
               </CardContent>
@@ -660,15 +738,19 @@ export default function DoctorPatientDetailPage() {
                       <div key={record._id} className="p-4 border rounded-lg">
                         <div className="flex justify-between items-start mb-2">
                           <div>
-                            <h4 className="font-medium">{record.diagnosis}</h4>
                             <p className="text-sm text-muted-foreground">
-                              {formatDate(record.date)} • Dr. {record.doctor.name}
+                              {formatDate(record.date)} • Dr.{" "}
+                              {record.doctor.name}
                             </p>
                           </div>
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => router.push(`/doctor/medical-records/${record._id}`)}
+                            onClick={() =>
+                              router.push(
+                                `/doctor/medical-records/${record._id}`,
+                              )
+                            }
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
@@ -771,7 +853,9 @@ export default function DoctorPatientDetailPage() {
                 <Button
                   variant="outline"
                   className="h-auto py-4 flex flex-col items-center gap-2"
-                  onClick={() => router.push(`/doctor/patients/${patientId}/appointment/new`)}
+                  onClick={() =>
+                    router.push(`/doctor/patients/${patientId}/appointment/new`)
+                  }
                 >
                   <Calendar className="h-5 w-5" />
                   <span>Schedule Appointment</span>
@@ -809,7 +893,9 @@ export default function DoctorPatientDetailPage() {
               {medicalRecords.length === 0 ? (
                 <div className="text-center py-12">
                   <FileText className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                  <h3 className="text-lg font-semibold mb-2">No Medical Records</h3>
+                  <h3 className="text-lg font-semibold mb-2">
+                    No Medical Records
+                  </h3>
                   <p className="text-gray-500 mb-4">
                     Start by creating a new medical record for this patient
                   </p>
@@ -828,19 +914,24 @@ export default function DoctorPatientDetailPage() {
               ) : (
                 <div className="space-y-4">
                   {medicalRecords.map((record) => (
-                    <Card key={record._id} className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-900">
+                    <Card
+                      key={record._id}
+                      className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-900"
+                    >
                       <CardContent className="pt-6">
                         <div className="flex justify-between items-start">
                           <div className="space-y-2">
                             <div>
-                              <h3 className="font-semibold">{record.diagnosis}</h3>
                               <p className="text-sm text-muted-foreground">
-                                {formatDate(record.date)} • Dr. {record.doctor.name}
+                                {formatDate(record.date)} • Dr.{" "}
+                                {record.doctor.name}
                               </p>
                             </div>
                             {record.symptoms.length > 0 && (
                               <div>
-                                <p className="text-sm font-medium mb-1">Symptoms:</p>
+                                <p className="text-sm font-medium mb-1">
+                                  Symptoms:
+                                </p>
                                 <div className="flex flex-wrap gap-1">
                                   {record.symptoms.map((symptom, index) => (
                                     <Badge key={index} variant="outline">
@@ -858,14 +949,22 @@ export default function DoctorPatientDetailPage() {
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => router.push(`/doctor/medical-records/${record._id}`)}
+                              onClick={() =>
+                                router.push(
+                                  `/doctor/medical-records/${record._id}`,
+                                )
+                              }
                             >
                               <Eye className="h-4 w-4" />
                             </Button>
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => router.push(`/doctor/medical-records/${record._id}/edit`)}
+                              onClick={() =>
+                                router.push(
+                                  `/doctor/medical-records/${record._id}/edit`,
+                                )
+                              }
                             >
                               <Edit className="h-4 w-4" />
                             </Button>
@@ -873,27 +972,49 @@ export default function DoctorPatientDetailPage() {
                         </div>
                         {record.vitals && (
                           <div className="mt-4 pt-4 border-t">
-                            <h4 className="text-sm font-medium mb-2">Vital Signs</h4>
+                            <h4 className="text-sm font-medium mb-2">
+                              Vital Signs
+                            </h4>
                             <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                               <div className="text-center">
-                                <p className="text-xs text-muted-foreground">Blood Pressure</p>
-                                <p className="font-medium">{record.vitals.bloodPressure}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  Blood Pressure
+                                </p>
+                                <p className="font-medium">
+                                  {record.vitals.bloodPressure}
+                                </p>
                               </div>
                               <div className="text-center">
-                                <p className="text-xs text-muted-foreground">Heart Rate</p>
-                                <p className="font-medium">{record.vitals.heartRate} bpm</p>
+                                <p className="text-xs text-muted-foreground">
+                                  Heart Rate
+                                </p>
+                                <p className="font-medium">
+                                  {record.vitals.heartRate} bpm
+                                </p>
                               </div>
                               <div className="text-center">
-                                <p className="text-xs text-muted-foreground">Temperature</p>
-                                <p className="font-medium">{record.vitals.temperature}°C</p>
+                                <p className="text-xs text-muted-foreground">
+                                  Temperature
+                                </p>
+                                <p className="font-medium">
+                                  {record.vitals.temperature}°C
+                                </p>
                               </div>
                               <div className="text-center">
-                                <p className="text-xs text-muted-foreground">Weight</p>
-                                <p className="font-medium">{record.vitals.weight} kg</p>
+                                <p className="text-xs text-muted-foreground">
+                                  Weight
+                                </p>
+                                <p className="font-medium">
+                                  {record.vitals.weight} kg
+                                </p>
                               </div>
                               <div className="text-center">
-                                <p className="text-xs text-muted-foreground">BMI</p>
-                                <p className="font-medium">{record.vitals.bmi.toFixed(1)}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  BMI
+                                </p>
+                                <p className="font-medium">
+                                  {record.vitals.bmi.toFixed(1)}
+                                </p>
                               </div>
                             </div>
                           </div>
@@ -935,7 +1056,9 @@ export default function DoctorPatientDetailPage() {
               {prescriptions.length === 0 ? (
                 <div className="text-center py-12">
                   <Pill className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                  <h3 className="text-lg font-semibold mb-2">No Prescriptions</h3>
+                  <h3 className="text-lg font-semibold mb-2">
+                    No Prescriptions
+                  </h3>
                   <p className="text-gray-500 mb-4">
                     Create a new prescription for this patient
                   </p>
@@ -958,13 +1081,13 @@ export default function DoctorPatientDetailPage() {
                       <CardContent className="pt-6">
                         <div className="flex justify-between items-start mb-4">
                           <div>
-                            <h3 className="font-semibold">{prescription.prescriptionId}</h3>
+                            <h3 className="font-semibold">
+                              {prescription.prescriptionId}
+                            </h3>
                             <p className="text-sm text-muted-foreground">
-                              {formatDate(prescription.date)} • {getStatusBadge(prescription.status)}
+                              {formatDate(prescription.date)} •{" "}
+                              {getStatusBadge(prescription.status)}
                             </p>
-                            {prescription.diagnosis && (
-                              <p className="text-sm mt-1">Diagnosis: {prescription.diagnosis}</p>
-                            )}
                           </div>
                           <div className="flex gap-2">
                             <Button variant="outline" size="sm">
@@ -979,7 +1102,10 @@ export default function DoctorPatientDetailPage() {
                         <div className="space-y-3">
                           <h4 className="font-medium">Medications:</h4>
                           {prescription.medications.map((med, index) => (
-                            <div key={index} className="pl-4 border-l-2 border-blue-200">
+                            <div
+                              key={index}
+                              className="pl-4 border-l-2 border-blue-200"
+                            >
                               <div className="flex justify-between">
                                 <span className="font-medium">{med.name}</span>
                                 <Badge variant="outline">{med.dosage}</Badge>
@@ -987,7 +1113,9 @@ export default function DoctorPatientDetailPage() {
                               <div className="text-sm text-muted-foreground mt-1">
                                 <p>Frequency: {med.frequency}</p>
                                 <p>Duration: {med.duration}</p>
-                                {med.instructions && <p>Instructions: {med.instructions}</p>}
+                                {med.instructions && (
+                                  <p>Instructions: {med.instructions}</p>
+                                )}
                               </div>
                             </div>
                           ))}
@@ -1008,293 +1136,329 @@ export default function DoctorPatientDetailPage() {
         </TabsContent>
 
         {/* Lab Tests Tab */}
-      <TabsContent value="lab" className="space-y-6">
-        <Card>
-          <CardHeader>
-            <div className="flex justify-between items-center">
-              <div>
-                <CardTitle>Laboratory Tests</CardTitle>
-                <CardDescription>
-                  Lab tests ordered for this patient
-                </CardDescription>
-              </div>
-              <LabTestOrderDialog
-                patientId={patientId}
-                patientName={patient?.name || "Patient"}
-                onTestOrdered={handleTestOrdered}
-              />
-            </div>
-          </CardHeader>
-          <CardContent>
-            {labTests.length === 0 ? (
-              <div className="text-center py-12">
-                <TestTube className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                <h3 className="text-lg font-semibold mb-2">No Lab Tests</h3>
-                <p className="text-gray-500 mb-4">
-                  Order a lab test for this patient
-                </p>
+        <TabsContent value="lab" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <div className="flex justify-between items-center">
+                <div>
+                  <CardTitle>Laboratory Tests</CardTitle>
+                  <CardDescription>
+                    Lab tests ordered for this patient
+                  </CardDescription>
+                </div>
                 <LabTestOrderDialog
                   patientId={patientId}
                   patientName={patient?.name || "Patient"}
                   onTestOrdered={handleTestOrdered}
-                  trigger={
-                    <Button>
-                      <Plus className="h-4 w-4 mr-2" />
-                      Order First Test
-                    </Button>
-                  }
                 />
               </div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Test ID</TableHead>
-                    <TableHead>Test Name</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead>Ordered Date</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Results</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {labTests.map((test) => (
-                    <TableRow key={test._id}>
-                      <TableCell className="font-medium">{test.testId}</TableCell>
-                      <TableCell>{test.testName}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="capitalize">
-                          {test.category.replace('_', ' ')}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{formatDate(test.orderedAt)}</TableCell>
-                      <TableCell>
-                        {getStatusBadge(test.status)}
-                      </TableCell>
-                      <TableCell>
-                        {test.results?.reportedAt ? (
-                          <Badge variant="default">Reported</Badge>
-                        ) : (
-                          <span className="text-muted-foreground">Pending</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => router.push(`/laboratory/tests/${test._id}`)}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
+            </CardHeader>
+            <CardContent>
+              {labTests.length === 0 ? (
+                <div className="text-center py-12">
+                  <TestTube className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                  <h3 className="text-lg font-semibold mb-2">No Lab Tests</h3>
+                  <p className="text-gray-500 mb-4">
+                    Order a lab test for this patient
+                  </p>
+                  <LabTestOrderDialog
+                    patientId={patientId}
+                    patientName={patient?.name || "Patient"}
+                    onTestOrdered={handleTestOrdered}
+                    trigger={
+                      <Button>
+                        <Plus className="h-4 w-4 mr-2" />
+                        Order First Test
+                      </Button>
+                    }
+                  />
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Test ID</TableHead>
+                      <TableHead>Test Name</TableHead>
+                      <TableHead>Category</TableHead>
+                      <TableHead>Ordered Date</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Results</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
-      </TabsContent>
+                  </TableHeader>
+                  <TableBody>
+                    {labTests.map((test) => (
+                      <TableRow key={test._id}>
+                        <TableCell className="font-medium">
+                          {test.testId}
+                        </TableCell>
+                        <TableCell>{test.testName}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="capitalize">
+                            {test.category.replace("_", " ")}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{formatDate(test.orderedAt)}</TableCell>
+                        <TableCell>{getStatusBadge(test.status)}</TableCell>
+                        <TableCell>
+                          {test.results?.reportedAt ? (
+                            <Badge variant="default">Reported</Badge>
+                          ) : (
+                            <span className="text-muted-foreground">
+                              Pending
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              router.push(`/laboratory/tests/${test._id}`)
+                            }
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-      {/* Imaging Tab */}
-      <TabsContent value="imaging" className="space-y-6">
-        <Card>
-          <CardHeader>
-            <div className="flex justify-between items-center">
-              <div>
-                <CardTitle>Imaging Studies</CardTitle>
-                <CardDescription>
-                  Radiology studies ordered for this patient
-                </CardDescription>
-              </div>
-              <ImagingOrderDialog
-                patientId={patientId}
-                patientName={patient?.name || "Patient"}
-                onImagingOrdered={handleImagingOrdered}
-              />
-            </div>
-          </CardHeader>
-          <CardContent>
-            {imagingStudies.length === 0 ? (
-              <div className="text-center py-12">
-                <Activity className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                <h3 className="text-lg font-semibold mb-2">No Imaging Studies</h3>
-                <p className="text-gray-500 mb-4">
-                  Order an imaging study for this patient
-                </p>
+        {/* Imaging Tab */}
+        <TabsContent value="imaging" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <div className="flex justify-between items-center">
+                <div>
+                  <CardTitle>Imaging Studies</CardTitle>
+                  <CardDescription>
+                    Radiology studies ordered for this patient
+                  </CardDescription>
+                </div>
                 <ImagingOrderDialog
                   patientId={patientId}
                   patientName={patient?.name || "Patient"}
                   onImagingOrdered={handleImagingOrdered}
-                  trigger={
-                    <Button>
-                      <Plus className="h-4 w-4 mr-2" />
-                      Order First Study
-                    </Button>
-                  }
                 />
               </div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Service ID</TableHead>
-                    <TableHead>Service Type</TableHead>
-                    <TableHead>Body Part</TableHead>
-                    <TableHead>View</TableHead>
-                    <TableHead>Requested Date</TableHead>
-                    <TableHead>Scheduled Date</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Report Status</TableHead>
-                    <TableHead>Results</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {imagingStudies.map((study) => (
-                    <TableRow key={study._id}>
-                      <TableCell className="font-medium">{study.serviceId}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="capitalize">
-                          {study.serviceType.replace('-', ' ')}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{study.bodyPart}</TableCell>
-                      <TableCell>{study.view}</TableCell>
-                      <TableCell>{formatDate(study.requestDate)}</TableCell>
-                      <TableCell>{formatDate(study.scheduledDate)}</TableCell>
-                      <TableCell>
-                        {getStatusBadge(study.status)}
-                      </TableCell>
-                      <TableCell>
-                        {study.reportStatus === "completed" ? (
-                          <Badge variant="default">Completed</Badge>
-                        ) : (
-                          <Badge variant="secondary">Pending</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {study.reportStatus === "completed" ? (
-                          <Badge variant="default">Available</Badge>
-                        ) : (
-                          <span className="text-muted-foreground text-sm">Pending</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          {study.reportStatus === "completed" && (
-                            <ImagingResultsDialog
-                              patientId={patientId}
-                              studyId={study._id}
-                              trigger={
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  title="View Results"
-                                >
-                                  <Eye className="h-4 w-4" />
-                                </Button>
-                              }
-                            />
+            </CardHeader>
+            <CardContent>
+              {imagingStudies.length === 0 ? (
+                <div className="text-center py-12">
+                  <Activity className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                  <h3 className="text-lg font-semibold mb-2">
+                    No Imaging Studies
+                  </h3>
+                  <p className="text-gray-500 mb-4">
+                    Order an imaging study for this patient
+                  </p>
+                  <ImagingOrderDialog
+                    patientId={patientId}
+                    patientName={patient?.name || "Patient"}
+                    onImagingOrdered={handleImagingOrdered}
+                    trigger={
+                      <Button>
+                        <Plus className="h-4 w-4 mr-2" />
+                        Order First Study
+                      </Button>
+                    }
+                  />
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Service ID</TableHead>
+                      <TableHead>Service Type</TableHead>
+                      <TableHead>Body Part</TableHead>
+                      <TableHead>View</TableHead>
+                      <TableHead>Requested Date</TableHead>
+                      <TableHead>Scheduled Date</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Report Status</TableHead>
+                      <TableHead>Results</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {imagingStudies.map((study) => (
+                      <TableRow key={study._id}>
+                        <TableCell className="font-medium">
+                          {study.serviceId}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="capitalize">
+                            {study.serviceType.replace("-", " ")}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{study.bodyPart}</TableCell>
+                        <TableCell>{study.view}</TableCell>
+                        <TableCell>{formatDate(study.requestDate)}</TableCell>
+                        <TableCell>{formatDate(study.scheduledDate)}</TableCell>
+                        <TableCell>{getStatusBadge(study.status)}</TableCell>
+                        <TableCell>
+                          {study.reportStatus === "completed" ? (
+                            <Badge variant="default">Completed</Badge>
+                          ) : (
+                            <Badge variant="secondary">Pending</Badge>
                           )}
+                        </TableCell>
+                        <TableCell>
+                          {study.reportStatus === "completed" ? (
+                            <Badge variant="default">Available</Badge>
+                          ) : (
+                            <span className="text-muted-foreground text-sm">
+                              Pending
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            {study.reportStatus === "completed" && (
+                              <ImagingResultsDialog
+                                patientId={patientId}
+                                studyId={study._id}
+                                trigger={
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    title="View Results"
+                                  >
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
+                                }
+                              />
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() =>
+                                router.push(`/services/imaging/${study._id}`)
+                              }
+                              title="View Details"
+                            >
+                              <FileText className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Appointments Tab */}
+        <TabsContent value="appointments" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <div className="flex justify-between items-center">
+                <div>
+                  <CardTitle>Appointments</CardTitle>
+                  <CardDescription>
+                    Appointment history with this patient
+                  </CardDescription>
+                </div>
+                <Button
+                  onClick={() =>
+                    router.push(`/doctor/patients/${patientId}/appointment/new`)
+                  }
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Schedule
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {appointments.length === 0 ? (
+                <div className="text-center py-12">
+                  <Calendar className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                  <h3 className="text-lg font-semibold mb-2">
+                    No Appointments
+                  </h3>
+                  <p className="text-gray-500 mb-4">
+                    Schedule an appointment with this patient
+                  </p>
+                  <Button
+                    onClick={() =>
+                      router.push(
+                        `/doctor/patients/${patientId}/appointment/new`,
+                      )
+                    }
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Schedule Appointment
+                  </Button>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Appointment ID</TableHead>
+                      <TableHead>Date & Time</TableHead>
+                      <TableHead>Reason</TableHead>
+                      <TableHead>Priority</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {appointments.map((appointment) => (
+                      <TableRow key={appointment._id}>
+                        <TableCell className="font-medium">
+                          {appointment.appointmentId}
+                        </TableCell>
+                        <TableCell>
+                          {formatDateTime(appointment.startTime)}
+                        </TableCell>
+                        <TableCell className="max-w-xs truncate">
+                          {appointment.reason}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              appointment.priority === "emergency"
+                                ? "destructive"
+                                : appointment.priority === "high"
+                                  ? "default"
+                                  : "outline"
+                            }
+                          >
+                            {appointment.priority}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {getStatusBadge(appointment.status)}
+                        </TableCell>
+                        <TableCell className="text-right">
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => router.push(`/services/imaging/${study._id}`)}
-                            title="View Details"
+                            onClick={() =>
+                              router.push(
+                                `/doctor/appointments/${appointment._id}`,
+                              )
+                            }
                           >
-                            <FileText className="h-4 w-4" />
+                            <Eye className="h-4 w-4" />
                           </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
-      </TabsContent>
-
-      {/* Appointments Tab */}
-      <TabsContent value="appointments" className="space-y-6">
-        <Card>
-          <CardHeader>
-            <div className="flex justify-between items-center">
-              <div>
-                <CardTitle>Appointments</CardTitle>
-                <CardDescription>
-                  Appointment history with this patient
-                </CardDescription>
-              </div>
-              <Button onClick={() => router.push(`/doctor/patients/${patientId}/appointment/new`)}>
-                <Plus className="h-4 w-4 mr-2" />
-                Schedule
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {appointments.length === 0 ? (
-              <div className="text-center py-12">
-                <Calendar className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                <h3 className="text-lg font-semibold mb-2">No Appointments</h3>
-                <p className="text-gray-500 mb-4">
-                  Schedule an appointment with this patient
-                </p>
-                <Button onClick={() => router.push(`/doctor/patients/${patientId}/appointment/new`)}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Schedule Appointment
-                </Button>
-              </div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Appointment ID</TableHead>
-                    <TableHead>Date & Time</TableHead>
-                    <TableHead>Reason</TableHead>
-                    <TableHead>Priority</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {appointments.map((appointment) => (
-                    <TableRow key={appointment._id}>
-                      <TableCell className="font-medium">{appointment.appointmentId}</TableCell>
-                      <TableCell>
-                        {formatDateTime(appointment.startTime)}
-                      </TableCell>
-                      <TableCell className="max-w-xs truncate">{appointment.reason}</TableCell>
-                      <TableCell>
-                        <Badge variant={
-                          appointment.priority === "emergency" ? "destructive" :
-                          appointment.priority === "high" ? "default" :
-                          "outline"
-                        }>
-                          {appointment.priority}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{getStatusBadge(appointment.status)}</TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => router.push(`/doctor/appointments/${appointment._id}`)}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
-      </TabsContent>
-    </Tabs>
-  </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
   );
 }

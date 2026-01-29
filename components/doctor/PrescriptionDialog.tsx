@@ -35,20 +35,23 @@ import { SmartMedicineSearch } from "./SmartMedicineSearch";
 
 // Define validation schema with Zod
 const prescriptionSchema = z.object({
-  diagnosis: z.string().min(1, "Diagnosis is required"),
   notes: z.string().optional(),
-  
-  medications: z.array(z.object({
-    name: z.string().min(1, "Medication name is required"),
-    dosage: z.string().min(1, "Dosage is required"),
-    frequency: z.string().min(1, "Frequency is required"),
-    duration: z.string().min(1, "Duration is required"),
-    instructions: z.string().optional(),
-    quantity: z.string().optional(),
-    route: z.string().optional(),
-    medicine: z.string().optional(), // Add medicine ID field for API validation
-  })).min(1, "At least one medication is required"),
-  
+
+  medications: z
+    .array(
+      z.object({
+        name: z.string().min(1, "Medication name is required"),
+        dosage: z.string().min(1, "Dosage is required"),
+        frequency: z.string().min(1, "Frequency is required"),
+        duration: z.string().min(1, "Duration is required"),
+        instructions: z.string().optional(),
+        quantity: z.string().optional(),
+        route: z.string().optional(),
+        medicine: z.string().optional(), // Add medicine ID field for API validation
+      }),
+    )
+    .min(1, "At least one medication is required"),
+
   // Patient Instructions
   patientInstructions: z.string().optional(),
   followUpDate: z.string().optional(),
@@ -65,38 +68,32 @@ interface PrescriptionDialogProps {
   trigger?: React.ReactNode;
   editData?: {
     _id: string;
-    diagnosis: string;
     medications: any[];
     notes?: string;
   };
 }
 
-const COMMON_DIAGNOSES = [
-  { name: "Upper Respiratory Infection", icd10: "J06.9" },
-  { name: "Hypertension", icd10: "I10" },
-  { name: "Type 2 Diabetes", icd10: "E11.9" },
-  { name: "Acute Gastroenteritis", icd10: "A09" },
-  { name: "Migraine", icd10: "G43.909" },
-];
-
-const COMMON_MEDICATIONS = [
-  { name: "Amoxicillin 500mg", category: "Antibiotic", form: "Tablet" },
-  { name: "Paracetamol 500mg", category: "Analgesic", form: "Tablet" },
-  { name: "Ibuprofen 400mg", category: "NSAID", form: "Tablet" },
-  { name: "Cetirizine 10mg", category: "Antihistamine", form: "Tablet" },
-  { name: "Omeprazole 20mg", category: "PPI", form: "Capsule" },
-  { name: "Atorvastatin 20mg", category: "Statin", form: "Tablet" },
-  { name: "Metformin 500mg", category: "Antidiabetic", form: "Tablet" },
-  { name: "Losartan 50mg", category: "ARB", form: "Tablet" },
-  { name: "Salbutamol Inhaler", category: "Bronchodilator", form: "Inhaler" },
-  { name: "Fluoxetine 20mg", category: "Antidepressant", form: "Capsule" },
-];
-
 const DOSAGE_OPTIONS = [
-  "500mg", "250mg", "100mg", "50mg", "20mg", "10mg", "5mg", "1mg",
-  "5ml", "10ml", "15ml", "20ml",
-  "1 tablet", "2 tablets", "1 capsule", "2 capsules",
-  "1 puff", "2 puffs", "5mg/ml", "10mg/ml"
+  "500mg",
+  "250mg",
+  "100mg",
+  "50mg",
+  "20mg",
+  "10mg",
+  "5mg",
+  "1mg",
+  "5ml",
+  "10ml",
+  "15ml",
+  "20ml",
+  "1 tablet",
+  "2 tablets",
+  "1 capsule",
+  "2 capsules",
+  "1 puff",
+  "2 puffs",
+  "5mg/ml",
+  "10mg/ml",
 ];
 
 const FREQUENCY_OPTIONS = [
@@ -111,13 +108,22 @@ const FREQUENCY_OPTIONS = [
   "As needed",
   "Before meals",
   "After meals",
-  "At bedtime"
+  "At bedtime",
 ];
 
 const DURATION_OPTIONS = [
-  "1 day", "3 days", "5 days", "7 days", "10 days", "14 days",
-  "21 days", "30 days", "60 days", "90 days",
-  "Until finished", "As directed"
+  "1 day",
+  "3 days",
+  "5 days",
+  "7 days",
+  "10 days",
+  "14 days",
+  "21 days",
+  "30 days",
+  "60 days",
+  "90 days",
+  "Until finished",
+  "As directed",
 ];
 
 const ROUTE_OPTIONS = [
@@ -156,7 +162,6 @@ export function PrescriptionDialog({
   } = useForm<PrescriptionFormValues>({
     resolver: zodResolver(prescriptionSchema),
     defaultValues: {
-      diagnosis: "",
       notes: "",
       medications: [
         {
@@ -167,7 +172,7 @@ export function PrescriptionDialog({
           instructions: "",
           quantity: "",
           route: "oral", // FIXED: Change from "Oral" to "oral" (lowercase)
-        }
+        },
       ],
       patientInstructions: "",
       followUpDate: "",
@@ -179,14 +184,6 @@ export function PrescriptionDialog({
     control,
     name: "medications",
   });
-
-  const handleSelectDiagnosis = (diagnosis: typeof COMMON_DIAGNOSES[0]) => {
-    setValue("diagnosis", diagnosis.name);
-  };
-
-  const handleSelectMedication = (medication: typeof COMMON_MEDICATIONS[0], index: number) => {
-    setValue(`medications.${index}.name`, medication.name);
-  };
 
   const addNewMedication = () => {
     append({
@@ -213,7 +210,7 @@ export function PrescriptionDialog({
       setLoading(true);
 
       // Convert route to lowercase for mongoose enum validation
-      const medications = data.medications.map(med => ({
+      const medications = data.medications.map((med) => ({
         name: med.name,
         dosage: med.dosage,
         frequency: med.frequency,
@@ -226,7 +223,6 @@ export function PrescriptionDialog({
       }));
 
       const requestData = {
-        diagnosis: data.diagnosis,
         medications: medications,
         notes: data.notes || "",
         patientInstructions: data.patientInstructions || "",
@@ -237,14 +233,17 @@ export function PrescriptionDialog({
 
       console.log("Sending prescription data:", requestData);
 
-      const response = await fetch(`/api/doctor/patients/${patientId}/prescriptions`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
+      const response = await fetch(
+        `/api/doctor/patients/${patientId}/prescriptions`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify(requestData),
         },
-        body: JSON.stringify(requestData),
-      });
+      );
 
       const result = await response.json();
 
@@ -256,10 +255,10 @@ export function PrescriptionDialog({
         toast.success("Prescription Created", {
           description: `Prescription has been created successfully for ${patientName}`,
         });
-        
+
         reset();
         setOpen(false);
-        
+
         if (onPrescriptionCreated) {
           onPrescriptionCreated();
         }
@@ -267,7 +266,8 @@ export function PrescriptionDialog({
     } catch (error: any) {
       console.error("Error saving prescription:", error);
       toast.error("Failed to Save Prescription", {
-        description: error.message || "An error occurred while saving the prescription",
+        description:
+          error.message || "An error occurred while saving the prescription",
       });
     } finally {
       setLoading(false);
@@ -298,60 +298,16 @@ export function PrescriptionDialog({
             {editData ? "Edit Prescription" : "New Prescription"}
           </DialogTitle>
           <DialogDescription>
-            {editData ? "Update prescription for" : "Create prescription for"} 
+            {editData ? "Update prescription for" : "Create prescription for"}
             <span className="font-medium ml-1">{patientName}</span>
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-          {/* Quick Select Common Diagnoses */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <Label className="text-sm font-medium">Quick Select Common Diagnoses</Label>
-              <span className="text-xs text-muted-foreground">ICD-10 codes included</span>
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-              {COMMON_DIAGNOSES.map((diagnosis, index) => (
-                <Button
-                  key={index}
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleSelectDiagnosis(diagnosis)}
-                  className="justify-start h-auto py-2 hover:border-primary hover:bg-primary/5 transition-colors"
-                >
-                  <div className="text-left">
-                    <p className="text-xs font-medium truncate">{diagnosis.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {diagnosis.icd10}
-                    </p>
-                  </div>
-                </Button>
-              ))}
-            </div>
-          </div>
-
           {/* Main 3-Column Grid Layout */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            
-            {/* Column 1: Diagnosis & Notes */}
+            {/* Column 1: Notes */}
             <div className="space-y-4">
-              {/* Diagnosis */}
-              <div className="space-y-2">
-                <Label htmlFor="diagnosis" className="text-sm font-medium">
-                  Diagnosis *
-                </Label>
-                <Input
-                  id="diagnosis"
-                  {...register("diagnosis")}
-                  placeholder="Enter diagnosis"
-                  className={errors.diagnosis ? "border-red-500" : ""}
-                />
-                {errors.diagnosis && (
-                  <p className="text-xs text-red-500">{errors.diagnosis.message}</p>
-                )}
-              </div>
-
               {/* Clinical Notes */}
               <div className="space-y-2">
                 <Label htmlFor="notes" className="text-sm font-medium">
@@ -416,36 +372,12 @@ export function PrescriptionDialog({
                 </Button>
               </div>
 
-              {/* Quick Medications */}
-              <div className="space-y-2">
-                <Label className="text-xs font-medium text-muted-foreground">
-                  Quick Select Medications
-                </Label>
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-                  {COMMON_MEDICATIONS.map((medication, index) => (
-                    <Button
-                      key={index}
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleSelectMedication(medication, 0)}
-                      className="justify-start h-auto py-1.5 hover:border-primary hover:bg-primary/5 transition-colors"
-                    >
-                      <div className="text-left">
-                        <p className="text-xs font-medium truncate">{medication.name}</p>
-                        <p className="text-[10px] text-muted-foreground">
-                          {medication.category}
-                        </p>
-                      </div>
-                    </Button>
-                  ))}
-                </div>
-              </div>
-
               {/* Smart Medicine Search */}
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <Label className="text-sm font-medium">Smart Medicine Search</Label>
+                  <Label className="text-sm font-medium">
+                    Smart Medicine Search
+                  </Label>
                   <Button
                     type="button"
                     variant="outline"
@@ -460,7 +392,7 @@ export function PrescriptionDialog({
                     Refresh
                   </Button>
                 </div>
-                
+
                 <SmartMedicineSearch
                   onSelectMedicine={(medicine) => {
                     // Add the selected medicine to the form with proper medicine ID
@@ -511,27 +443,45 @@ export function PrescriptionDialog({
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {/* Medication Name */}
                         <div className="space-y-2">
-                          <Label htmlFor={`medications.${index}.name`} className="text-sm">
+                          <Label
+                            htmlFor={`medications.${index}.name`}
+                            className="text-sm"
+                          >
                             Medication Name *
                           </Label>
                           <Input
                             id={`medications.${index}.name`}
                             {...register(`medications.${index}.name` as const)}
                             placeholder="e.g., Amoxicillin 500mg"
-                            className={errors.medications?.[index]?.name ? "border-red-500" : ""}
+                            className={
+                              errors.medications?.[index]?.name
+                                ? "border-red-500"
+                                : ""
+                            }
                           />
                         </div>
 
                         {/* Dosage */}
                         <div className="space-y-2">
-                          <Label htmlFor={`medications.${index}.dosage`} className="text-sm">
+                          <Label
+                            htmlFor={`medications.${index}.dosage`}
+                            className="text-sm"
+                          >
                             Dosage *
                           </Label>
                           <Select
-                            onValueChange={(value) => setValue(`medications.${index}.dosage`, value)}
+                            onValueChange={(value) =>
+                              setValue(`medications.${index}.dosage`, value)
+                            }
                             value={watch(`medications.${index}.dosage`)}
                           >
-                            <SelectTrigger className={errors.medications?.[index]?.dosage ? "border-red-500" : ""}>
+                            <SelectTrigger
+                              className={
+                                errors.medications?.[index]?.dosage
+                                  ? "border-red-500"
+                                  : ""
+                              }
+                            >
                               <SelectValue placeholder="Select dosage" />
                             </SelectTrigger>
                             <SelectContent>
@@ -546,20 +496,31 @@ export function PrescriptionDialog({
 
                         {/* Frequency */}
                         <div className="space-y-2">
-                          <Label htmlFor={`medications.${index}.frequency`} className="text-sm">
+                          <Label
+                            htmlFor={`medications.${index}.frequency`}
+                            className="text-sm"
+                          >
                             Frequency *
                           </Label>
                           <Select
-                            onValueChange={(value) => setValue(`medications.${index}.frequency`, value)}
+                            onValueChange={(value) =>
+                              setValue(`medications.${index}.frequency`, value)
+                            }
                             value={watch(`medications.${index}.frequency`)}
                           >
-                            <SelectTrigger className={errors.medications?.[index]?.frequency ? "border-red-500" : ""}>
+                            <SelectTrigger
+                              className={
+                                errors.medications?.[index]?.frequency
+                                  ? "border-red-500"
+                                  : ""
+                              }
+                            >
                               <SelectValue placeholder="Select frequency" />
                             </SelectTrigger>
                             <SelectContent>
                               {FREQUENCY_OPTIONS.map((frequency, idx) => (
                                 <SelectItem key={idx} value={frequency}>
-                                {frequency}
+                                  {frequency}
                                 </SelectItem>
                               ))}
                             </SelectContent>
@@ -568,14 +529,25 @@ export function PrescriptionDialog({
 
                         {/* Duration */}
                         <div className="space-y-2">
-                          <Label htmlFor={`medications.${index}.duration`} className="text-sm">
+                          <Label
+                            htmlFor={`medications.${index}.duration`}
+                            className="text-sm"
+                          >
                             Duration *
                           </Label>
                           <Select
-                            onValueChange={(value) => setValue(`medications.${index}.duration`, value)}
+                            onValueChange={(value) =>
+                              setValue(`medications.${index}.duration`, value)
+                            }
                             value={watch(`medications.${index}.duration`)}
                           >
-                            <SelectTrigger className={errors.medications?.[index]?.duration ? "border-red-500" : ""}>
+                            <SelectTrigger
+                              className={
+                                errors.medications?.[index]?.duration
+                                  ? "border-red-500"
+                                  : ""
+                              }
+                            >
                               <SelectValue placeholder="Select duration" />
                             </SelectTrigger>
                             <SelectContent>
@@ -590,12 +562,19 @@ export function PrescriptionDialog({
 
                         {/* Route */}
                         <div className="space-y-2">
-                          <Label htmlFor={`medications.${index}.route`} className="text-sm">
+                          <Label
+                            htmlFor={`medications.${index}.route`}
+                            className="text-sm"
+                          >
                             Route
                           </Label>
                           <Select
-                            onValueChange={(value) => setValue(`medications.${index}.route`, value)}
-                            value={watch(`medications.${index}.route`) || "oral"} // FIXED: Change from "Oral" to "oral"
+                            onValueChange={(value) =>
+                              setValue(`medications.${index}.route`, value)
+                            }
+                            value={
+                              watch(`medications.${index}.route`) || "oral"
+                            } // FIXED: Change from "Oral" to "oral"
                           >
                             <SelectTrigger>
                               <SelectValue placeholder="Select route" />
@@ -612,12 +591,17 @@ export function PrescriptionDialog({
 
                         {/* Quantity */}
                         <div className="space-y-2">
-                          <Label htmlFor={`medications.${index}.quantity`} className="text-sm">
+                          <Label
+                            htmlFor={`medications.${index}.quantity`}
+                            className="text-sm"
+                          >
                             Quantity
                           </Label>
                           <Input
                             id={`medications.${index}.quantity`}
-                            {...register(`medications.${index}.quantity` as const)}
+                            {...register(
+                              `medications.${index}.quantity` as const,
+                            )}
                             placeholder="e.g., 30 tablets, 1 bottle"
                           />
                         </div>
@@ -625,12 +609,17 @@ export function PrescriptionDialog({
 
                       {/* Instructions */}
                       <div className="mt-4 space-y-2">
-                        <Label htmlFor={`medications.${index}.instructions`} className="text-sm">
+                        <Label
+                          htmlFor={`medications.${index}.instructions`}
+                          className="text-sm"
+                        >
                           Special Instructions
                         </Label>
                         <Textarea
                           id={`medications.${index}.instructions`}
-                          {...register(`medications.${index}.instructions` as const)}
+                          {...register(
+                            `medications.${index}.instructions` as const,
+                          )}
                           placeholder="e.g., Take with food, Avoid alcohol, etc."
                           rows={2}
                           className="resize-none"
@@ -643,7 +632,10 @@ export function PrescriptionDialog({
 
               {/* Patient Instructions */}
               <div className="space-y-2">
-                <Label htmlFor="patientInstructions" className="text-sm font-medium">
+                <Label
+                  htmlFor="patientInstructions"
+                  className="text-sm font-medium"
+                >
                   Patient Instructions
                 </Label>
                 <Textarea
@@ -672,11 +664,7 @@ export function PrescriptionDialog({
                 >
                   Cancel
                 </Button>
-                <Button 
-                  type="submit" 
-                  disabled={loading}
-                  className="min-w-30"
-                >
+                <Button type="submit" disabled={loading} className="min-w-30">
                   {loading ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />

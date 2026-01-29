@@ -539,10 +539,51 @@ export default function AppointmentDetailPage() {
       : sortedPrescriptions.slice(0, 10);
   };
 
+  // Helper function to determine if payment should be disabled
+  const isPaymentDisabled = (item: LabTest | ImagingService) => {
+    // Check for lab test
+    if ("testId" in item) {
+      return item.charges?.paymentStatus === "paid";
+    }
+
+    // Check for imaging service
+    if ("serviceId" in item) {
+      // Check multiple conditions for imaging
+      return (
+        item.charges?.paymentStatus === "paid" ||
+        item.billingStatus === "paid" ||
+        item.paymentVerified === true
+      );
+    }
+
+    return false;
+  };
+
   // Process payment for lab test
   const handleProcessPayment = async () => {
     if (paymentType === "lab" && !selectedLabTest) return;
     if (paymentType === "imaging" && !selectedImagingService) return;
+
+    // Check if already paid before processing
+    if (
+      paymentType === "lab" &&
+      selectedLabTest &&
+      isPaymentDisabled(selectedLabTest)
+    ) {
+      toast.error("This test has already been paid");
+      setPaymentDialogOpen(false);
+      return;
+    }
+
+    if (
+      paymentType === "imaging" &&
+      selectedImagingService &&
+      isPaymentDisabled(selectedImagingService)
+    ) {
+      toast.error("This imaging service has already been paid");
+      setPaymentDialogOpen(false);
+      return;
+    }
 
     try {
       setProcessingPayment(true);
@@ -1121,7 +1162,12 @@ export default function AppointmentDetailPage() {
                     </TableHeader>
                     <TableBody>
                       {labTests.map((test) => (
-                        <TableRow key={test._id}>
+                        <TableRow
+                          key={test._id}
+                          className={
+                            isPaymentDisabled(test) ? "bg-green-50" : ""
+                          }
+                        >
                           <TableCell className="font-medium">
                             {test.testId}
                           </TableCell>
@@ -1148,6 +1194,11 @@ export default function AppointmentDetailPage() {
                           <TableCell>
                             {getLabStatusBadge(test.status)}
                           </TableCell>
+                          {isPaymentDisabled(test) && (
+                            <TableCell className="text-center">
+                              <CheckCircle className="h-4 w-4 text-green-500 inline" />
+                            </TableCell>
+                          )}
                           <TableCell>
                             <div className="flex gap-2">
                               <Button
@@ -1167,12 +1218,24 @@ export default function AppointmentDetailPage() {
                                   });
                                   setPaymentDialogOpen(true);
                                 }}
-                                disabled={
-                                  test.charges?.paymentStatus === "paid"
+                                disabled={isPaymentDisabled(test)}
+                                className={
+                                  isPaymentDisabled(test)
+                                    ? "opacity-50 cursor-not-allowed"
+                                    : ""
                                 }
                               >
-                                <CreditCard className="h-3 w-3 mr-1" />
-                                Pay
+                                {isPaymentDisabled(test) ? (
+                                  <>
+                                    <CheckCircle className="h-3 w-3 mr-1" />
+                                    Paid
+                                  </>
+                                ) : (
+                                  <>
+                                    <CreditCard className="h-3 w-3 mr-1" />
+                                    Pay
+                                  </>
+                                )}
                               </Button>
                               <Button
                                 size="sm"
@@ -1343,7 +1406,12 @@ export default function AppointmentDetailPage() {
                     </TableHeader>
                     <TableBody>
                       {imagingServices.map((service) => (
-                        <TableRow key={service._id}>
+                        <TableRow
+                          key={service._id}
+                          className={
+                            isPaymentDisabled(service) ? "bg-green-50" : ""
+                          }
+                        >
                           <TableCell className="font-medium">
                             {service.serviceId}
                           </TableCell>
@@ -1376,6 +1444,11 @@ export default function AppointmentDetailPage() {
                           <TableCell>
                             {getLabStatusBadge(service.status)}
                           </TableCell>
+                          {isPaymentDisabled(service) && (
+                            <TableCell className="text-center">
+                              <CheckCircle className="h-4 w-4 text-green-500 inline" />
+                            </TableCell>
+                          )}
                           <TableCell>
                             <div className="flex gap-2">
                               <Button
@@ -1397,15 +1470,14 @@ export default function AppointmentDetailPage() {
                                   });
                                   setPaymentDialogOpen(true);
                                 }}
-                                disabled={
-                                  service.charges?.paymentStatus === "paid" ||
-                                  service.billingStatus === "paid" ||
-                                  service.paymentVerified === true
+                                disabled={isPaymentDisabled(service)}
+                                className={
+                                  isPaymentDisabled(service)
+                                    ? "opacity-50 cursor-not-allowed"
+                                    : ""
                                 }
                               >
-                                {service.charges?.paymentStatus === "paid" ||
-                                service.billingStatus === "paid" ||
-                                service.paymentVerified === true ? (
+                                {isPaymentDisabled(service) ? (
                                   <>
                                     <CheckCircle className="h-3 w-3 mr-1" />
                                     Paid
@@ -1514,13 +1586,23 @@ export default function AppointmentDetailPage() {
                   <Button
                     size="lg"
                     onClick={() => {
+                      // Find the first unpaid item
                       const unpaidTest = labTests.find(
                         (t) =>
-                          !t.charges?.paymentStatus ||
-                          t.charges?.paymentStatus !== "paid",
+                          !isPaymentDisabled(t) &&
+                          (t.charges?.due || calculateTestTotal(t)) > 0,
                       );
+
+                      const unpaidImaging = imagingServices.find(
+                        (s) =>
+                          !isPaymentDisabled(s) &&
+                          (s.charges?.due || s.charges?.totalAmount || 0) > 0,
+                      );
+
+                      // Prioritize lab tests
                       if (unpaidTest) {
                         setSelectedLabTest(unpaidTest);
+                        setPaymentType("lab");
                         setPaymentForm({
                           paymentMethod:
                             unpaidTest.charges?.paymentMethod || "cash",
@@ -1532,11 +1614,35 @@ export default function AppointmentDetailPage() {
                           notes: "",
                         });
                         setPaymentDialogOpen(true);
+                      } else if (unpaidImaging) {
+                        setSelectedImagingService(unpaidImaging);
+                        setPaymentType("imaging");
+                        setPaymentForm({
+                          paymentMethod:
+                            unpaidImaging.charges?.paymentMethod || "cash",
+                          amount:
+                            unpaidImaging.charges?.due ||
+                            unpaidImaging.charges?.totalAmount ||
+                            0,
+                          transactionId:
+                            unpaidImaging.charges?.transactionId || "",
+                          notes: "",
+                        });
+                        setPaymentDialogOpen(true);
+                      } else {
+                        toast.info("All payments have been processed");
                       }
                     }}
+                    disabled={
+                      labTests.every(isPaymentDisabled) &&
+                      imagingServices.every(isPaymentDisabled)
+                    }
                   >
                     <DollarSign className="h-4 w-4 mr-2" />
-                    Process All Payments
+                    {labTests.every(isPaymentDisabled) &&
+                    imagingServices.every(isPaymentDisabled)
+                      ? "All Paid"
+                      : "Process All Payments"}
                   </Button>
                 )}
                 <Button

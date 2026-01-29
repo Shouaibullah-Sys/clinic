@@ -1,4 +1,3 @@
-
 // app/pharmacy/dispense/page.tsx
 
 "use client";
@@ -125,9 +124,9 @@ export default function DispensePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, accessToken, isLoading: authLoading } = useAuthStore();
-  
+
   const prescriptionId = searchParams.get("prescriptionId");
-  
+
   const [prescription, setPrescription] = useState<Prescription | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -141,24 +140,27 @@ export default function DispensePage() {
   // Fetch prescription
   const fetchPrescription = async () => {
     if (!prescriptionId || !accessToken) return;
-    
+
     try {
       setLoading(true);
       setError(null);
 
-      const response = await fetch(`/api/pharmacy/prescriptions/${prescriptionId}`, {
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
+      const response = await fetch(
+        `/api/pharmacy/prescriptions/${prescriptionId}`,
+        {
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
         },
-      });
+      );
 
       if (!response.ok) {
         throw new Error(`Failed to fetch prescription (${response.status})`);
       }
 
       const data = await response.json();
-      
+
       if (data.success && data.data) {
         console.log("✅ Prescription loaded:", data.data);
         setPrescription(data.data);
@@ -175,27 +177,36 @@ export default function DispensePage() {
   };
 
   // Find medicine in stock
-  const findMedicineInStock = async (medicineName: string): Promise<Medicine | null> => {
+  const findMedicineInStock = async (
+    medicineName: string,
+  ): Promise<Medicine | null> => {
     try {
       setStockLoading(true);
-      
+
       // First try exact search
       const searchResponse = await fetch(
         `/api/pharmacy/medicines/search?q=${encodeURIComponent(medicineName)}`,
         {
-          headers: { Authorization: `Bearer ${accessToken}` }
-        }
+          headers: { Authorization: `Bearer ${accessToken}` },
+        },
       );
-      
+
       if (searchResponse.ok) {
         const searchData = await searchResponse.json();
-        
-        if (searchData.success && searchData.data && searchData.data.length > 0) {
-          console.log(`✅ Found medicine "${medicineName}" in stock:`, searchData.data[0]);
+
+        if (
+          searchData.success &&
+          searchData.data &&
+          searchData.data.length > 0
+        ) {
+          console.log(
+            `✅ Found medicine "${medicineName}" in stock:`,
+            searchData.data[0],
+          );
           return searchData.data[0];
         }
       }
-      
+
       return null;
     } catch (error) {
       console.error(`Error finding medicine "${medicineName}":`, error);
@@ -213,29 +224,33 @@ export default function DispensePage() {
     }
 
     try {
-      console.log("🔄 Loading medicines from prescription and linking to stock...");
+      console.log(
+        "🔄 Loading medicines from prescription and linking to stock...",
+      );
       const items: DispensingItem[] = [];
-      
+
       for (const med of prescription.medications) {
         console.log(`Processing: ${med.name}`);
-        
+
         let medicineData: Medicine | null = null;
         let foundInStock = false;
-        
+
         // Search for medicine in stock by name
         medicineData = await findMedicineInStock(med.name);
-        
+
         if (medicineData) {
           foundInStock = true;
-          console.log(`✅ Linked "${med.name}" to stock item "${medicineData.name}"`);
-          
+          console.log(
+            `✅ Linked "${med.name}" to stock item "${medicineData.name}"`,
+          );
+
           const availableStock = medicineData.currentQuantity || 0;
           const prescribedQty = med.quantity || 1;
           const dispensedQty = Math.min(prescribedQty, availableStock);
           const unitPrice = medicineData.sellingPrice || med.price || 0;
           const isLowStock = medicineData.currentQuantity <= 20;
           const isExpiringSoon = medicineData.isExpiringSoon || false;
-          
+
           items.push({
             medicineId: medicineData._id,
             medicineName: med.name,
@@ -250,22 +265,29 @@ export default function DispensePage() {
             supplier: medicineData.supplier,
             isLowStock,
             isExpiringSoon,
-            status: availableStock === 0 ? "out-of-stock" : 
-                   isLowStock ? "low-stock" :
-                   isExpiringSoon ? "expiring-soon" : "available",
-            foundInStock: true
+            status:
+              availableStock === 0
+                ? "out-of-stock"
+                : isLowStock
+                  ? "low-stock"
+                  : isExpiringSoon
+                    ? "expiring-soon"
+                    : "available",
+            foundInStock: true,
           });
-          
+
           // Show warnings
           if (availableStock === 0) {
             toast.warning(`${med.name} is out of stock`);
           } else if (availableStock < prescribedQty) {
-            toast.warning(`${med.name}: ${availableStock} available, ${prescribedQty} prescribed`);
+            toast.warning(
+              `${med.name}: ${availableStock} available, ${prescribedQty} prescribed`,
+            );
           }
         } else {
           // Medicine not found in stock
           console.log(`❌ "${med.name}" not found in stock`);
-          
+
           items.push({
             medicineId: med.name,
             medicineName: med.name,
@@ -279,23 +301,22 @@ export default function DispensePage() {
             isLowStock: false,
             isExpiringSoon: false,
             status: "out-of-stock",
-            foundInStock: false
+            foundInStock: false,
           });
         }
       }
-      
+
       console.log("📦 Final dispensing items:", items);
       setDispensingItems(items);
-      
+
       // Set instructions from prescription
       if (prescription.instructions) {
         setPatientInstructions(prescription.instructions);
       }
-      
+
       if (prescription.notes) {
         setPharmacyNotes(prescription.notes);
       }
-      
     } catch (error) {
       console.error("Error loading medicines:", error);
       toast.error("Failed to load medicines");
@@ -304,18 +325,21 @@ export default function DispensePage() {
 
   // Update dispensed quantity
   const updateDispensedQuantity = (medicineId: string, quantity: number) => {
-    setDispensingItems(items =>
-      items.map(item => {
+    setDispensingItems((items) =>
+      items.map((item) => {
         if (item.medicineId === medicineId) {
-          const dispensedQty = Math.max(0, Math.min(quantity, item.availableStock));
+          const dispensedQty = Math.max(
+            0,
+            Math.min(quantity, item.availableStock),
+          );
           return {
             ...item,
             dispensedQuantity: dispensedQty,
-            totalPrice: dispensedQty * item.unitPrice
+            totalPrice: dispensedQty * item.unitPrice,
           };
         }
         return item;
-      })
+      }),
     );
   };
 
@@ -327,7 +351,10 @@ export default function DispensePage() {
     }
 
     // Validate
-    const totalDispensed = dispensingItems.reduce((sum, item) => sum + item.dispensedQuantity, 0);
+    const totalDispensed = dispensingItems.reduce(
+      (sum, item) => sum + item.dispensedQuantity,
+      0,
+    );
     if (totalDispensed === 0) {
       toast.error("Please select quantities to dispense");
       return;
@@ -335,11 +362,13 @@ export default function DispensePage() {
 
     // Check if any items are out of stock
     const outOfStockItems = dispensingItems.filter(
-      item => item.dispensedQuantity > 0 && item.status === "out-of-stock"
+      (item) => item.dispensedQuantity > 0 && item.status === "out-of-stock",
     );
-    
+
     if (outOfStockItems.length > 0) {
-      toast.error(`Cannot dispense: ${outOfStockItems.map(i => i.medicineName).join(', ')} not in stock`);
+      toast.error(
+        `Cannot dispense: ${outOfStockItems.map((i) => i.medicineName).join(", ")} not in stock`,
+      );
       return;
     }
 
@@ -348,12 +377,12 @@ export default function DispensePage() {
 
       // Prepare items for dispensing
       const itemsToDispense = dispensingItems
-        .filter(item => item.dispensedQuantity > 0 && item.foundInStock)
-        .map(item => ({
+        .filter((item) => item.dispensedQuantity > 0 && item.foundInStock)
+        .map((item) => ({
           medicine: item.medicineId,
           dispensedQuantity: item.dispensedQuantity,
           batchNumber: item.batchNumber,
-          unitPrice: item.unitPrice
+          unitPrice: item.unitPrice,
         }));
 
       if (itemsToDispense.length === 0) {
@@ -369,34 +398,36 @@ export default function DispensePage() {
         paymentMethod,
         pharmacyNotes,
         patientInstructions,
-        dispensingStatus: "full"
+        dispensingStatus: "full",
       };
 
       console.log("🚀 Dispensing:", dispenseData);
 
       // Call dispense API
-      const response = await fetch(`/api/pharmacy/prescriptions/${prescription._id}/dispense`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
+      const response = await fetch(
+        `/api/pharmacy/prescriptions/${prescription._id}/dispense`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify(dispenseData),
         },
-        body: JSON.stringify(dispenseData),
-      });
+      );
 
       const result = await response.json();
-      
+
       if (!response.ok) {
         throw new Error(result.error || "Failed to dispense");
       }
 
       toast.success("✅ Medicines dispensed successfully!");
-      
+
       // Redirect after success
       setTimeout(() => {
         router.push("/pharmacy");
       }, 1500);
-      
     } catch (error: any) {
       console.error("Dispensing failed:", error);
       toast.error(error.message || "Dispensing failed");
@@ -425,13 +456,20 @@ export default function DispensePage() {
   }, [prescription]);
 
   // Calculate dispensing status
-  const totalDispensed = dispensingItems.reduce((sum, item) => sum + item.dispensedQuantity, 0);
-  const totalPrescribed = dispensingItems.reduce((sum, item) => sum + item.prescribedQuantity, 0);
-  const dispensingStatus = totalDispensed === 0 
-    ? "pending" 
-    : totalDispensed < totalPrescribed 
-      ? "partial" 
-      : "full";
+  const totalDispensed = dispensingItems.reduce(
+    (sum, item) => sum + item.dispensedQuantity,
+    0,
+  );
+  const totalPrescribed = dispensingItems.reduce(
+    (sum, item) => sum + item.prescribedQuantity,
+    0,
+  );
+  const dispensingStatus =
+    totalDispensed === 0
+      ? "pending"
+      : totalDispensed < totalPrescribed
+        ? "partial"
+        : "full";
 
   // ========== RENDER ==========
 
@@ -441,8 +479,12 @@ export default function DispensePage() {
         <Card>
           <CardContent className="p-6 text-center">
             <AlertTriangle className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
-            <h2 className="text-2xl font-bold mb-2">No Prescription Selected</h2>
-            <Button onClick={() => router.push("/pharmacy/select-prescription")}>
+            <h2 className="text-2xl font-bold mb-2">
+              No Prescription Selected
+            </h2>
+            <Button
+              onClick={() => router.push("/pharmacy/select-prescription")}
+            >
               Select Prescription
             </Button>
           </CardContent>
@@ -469,10 +511,15 @@ export default function DispensePage() {
           <CardContent className="p-6">
             <AlertCircle className="h-8 w-8 text-red-500 mb-4" />
             <h2 className="text-xl font-semibold text-red-800 mb-2">Error</h2>
-            <p className="text-red-700 mb-4">{error || "Prescription not found"}</p>
+            <p className="text-red-700 mb-4">
+              {error || "Prescription not found"}
+            </p>
             <div className="flex gap-3">
               <Button onClick={fetchPrescription}>Retry</Button>
-              <Button onClick={() => router.push("/pharmacy")} variant="outline">
+              <Button
+                onClick={() => router.push("/pharmacy")}
+                variant="outline"
+              >
                 Back to Pharmacy
               </Button>
             </div>
@@ -492,7 +539,8 @@ export default function DispensePage() {
         <div>
           <h1 className="text-3xl font-bold">Dispense Medicines</h1>
           <p className="text-muted-foreground">
-            Prescription: {prescription.prescriptionId} • Patient: {prescription.patient.name}
+            Prescription: {prescription.prescriptionId} • Patient:{" "}
+            {prescription.patient.name}
           </p>
         </div>
         <Badge variant={dispensingStatus === "full" ? "default" : "secondary"}>
@@ -512,10 +560,14 @@ export default function DispensePage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <Label className="text-sm text-muted-foreground">Prescription ID</Label>
-                <p className="font-mono font-bold">{prescription.prescriptionId}</p>
+                <Label className="text-sm text-muted-foreground">
+                  Prescription ID
+                </Label>
+                <p className="font-mono font-bold">
+                  {prescription.prescriptionId}
+                </p>
               </div>
-              
+
               <div>
                 <Label className="text-sm text-muted-foreground">Patient</Label>
                 <div className="flex items-center gap-2 mt-1">
@@ -540,20 +592,29 @@ export default function DispensePage() {
               </div>
 
               <div>
-                <Label className="text-sm text-muted-foreground">Diagnosis</Label>
+                <Label className="text-sm text-muted-foreground">
+                  Diagnosis
+                </Label>
                 <p className="mt-1">{prescription.diagnosis}</p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label className="text-sm text-muted-foreground">Prescribed</Label>
+                  <Label className="text-sm text-muted-foreground">
+                    Prescribed
+                  </Label>
                   <div className="flex items-center gap-2 mt-1">
                     <Calendar className="h-4 w-4" />
-                    {format(new Date(prescription.prescribedDate), "MMM d, yyyy")}
+                    {format(
+                      new Date(prescription.prescribedDate),
+                      "MMM d, yyyy",
+                    )}
                   </div>
                 </div>
                 <div>
-                  <Label className="text-sm text-muted-foreground">Expires</Label>
+                  <Label className="text-sm text-muted-foreground">
+                    Expires
+                  </Label>
                   <div className="flex items-center gap-2 mt-1">
                     <Calendar className="h-4 w-4" />
                     {format(new Date(prescription.expiryDate), "MMM d, yyyy")}
@@ -594,7 +655,9 @@ export default function DispensePage() {
           {stockLoading && (
             <Alert>
               <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              <AlertDescription>Checking stock availability...</AlertDescription>
+              <AlertDescription>
+                Checking stock availability...
+              </AlertDescription>
             </Alert>
           )}
         </div>
@@ -609,7 +672,11 @@ export default function DispensePage() {
                   Medicines from Stock
                 </span>
                 <Badge variant="outline">
-                  {dispensingItems.filter(i => i.dispensedQuantity > 0).length} / {dispensingItems.length}
+                  {
+                    dispensingItems.filter((i) => i.dispensedQuantity > 0)
+                      .length
+                  }{" "}
+                  / {dispensingItems.length}
                 </Badge>
               </CardTitle>
             </CardHeader>
@@ -636,15 +703,24 @@ export default function DispensePage() {
                     </TableHeader>
                     <TableBody>
                       {dispensingItems.map((item) => (
-                        <TableRow key={item.medicineId} className={
-                          !item.foundInStock ? "bg-red-50" :
-                          item.status === "low-stock" ? "bg-orange-50" :
-                          item.status === "expiring-soon" ? "bg-yellow-50" : ""
-                        }>
+                        <TableRow
+                          key={item.medicineId}
+                          className={
+                            !item.foundInStock
+                              ? "bg-dark:background"
+                              : item.status === "low-stock"
+                                ? "bg-orange-50"
+                                : item.status === "expiring-soon"
+                                  ? "bg-yellow-50"
+                                  : ""
+                          }
+                        >
                           <TableCell>
                             <div>
                               <div className="flex items-center gap-2">
-                                <p className="font-medium">{item.medicineName}</p>
+                                <p className="font-medium">
+                                  {item.medicineName}
+                                </p>
                                 {item.foundInStock ? (
                                   <span title="Found in stock">
                                     <Check className="h-4 w-4 text-green-500" />
@@ -656,18 +732,26 @@ export default function DispensePage() {
                                 )}
                               </div>
                               {!item.foundInStock && (
-                                <Badge variant="destructive" className="mt-1 text-xs">
+                                <Badge
+                                  variant="destructive"
+                                  className="mt-1 text-xs"
+                                >
                                   Not in stock
                                 </Badge>
                               )}
-                              {item.foundInStock && item.status === "low-stock" && (
-                                <Badge className="bg-orange-500 text-xs mt-1">
-                                  Low Stock
-                                </Badge>
-                              )}
+                              {item.foundInStock &&
+                                item.status === "low-stock" && (
+                                  <Badge className="bg-orange-500 text-xs mt-1">
+                                    Low Stock
+                                  </Badge>
+                                )}
                               {item.expiryDate && (
                                 <p className="text-xs text-muted-foreground mt-1">
-                                  Expires: {format(new Date(item.expiryDate), "MMM d, yyyy")}
+                                  Expires:{" "}
+                                  {format(
+                                    new Date(item.expiryDate),
+                                    "MMM d, yyyy",
+                                  )}
                                 </p>
                               )}
                             </div>
@@ -681,26 +765,39 @@ export default function DispensePage() {
                             <p className="text-sm">{item.supplier || "N/A"}</p>
                           </TableCell>
                           <TableCell>
-                            <div className="font-medium">{item.prescribedQuantity}</div>
+                            <div className="font-medium">
+                              {item.prescribedQuantity}
+                            </div>
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
-                              <span className={
-                                !item.foundInStock ? "text-red-600 font-bold" :
-                                item.availableStock === 0 ? "text-red-600" :
-                                item.availableStock < item.prescribedQuantity ? "text-orange-500" : "text-green-600"
-                              }>
+                              <span
+                                className={
+                                  !item.foundInStock
+                                    ? "text-red-600 font-bold"
+                                    : item.availableStock === 0
+                                      ? "text-red-600"
+                                      : item.availableStock <
+                                          item.prescribedQuantity
+                                        ? "text-orange-500"
+                                        : "text-green-600"
+                                }
+                              >
                                 {item.foundInStock ? item.availableStock : "0"}
                               </span>
                               {!item.foundInStock && (
                                 <AlertCircle className="h-4 w-4 text-red-500" />
                               )}
-                              {item.foundInStock && item.availableStock === 0 && (
-                                <AlertCircle className="h-4 w-4 text-red-500" />
-                              )}
-                              {item.foundInStock && item.availableStock > 0 && item.availableStock < item.prescribedQuantity && (
-                                <Info className="h-4 w-4 text-orange-500" />
-                              )}
+                              {item.foundInStock &&
+                                item.availableStock === 0 && (
+                                  <AlertCircle className="h-4 w-4 text-red-500" />
+                                )}
+                              {item.foundInStock &&
+                                item.availableStock > 0 &&
+                                item.availableStock <
+                                  item.prescribedQuantity && (
+                                  <Info className="h-4 w-4 text-orange-500" />
+                                )}
                             </div>
                           </TableCell>
                           <TableCell>
@@ -708,19 +805,35 @@ export default function DispensePage() {
                               <Input
                                 type="number"
                                 min="0"
-                                max={item.foundInStock ? item.availableStock : 0}
+                                max={
+                                  item.foundInStock ? item.availableStock : 0
+                                }
                                 value={item.dispensedQuantity}
                                 onChange={(e) =>
-                                  updateDispensedQuantity(item.medicineId, parseInt(e.target.value) || 0)
+                                  updateDispensedQuantity(
+                                    item.medicineId,
+                                    parseInt(e.target.value) || 0,
+                                  )
                                 }
                                 className="w-20"
-                                disabled={!item.foundInStock || item.availableStock === 0}
+                                disabled={
+                                  !item.foundInStock ||
+                                  item.availableStock === 0
+                                }
                               />
                               {item.foundInStock && item.availableStock > 0 && (
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  onClick={() => updateDispensedQuantity(item.medicineId, Math.min(item.prescribedQuantity, item.availableStock))}
+                                  onClick={() =>
+                                    updateDispensedQuantity(
+                                      item.medicineId,
+                                      Math.min(
+                                        item.prescribedQuantity,
+                                        item.availableStock,
+                                      ),
+                                    )
+                                  }
                                   className="text-xs"
                                 >
                                   Max
@@ -729,7 +842,9 @@ export default function DispensePage() {
                             </div>
                           </TableCell>
                           <TableCell>
-                            <div className="text-sm">${item.unitPrice.toFixed(2)}</div>
+                            <div className="text-sm">
+                              ${item.unitPrice.toFixed(2)}
+                            </div>
                           </TableCell>
                           <TableCell className="font-medium">
                             ${item.totalPrice.toFixed(2)}
@@ -777,16 +892,21 @@ export default function DispensePage() {
                 <p>Review before dispensing:</p>
                 <div className="text-sm grid grid-cols-2 gap-2">
                   <div>
-                    <span className="font-medium">Total Prescribed:</span> {totalPrescribed} units
+                    <span className="font-medium">Total Prescribed:</span>{" "}
+                    {totalPrescribed} units
                   </div>
                   <div>
-                    <span className="font-medium">To Dispense:</span> {totalDispensed} units
+                    <span className="font-medium">To Dispense:</span>{" "}
+                    {totalDispensed} units
                   </div>
                   <div>
-                    <span className="font-medium">Status:</span> {dispensingStatus.toUpperCase()}
+                    <span className="font-medium">Status:</span>{" "}
+                    {dispensingStatus.toUpperCase()}
                   </div>
                   <div>
-                    <span className="font-medium">Found in Stock:</span> {dispensingItems.filter(i => i.foundInStock).length} / {dispensingItems.length}
+                    <span className="font-medium">Found in Stock:</span>{" "}
+                    {dispensingItems.filter((i) => i.foundInStock).length} /{" "}
+                    {dispensingItems.length}
                   </div>
                 </div>
               </div>

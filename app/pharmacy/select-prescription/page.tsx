@@ -4,7 +4,13 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/useAuthStore";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -17,7 +23,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Search, Pill, User, Calendar, AlertCircle, Loader2, FileText } from "lucide-react";
+import {
+  Search,
+  Pill,
+  User,
+  Calendar,
+  AlertCircle,
+  Loader2,
+  FileText,
+} from "lucide-react";
 import { format } from "date-fns";
 
 // Update interface to match your Prescription model
@@ -49,7 +63,6 @@ interface Prescription {
     specialization?: string;
   };
   medications: PrescriptionItem[];
-  diagnosis: string;
   prescribedDate: string;
   expiryDate?: string;
   status: "active" | "completed" | "cancelled" | "expired";
@@ -83,21 +96,24 @@ export default function SelectPrescriptionPage() {
     try {
       setLoading(true);
       setError(null);
-      
+
       // Fetch pending prescriptions from pharmacy API
-      const response = await fetch("/api/pharmacy/pending-prescriptions?status=pending&limit=50", {
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
+      const response = await fetch(
+        "/api/pharmacy/pending-prescriptions?status=pending&limit=50",
+        {
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
         },
-      });
+      );
 
       if (!response.ok) {
         throw new Error(`Failed to fetch prescriptions: ${response.status}`);
       }
 
       const data = await response.json();
-      
+
       if (data.success) {
         console.log("Fetched prescriptions:", data.data);
         setPrescriptions(data.data || []);
@@ -121,8 +137,7 @@ export default function SelectPrescriptionPage() {
       prescription.prescriptionId?.toLowerCase().includes(searchLower) ||
       prescription.patient?.name?.toLowerCase().includes(searchLower) ||
       prescription.patient?.patientId?.toLowerCase().includes(searchLower) ||
-      prescription.doctor?.name?.toLowerCase().includes(searchLower) ||
-      prescription.diagnosis?.toLowerCase().includes(searchLower)
+      prescription.doctor?.name?.toLowerCase().includes(searchLower)
     );
   });
 
@@ -138,7 +153,10 @@ export default function SelectPrescriptionPage() {
       cancelled: "bg-red-100 text-red-800 hover:bg-red-100",
     };
     return (
-      <Badge variant="outline" className={variants[status as keyof typeof variants]}>
+      <Badge
+        variant="outline"
+        className={variants[status as keyof typeof variants]}
+      >
         {status.charAt(0).toUpperCase() + status.slice(1)}
       </Badge>
     );
@@ -152,7 +170,10 @@ export default function SelectPrescriptionPage() {
       expired: "bg-gray-100 text-gray-800 hover:bg-gray-100",
     };
     return (
-      <Badge variant="outline" className={variants[status as keyof typeof variants] || "bg-gray-100"}>
+      <Badge
+        variant="outline"
+        className={variants[status as keyof typeof variants] || "bg-gray-100"}
+      >
         {status.charAt(0).toUpperCase() + status.slice(1)}
       </Badge>
     );
@@ -165,7 +186,7 @@ export default function SelectPrescriptionPage() {
 
   // Get medicine names (first 2)
   const getMedicineNames = (medications: PrescriptionItem[]) => {
-    const names = medications.slice(0, 2).map(m => m.name);
+    const names = medications.slice(0, 2).map((m) => m.name);
     if (medications.length > 2) {
       return `${names.join(", ")} +${medications.length - 2} more`;
     }
@@ -195,9 +216,12 @@ export default function SelectPrescriptionPage() {
       <div className="mb-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold mb-2">Select Prescription to Dispense</h1>
+            <h1 className="text-3xl font-bold mb-2">
+              Select Prescription to Dispense
+            </h1>
             <p className="text-muted-foreground">
-              Choose a prescription from the list below to begin dispensing medicines
+              Choose a prescription from the list below to begin dispensing
+              medicines
             </p>
           </div>
           <Button onClick={() => router.push("/pharmacy")} variant="outline">
@@ -225,18 +249,22 @@ export default function SelectPrescriptionPage() {
               <div className="relative w-full md:w-64">
                 <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search by patient, doctor, or diagnosis..."
+                  placeholder="Search by patient or doctor..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-9"
                 />
               </div>
-              <Button 
-                onClick={fetchPrescriptions} 
+              <Button
+                onClick={fetchPrescriptions}
                 variant="outline"
                 disabled={loading}
               >
-                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Refresh"}
+                {loading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  "Refresh"
+                )}
               </Button>
             </div>
           </div>
@@ -257,17 +285,16 @@ export default function SelectPrescriptionPage() {
           ) : filteredPrescriptions.length === 0 ? (
             <div className="text-center py-12">
               <Pill className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium mb-2">No Pending Prescriptions</h3>
+              <h3 className="text-lg font-medium mb-2">
+                No Pending Prescriptions
+              </h3>
               <p className="text-muted-foreground mb-6">
-                {prescriptions.length === 0 
+                {prescriptions.length === 0
                   ? "There are no pending prescriptions to dispense."
-                  : "No prescriptions match your search criteria."
-                }
+                  : "No prescriptions match your search criteria."}
               </p>
               <div className="flex gap-3 justify-center">
-                <Button onClick={fetchPrescriptions}>
-                  Refresh List
-                </Button>
+                <Button onClick={fetchPrescriptions}>Refresh List</Button>
                 {searchTerm && (
                   <Button onClick={() => setSearchTerm("")} variant="outline">
                     Clear Search
@@ -281,24 +308,29 @@ export default function SelectPrescriptionPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-[140px]">Prescription ID</TableHead>
+                      <TableHead className="w-[140px]">
+                        Prescription ID
+                      </TableHead>
                       <TableHead>Patient</TableHead>
                       <TableHead>Doctor</TableHead>
-                      <TableHead>Diagnosis</TableHead>
                       <TableHead>Medicines</TableHead>
                       <TableHead className="w-[120px]">Date</TableHead>
                       <TableHead className="w-[100px]">Status</TableHead>
-                      <TableHead className="w-[120px] text-right">Action</TableHead>
+                      <TableHead className="w-[120px] text-right">
+                        Action
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredPrescriptions.map((prescription) => {
-                      const isPrescriptionExpired = isExpired(prescription.expiryDate);
-                      
+                      const isPrescriptionExpired = isExpired(
+                        prescription.expiryDate,
+                      );
+
                       return (
-                        <TableRow 
-                          key={prescription._id} 
-                          className={`hover:bg-gray-50 ${isPrescriptionExpired ? 'opacity-70' : ''}`}
+                        <TableRow
+                          key={prescription._id}
+                          className={`hover: bg-dark:background ${isPrescriptionExpired ? "opacity-70" : ""}`}
                         >
                           <TableCell>
                             <div className="flex flex-col">
@@ -306,7 +338,10 @@ export default function SelectPrescriptionPage() {
                                 {prescription.prescriptionId}
                               </span>
                               {isPrescriptionExpired && (
-                                <Badge variant="destructive" className="mt-1 text-xs">
+                                <Badge
+                                  variant="destructive"
+                                  className="mt-1 text-xs"
+                                >
                                   Expired
                                 </Badge>
                               )}
@@ -314,7 +349,9 @@ export default function SelectPrescriptionPage() {
                           </TableCell>
                           <TableCell>
                             <div className="flex flex-col">
-                              <span className="font-medium">{prescription.patient?.name || "Unknown"}</span>
+                              <span className="font-medium">
+                                {prescription.patient?.name || "Unknown"}
+                              </span>
                               {prescription.patient?.patientId && (
                                 <span className="text-xs text-muted-foreground">
                                   ID: {prescription.patient.patientId}
@@ -326,7 +363,9 @@ export default function SelectPrescriptionPage() {
                             <div className="flex items-center gap-2">
                               <User className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                               <div className="min-w-0">
-                                <span className="truncate block">Dr. {prescription.doctor?.name || "Unknown"}</span>
+                                <span className="truncate block">
+                                  Dr. {prescription.doctor?.name || "Unknown"}
+                                </span>
                                 {prescription.doctor?.specialization && (
                                   <span className="text-xs text-muted-foreground truncate block">
                                     {prescription.doctor.specialization}
@@ -336,26 +375,28 @@ export default function SelectPrescriptionPage() {
                             </div>
                           </TableCell>
                           <TableCell>
-                            <div className="max-w-[180px]">
-                              <p className="truncate" title={prescription.diagnosis}>
-                                {prescription.diagnosis}
-                              </p>
-                            </div>
-                          </TableCell>
-                          <TableCell>
                             <div className="flex flex-col space-y-1">
                               <Badge variant="outline" className="w-fit">
                                 {prescription.medications?.length || 0} items
                                 <span className="ml-1 text-xs">
-                                  ({calculateTotalMedicines(prescription.medications || [])} total)
+                                  (
+                                  {calculateTotalMedicines(
+                                    prescription.medications || [],
+                                  )}{" "}
+                                  total)
                                 </span>
                               </Badge>
-                              {prescription.medications && prescription.medications.length > 0 && (
-                                <p className="text-xs text-muted-foreground truncate" 
-                                   title={getMedicineNames(prescription.medications)}>
-                                  {getMedicineNames(prescription.medications)}
-                                </p>
-                              )}
+                              {prescription.medications &&
+                                prescription.medications.length > 0 && (
+                                  <p
+                                    className="text-xs text-muted-foreground truncate"
+                                    title={getMedicineNames(
+                                      prescription.medications,
+                                    )}
+                                  >
+                                    {getMedicineNames(prescription.medications)}
+                                  </p>
+                                )}
                             </div>
                           </TableCell>
                           <TableCell>
@@ -363,12 +404,19 @@ export default function SelectPrescriptionPage() {
                               <div className="flex items-center gap-2">
                                 <Calendar className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                                 <span className="text-sm">
-                                  {format(new Date(prescription.prescribedDate), "MMM d, yyyy")}
+                                  {format(
+                                    new Date(prescription.prescribedDate),
+                                    "MMM d, yyyy",
+                                  )}
                                 </span>
                               </div>
                               {prescription.expiryDate && (
                                 <span className="text-xs text-muted-foreground mt-1">
-                                  Expires: {format(new Date(prescription.expiryDate), "MMM d")}
+                                  Expires:{" "}
+                                  {format(
+                                    new Date(prescription.expiryDate),
+                                    "MMM d",
+                                  )}
                                 </span>
                               )}
                             </div>
@@ -376,15 +424,28 @@ export default function SelectPrescriptionPage() {
                           <TableCell>
                             <div className="flex flex-col gap-1">
                               {getStatusBadge(prescription.status)}
-                              {getDispensingStatusBadge(prescription.dispensingStatus)}
+                              {getDispensingStatusBadge(
+                                prescription.dispensingStatus,
+                              )}
                             </div>
                           </TableCell>
                           <TableCell className="text-right">
                             <Button
                               size="sm"
-                              onClick={() => handleSelectPrescription(prescription._id)}
-                              disabled={isPrescriptionExpired || prescription.status === "cancelled"}
-                              title={isPrescriptionExpired ? "Prescription expired" : prescription.status === "cancelled" ? "Prescription cancelled" : "Dispense medicines"}
+                              onClick={() =>
+                                handleSelectPrescription(prescription._id)
+                              }
+                              disabled={
+                                isPrescriptionExpired ||
+                                prescription.status === "cancelled"
+                              }
+                              title={
+                                isPrescriptionExpired
+                                  ? "Prescription expired"
+                                  : prescription.status === "cancelled"
+                                    ? "Prescription cancelled"
+                                    : "Dispense medicines"
+                              }
                             >
                               {isPrescriptionExpired ? "Expired" : "Dispense"}
                             </Button>
@@ -395,10 +456,11 @@ export default function SelectPrescriptionPage() {
                   </TableBody>
                 </Table>
               </div>
-              
+
               <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-6">
                 <div className="text-sm text-muted-foreground">
-                  Showing {filteredPrescriptions.length} of {prescriptions.length} prescriptions
+                  Showing {filteredPrescriptions.length} of{" "}
+                  {prescriptions.length} prescriptions
                   {searchTerm && ` matching "${searchTerm}"`}
                 </div>
                 <div className="flex items-center gap-3">
@@ -417,16 +479,15 @@ export default function SelectPrescriptionPage() {
                   >
                     Back to Pharmacy
                   </Button>
-                  <Button
-                    onClick={fetchPrescriptions}
-                    disabled={loading}
-                  >
+                  <Button onClick={fetchPrescriptions} disabled={loading}>
                     {loading ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         Refreshing...
                       </>
-                    ) : "Refresh List"}
+                    ) : (
+                      "Refresh List"
+                    )}
                   </Button>
                 </div>
               </div>
@@ -441,7 +502,9 @@ export default function SelectPrescriptionPage() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Total Pending</p>
+                <p className="text-sm font-medium text-muted-foreground">
+                  Total Pending
+                </p>
                 <p className="text-2xl font-bold">{prescriptions.length}</p>
               </div>
               <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
@@ -450,16 +513,22 @@ export default function SelectPrescriptionPage() {
             </div>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Active Today</p>
+                <p className="text-sm font-medium text-muted-foreground">
+                  Active Today
+                </p>
                 <p className="text-2xl font-bold">
-                  {prescriptions.filter(p => 
-                    new Date(p.prescribedDate).toDateString() === new Date().toDateString()
-                  ).length}
+                  {
+                    prescriptions.filter(
+                      (p) =>
+                        new Date(p.prescribedDate).toDateString() ===
+                        new Date().toDateString(),
+                    ).length
+                  }
                 </p>
               </div>
               <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center">
@@ -468,15 +537,19 @@ export default function SelectPrescriptionPage() {
             </div>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Total Medicines</p>
+                <p className="text-sm font-medium text-muted-foreground">
+                  Total Medicines
+                </p>
                 <p className="text-2xl font-bold">
-                  {prescriptions.reduce((total, p) => 
-                    total + calculateTotalMedicines(p.medications || []), 0
+                  {prescriptions.reduce(
+                    (total, p) =>
+                      total + calculateTotalMedicines(p.medications || []),
+                    0,
                   )}
                 </p>
               </div>
