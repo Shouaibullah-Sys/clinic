@@ -29,19 +29,37 @@ export interface ILabTest extends mongoose.Document {
   price: number;
   discountedPrice?: number;
   charges: ILabTestCharges;
-  status: "pending" | "ordered" | "collected" | "processing" | "completed" | "reported" | "cancelled";
+  status:
+    | "pending"
+    | "ordered"
+    | "collected"
+    | "processing"
+    | "completed"
+    | "reported"
+    | "cancelled";
   priority: "routine" | "urgent" | "emergency";
   notes?: string;
-  
+
   // Laboratory module fields
   labReferenceId?: string;
-  collectionStatus: "pending" | "scheduled" | "collected" | "rejected" | "insufficient";
+  collectionStatus:
+    | "pending"
+    | "scheduled"
+    | "collected"
+    | "rejected"
+    | "insufficient";
   collectionDetails?: {
     collectionTime?: Date;
     collectedBy?: mongoose.Types.ObjectId;
     collectionNotes?: string;
     sampleId?: string;
-    sampleCondition?: "satisfactory" | "hemolyzed" | "clotted" | "insufficient" | "contaminated" | "other";
+    sampleCondition?:
+      | "satisfactory"
+      | "hemolyzed"
+      | "clotted"
+      | "insufficient"
+      | "contaminated"
+      | "other";
     sampleConditionNotes?: string;
   };
   processingStatus: "pending" | "processing" | "completed" | "failed";
@@ -68,7 +86,7 @@ export interface ILabTest extends mongoose.Document {
   paymentVerified: boolean;
   paymentVerifiedBy?: mongoose.Types.ObjectId;
   paymentVerifiedAt?: Date;
-  
+
   specimen: {
     type: string;
     collectionTime?: Date;
@@ -107,7 +125,7 @@ export interface ILabTest extends mongoose.Document {
   cancelledAt?: Date;
   createdAt: Date;
   updatedAt: Date;
-  
+
   // Virtuals
   calculatedTotal: number;
   isPaid: boolean;
@@ -123,7 +141,11 @@ interface LabTestModel extends mongoose.Model<ILabTest> {
   findByPatientId(patientId: string): Promise<ILabTest[]>;
   findByDoctorId(doctorId: string): Promise<ILabTest[]>;
   getUnpaidTests(patientId?: string): Promise<ILabTest[]>;
-  verifyPayment(testId: string, verifiedBy: string, notes?: string): Promise<ILabTest | null>;
+  verifyPayment(
+    testId: string,
+    verifiedBy: string,
+    notes?: string,
+  ): Promise<ILabTest | null>;
   unverifyPayment(testId: string): Promise<ILabTest | null>;
 }
 
@@ -149,19 +171,24 @@ const labTestChargesSchema = new Schema<ILabTestCharges>({
 const specimenSchema = new Schema({
   type: {
     type: String,
-    enum: ["blood", "urine", "stool", "tissue", "saliva", "other"],
+    trim: true,
   },
   collectionTime: { type: Date },
   collectedBy: { type: Schema.Types.ObjectId, ref: "User" },
   quantity: { type: String, trim: true },
   container: { type: String, trim: true },
   remarks: { type: String, trim: true },
-  parameters: [{
-    name: { type: String, required: true, trim: true },
-    value: { type: String, required: true, trim: true },
-    unit: { type: String, trim: true },
-    remarks: { type: String, trim: true },
-  }],
+  parameters: [
+    {
+      name: { type: String, required: true, trim: true },
+      // Made value optional to support both 'value' and 'result' fields
+      value: { type: String, trim: true },
+      // Added result field to support new frontend structure
+      result: { type: String, trim: true },
+      unit: { type: String, trim: true },
+      remarks: { type: String, trim: true },
+    },
+  ],
 });
 
 const labTestSchema = new Schema<ILabTest, LabTestModel>(
@@ -194,7 +221,7 @@ const labTestSchema = new Schema<ILabTest, LabTestModel>(
       type: String,
       required: true,
       enum: [
-        "hematology",    
+        "hematology",
         "blood_test",
         "urine_test",
         "stool_test",
@@ -254,7 +281,7 @@ const labTestSchema = new Schema<ILabTest, LabTestModel>(
       type: String,
       trim: true,
     },
-    
+
     // Laboratory module fields
     labReferenceId: {
       type: String,
@@ -271,7 +298,14 @@ const labTestSchema = new Schema<ILabTest, LabTestModel>(
       sampleId: { type: String, trim: true },
       sampleCondition: {
         type: String,
-        enum: ["satisfactory", "hemolyzed", "clotted", "insufficient", "contaminated", "other"],
+        enum: [
+          "satisfactory",
+          "hemolyzed",
+          "clotted",
+          "insufficient",
+          "contaminated",
+          "other",
+        ],
       },
       sampleConditionNotes: { type: String, trim: true },
     },
@@ -315,7 +349,7 @@ const labTestSchema = new Schema<ILabTest, LabTestModel>(
     paymentVerifiedAt: {
       type: Date,
     },
-    
+
     specimen: {
       type: specimenSchema,
       default: () => ({}),
@@ -360,7 +394,7 @@ const labTestSchema = new Schema<ILabTest, LabTestModel>(
     timestamps: true,
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
-  }
+  },
 );
 
 // Indexes for performance - ONLY schema.index() method (NO index: true in fields)
@@ -398,11 +432,11 @@ labTestSchema.index({ orderedAt: -1, collectionStatus: 1 });
 labTestSchema.index({ "charges.paymentStatus": 1, collectionStatus: 1 });
 
 // For technician queries
-labTestSchema.index({ 
-  paymentVerified: 1, 
-  priority: 1, 
+labTestSchema.index({
+  paymentVerified: 1,
+  priority: 1,
   collectionStatus: 1,
-  processingStatus: 1 
+  processingStatus: 1,
 });
 
 // Virtual for calculated total amount
@@ -411,7 +445,7 @@ labTestSchema.virtual("calculatedTotal").get(function () {
   const tax = this.charges?.tax || 0;
   const other = this.charges?.otherCharges || 0;
   const discount = this.charges?.discount || 0;
-  
+
   return base + tax + other - discount;
 });
 
@@ -428,9 +462,11 @@ labTestSchema.virtual("isUrgent").get(function () {
 // Virtual for canCollectSample
 labTestSchema.virtual("canCollectSample").get(function () {
   const condition1 = this.status !== "cancelled";
-  const condition2 = (this.paymentVerified || this.priority !== "routine");
+  const condition2 = this.paymentVerified || this.priority !== "routine";
   const effectiveCollectionStatus = this.collectionStatus || "pending";
-  const condition3 = ["pending", "scheduled"].includes(effectiveCollectionStatus);
+  const condition3 = ["pending", "scheduled"].includes(
+    effectiveCollectionStatus,
+  );
 
   return condition1 && condition2 && condition3;
 });
@@ -471,15 +507,22 @@ labTestSchema.virtual("statusColor").get(function () {
 // Pre-save hook to update charges and payment verification
 labTestSchema.pre("save", function (next) {
   const labTest = this;
-  
+
   // Calculate total amount
   const base = labTest.discountedPrice || labTest.price;
   labTest.charges.basePrice = base;
-  labTest.charges.totalAmount = base + labTest.charges.tax + labTest.charges.otherCharges - labTest.charges.discount;
-  
+  labTest.charges.totalAmount =
+    base +
+    labTest.charges.tax +
+    labTest.charges.otherCharges -
+    labTest.charges.discount;
+
   // Update due amount
-  labTest.charges.due = Math.max(0, labTest.charges.totalAmount - labTest.charges.paid);
-  
+  labTest.charges.due = Math.max(
+    0,
+    labTest.charges.totalAmount - labTest.charges.paid,
+  );
+
   // Update payment status
   if (labTest.charges.due === 0 && labTest.charges.totalAmount > 0) {
     labTest.charges.paymentStatus = "paid";
@@ -492,7 +535,7 @@ labTestSchema.pre("save", function (next) {
   } else {
     labTest.charges.paymentStatus = "pending";
   }
-  
+
   // Generate test ID if not exists
   if (!labTest.testId) {
     const date = new Date();
@@ -501,7 +544,7 @@ labTestSchema.pre("save", function (next) {
     const random = Math.floor(1000 + Math.random() * 9000);
     labTest.testId = `LAB${year}${month}${random}`;
   }
-  
+
   // Generate lab reference ID if not exists and test is collected
   if (!labTest.labReferenceId && labTest.collectionStatus === "collected") {
     const date = new Date();
@@ -511,21 +554,24 @@ labTestSchema.pre("save", function (next) {
     const random = Math.floor(100 + Math.random() * 900);
     labTest.labReferenceId = `LREF${year}${month}${day}${random}`;
   }
-  
+
   // Update timestamps based on status changes
   if (labTest.collectionStatus === "collected" && !labTest.collectedAt) {
     labTest.collectedAt = new Date();
   }
-  
+
   if (labTest.processingStatus === "completed" && !labTest.completedAt) {
     labTest.completedAt = new Date();
   }
-  
-  if (labTest.verificationStatus === "verified" && labTest.status !== "reported") {
+
+  if (
+    labTest.verificationStatus === "verified" &&
+    labTest.status !== "reported"
+  ) {
     labTest.status = "reported";
     labTest.reportedAt = new Date();
   }
-  
+
   next();
 });
 
@@ -574,14 +620,14 @@ labTestSchema.statics.findByDoctorId = function (doctorId: string) {
 };
 
 labTestSchema.statics.getUnpaidTests = function (patientId?: string) {
-  const query: any = { 
+  const query: any = {
     "charges.paymentStatus": { $in: ["pending", "partial"] },
-    status: { $ne: "cancelled" }
+    status: { $ne: "cancelled" },
   };
   if (patientId) {
     query.patient = patientId;
   }
-  
+
   return this.find(query)
     .populate("patient", "name patientId phone")
     .populate("doctor", "name")
@@ -593,7 +639,7 @@ labTestSchema.statics.getUnpaidTests = function (patientId?: string) {
 labTestSchema.statics.verifyPayment = async function (
   testId: string,
   verifiedBy: string,
-  notes?: string
+  notes?: string,
 ): Promise<ILabTest | null> {
   return this.findByIdAndUpdate(
     testId,
@@ -605,12 +651,12 @@ labTestSchema.statics.verifyPayment = async function (
         ...(notes && { "verificationDetails.verificationNotes": notes }),
       },
     },
-    { new: true }
+    { new: true },
   );
 };
 
 labTestSchema.statics.unverifyPayment = async function (
-  testId: string
+  testId: string,
 ): Promise<ILabTest | null> {
   return this.findByIdAndUpdate(
     testId,
@@ -621,12 +667,15 @@ labTestSchema.statics.unverifyPayment = async function (
         paymentVerifiedAt: null,
       },
     },
-    { new: true }
+    { new: true },
   );
 };
 
 // Instance method to update collection status
-labTestSchema.methods.updateCollectionStatus = function (status: string, details?: any) {
+labTestSchema.methods.updateCollectionStatus = function (
+  status: string,
+  details?: any,
+) {
   this.collectionStatus = status;
   if (details) {
     this.collectionDetails = { ...this.collectionDetails, ...details };
@@ -638,7 +687,10 @@ labTestSchema.methods.updateCollectionStatus = function (status: string, details
 };
 
 // Instance method to update processing status
-labTestSchema.methods.updateProcessingStatus = function (status: string, details?: any) {
+labTestSchema.methods.updateProcessingStatus = function (
+  status: string,
+  details?: any,
+) {
   this.processingStatus = status;
   if (details) {
     this.processingDetails = { ...this.processingDetails, ...details };
@@ -650,7 +702,10 @@ labTestSchema.methods.updateProcessingStatus = function (status: string, details
 };
 
 // Instance method to update verification status
-labTestSchema.methods.updateVerificationStatus = function (status: string, details?: any) {
+labTestSchema.methods.updateVerificationStatus = function (
+  status: string,
+  details?: any,
+) {
   this.verificationStatus = status;
   if (details) {
     this.verificationDetails = { ...this.verificationDetails, ...details };
@@ -696,9 +751,12 @@ labTestSchema.methods.cancel = function (reason?: string) {
   this.status = "cancelled";
   this.cancelledAt = new Date();
   if (reason) {
-    this.notes = this.notes ? `${this.notes}\nCancelled: ${reason}` : `Cancelled: ${reason}`;
+    this.notes = this.notes
+      ? `${this.notes}\nCancelled: ${reason}`
+      : `Cancelled: ${reason}`;
   }
   return this.save();
 };
 
-export const LabTest = (models.LabTest || model<ILabTest, LabTestModel>("LabTest", labTestSchema)) as LabTestModel;
+export const LabTest = (models.LabTest ||
+  model<ILabTest, LabTestModel>("LabTest", labTestSchema)) as LabTestModel;

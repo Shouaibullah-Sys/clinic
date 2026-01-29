@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
 import { LabTest } from "@/lib/models/LabTest";
+import { LabTestTemplate } from "@/lib/models/LabTestTemplate";
 import { Appointment } from "@/lib/models/Appointment";
 import { jwtVerify } from "jose";
 import mongoose from "mongoose";
@@ -147,29 +148,72 @@ export async function POST(
     const body = await request.json();
     const {
       appointmentId,
+      templateId,
       testName,
       category,
       priority = "routine",
       notes,
     } = body;
 
-    // Validation
-    if (!testName || !category) {
+    // Validation - either templateId or (testName + category) must be provided
+    if (!templateId && (!testName || !category)) {
       return NextResponse.json(
         {
           success: false,
-          error: "Missing required fields: testName and category are required",
+          error:
+            "Either templateId or (testName and category) must be provided",
         },
         { status: 400 },
       );
     }
 
-    // Set default price (will be updated by receptionist)
-    const priceNum = 0;
+    // Get template data if templateId is provided
+    let template = null;
+    let priceNum = 0;
+    let description = notes?.trim();
+    let instructions = notes?.trim();
+    let specimenType = "other";
 
-    // Use consolidated notes field for both description and instructions
-    const description = notes?.trim();
-    const instructions = notes?.trim();
+    if (templateId) {
+      template = await LabTestTemplate.findById(templateId);
+      if (!template) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Lab test template not found",
+          },
+          { status: 404 },
+        );
+      }
+
+      // Use template data
+      priceNum = template.basePrice;
+      description = template.description || notes?.trim();
+      instructions = template.preparationInstructions || notes?.trim();
+      specimenType = template.specimenType?.[0] || "other";
+    } else {
+      // Set default price (will be updated by receptionist)
+      priceNum = 0;
+
+      // Use consolidated notes field for both description and instructions
+      description = notes?.trim();
+      instructions = notes?.trim();
+
+      // Automatically derive specimen type from category
+      const categoryToSpecimenMap: { [key: string]: string } = {
+        hematology: "blood",
+        blood_test: "blood",
+        urine_test: "urine",
+        stool_test: "stool",
+        biopsy: "tissue",
+        culture: "other",
+        hormone_test: "blood",
+        genetic_test: "blood",
+        other: "other",
+      };
+
+      specimenType = categoryToSpecimenMap[category] || "other";
+    }
 
     // Check if appointment exists and belongs to patient (if provided)
     let appointment = null;
@@ -192,12 +236,16 @@ export async function POST(
 
     const doctorId = new mongoose.Types.ObjectId(userId);
 
+    // Use template data if available, otherwise use provided values
+    const finalTestName = template ? template.testName : testName.trim();
+    const finalCategory = template ? template.category : category;
+
     // Create lab test object
     const labTestData: any = {
       patient: patientId,
       doctor: doctorId,
-      testName: testName.trim(),
-      category,
+      testName: finalTestName,
+      category: finalCategory,
       description: description,
       price: priceNum,
       priority,
@@ -227,25 +275,24 @@ export async function POST(
       labTestData.appointment = appointmentId;
     }
 
-    // Automatically derive specimen type from category
-    const categoryToSpecimenMap: { [key: string]: string } = {
-      hematology: "blood",
-      blood_test: "blood",
-      urine_test: "urine",
-      stool_test: "stool",
-      biopsy: "tissue",
-      culture: "other",
-      hormone_test: "blood",
-      genetic_test: "blood",
-      other: "other",
-    };
-
-    const specimenType = categoryToSpecimenMap[category] || "other";
-
-    // Always include specimen type (automatically derived from category)
+    // Always include specimen type
     labTestData.specimen = {
       type: specimenType,
     };
+
+    // Add parameters from template if available
+    if (template && template.parameters && template.parameters.length > 0) {
+      labTestData.results = {
+        parameters: template.parameters.map((param: any) => ({
+          name: param.parameterName,
+          value: "",
+          unit: param.unit,
+          normalRange: param.normalRange,
+          flag: "normal",
+          remarks: "",
+        })),
+      };
+    }
 
     // Create and save lab test
     const labTest = new LabTest(labTestData);

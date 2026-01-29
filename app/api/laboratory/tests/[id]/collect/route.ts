@@ -3,12 +3,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
 import { LabTest } from "@/lib/models/LabTest";
-import { authenticateRequest, canAccessLaboratory, hasRequiredRole } from "@/lib/auth";
+import {
+  authenticateRequest,
+  canAccessLaboratory,
+  hasRequiredRole,
+} from "@/lib/auth";
 import mongoose from "mongoose";
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     await dbConnect();
@@ -17,14 +21,17 @@ export async function PUT(
     if (!auth.success) {
       return NextResponse.json(
         { success: false, error: auth.error },
-        { status: auth.status || 401 }
+        { status: auth.status || 401 },
       );
     }
 
     if (!canAccessLaboratory(auth.userRole)) {
       return NextResponse.json(
-        { success: false, error: "Forbidden. You don't have permission to collect samples." },
-        { status: 403 }
+        {
+          success: false,
+          error: "Forbidden. You don't have permission to collect samples.",
+        },
+        { status: 403 },
       );
     }
 
@@ -32,14 +39,17 @@ export async function PUT(
     const allowedRoles = ["lab_technician", "admin"];
     if (!hasRequiredRole(auth.userRole, allowedRoles)) {
       return NextResponse.json(
-        { success: false, error: "Forbidden. Only lab staff can collect samples." },
-        { status: 403 }
+        {
+          success: false,
+          error: "Forbidden. Only lab staff can collect samples.",
+        },
+        { status: 403 },
       );
     }
 
     const { id: testId } = await params;
     const body = await request.json();
-    
+
     const {
       sampleId,
       sampleCondition = "satisfactory",
@@ -52,11 +62,11 @@ export async function PUT(
 
     // Find the test
     const test = await LabTest.findById(testId);
-    
+
     if (!test) {
       return NextResponse.json(
         { success: false, error: "Lab test not found" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -68,7 +78,7 @@ export async function PUT(
       status: test.status,
       collectionStatus: test.collectionStatus,
       paymentVerified: test.paymentVerified,
-      priority: test.priority
+      priority: test.priority,
     });
 
     // Check if sample can be collected
@@ -78,22 +88,22 @@ export async function PUT(
         collectionStatus: test.collectionStatus,
         paymentVerified: test.paymentVerified,
         priority: test.priority,
-        canCollectSample: test.canCollectSample
+        canCollectSample: test.canCollectSample,
       });
-      
+
       return NextResponse.json(
-        { 
-          success: false, 
+        {
+          success: false,
           error: "Sample cannot be collected",
           details: {
             status: test.status,
             collectionStatus: test.collectionStatus,
             paymentVerified: test.paymentVerified,
             priority: test.priority,
-            canCollectSample: test.canCollectSample
-          }
+            canCollectSample: test.canCollectSample,
+          },
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -103,7 +113,7 @@ export async function PUT(
     // Update the test with collection details
     test.collectionStatus = "collected";
     test.status = "collected";
-    
+
     // Basic collection details
     test.collectionDetails = {
       collectionTime: new Date(),
@@ -113,7 +123,7 @@ export async function PUT(
       sampleCondition: sampleCondition || "satisfactory",
       sampleConditionNotes: sampleConditionNotes || "",
     };
-    
+
     // Update specimen details
     if (specimen) {
       test.specimen = {
@@ -122,23 +132,26 @@ export async function PUT(
         container: specimen.container || "",
         remarks: specimen.remarks || "",
         collectedBy: collectedBy,
-        ...(specimen.parameters && specimen.parameters.length > 0 && {
-          parameters: specimen.parameters.map((param: any) => ({
-            name: param.name || "",
-            value: param.value || "",
-            unit: param.unit || "",
-            remarks: param.remarks || "",
-          })),
-        }),
+        ...(specimen.parameters &&
+          specimen.parameters.length > 0 && {
+            parameters: specimen.parameters.map((param: any) => ({
+              name: param.name || "",
+              // Support both 'result' (new frontend) and 'value' (old structure)
+              value: param.result || param.value || "",
+              result: param.result || param.value || "",
+              unit: param.unit || "",
+              remarks: param.remarks || "",
+            })),
+          }),
       };
     }
-    
+
     test.collectedAt = new Date();
 
     // DEBUG: Check test before saving
     console.log("Test before save:", {
       doctor: test.doctor,
-      hasDoctorValidationError: test.doctor ? false : "No doctor field"
+      hasDoctorValidationError: test.doctor ? false : "No doctor field",
     });
 
     // Save with error handling
@@ -149,31 +162,34 @@ export async function PUT(
       console.error("Save error details:", {
         message: saveError.message,
         errors: saveError.errors,
-        errorType: saveError.name
+        errorType: saveError.name,
       });
-      
+
       // If it's a validation error for doctor, try to fix it
-      if (saveError.name === 'ValidationError' && saveError.errors?.doctor) {
+      if (saveError.name === "ValidationError" && saveError.errors?.doctor) {
         console.log("Attempting to fix doctor validation error...");
-        
+
         // Try to find a doctor from orderedBy or set a default
         if (!test.doctor && test.orderedBy) {
           // Check if orderedBy is a doctor
           const User = (await import("@/lib/models/User")).User;
           const orderedByUser = await User.findById(test.orderedBy);
-          
-          if (orderedByUser && orderedByUser.role === 'doctor') {
+
+          if (orderedByUser && orderedByUser.role === "doctor") {
             test.doctor = test.orderedBy;
             console.log("Assigned orderedBy as doctor:", test.doctor);
           } else {
             // Find any active doctor to assign
-            const anyDoctor = await User.findOne({ role: 'doctor', active: true });
+            const anyDoctor = await User.findOne({
+              role: "doctor",
+              active: true,
+            });
             if (anyDoctor) {
               test.doctor = anyDoctor._id;
               console.log("Assigned random doctor:", test.doctor);
             }
           }
-          
+
           // Try to save again
           try {
             await test.save();
@@ -202,25 +218,24 @@ export async function PUT(
       data: updatedTest,
       message: "Sample collected successfully",
     });
-
   } catch (error: any) {
     console.error("Error collecting sample:", error);
-    
+
     // Provide more detailed error information
     const errorDetails = {
       message: error.message,
       name: error.name,
       ...(error.errors && { errors: Object.keys(error.errors) }),
-      ...(error.code && { code: error.code })
+      ...(error.code && { code: error.code }),
     };
-    
+
     return NextResponse.json(
-      { 
-        success: false, 
+      {
+        success: false,
         error: error.message || "Failed to collect sample",
-        details: errorDetails
+        details: errorDetails,
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
