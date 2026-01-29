@@ -20,76 +20,79 @@ async function verifyToken(token: string) {
 // GET: Get lab tests for a patient
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const { id: patientId } = await params;
-    
+
     await dbConnect();
-    
+
     // Authentication
     const authHeader = request.headers.get("authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return NextResponse.json(
         { success: false, error: "Unauthorized. No token provided." },
-        { status: 401 }
+        { status: 401 },
       );
     }
-    
+
     const token = authHeader.split(" ")[1];
     const payload = await verifyToken(token);
-    
+
     if (!payload) {
       return NextResponse.json(
         { success: false, error: "Invalid or expired token." },
-        { status: 401 }
+        { status: 401 },
       );
     }
-    
+
     const userId = payload.id as string;
     const userRole = payload.role as string;
-    
-    console.log(`Fetching lab tests for patient ${patientId} by doctor ${userId}`);
-    
+
+    console.log(
+      `Fetching lab tests for patient ${patientId} by doctor ${userId}`,
+    );
+
     // Only doctors can access
     if (userRole !== "doctor") {
       return NextResponse.json(
         { success: false, error: "Forbidden. Doctor access required." },
-        { status: 403 }
+        { status: 403 },
       );
     }
-    
+
     const doctorId = new mongoose.Types.ObjectId(userId);
-    
+
     // Get lab tests for this patient, either ordered by this doctor or linked to appointments with this doctor
     const labTests = await LabTest.find({
       $or: [
         { patient: patientId, doctor: doctorId },
-        { 
+        {
           patient: patientId,
           appointment: { $exists: true },
-          doctor: doctorId 
-        }
-      ]
+          doctor: doctorId,
+        },
+      ],
     })
-      .select("_id testId testName category orderedAt status collectionStatus priority instructions results reportedDate charges price discountedPrice")
+      .select(
+        "_id testId testName category orderedAt status collectionStatus priority instructions results reportedDate charges price discountedPrice",
+      )
       .populate("doctor", "name")
       .populate("appointment", "appointmentId date")
       .sort({ orderedAt: -1 })
       .lean();
-    
+
     console.log(`Found ${labTests.length} lab tests for patient ${patientId}`);
-    
+
     return NextResponse.json({
       success: true,
       data: labTests,
     });
-    
   } catch (error: any) {
     console.error("Error fetching lab tests:", error);
     return NextResponse.json(
       { success: false, error: error.message || "Failed to fetch lab tests" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -97,79 +100,77 @@ export async function GET(
 // POST: Order a new lab test for a patient
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const { id: patientId } = await params;
-    
+
     await dbConnect();
-    
+
     // Authentication
     const authHeader = request.headers.get("authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return NextResponse.json(
         { success: false, error: "Unauthorized. No token provided." },
-        { status: 401 }
+        { status: 401 },
       );
     }
-    
+
     const token = authHeader.split(" ")[1];
     const payload = await verifyToken(token);
-    
+
     if (!payload) {
       return NextResponse.json(
         { success: false, error: "Invalid or expired token." },
-        { status: 401 }
+        { status: 401 },
       );
     }
-    
+
     const userId = payload.id as string;
     const userRole = payload.role as string;
-    
-    console.log(`Ordering lab test for patient ${patientId} by doctor ${userId}`);
-    
+
+    console.log(
+      `Ordering lab test for patient ${patientId} by doctor ${userId}`,
+    );
+
     // Only doctors can order lab tests
     if (!["doctor", "admin"].includes(userRole)) {
       return NextResponse.json(
-        { success: false, error: "Forbidden. Only doctors can order lab tests." },
-        { status: 403 }
+        {
+          success: false,
+          error: "Forbidden. Only doctors can order lab tests.",
+        },
+        { status: 403 },
       );
     }
-    
+
     const body = await request.json();
     const {
       appointmentId,
       testName,
       category,
-      description,
-      price,
-      discountedPrice,
       priority = "routine",
       notes,
-      instructions,
-      specimenType,
-      specimenQuantity,
-      specimenContainer,
-      specimenInstructions,
     } = body;
-    
+
     // Validation
-    if (!testName || !category || !price) {
+    if (!testName || !category) {
       return NextResponse.json(
-        { success: false, error: "Missing required fields: testName, category, and price are required" },
-        { status: 400 }
+        {
+          success: false,
+          error: "Missing required fields: testName and category are required",
+        },
+        { status: 400 },
       );
     }
-    
-    // Validate price
-    const priceNum = parseFloat(price);
-    if (isNaN(priceNum) || priceNum <= 0) {
-      return NextResponse.json(
-        { success: false, error: "Price must be a positive number" },
-        { status: 400 }
-      );
-    }
-    
+
+    // Set default price (will be updated by receptionist)
+    const priceNum = 0;
+
+    // Use consolidated notes field for both description and instructions
+    const description = notes?.trim();
+    const instructions = notes?.trim();
+
     // Check if appointment exists and belongs to patient (if provided)
     let appointment = null;
     if (appointmentId) {
@@ -177,28 +178,31 @@ export async function POST(
         _id: appointmentId,
         patient: patientId,
       });
-      
+
       if (!appointment) {
         return NextResponse.json(
-          { success: false, error: "Appointment not found or does not belong to this patient" },
-          { status: 404 }
+          {
+            success: false,
+            error: "Appointment not found or does not belong to this patient",
+          },
+          { status: 404 },
         );
       }
     }
-    
+
     const doctorId = new mongoose.Types.ObjectId(userId);
-    
+
     // Create lab test object
     const labTestData: any = {
       patient: patientId,
       doctor: doctorId,
       testName: testName.trim(),
       category,
-      description: description?.trim(),
+      description: description,
       price: priceNum,
       priority,
       notes: notes?.trim(),
-      instructions: instructions?.trim(),
+      instructions: instructions,
       orderedBy: doctorId,
       orderedAt: new Date(),
       status: "ordered",
@@ -215,87 +219,92 @@ export async function POST(
         paid: 0,
         due: priceNum,
         paymentStatus: "pending",
-      }
+      },
     };
-    
+
     // Add appointment if provided
     if (appointmentId) {
       labTestData.appointment = appointmentId;
     }
-    
-    // Add discounted price if provided
-    if (discountedPrice) {
-      const discountedNum = parseFloat(discountedPrice);
-      if (!isNaN(discountedNum) && discountedNum >= 0) {
-        labTestData.discountedPrice = discountedNum;
-        labTestData.charges.basePrice = discountedNum;
-        labTestData.charges.totalAmount = discountedNum;
-        labTestData.charges.due = discountedNum;
-      }
-    }
-    
-    // Add specimen information if provided
-    if (specimenType) {
-      labTestData.specimen = {
-        type: specimenType,
-        ...(specimenQuantity && { quantity: specimenQuantity }),
-        ...(specimenContainer && { container: specimenContainer }),
-        ...(specimenInstructions && { remarks: specimenInstructions }),
-      };
-    }
-    
+
+    // Automatically derive specimen type from category
+    const categoryToSpecimenMap: { [key: string]: string } = {
+      hematology: "blood",
+      blood_test: "blood",
+      urine_test: "urine",
+      stool_test: "stool",
+      biopsy: "tissue",
+      culture: "other",
+      hormone_test: "blood",
+      genetic_test: "blood",
+      other: "other",
+    };
+
+    const specimenType = categoryToSpecimenMap[category] || "other";
+
+    // Always include specimen type (automatically derived from category)
+    labTestData.specimen = {
+      type: specimenType,
+    };
+
     // Create and save lab test
     const labTest = new LabTest(labTestData);
     await labTest.save();
-    
+
     // If appointment exists, update it to reference this lab test
     if (appointmentId && appointment) {
       await Appointment.findByIdAndUpdate(
         appointmentId,
         { $addToSet: { labTests: labTest._id } },
-        { new: true }
+        { new: true },
       );
     }
-    
+
     // Populate response data
     await labTest.populate([
       { path: "patient", select: "name patientId" },
       { path: "doctor", select: "name specialization" },
       { path: "orderedBy", select: "name" },
-      ...(appointmentId ? [{ path: "appointment", select: "appointmentId date" }] : []),
+      ...(appointmentId
+        ? [{ path: "appointment", select: "appointmentId date" }]
+        : []),
     ]);
-    
-    console.log(`Lab test ordered successfully: ${labTest.testId} for appointment: ${appointmentId || 'No appointment linked'}`);
-    
-    return NextResponse.json({
-      success: true,
-      data: labTest,
-      message: "Lab test ordered successfully",
-    }, { status: 201 });
-    
+
+    console.log(
+      `Lab test ordered successfully: ${labTest.testId} for appointment: ${appointmentId || "No appointment linked"}`,
+    );
+
+    return NextResponse.json(
+      {
+        success: true,
+        data: labTest,
+        message: "Lab test ordered successfully",
+      },
+      { status: 201 },
+    );
   } catch (error: any) {
     console.error("Error ordering lab test:", error);
-    
+
     // Handle validation errors
-    if (error.name === 'ValidationError') {
+    if (error.name === "ValidationError") {
       const errors = Object.values(error.errors).map((err: any) => err.message);
       return NextResponse.json(
         { success: false, error: "Validation failed", details: errors },
-        { status: 400 }
+        { status: 400 },
       );
     }
-    
+
     // Handle duplicate key errors
     if (error.code === 11000) {
       return NextResponse.json(
         { success: false, error: "Duplicate test ID detected" },
-        { status: 409 }
+        { status: 409 },
       );
     }
-    
+
     return NextResponse.json(
       { success: false, error: error.message || "Failed to order lab test" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

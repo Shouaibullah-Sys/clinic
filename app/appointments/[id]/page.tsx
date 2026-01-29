@@ -41,6 +41,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Calendar,
   User,
@@ -58,6 +59,7 @@ import {
   Copy,
   AlertCircle,
   Scan,
+  AlertTriangle,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { toast } from "sonner";
@@ -201,6 +203,7 @@ export default function AppointmentDetailPage() {
   const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
   const [imagingServices, setImagingServices] = useState<ImagingService[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
   const [dataSource, setDataSource] = useState<{
     labTests: "appointment" | "patient" | "mixed";
@@ -222,6 +225,7 @@ export default function AppointmentDetailPage() {
     amount: 0,
     transactionId: "",
     notes: "",
+    price: 0,
   });
   const [processingPayment, setProcessingPayment] = useState(false);
   const [paymentType, setPaymentType] = useState<"lab" | "imaging">("lab");
@@ -233,11 +237,14 @@ export default function AppointmentDetailPage() {
   }, [params.id, accessToken]);
 
   // FETCH - Get appointment data and related lab tests and prescriptions
-  const fetchAppointmentWithAllData = async () => {
+  const fetchAppointmentWithAllData = async (isRefresh = false) => {
     try {
-      setLoading(true);
+      if (isRefresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
 
-      // Use the combined medical records endpoint with cache-busting
       const response = await fetch(
         `/api/appointments/${params.id}/medical-records?_t=${Date.now()}`,
         {
@@ -251,7 +258,6 @@ export default function AppointmentDetailPage() {
       const data = await response.json();
 
       if (data.success) {
-        console.log("📊 Medical records source:", data.data.source);
         setAppointment(data.data.appointment);
         setLabTests(data.data.labTests || []);
         setPrescriptions(data.data.prescriptions || []);
@@ -264,32 +270,25 @@ export default function AppointmentDetailPage() {
           },
         );
 
-        // Log counts for debugging
-        console.log(
-          `✅ Loaded: ${data.data.labTests?.length || 0} lab tests, ${data.data.prescriptions?.length || 0} prescriptions, ${data.data.imagingServices?.length || 0} imaging services`,
-        );
+        if (isRefresh) {
+          toast.success("Data refreshed successfully");
+        }
       } else {
-        console.warn(
-          "⚠️ Medical records endpoint failed, falling back to separate endpoints",
-        );
         toast.error(data.error || "Failed to fetch appointment details");
-        // Fallback to old method if new endpoint fails
         await fetchAppointmentWithAllDataFallback();
       }
     } catch (error) {
       console.error("Error fetching medical records:", error);
-      console.warn(
-        "⚠️ Medical records endpoint failed, falling back to separate endpoints",
-      );
+      toast.error("Network error. Please try again.");
       await fetchAppointmentWithAllDataFallback();
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
   const fetchAppointmentWithAllDataFallback = async () => {
     try {
-      // Fetch appointment with all related data
       const response = await fetch(`/api/appointments/${params.id}`, {
         headers: {
           "Content-Type": "application/json",
@@ -301,8 +300,6 @@ export default function AppointmentDetailPage() {
 
       if (data.success) {
         setAppointment(data.data);
-
-        // Fetch ALL data in parallel for better performance
         await Promise.all([
           fetchLabTests(data.data.patient._id),
           fetchPrescriptions(data.data.patient._id),
@@ -320,8 +317,6 @@ export default function AppointmentDetailPage() {
   // Unified imaging services fetcher
   const fetchImagingServices = async () => {
     try {
-      console.log(`🔍 FETCHING IMAGING SERVICES for appointment ${params.id}`);
-
       const response = await fetch(`/api/appointments/${params.id}/imaging`, {
         headers: {
           "Content-Type": "application/json",
@@ -332,15 +327,13 @@ export default function AppointmentDetailPage() {
       const data = await response.json();
 
       if (data.success && Array.isArray(data.data)) {
-        console.log(`✅ Found ${data.data.length} imaging services`);
         setImagingServices(data.data);
         setDataSource((prev) => ({ ...prev, imaging: "appointment" }));
       } else {
-        console.warn("⚠️ No imaging services found");
         setImagingServices([]);
       }
     } catch (error) {
-      console.error("💥 Error fetching imaging services:", error);
+      console.error("Error fetching imaging services:", error);
       setImagingServices([]);
     }
   };
@@ -348,11 +341,6 @@ export default function AppointmentDetailPage() {
   // Unified lab tests fetcher
   const fetchLabTests = async (patientId: string) => {
     try {
-      console.log(
-        `🔍 FETCHING LAB TESTS for appointment ${params.id} and patient ${patientId}`,
-      );
-
-      // Try appointment-specific lab tests first
       const appointmentResponse = await fetch(
         `/api/appointments/${params.id}/lab-tests`,
         {
@@ -369,18 +357,11 @@ export default function AppointmentDetailPage() {
       let source: "appointment" | "patient" | "mixed" = "appointment";
 
       if (appointmentData.success && Array.isArray(appointmentData.data)) {
-        console.log(
-          `✅ Found ${appointmentData.data.length} appointment-specific lab tests`,
-        );
         labTestsData = appointmentData.data;
         source = "appointment";
       }
 
-      // If no appointment-specific lab tests, fetch patient-specific ones
       if (labTestsData.length === 0) {
-        console.log(
-          `⚠️ No appointment-specific lab tests, fetching patient-specific lab tests`,
-        );
         const patientResponse = await fetch(
           `/api/doctor/patients/${patientId}/lab-tests`,
           {
@@ -396,23 +377,16 @@ export default function AppointmentDetailPage() {
         const patientData = await patientResponse.json();
 
         if (patientData.success && Array.isArray(patientData.data)) {
-          console.log(
-            `✅ Found ${patientData.data.length} patient-specific lab tests`,
-          );
           labTestsData = patientData.data;
           source = "patient";
         }
       }
 
-      // Filter to show only relevant tests (recent or appointment-specific)
       const filteredTests = filterLabTestsByRelevance(labTestsData);
-      console.log(
-        `📊 Setting ${filteredTests.length} lab tests to display (source: ${source})`,
-      );
       setLabTests(filteredTests);
       setDataSource((prev) => ({ ...prev, labTests: source }));
     } catch (error) {
-      console.error("💥 Error fetching lab tests:", error);
+      console.error("Error fetching lab tests:", error);
       setLabTests([]);
     }
   };
@@ -420,11 +394,6 @@ export default function AppointmentDetailPage() {
   // Unified prescriptions fetcher
   const fetchPrescriptions = async (patientId: string) => {
     try {
-      console.log(
-        `🔍 FETCHING PRESCRIPTIONS for appointment ${params.id} and patient ${patientId}`,
-      );
-
-      // Try appointment-specific prescriptions first
       const appointmentResponse = await fetch(
         `/api/appointments/${params.id}/prescriptions`,
         {
@@ -441,18 +410,11 @@ export default function AppointmentDetailPage() {
       let source: "appointment" | "patient" | "mixed" = "appointment";
 
       if (appointmentData.success && Array.isArray(appointmentData.data)) {
-        console.log(
-          `✅ Found ${appointmentData.data.length} appointment-specific prescriptions`,
-        );
         prescriptionsData = appointmentData.data;
         source = "appointment";
       }
 
-      // If no appointment-specific prescriptions, fetch patient-specific ones
       if (prescriptionsData.length === 0) {
-        console.log(
-          `⚠️ No appointment-specific prescriptions, fetching patient-specific prescriptions`,
-        );
         const patientResponse = await fetch(
           `/api/doctor/patients/${patientId}/prescriptions`,
           {
@@ -468,24 +430,17 @@ export default function AppointmentDetailPage() {
         const patientData = await patientResponse.json();
 
         if (patientData.success && Array.isArray(patientData.data)) {
-          console.log(
-            `✅ Found ${patientData.data.length} patient-specific prescriptions`,
-          );
           prescriptionsData = patientData.data;
           source = "patient";
         }
       }
 
-      // Filter to show only relevant prescriptions
       const filteredPrescriptions =
         filterPrescriptionsByRelevance(prescriptionsData);
-      console.log(
-        `📊 Setting ${filteredPrescriptions.length} prescriptions to display (source: ${source})`,
-      );
       setPrescriptions(filteredPrescriptions);
       setDataSource((prev) => ({ ...prev, prescriptions: source }));
     } catch (error) {
-      console.error("💥 Error fetching prescriptions:", error);
+      console.error("Error fetching prescriptions:", error);
       setPrescriptions([]);
     }
   };
@@ -494,13 +449,11 @@ export default function AppointmentDetailPage() {
   const filterLabTestsByRelevance = (tests: LabTest[]) => {
     if (!tests || tests.length === 0) return [];
 
-    // Sort by most recent first
     const sortedTests = [...tests].sort(
       (a, b) =>
         new Date(b.orderedAt).getTime() - new Date(a.orderedAt).getTime(),
     );
 
-    // Return only tests from the last 30 days or all if less than 10
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
@@ -515,14 +468,12 @@ export default function AppointmentDetailPage() {
   const filterPrescriptionsByRelevance = (prescriptions: Prescription[]) => {
     if (!prescriptions || prescriptions.length === 0) return [];
 
-    // Sort by most recent first
     const sortedPrescriptions = [...prescriptions].sort(
       (a, b) =>
         new Date(b.prescribedDate).getTime() -
         new Date(a.prescribedDate).getTime(),
     );
 
-    // Return only active or recent prescriptions
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
@@ -541,14 +492,11 @@ export default function AppointmentDetailPage() {
 
   // Helper function to determine if payment should be disabled
   const isPaymentDisabled = (item: LabTest | ImagingService) => {
-    // Check for lab test
     if ("testId" in item) {
       return item.charges?.paymentStatus === "paid";
     }
 
-    // Check for imaging service
     if ("serviceId" in item) {
-      // Check multiple conditions for imaging
       return (
         item.charges?.paymentStatus === "paid" ||
         item.billingStatus === "paid" ||
@@ -564,7 +512,6 @@ export default function AppointmentDetailPage() {
     if (paymentType === "lab" && !selectedLabTest) return;
     if (paymentType === "imaging" && !selectedImagingService) return;
 
-    // Check if already paid before processing
     if (
       paymentType === "lab" &&
       selectedLabTest &&
@@ -597,6 +544,7 @@ export default function AppointmentDetailPage() {
           paidAmount: paymentForm.amount,
           transactionId: paymentForm.transactionId,
           verifyPayment: true,
+          price: paymentForm.price > 0 ? paymentForm.price : undefined,
         };
       } else if (paymentType === "imaging" && selectedImagingService) {
         url = `/api/radiology/services/${selectedImagingService._id}/charges`;
@@ -624,7 +572,7 @@ export default function AppointmentDetailPage() {
       if (data.success) {
         toast.success("Payment processed successfully");
         setPaymentDialogOpen(false);
-        fetchAppointmentWithAllData(); // Refresh all data
+        fetchAppointmentWithAllData(true);
       } else {
         toast.error(data.error || "Failed to process payment");
       }
@@ -848,17 +796,23 @@ export default function AppointmentDetailPage() {
 
   const totals = calculateTotals();
 
-  // Badge helpers
+  // Badge helpers with proper dark mode support
   const getPaymentStatusBadge = (status: string) => {
     const variants: Record<string, string> = {
-      pending: "bg-yellow-100 text-yellow-800 hover:bg-yellow-100",
-      partial: "bg-blue-100 text-blue-800 hover:bg-blue-100",
-      paid: "bg-green-100 text-green-800 hover:bg-green-100",
-      cancelled: "bg-red-100 text-red-800 hover:bg-red-100",
+      pending:
+        "bg-yellow-100 text-yellow-800 hover:bg-yellow-100 dark:bg-yellow-900/20 dark:text-yellow-300",
+      partial:
+        "bg-blue-100 text-blue-800 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-300",
+      paid: "bg-green-100 text-green-800 hover:bg-green-100 dark:bg-green-900/20 dark:text-green-300",
+      cancelled:
+        "bg-red-100 text-red-800 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-300",
     };
 
     return (
-      <Badge className={variants[status] || "bg-gray-100"}>
+      <Badge
+        variant="secondary"
+        className={variants[status] || "bg-gray-100 dark:bg-gray-800"}
+      >
         {status?.toUpperCase() || "PENDING"}
       </Badge>
     );
@@ -866,17 +820,27 @@ export default function AppointmentDetailPage() {
 
   const getLabStatusBadge = (status: string) => {
     const variants: Record<string, string> = {
-      pending: "bg-yellow-100 text-yellow-800 hover:bg-yellow-100",
-      ordered: "bg-blue-100 text-blue-800 hover:bg-blue-100",
-      collected: "bg-purple-100 text-purple-800 hover:bg-purple-100",
-      processing: "bg-orange-100 text-orange-800 hover:bg-orange-100",
-      completed: "bg-green-100 text-green-800 hover:bg-green-100",
-      reported: "bg-emerald-100 text-emerald-800 hover:bg-emerald-100",
-      cancelled: "bg-red-100 text-red-800 hover:bg-red-100",
+      pending:
+        "bg-yellow-100 text-yellow-800 hover:bg-yellow-100 dark:bg-yellow-900/20 dark:text-yellow-300",
+      ordered:
+        "bg-blue-100 text-blue-800 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-300",
+      collected:
+        "bg-purple-100 text-purple-800 hover:bg-purple-100 dark:bg-purple-900/20 dark:text-purple-300",
+      processing:
+        "bg-orange-100 text-orange-800 hover:bg-orange-100 dark:bg-orange-900/20 dark:text-orange-300",
+      completed:
+        "bg-green-100 text-green-800 hover:bg-green-100 dark:bg-green-900/20 dark:text-green-300",
+      reported:
+        "bg-emerald-100 text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-300",
+      cancelled:
+        "bg-red-100 text-red-800 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-300",
     };
 
     return (
-      <Badge className={variants[status] || "bg-gray-100"}>
+      <Badge
+        variant="secondary"
+        className={variants[status] || "bg-gray-100 dark:bg-gray-800"}
+      >
         {status?.toUpperCase() || "UNKNOWN"}
       </Badge>
     );
@@ -884,12 +848,18 @@ export default function AppointmentDetailPage() {
 
   const getStatusBadge = (status: string) => {
     const variants: Record<string, string> = {
-      scheduled: "bg-blue-50 text-blue-700 border-blue-200",
-      confirmed: "bg-green-50 text-green-700 border-green-200",
-      "checked-in": "bg-purple-50 text-purple-700 border-purple-200",
-      "in-progress": "bg-yellow-50 text-yellow-700 border-yellow-200",
-      completed: "bg-gray-50 text-gray-700 border-gray-200",
-      cancelled: "bg-red-50 text-red-700 border-red-200",
+      scheduled:
+        "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-800",
+      confirmed:
+        "bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-300 dark:border-green-800",
+      "checked-in":
+        "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-900/20 dark:text-purple-300 dark:border-purple-800",
+      "in-progress":
+        "bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-900/20 dark:text-yellow-300 dark:border-yellow-800",
+      completed:
+        "bg-gray-50 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700",
+      cancelled:
+        "bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-300 dark:border-red-800",
     };
 
     return (
@@ -905,19 +875,19 @@ export default function AppointmentDetailPage() {
         return <Badge variant="destructive">Emergency</Badge>;
       case "high":
         return (
-          <Badge className="bg-red-100 text-red-800 hover:bg-red-100">
+          <Badge className="bg-red-100 text-red-800 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-300 dark:hover:bg-red-900/30">
             High
           </Badge>
         );
       case "medium":
         return (
-          <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">
+          <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100 dark:bg-yellow-900/20 dark:text-yellow-300 dark:hover:bg-yellow-900/30">
             Medium
           </Badge>
         );
       case "low":
         return (
-          <Badge className="bg-green-100 text-green-800 hover:bg-green-100">
+          <Badge className="bg-green-100 text-green-800 hover:bg-green-100 dark:bg-green-900/20 dark:text-green-300 dark:hover:bg-green-900/30">
             Low
           </Badge>
         );
@@ -926,12 +896,21 @@ export default function AppointmentDetailPage() {
     }
   };
 
+  // Loading skeleton
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
-          <p>Loading appointment details...</p>
+      <div className="container mx-auto p-4 md:p-6">
+        <div className="flex items-center gap-4 mb-6">
+          <Skeleton className="h-10 w-24" />
+          <div>
+            <Skeleton className="h-8 w-48 mb-2" />
+            <Skeleton className="h-4 w-32" />
+          </div>
+        </div>
+        <div className="grid gap-6">
+          <Skeleton className="h-32 w-full" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-64 w-full" />
         </div>
       </div>
     );
@@ -939,13 +918,17 @@ export default function AppointmentDetailPage() {
 
   if (!appointment) {
     return (
-      <div className="p-6">
+      <div className="container mx-auto p-6">
         <Card>
           <CardContent className="pt-6 text-center">
-            <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
-            <h2 className="text-xl font-semibold mb-2">
+            <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4 dark:text-red-400" />
+            <h2 className="text-xl font-semibold mb-2 dark:text-gray-100">
               Appointment Not Found
             </h2>
+            <p className="text-gray-500 dark:text-gray-400 mb-4">
+              The appointment you're looking for doesn't exist or you don't have
+              permission to view it.
+            </p>
             <Button onClick={() => router.push("/appointments")}>
               Back to Appointments
             </Button>
@@ -956,7 +939,7 @@ export default function AppointmentDetailPage() {
   }
 
   return (
-    <div className="space-y-6 p-4 md:p-6">
+    <div className="container mx-auto space-y-6 p-4 md:p-6">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
@@ -965,16 +948,26 @@ export default function AppointmentDetailPage() {
             Back
           </Button>
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold">
+            <h1 className="text-2xl md:text-3xl font-bold dark:text-gray-100">
               Appointment Details
             </h1>
-            <p className="text-gray-500">ID: {appointment.appointmentId}</p>
+            <p className="text-gray-500 dark:text-gray-400">
+              ID: {appointment.appointmentId}
+            </p>
           </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={fetchAppointmentWithAllData}>
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Refresh
+          <Button
+            variant="outline"
+            onClick={() => fetchAppointmentWithAllData(true)}
+            disabled={refreshing}
+          >
+            {refreshing ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4 mr-2" />
+            )}
+            {refreshing ? "Refreshing..." : "Refresh"}
           </Button>
           <Button variant="outline" onClick={() => window.print()}>
             <Printer className="h-4 w-4 mr-2" />
@@ -984,16 +977,20 @@ export default function AppointmentDetailPage() {
       </div>
 
       {/* Patient Info Bar */}
-      <Card>
+      <Card className="dark:bg-gray-900 dark:border-gray-800">
         <CardContent className="pt-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="space-y-2">
               <div className="flex items-center gap-2">
-                <User className="h-4 w-4" />
-                <h3 className="font-semibold">Patient Information</h3>
+                <User className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+                <h3 className="font-semibold dark:text-gray-200">
+                  Patient Information
+                </h3>
               </div>
-              <p className="text-lg font-bold">{appointment.patient.name}</p>
-              <div className="space-y-1 text-sm">
+              <p className="text-lg font-bold dark:text-gray-100">
+                {appointment.patient.name}
+              </p>
+              <div className="space-y-1 text-sm text-gray-600 dark:text-gray-400">
                 <p>ID: {appointment.patient.patientId}</p>
                 <p>Phone: {appointment.patient.phone}</p>
                 {appointment.patient.bloodGroup && (
@@ -1004,11 +1001,15 @@ export default function AppointmentDetailPage() {
 
             <div className="space-y-2">
               <div className="flex items-center gap-2">
-                <Stethoscope className="h-4 w-4" />
-                <h3 className="font-semibold">Doctor Information</h3>
+                <Stethoscope className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+                <h3 className="font-semibold dark:text-gray-200">
+                  Doctor Information
+                </h3>
               </div>
-              <p className="text-lg font-bold">Dr. {appointment.doctor.name}</p>
-              <div className="space-y-1 text-sm">
+              <p className="text-lg font-bold dark:text-gray-100">
+                Dr. {appointment.doctor.name}
+              </p>
+              <div className="space-y-1 text-sm text-gray-600 dark:text-gray-400">
                 <p>Specialization: {appointment.doctor.specialization}</p>
                 <p>Department: {appointment.doctor.department}</p>
               </div>
@@ -1016,10 +1017,12 @@ export default function AppointmentDetailPage() {
 
             <div className="space-y-2">
               <div className="flex items-center gap-2">
-                <Calendar className="h-4 w-4" />
-                <h3 className="font-semibold">Appointment Details</h3>
+                <Calendar className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+                <h3 className="font-semibold dark:text-gray-200">
+                  Appointment Details
+                </h3>
               </div>
-              <div className="space-y-1 text-sm">
+              <div className="space-y-1 text-sm text-gray-600 dark:text-gray-400">
                 <p>
                   Date: {format(parseISO(appointment.date), "MMMM d, yyyy")}
                 </p>
@@ -1034,7 +1037,7 @@ export default function AppointmentDetailPage() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid grid-cols-5">
+        <TabsList className="grid grid-cols-5 dark:bg-gray-900">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="lab-tests">
             Lab Tests {labTests.length > 0 && `(${labTests.length})`}
@@ -1053,31 +1056,45 @@ export default function AppointmentDetailPage() {
         {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card>
+            <Card className="dark:bg-gray-900 dark:border-gray-800">
               <CardHeader>
-                <CardTitle>Appointment Summary</CardTitle>
+                <CardTitle className="dark:text-gray-100">
+                  Appointment Summary
+                </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label className="text-gray-500">Reason for Visit</Label>
-                  <p className="font-medium">{appointment.reason}</p>
+                  <Label className="text-gray-500 dark:text-gray-400">
+                    Reason for Visit
+                  </Label>
+                  <p className="font-medium dark:text-gray-200">
+                    {appointment.reason}
+                  </p>
                 </div>
                 {appointment.notes && (
                   <div className="space-y-2">
-                    <Label className="text-gray-500">Notes</Label>
-                    <p className="font-medium">{appointment.notes}</p>
+                    <Label className="text-gray-500 dark:text-gray-400">
+                      Notes
+                    </Label>
+                    <p className="font-medium dark:text-gray-200">
+                      {appointment.notes}
+                    </p>
                   </div>
                 )}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label className="text-gray-500">Start Time</Label>
-                    <p className="font-medium">
+                    <Label className="text-gray-500 dark:text-gray-400">
+                      Start Time
+                    </Label>
+                    <p className="font-medium dark:text-gray-200">
                       {format(parseISO(appointment.startTime), "h:mm a")}
                     </p>
                   </div>
                   <div>
-                    <Label className="text-gray-500">Duration</Label>
-                    <p className="font-medium">
+                    <Label className="text-gray-500 dark:text-gray-400">
+                      Duration
+                    </Label>
+                    <p className="font-medium dark:text-gray-200">
                       {appointment.duration} minutes
                     </p>
                   </div>
@@ -1085,31 +1102,33 @@ export default function AppointmentDetailPage() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="dark:bg-gray-900 dark:border-gray-800">
               <CardHeader>
-                <CardTitle>Quick Stats</CardTitle>
+                <CardTitle className="dark:text-gray-100">
+                  Quick Stats
+                </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex justify-between items-center">
-                  <span>Lab Tests:</span>
+                  <span className="dark:text-gray-300">Lab Tests:</span>
                   <Badge variant="outline">{labTests.length}</Badge>
                 </div>
-                <Separator />
+                <Separator className="dark:bg-gray-800" />
                 <div className="flex justify-between items-center">
-                  <span>Prescriptions:</span>
+                  <span className="dark:text-gray-300">Prescriptions:</span>
                   <Badge variant="outline">{prescriptions.length}</Badge>
                 </div>
-                <Separator />
+                <Separator className="dark:bg-gray-800" />
                 <div className="flex justify-between items-center">
-                  <span>Total Amount:</span>
-                  <span className="font-bold">
+                  <span className="dark:text-gray-300">Total Amount:</span>
+                  <span className="font-bold dark:text-gray-100">
                     ${totals.totalAmount.toFixed(2)}
                   </span>
                 </div>
-                <Separator />
+                <Separator className="dark:bg-gray-800" />
                 <div className="flex justify-between items-center">
-                  <span>Amount Due:</span>
-                  <span className="font-bold text-red-600">
+                  <span className="dark:text-gray-300">Amount Due:</span>
+                  <span className="font-bold text-red-600 dark:text-red-400">
                     ${totals.dueAmount.toFixed(2)}
                   </span>
                 </div>
@@ -1120,16 +1139,19 @@ export default function AppointmentDetailPage() {
 
         {/* Lab Tests Tab */}
         <TabsContent value="lab-tests" className="space-y-6">
-          <Card>
+          <Card className="dark:bg-gray-900 dark:border-gray-800">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
+              <CardTitle className="flex items-center gap-2 dark:text-gray-100">
                 <FlaskConical className="h-5 w-5" />
                 Laboratory Tests
               </CardTitle>
-              <CardDescription className="flex items-center gap-2">
+              <CardDescription className="flex items-center gap-2 dark:text-gray-400">
                 Manage and process payments for laboratory tests
                 {labTests.length > 0 && (
-                  <Badge variant="outline" className="ml-2">
+                  <Badge
+                    variant="outline"
+                    className="ml-2 dark:border-gray-700 dark:text-gray-300"
+                  >
                     {dataSource.labTests === "appointment"
                       ? "Appointment-specific"
                       : dataSource.labTests === "patient"
@@ -1142,43 +1164,65 @@ export default function AppointmentDetailPage() {
             <CardContent>
               {labTests.length === 0 ? (
                 <div className="text-center py-12">
-                  <FlaskConical className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-                  <p>No lab tests ordered</p>
+                  <FlaskConical className="h-12 w-12 text-gray-300 mx-auto mb-4 dark:text-gray-600" />
+                  <p className="text-gray-500 dark:text-gray-400">
+                    No lab tests ordered
+                  </p>
                 </div>
               ) : (
-                <div className="rounded-md border">
+                <div className="rounded-md border dark:border-gray-800">
                   <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Test ID</TableHead>
-                        <TableHead>Test Name</TableHead>
-                        <TableHead>Price</TableHead>
-                        <TableHead>Total</TableHead>
-                        <TableHead>Payment Status</TableHead>
-                        <TableHead>Due</TableHead>
-                        <TableHead>Test Status</TableHead>
-                        <TableHead>Actions</TableHead>
+                    <TableHeader className="dark:bg-gray-800">
+                      <TableRow className="dark:border-gray-800">
+                        <TableHead className="dark:text-gray-300">
+                          Test ID
+                        </TableHead>
+                        <TableHead className="dark:text-gray-300">
+                          Test Name
+                        </TableHead>
+                        <TableHead className="dark:text-gray-300">
+                          Price
+                        </TableHead>
+                        <TableHead className="dark:text-gray-300">
+                          Total
+                        </TableHead>
+                        <TableHead className="dark:text-gray-300">
+                          Payment Status
+                        </TableHead>
+                        <TableHead className="dark:text-gray-300">
+                          Due
+                        </TableHead>
+                        <TableHead className="dark:text-gray-300">
+                          Test Status
+                        </TableHead>
+                        <TableHead className="dark:text-gray-300">
+                          Actions
+                        </TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {labTests.map((test) => (
                         <TableRow
                           key={test._id}
-                          className={
-                            isPaymentDisabled(test) ? "bg-green-50" : ""
-                          }
+                          className={`dark:border-gray-800 ${
+                            isPaymentDisabled(test)
+                              ? "bg-green-50 dark:bg-green-900/10"
+                              : ""
+                          }`}
                         >
-                          <TableCell className="font-medium">
+                          <TableCell className="font-medium dark:text-gray-200">
                             {test.testId}
                           </TableCell>
-                          <TableCell>{test.testName}</TableCell>
-                          <TableCell>
+                          <TableCell className="dark:text-gray-300">
+                            {test.testName}
+                          </TableCell>
+                          <TableCell className="dark:text-gray-300">
                             $
                             {(test.discountedPrice || test.price || 0).toFixed(
                               2,
                             )}
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="dark:text-gray-300">
                             ${calculateTestTotal(test).toFixed(2)}
                           </TableCell>
                           <TableCell>
@@ -1186,7 +1230,7 @@ export default function AppointmentDetailPage() {
                               test.charges?.paymentStatus || "pending",
                             )}
                           </TableCell>
-                          <TableCell className="font-bold text-red-600">
+                          <TableCell className="font-bold text-red-600 dark:text-red-400">
                             $
                             {test.charges?.due?.toFixed(2) ||
                               calculateTestTotal(test).toFixed(2)}
@@ -1194,18 +1238,18 @@ export default function AppointmentDetailPage() {
                           <TableCell>
                             {getLabStatusBadge(test.status)}
                           </TableCell>
-                          {isPaymentDisabled(test) && (
-                            <TableCell className="text-center">
-                              <CheckCircle className="h-4 w-4 text-green-500 inline" />
-                            </TableCell>
-                          )}
                           <TableCell>
                             <div className="flex gap-2">
                               <Button
                                 size="sm"
-                                variant="outline"
+                                variant={
+                                  isPaymentDisabled(test)
+                                    ? "secondary"
+                                    : "outline"
+                                }
                                 onClick={() => {
                                   setSelectedLabTest(test);
+                                  setPaymentType("lab");
                                   setPaymentForm({
                                     paymentMethod:
                                       test.charges?.paymentMethod || "cash",
@@ -1215,6 +1259,8 @@ export default function AppointmentDetailPage() {
                                     transactionId:
                                       test.charges?.transactionId || "",
                                     notes: "",
+                                    price:
+                                      test.discountedPrice || test.price || 0,
                                   });
                                   setPaymentDialogOpen(true);
                                 }}
@@ -1259,16 +1305,19 @@ export default function AppointmentDetailPage() {
 
         {/* Prescriptions Tab */}
         <TabsContent value="prescriptions" className="space-y-6">
-          <Card>
+          <Card className="dark:bg-gray-900 dark:border-gray-800">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
+              <CardTitle className="flex items-center gap-2 dark:text-gray-100">
                 <Pill className="h-5 w-5" />
                 Prescriptions
               </CardTitle>
-              <CardDescription className="flex items-center gap-2">
+              <CardDescription className="flex items-center gap-2 dark:text-gray-400">
                 All prescriptions issued for this patient
                 {prescriptions.length > 0 && (
-                  <Badge variant="outline" className="ml-2">
+                  <Badge
+                    variant="outline"
+                    className="ml-2 dark:border-gray-700 dark:text-gray-300"
+                  >
                     {dataSource.prescriptions === "appointment"
                       ? "Appointment-specific"
                       : dataSource.prescriptions === "patient"
@@ -1281,56 +1330,70 @@ export default function AppointmentDetailPage() {
             <CardContent>
               {prescriptions.length === 0 ? (
                 <div className="text-center py-12">
-                  <Pill className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-                  <p>No prescriptions</p>
+                  <Pill className="h-12 w-12 text-gray-300 mx-auto mb-4 dark:text-gray-600" />
+                  <p className="text-gray-500 dark:text-gray-400">
+                    No prescriptions
+                  </p>
                 </div>
               ) : (
                 <div className="space-y-4">
                   {prescriptions.map((prescription) => (
-                    <Card key={prescription._id}>
+                    <Card
+                      key={prescription._id}
+                      className="dark:bg-gray-800 dark:border-gray-700"
+                    >
                       <CardContent className="pt-6">
                         <div className="flex justify-between items-start mb-4">
                           <div>
-                            <h3 className="font-semibold">
+                            <h3 className="font-semibold dark:text-gray-100">
                               {prescription.prescriptionId}
                             </h3>
-                            <p className="text-sm text-gray-500">
+                            <p className="text-sm text-gray-500 dark:text-gray-400">
                               {format(
                                 parseISO(prescription.prescribedDate),
                                 "MMM d, yyyy",
                               )}
                             </p>
-                            <p className="mt-1">
+                            <p className="mt-1 dark:text-gray-300">
                               Diagnosis: {prescription.diagnosis}
                             </p>
                           </div>
-                          <Badge>{prescription.status}</Badge>
+                          <Badge className="dark:border-gray-600 dark:text-gray-300">
+                            {prescription.status}
+                          </Badge>
                         </div>
 
                         <div className="space-y-3">
-                          <h4 className="font-medium">Medications:</h4>
+                          <h4 className="font-medium dark:text-gray-200">
+                            Medications:
+                          </h4>
                           {prescription.medications.map((med, index) => (
-                            <div key={index} className="pl-4 border-l-2">
+                            <div
+                              key={index}
+                              className="pl-4 border-l-2 dark:border-gray-600"
+                            >
                               <div className="flex justify-between">
-                                <span className="font-medium">{med.name}</span>
-                                <span>
+                                <span className="font-medium dark:text-gray-200">
+                                  {med.name}
+                                </span>
+                                <span className="dark:text-gray-300">
                                   ${(med.price || 0).toFixed(2)} ×{" "}
                                   {med.quantity}
                                 </span>
                               </div>
-                              <p className="text-sm text-gray-500">
+                              <p className="text-sm text-gray-500 dark:text-gray-400">
                                 {med.dosage} • {med.frequency} • {med.duration}
                               </p>
                             </div>
                           ))}
                         </div>
 
-                        <div className="mt-4 pt-4 border-t flex justify-between items-center">
+                        <div className="mt-4 pt-4 border-t dark:border-gray-700 flex justify-between items-center">
                           <div>
-                            <p className="text-sm text-gray-500">
+                            <p className="text-sm text-gray-500 dark:text-gray-400">
                               Total Medications Cost:
                             </p>
-                            <p className="font-bold">
+                            <p className="font-bold dark:text-gray-100">
                               $
                               {prescription.medications
                                 .reduce(
@@ -1362,17 +1425,20 @@ export default function AppointmentDetailPage() {
 
         {/* Imaging Tab */}
         <TabsContent value="imaging" className="space-y-6">
-          <Card>
+          <Card className="dark:bg-gray-900 dark:border-gray-800">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
+              <CardTitle className="flex items-center gap-2 dark:text-gray-100">
                 <Scan className="h-5 w-5" />
                 Imaging Services
               </CardTitle>
-              <CardDescription className="flex items-center gap-2">
+              <CardDescription className="flex items-center gap-2 dark:text-gray-400">
                 Manage and process payments for imaging services (X-Ray, CT
                 Scan, MRI, Ultrasound)
                 {imagingServices.length > 0 && (
-                  <Badge variant="outline" className="ml-2">
+                  <Badge
+                    variant="outline"
+                    className="ml-2 dark:border-gray-700 dark:text-gray-300"
+                  >
                     {dataSource.imaging === "appointment"
                       ? "Appointment-specific"
                       : dataSource.imaging === "patient"
@@ -1385,38 +1451,63 @@ export default function AppointmentDetailPage() {
             <CardContent>
               {imagingServices.length === 0 ? (
                 <div className="text-center py-12">
-                  <Scan className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-                  <p>No imaging services ordered</p>
+                  <Scan className="h-12 w-12 text-gray-300 mx-auto mb-4 dark:text-gray-600" />
+                  <p className="text-gray-500 dark:text-gray-400">
+                    No imaging services ordered
+                  </p>
                 </div>
               ) : (
-                <div className="rounded-md border">
+                <div className="rounded-md border dark:border-gray-800">
                   <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Service ID</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead>Body Part</TableHead>
-                        <TableHead>View</TableHead>
-                        <TableHead>Total</TableHead>
-                        <TableHead>Payment Status</TableHead>
-                        <TableHead>Due</TableHead>
-                        <TableHead>Service Status</TableHead>
-                        <TableHead>Actions</TableHead>
+                    <TableHeader className="dark:bg-gray-800">
+                      <TableRow className="dark:border-gray-800">
+                        <TableHead className="dark:text-gray-300">
+                          Service ID
+                        </TableHead>
+                        <TableHead className="dark:text-gray-300">
+                          Type
+                        </TableHead>
+                        <TableHead className="dark:text-gray-300">
+                          Body Part
+                        </TableHead>
+                        <TableHead className="dark:text-gray-300">
+                          View
+                        </TableHead>
+                        <TableHead className="dark:text-gray-300">
+                          Total
+                        </TableHead>
+                        <TableHead className="dark:text-gray-300">
+                          Payment Status
+                        </TableHead>
+                        <TableHead className="dark:text-gray-300">
+                          Due
+                        </TableHead>
+                        <TableHead className="dark:text-gray-300">
+                          Service Status
+                        </TableHead>
+                        <TableHead className="dark:text-gray-300">
+                          Actions
+                        </TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {imagingServices.map((service) => (
                         <TableRow
                           key={service._id}
-                          className={
-                            isPaymentDisabled(service) ? "bg-green-50" : ""
-                          }
+                          className={`dark:border-gray-800 ${
+                            isPaymentDisabled(service)
+                              ? "bg-green-50 dark:bg-green-900/10"
+                              : ""
+                          }`}
                         >
-                          <TableCell className="font-medium">
+                          <TableCell className="font-medium dark:text-gray-200">
                             {service.serviceId}
                           </TableCell>
                           <TableCell>
-                            <Badge variant="outline">
+                            <Badge
+                              variant="outline"
+                              className="dark:border-gray-700 dark:text-gray-300"
+                            >
                               {service.serviceType === "x-ray"
                                 ? "X-Ray"
                                 : service.serviceType === "ct-scan"
@@ -1426,9 +1517,13 @@ export default function AppointmentDetailPage() {
                                     : "Ultrasound"}
                             </Badge>
                           </TableCell>
-                          <TableCell>{service.bodyPart}</TableCell>
-                          <TableCell>{service.view}</TableCell>
-                          <TableCell>
+                          <TableCell className="dark:text-gray-300">
+                            {service.bodyPart}
+                          </TableCell>
+                          <TableCell className="dark:text-gray-300">
+                            {service.view}
+                          </TableCell>
+                          <TableCell className="dark:text-gray-300">
                             ${(service.charges?.totalAmount || 0).toFixed(2)}
                           </TableCell>
                           <TableCell>
@@ -1436,7 +1531,7 @@ export default function AppointmentDetailPage() {
                               service.charges?.paymentStatus || "pending",
                             )}
                           </TableCell>
-                          <TableCell className="font-bold text-red-600">
+                          <TableCell className="font-bold text-red-600 dark:text-red-400">
                             $
                             {service.charges?.due?.toFixed(2) ||
                               (service.charges?.totalAmount || 0).toFixed(2)}
@@ -1444,16 +1539,15 @@ export default function AppointmentDetailPage() {
                           <TableCell>
                             {getLabStatusBadge(service.status)}
                           </TableCell>
-                          {isPaymentDisabled(service) && (
-                            <TableCell className="text-center">
-                              <CheckCircle className="h-4 w-4 text-green-500 inline" />
-                            </TableCell>
-                          )}
                           <TableCell>
                             <div className="flex gap-2">
                               <Button
                                 size="sm"
-                                variant="outline"
+                                variant={
+                                  isPaymentDisabled(service)
+                                    ? "secondary"
+                                    : "outline"
+                                }
                                 onClick={() => {
                                   setSelectedImagingService(service);
                                   setPaymentType("imaging");
@@ -1467,6 +1561,7 @@ export default function AppointmentDetailPage() {
                                     transactionId:
                                       service.charges?.transactionId || "",
                                     notes: "",
+                                    price: 0,
                                   });
                                   setPaymentDialogOpen(true);
                                 }}
@@ -1513,66 +1608,80 @@ export default function AppointmentDetailPage() {
 
         {/* Billing Tab */}
         <TabsContent value="billing" className="space-y-6">
-          <Card>
+          <Card className="dark:bg-gray-900 dark:border-gray-800">
             <CardHeader>
-              <CardTitle>Billing Summary</CardTitle>
-              <CardDescription>
+              <CardTitle className="dark:text-gray-100">
+                Billing Summary
+              </CardTitle>
+              <CardDescription className="dark:text-gray-400">
                 Complete financial breakdown of this appointment
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               {/* Invoice Table */}
-              <div className="rounded-lg border">
+              <div className="rounded-lg border dark:border-gray-800">
                 <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Description</TableHead>
-                      <TableHead className="text-right">Amount</TableHead>
+                  <TableHeader className="dark:bg-gray-800">
+                    <TableRow className="dark:border-gray-800">
+                      <TableHead className="dark:text-gray-300">
+                        Description
+                      </TableHead>
+                      <TableHead className="text-right dark:text-gray-300">
+                        Amount
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    <TableRow>
-                      <TableCell className="font-medium">
+                    <TableRow className="dark:border-gray-800">
+                      <TableCell className="font-medium dark:text-gray-200">
                         Consultation Fee
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right dark:text-gray-300">
                         ${totals.consultationFee.toFixed(2)}
                       </TableCell>
                     </TableRow>
 
                     {labTests.map((test) => (
-                      <TableRow key={test._id}>
-                        <TableCell>
+                      <TableRow key={test._id} className="dark:border-gray-800">
+                        <TableCell className="dark:text-gray-300">
                           <div>
-                            <p>{test.testName}</p>
-                            <p className="text-sm text-gray-500">
+                            <p className="dark:text-gray-200">
+                              {test.testName}
+                            </p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">
                               {test.testId}
                             </p>
                           </div>
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="text-right dark:text-gray-300">
                           ${calculateTestTotal(test).toFixed(2)}
                         </TableCell>
                       </TableRow>
                     ))}
 
-                    <TableRow className="font-bold border-t">
-                      <TableCell>Total Amount</TableCell>
-                      <TableCell className="text-right">
+                    <TableRow className="font-bold border-t dark:border-gray-800">
+                      <TableCell className="dark:text-gray-100">
+                        Total Amount
+                      </TableCell>
+                      <TableCell className="text-right dark:text-gray-100">
                         ${totals.totalAmount.toFixed(2)}
                       </TableCell>
                     </TableRow>
 
-                    <TableRow>
-                      <TableCell>Total Paid</TableCell>
-                      <TableCell className="text-right text-green-600">
+                    <TableRow className="dark:border-gray-800">
+                      <TableCell className="dark:text-gray-300">
+                        Total Paid
+                      </TableCell>
+                      <TableCell className="text-right text-green-600 dark:text-green-400">
                         ${totals.paidAmount.toFixed(2)}
                       </TableCell>
                     </TableRow>
 
-                    <TableRow>
-                      <TableCell className="font-bold">Balance Due</TableCell>
-                      <TableCell className="text-right font-bold text-red-600">
+                    <TableRow className="dark:border-gray-800">
+                      <TableCell className="font-bold dark:text-gray-100">
+                        Balance Due
+                      </TableCell>
+                      <TableCell className="text-right font-bold text-red-600 dark:text-red-400">
                         ${totals.dueAmount.toFixed(2)}
                       </TableCell>
                     </TableRow>
@@ -1581,12 +1690,11 @@ export default function AppointmentDetailPage() {
               </div>
 
               {/* Payment Actions */}
-              <div className="flex gap-3 justify-center">
-                {totals.dueAmount > 0 && (
+              <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                {totals.dueAmount > 0 ? (
                   <Button
                     size="lg"
                     onClick={() => {
-                      // Find the first unpaid item
                       const unpaidTest = labTests.find(
                         (t) =>
                           !isPaymentDisabled(t) &&
@@ -1599,7 +1707,6 @@ export default function AppointmentDetailPage() {
                           (s.charges?.due || s.charges?.totalAmount || 0) > 0,
                       );
 
-                      // Prioritize lab tests
                       if (unpaidTest) {
                         setSelectedLabTest(unpaidTest);
                         setPaymentType("lab");
@@ -1612,6 +1719,8 @@ export default function AppointmentDetailPage() {
                           transactionId:
                             unpaidTest.charges?.transactionId || "",
                           notes: "",
+                          price:
+                            unpaidTest.discountedPrice || unpaidTest.price || 0,
                         });
                         setPaymentDialogOpen(true);
                       } else if (unpaidImaging) {
@@ -1627,6 +1736,7 @@ export default function AppointmentDetailPage() {
                           transactionId:
                             unpaidImaging.charges?.transactionId || "",
                           notes: "",
+                          price: 0,
                         });
                         setPaymentDialogOpen(true);
                       } else {
@@ -1642,8 +1752,15 @@ export default function AppointmentDetailPage() {
                     {labTests.every(isPaymentDisabled) &&
                     imagingServices.every(isPaymentDisabled)
                       ? "All Paid"
-                      : "Process All Payments"}
+                      : "Process Payments"}
                   </Button>
+                ) : (
+                  <div className="flex items-center justify-center gap-2 p-3 rounded-lg bg-green-50 dark:bg-green-900/20">
+                    <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
+                    <span className="font-medium text-green-700 dark:text-green-300">
+                      All payments have been processed
+                    </span>
+                  </div>
                 )}
                 <Button
                   size="lg"
@@ -1661,10 +1778,12 @@ export default function AppointmentDetailPage() {
 
       {/* Payment Dialog */}
       <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md dark:bg-gray-900 dark:border-gray-800">
           <DialogHeader>
-            <DialogTitle>Process Payment</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className="dark:text-gray-100">
+              Process Payment
+            </DialogTitle>
+            <DialogDescription className="dark:text-gray-400">
               {paymentType === "lab"
                 ? `Process payment for ${selectedLabTest?.testName}`
                 : `Process payment for ${
@@ -1681,9 +1800,11 @@ export default function AppointmentDetailPage() {
 
           {paymentType === "lab" && selectedLabTest && (
             <div className="space-y-4">
-              <div className="p-3 rounded-lg">
-                <p className="font-medium">Test: {selectedLabTest.testName}</p>
-                <p className="text-sm">
+              <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800">
+                <p className="font-medium dark:text-gray-200">
+                  Test: {selectedLabTest.testName}
+                </p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
                   Total Due: $
                   {selectedLabTest.charges?.due?.toFixed(2) ||
                     calculateTestTotal(selectedLabTest).toFixed(2)}
@@ -1692,7 +1813,36 @@ export default function AppointmentDetailPage() {
 
               <div className="space-y-3">
                 <div>
-                  <Label>Payment Method</Label>
+                  <Label className="dark:text-gray-300">Price</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={paymentForm.price}
+                    onChange={(e) => {
+                      const value = parseFloat(e.target.value);
+                      if (value >= 0 || e.target.value === "") {
+                        setPaymentForm((prev) => ({
+                          ...prev,
+                          price: value || 0,
+                        }));
+                      }
+                    }}
+                    placeholder="Enter price"
+                    className="dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                  />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Current price: $
+                    {(
+                      selectedLabTest.discountedPrice ||
+                      selectedLabTest.price ||
+                      0
+                    ).toFixed(2)}
+                  </p>
+                </div>
+
+                <div>
+                  <Label className="dark:text-gray-300">Payment Method</Label>
                   <Select
                     value={paymentForm.paymentMethod}
                     onValueChange={(value) =>
@@ -1702,20 +1852,40 @@ export default function AppointmentDetailPage() {
                       }))
                     }
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="cash">Cash</SelectItem>
-                      <SelectItem value="card">Credit/Debit Card</SelectItem>
-                      <SelectItem value="upi">UPI</SelectItem>
-                      <SelectItem value="insurance">Insurance</SelectItem>
+                    <SelectContent className="dark:bg-gray-800 dark:border-gray-700">
+                      <SelectItem
+                        value="cash"
+                        className="dark:text-gray-300 dark:focus:bg-gray-700"
+                      >
+                        Cash
+                      </SelectItem>
+                      <SelectItem
+                        value="card"
+                        className="dark:text-gray-300 dark:focus:bg-gray-700"
+                      >
+                        Credit/Debit Card
+                      </SelectItem>
+                      <SelectItem
+                        value="upi"
+                        className="dark:text-gray-300 dark:focus:bg-gray-700"
+                      >
+                        UPI
+                      </SelectItem>
+                      <SelectItem
+                        value="insurance"
+                        className="dark:text-gray-300 dark:focus:bg-gray-700"
+                      >
+                        Insurance
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
                 <div>
-                  <Label>Amount</Label>
+                  <Label className="dark:text-gray-300">Amount</Label>
                   <Input
                     type="number"
                     value={paymentForm.amount}
@@ -1726,11 +1896,14 @@ export default function AppointmentDetailPage() {
                       }))
                     }
                     placeholder="Enter amount"
+                    className="dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
                   />
                 </div>
 
                 <div>
-                  <Label>Transaction/Reference ID</Label>
+                  <Label className="dark:text-gray-300">
+                    Transaction/Reference ID
+                  </Label>
                   <Input
                     value={paymentForm.transactionId}
                     onChange={(e) =>
@@ -1740,6 +1913,7 @@ export default function AppointmentDetailPage() {
                       }))
                     }
                     placeholder="Optional"
+                    className="dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
                   />
                 </div>
               </div>
@@ -1748,8 +1922,8 @@ export default function AppointmentDetailPage() {
 
           {paymentType === "imaging" && selectedImagingService && (
             <div className="space-y-4">
-              <div className="p-3 rounded-lg">
-                <p className="font-medium">
+              <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800">
+                <p className="font-medium dark:text-gray-200">
                   Service:{" "}
                   {selectedImagingService.serviceType === "x-ray"
                     ? "X-Ray"
@@ -1759,10 +1933,10 @@ export default function AppointmentDetailPage() {
                         ? "MRI"
                         : "Ultrasound"}
                 </p>
-                <p className="text-sm">
+                <p className="text-sm text-gray-600 dark:text-gray-400">
                   Body Part: {selectedImagingService.bodyPart}
                 </p>
-                <p className="text-sm">
+                <p className="text-sm text-gray-600 dark:text-gray-400">
                   Total Due: $
                   {(
                     selectedImagingService.charges?.due ||
@@ -1774,7 +1948,7 @@ export default function AppointmentDetailPage() {
 
               <div className="space-y-3">
                 <div>
-                  <Label>Payment Method</Label>
+                  <Label className="dark:text-gray-300">Payment Method</Label>
                   <Select
                     value={paymentForm.paymentMethod}
                     onValueChange={(value) =>
@@ -1784,20 +1958,40 @@ export default function AppointmentDetailPage() {
                       }))
                     }
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="cash">Cash</SelectItem>
-                      <SelectItem value="card">Credit/Debit Card</SelectItem>
-                      <SelectItem value="upi">UPI</SelectItem>
-                      <SelectItem value="insurance">Insurance</SelectItem>
+                    <SelectContent className="dark:bg-gray-800 dark:border-gray-700">
+                      <SelectItem
+                        value="cash"
+                        className="dark:text-gray-300 dark:focus:bg-gray-700"
+                      >
+                        Cash
+                      </SelectItem>
+                      <SelectItem
+                        value="card"
+                        className="dark:text-gray-300 dark:focus:bg-gray-700"
+                      >
+                        Credit/Debit Card
+                      </SelectItem>
+                      <SelectItem
+                        value="upi"
+                        className="dark:text-gray-300 dark:focus:bg-gray-700"
+                      >
+                        UPI
+                      </SelectItem>
+                      <SelectItem
+                        value="insurance"
+                        className="dark:text-gray-300 dark:focus:bg-gray-700"
+                      >
+                        Insurance
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
                 <div>
-                  <Label>Amount</Label>
+                  <Label className="dark:text-gray-300">Amount</Label>
                   <Input
                     type="number"
                     value={paymentForm.amount}
@@ -1808,11 +2002,14 @@ export default function AppointmentDetailPage() {
                       }))
                     }
                     placeholder="Enter amount"
+                    className="dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
                   />
                 </div>
 
                 <div>
-                  <Label>Transaction/Reference ID</Label>
+                  <Label className="dark:text-gray-300">
+                    Transaction/Reference ID
+                  </Label>
                   <Input
                     value={paymentForm.transactionId}
                     onChange={(e) =>
@@ -1822,6 +2019,7 @@ export default function AppointmentDetailPage() {
                       }))
                     }
                     placeholder="Optional"
+                    className="dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
                   />
                 </div>
               </div>
@@ -1832,6 +2030,7 @@ export default function AppointmentDetailPage() {
             <Button
               variant="outline"
               onClick={() => setPaymentDialogOpen(false)}
+              className="dark:border-gray-700 dark:text-gray-300"
             >
               Cancel
             </Button>

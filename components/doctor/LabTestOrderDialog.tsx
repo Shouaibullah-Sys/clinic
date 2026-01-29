@@ -1,4 +1,4 @@
-// app/components/doctor/LabTestOrderDialog.tsx - REDESIGNED 3-COLUMN LAYOUT
+// app/components/doctor/LabTestOrderDialog.tsx - INLINE LAYOUT FOR TEST FIELDS
 
 "use client";
 
@@ -34,22 +34,8 @@ import { useAuthStore } from "@/store/useAuthStore";
 const labTestSchema = z.object({
   testName: z.string().min(1, "Test name is required"),
   category: z.string().min(1, "Category is required"),
-  description: z.string().optional(),
-  price: z.string()
-    .min(1, "Price is required")
-    .regex(/^\d+(\.\d{1,2})?$/, "Enter a valid price (e.g., 25.00)"),
-  discountedPrice: z.string()
-    .optional()
-    .refine(val => !val || /^\d+(\.\d{1,2})?$/.test(val), {
-      message: "Enter a valid price (e.g., 22.50)",
-    }),
   priority: z.enum(["routine", "urgent", "emergency"]),
   notes: z.string().optional(),
-  instructions: z.string().optional(),
-  specimenType: z.string().optional(),
-  specimenQuantity: z.string().optional(),
-  specimenContainer: z.string().optional(),
-  specimenInstructions: z.string().optional(),
 });
 
 type LabTestFormValues = z.infer<typeof labTestSchema>;
@@ -71,8 +57,6 @@ const COMMON_TESTS = [
   { name: "Thyroid Profile", category: "hormone_test", price: "1500" },
   { name: "Urine Routine Examination", category: "urine_test", price: "400" },
   { name: "Stool Examination", category: "stool_test", price: "350" },
-  { name: "Chest X-Ray", category: "imaging", price: "800" },
-  { name: "ECG", category: "other", price: "600" },
 ];
 
 const TEST_CATEGORIES = [
@@ -80,20 +64,10 @@ const TEST_CATEGORIES = [
   { value: "blood_test", label: "Blood Test" },
   { value: "urine_test", label: "Urine Test" },
   { value: "stool_test", label: "Stool Test" },
-  { value: "imaging", label: "Imaging" },
   { value: "biopsy", label: "Biopsy" },
   { value: "culture", label: "Culture" },
   { value: "hormone_test", label: "Hormone Test" },
   { value: "genetic_test", label: "Genetic Test" },
-  { value: "other", label: "Other" },
-];
-
-const SPECIMEN_TYPES = [
-  { value: "blood", label: "Blood" },
-  { value: "urine", label: "Urine" },
-  { value: "stool", label: "Stool" },
-  { value: "tissue", label: "Tissue" },
-  { value: "saliva", label: "Saliva" },
   { value: "other", label: "Other" },
 ];
 
@@ -126,23 +100,14 @@ export function LabTestOrderDialog({
     defaultValues: {
       testName: "",
       category: "",
-      description: "",
-      price: "",
-      discountedPrice: "",
       priority: "routine",
       notes: "",
-      instructions: "",
-      specimenType: "",
-      specimenQuantity: "",
-      specimenContainer: "",
-      specimenInstructions: "",
     },
   });
 
-  const handleSelectCommonTest = (test: typeof COMMON_TESTS[0]) => {
+  const handleSelectCommonTest = (test: (typeof COMMON_TESTS)[0]) => {
     setValue("testName", test.name);
     setValue("category", test.category);
-    setValue("price", test.price);
   };
 
   const onSubmit = async (data: LabTestFormValues) => {
@@ -152,18 +117,19 @@ export function LabTestOrderDialog({
       const requestData = {
         ...data,
         appointmentId,
-        price: parseFloat(data.price),
-        ...(data.discountedPrice && { discountedPrice: parseFloat(data.discountedPrice) }),
       };
 
-      const response = await fetch(`/api/doctor/patients/${patientId}/lab-tests`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
+      const response = await fetch(
+        `/api/doctor/patients/${patientId}/lab-tests`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify(requestData),
         },
-        body: JSON.stringify(requestData),
-      });
+      );
 
       const result = await response.json();
 
@@ -175,10 +141,10 @@ export function LabTestOrderDialog({
         toast.success("Lab Test Ordered", {
           description: `${data.testName} has been ordered successfully for ${patientName}`,
         });
-        
+
         reset();
         setOpen(false);
-        
+
         if (onTestOrdered) {
           onTestOrdered();
         }
@@ -186,7 +152,8 @@ export function LabTestOrderDialog({
     } catch (error: any) {
       console.error("Error ordering lab test:", error);
       toast.error("Failed to Order Test", {
-        description: error.message || "An error occurred while ordering the lab test",
+        description:
+          error.message || "An error occurred while ordering the lab test",
       });
     } finally {
       setLoading(false);
@@ -217,14 +184,17 @@ export function LabTestOrderDialog({
             Order Lab Test
           </DialogTitle>
           <DialogDescription>
-            Order lab test for <span className="font-medium">{patientName}</span>
+            Order lab test for{" "}
+            <span className="font-medium">{patientName}</span>
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
           {/* Quick Select Common Tests */}
           <div className="space-y-3">
-            <Label className="text-sm font-medium">Quick Select Common Tests</Label>
+            <Label className="text-sm font-medium">
+              Quick Select Common Tests
+            </Label>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
               {COMMON_TESTS.map((test, index) => (
                 <Button
@@ -237,230 +207,98 @@ export function LabTestOrderDialog({
                 >
                   <div className="text-left">
                     <p className="text-xs font-medium truncate">{test.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      Rs. {test.price}
-                    </p>
                   </div>
                 </Button>
               ))}
             </div>
           </div>
 
-          {/* Main 3-Column Grid Layout */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            
-            {/* Column 1: Basic Test Information */}
-            <div className="space-y-4">
-              {/* Test Name */}
-              <div className="space-y-2">
-                <Label htmlFor="testName" className="text-sm font-medium">
-                  Test Name *
-                </Label>
-                <Input
-                  id="testName"
-                  {...register("testName")}
-                  placeholder="Enter test name"
-                  className={errors.testName ? "border-red-500" : ""}
-                />
-                {errors.testName && (
-                  <p className="text-xs text-red-500">{errors.testName.message}</p>
-                )}
-              </div>
-
-              {/* Category */}
-              <div className="space-y-2">
-                <Label htmlFor="category" className="text-sm font-medium">
-                  Category *
-                </Label>
-                <Select
-                  onValueChange={(value) => setValue("category", value)}
-                  value={watch("category")}
-                >
-                  <SelectTrigger className={errors.category ? "border-red-500" : ""}>
-                    <SelectValue placeholder="Select category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {TEST_CATEGORIES.map((category) => (
-                      <SelectItem key={category.value} value={category.value}>
-                        {category.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {errors.category && (
-                  <p className="text-xs text-red-500">{errors.category.message}</p>
-                )}
-              </div>
-
-              {/* Description */}
-              <div className="space-y-2">
-                <Label htmlFor="description" className="text-sm font-medium">
-                  Description
-                </Label>
-                <Textarea
-                  id="description"
-                  {...register("description")}
-                  placeholder="Test description..."
-                  rows={4}
-                  className="resize-none"
-                />
-              </div>
-
-              {/* Notes */}
-              <div className="space-y-2">
-                <Label htmlFor="notes" className="text-sm font-medium">
-                  Additional Notes
-                </Label>
-                <Textarea
-                  id="notes"
-                  {...register("notes")}
-                  placeholder="Any additional notes..."
-                  rows={3}
-                  className="resize-none"
-                />
-              </div>
+          {/* Inline Row: Test Name, Priority, and Category */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Test Name */}
+            <div className="space-y-2">
+              <Label htmlFor="testName" className="text-sm font-medium">
+                Test Name *
+              </Label>
+              <Input
+                id="testName"
+                {...register("testName")}
+                placeholder="Enter test name"
+                className={errors.testName ? "border-red-500" : ""}
+              />
+              {errors.testName && (
+                <p className="text-xs text-red-500">
+                  {errors.testName.message}
+                </p>
+              )}
             </div>
 
-            {/* Column 2: Pricing & Priority */}
-            <div className="space-y-4">
-              {/* Price */}
-              <div className="space-y-2">
-                <Label htmlFor="price" className="text-sm font-medium">
-                  Price (Rs) *
-                </Label>
-                <Input
-                  id="price"
-                  {...register("price")}
-                  type="number"
-                  step="0.01"
-                  placeholder="0.00"
-                  className={errors.price ? "border-red-500" : ""}
-                />
-                {errors.price && (
-                  <p className="text-xs text-red-500">{errors.price.message}</p>
-                )}
-              </div>
-
-              {/* Discounted Price */}
-              <div className="space-y-2">
-                <Label htmlFor="discountedPrice" className="text-sm font-medium">
-                  Discounted Price (Rs)
-                </Label>
-                <Input
-                  id="discountedPrice"
-                  {...register("discountedPrice")}
-                  type="number"
-                  step="0.01"
-                  placeholder="0.00"
-                  className={errors.discountedPrice ? "border-red-500" : ""}
-                />
-                {errors.discountedPrice && (
-                  <p className="text-xs text-red-500">{errors.discountedPrice.message}</p>
-                )}
-              </div>
-
-              {/* Priority */}
-              <div className="space-y-2">
-                <Label htmlFor="priority" className="text-sm font-medium">
-                  Priority
-                </Label>
-                <Select
-                  onValueChange={(value: "routine" | "urgent" | "emergency") => 
-                    setValue("priority", value)
-                  }
-                  value={watch("priority")}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select priority" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PRIORITY_LEVELS.map((priority) => (
-                      <SelectItem key={priority.value} value={priority.value}>
-                        {priority.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Instructions for Lab */}
-              <div className="space-y-2">
-                <Label htmlFor="instructions" className="text-sm font-medium">
-                  Instructions for Lab
-                </Label>
-                <Textarea
-                  id="instructions"
-                  {...register("instructions")}
-                  placeholder="Special instructions for laboratory staff..."
-                  rows={4}
-                  className="resize-none"
-                />
-              </div>
+            {/* Priority */}
+            <div className="space-y-2">
+              <Label htmlFor="priority" className="text-sm font-medium">
+                Priority
+              </Label>
+              <Select
+                onValueChange={(value: "routine" | "urgent" | "emergency") =>
+                  setValue("priority", value)
+                }
+                value={watch("priority")}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select priority" />
+                </SelectTrigger>
+                <SelectContent>
+                  {PRIORITY_LEVELS.map((priority) => (
+                    <SelectItem key={priority.value} value={priority.value}>
+                      {priority.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
-            {/* Column 3: Specimen Details */}
-            <div className="space-y-4">
-              {/* Specimen Type */}
-              <div className="space-y-2">
-                <Label htmlFor="specimenType" className="text-sm font-medium">
-                  Specimen Type
-                </Label>
-                <Select
-                  onValueChange={(value) => setValue("specimenType", value)}
-                  value={watch("specimenType")}
+            {/* Category */}
+            <div className="space-y-2">
+              <Label htmlFor="category" className="text-sm font-medium">
+                Category *
+              </Label>
+              <Select
+                onValueChange={(value) => setValue("category", value)}
+                value={watch("category")}
+              >
+                <SelectTrigger
+                  className={errors.category ? "border-red-500" : ""}
                 >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select specimen type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {SPECIMEN_TYPES.map((type) => (
-                      <SelectItem key={type.value} value={type.value}>
-                        {type.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Specimen Details Grid */}
-              <div className="grid grid-cols-1 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="specimenQuantity" className="text-sm font-medium">
-                    Specimen Quantity
-                  </Label>
-                  <Input
-                    id="specimenQuantity"
-                    {...register("specimenQuantity")}
-                    placeholder="e.g., 5ml, 1 tube"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="specimenContainer" className="text-sm font-medium">
-                    Container
-                  </Label>
-                  <Input
-                    id="specimenContainer"
-                    {...register("specimenContainer")}
-                    placeholder="e.g., EDTA tube, sterile container"
-                  />
-                </div>
-              </div>
-
-              {/* Specimen Instructions */}
-              <div className="space-y-2">
-                <Label htmlFor="specimenInstructions" className="text-sm font-medium">
-                  Specimen Instructions
-                </Label>
-                <Textarea
-                  id="specimenInstructions"
-                  {...register("specimenInstructions")}
-                  placeholder="e.g., Fasting required, morning sample, etc."
-                  rows={4}
-                  className="resize-none"
-                />
-              </div>
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {TEST_CATEGORIES.map((category) => (
+                    <SelectItem key={category.value} value={category.value}>
+                      {category.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {errors.category && (
+                <p className="text-xs text-red-500">
+                  {errors.category.message}
+                </p>
+              )}
             </div>
+          </div>
+
+          {/* Notes */}
+          <div className="space-y-2">
+            <Label htmlFor="notes" className="text-sm font-medium">
+              Notes & Instructions
+            </Label>
+            <Textarea
+              id="notes"
+              {...register("notes")}
+              placeholder="Test description, special instructions for laboratory staff, and any additional notes..."
+              rows={7}
+              className="resize-none"
+            />
           </div>
 
           <DialogFooter className="pt-4 border-t">
