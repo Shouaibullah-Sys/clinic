@@ -7,7 +7,7 @@ import mongoose from "mongoose";
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     await dbConnect();
@@ -16,15 +16,18 @@ export async function PUT(
     if (!auth.success) {
       return NextResponse.json(
         { success: false, error: auth.error },
-        { status: auth.status || 401 }
+        { status: auth.status || 401 },
       );
     }
 
     // Only lab technicians can add results
     if (auth.userRole !== "lab_technician" && auth.userRole !== "admin") {
       return NextResponse.json(
-        { success: false, error: "Only lab technicians can add test parameters" },
-        { status: 403 }
+        {
+          success: false,
+          error: "Only lab technicians can add test parameters",
+        },
+        { status: 403 },
       );
     }
 
@@ -34,11 +37,11 @@ export async function PUT(
 
     // Find the test
     const test = await LabTest.findById(testId);
-    
+
     if (!test) {
       return NextResponse.json(
         { success: false, error: "Lab test not found" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -46,15 +49,18 @@ export async function PUT(
     if (test.status === "completed" || test.status === "reported") {
       return NextResponse.json(
         { success: false, error: "Test results have already been entered" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     // Check payment verification for routine tests
     if (test.priority === "routine" && !test.paymentVerified) {
       return NextResponse.json(
-        { success: false, error: "Payment must be verified before adding results" },
-        { status: 400 }
+        {
+          success: false,
+          error: "Payment must be verified before adding results",
+        },
+        { status: 400 },
       );
     }
 
@@ -65,18 +71,17 @@ export async function PUT(
         value: p.value,
         unit: p.unit || "",
         normalRange: p.normalRange || "",
-        remarks: p.remarks || ""
+        remarks: p.remarks || "",
       })),
       reportedBy: new mongoose.Types.ObjectId(auth.userId),
-      reportedAt: new Date()
+      reportedAt: new Date(),
     };
 
-    // Update status
-    if (status) test.status = status;
+    // Update status - only update processingStatus, not overall status
+    // Status will be set to "completed" when sample is collected
     if (processingStatus) test.processingStatus = processingStatus;
-    
-    // Set completed time
-    test.completedAt = new Date();
+
+    // Don't set completed time yet - sample collection is the final step
 
     await test.save();
 
@@ -90,14 +95,16 @@ export async function PUT(
     return NextResponse.json({
       success: true,
       data: updatedTest,
-      message: "Test parameters added successfully"
+      message: "Test parameters added successfully",
     });
-
   } catch (error: any) {
     console.error("Error adding test parameters:", error);
     return NextResponse.json(
-      { success: false, error: error.message || "Failed to save test parameters" },
-      { status: 500 }
+      {
+        success: false,
+        error: error.message || "Failed to save test parameters",
+      },
+      { status: 500 },
     );
   }
 }

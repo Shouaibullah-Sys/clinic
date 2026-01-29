@@ -10,8 +10,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
 import { useAuthStore } from "@/store/useAuthStore";
-import { 
-  ArrowLeft, 
+import {
+  ArrowLeft,
   FileText,
   TestTube,
   User,
@@ -20,7 +20,7 @@ import {
   CheckCircle,
   AlertTriangle,
   Clock,
-  RefreshCw
+  RefreshCw,
 } from "lucide-react";
 
 interface LabTest {
@@ -51,13 +51,14 @@ const safeDoctor = (doctor: any) => {
 };
 
 const safePatient = (patient: any) => {
-  if (!patient) return { 
-    name: "Unknown Patient", 
-    patientId: "N/A", 
-    phone: "N/A", 
-    age: undefined, 
-    gender: undefined 
-  };
+  if (!patient)
+    return {
+      name: "Unknown Patient",
+      patientId: "N/A",
+      phone: "N/A",
+      age: undefined,
+      gender: undefined,
+    };
   return {
     name: patient.name || "Unknown Patient",
     patientId: patient.patientId || "N/A",
@@ -68,12 +69,13 @@ const safePatient = (patient: any) => {
 };
 
 const safeCharges = (charges: any) => {
-  if (!charges) return { 
-    totalAmount: 0, 
-    paid: 0, 
-    due: 0, 
-    paymentStatus: "pending" 
-  };
+  if (!charges)
+    return {
+      totalAmount: 0,
+      paid: 0,
+      due: 0,
+      paymentStatus: "pending",
+    };
   return {
     totalAmount: charges.totalAmount || 0,
     paid: charges.paid || 0,
@@ -98,26 +100,26 @@ export default function TestDetailPage() {
     try {
       setLoading(true);
       setError(null);
-      
+
       const response = await fetch(`/api/laboratory/tests/${params.id}`, {
         headers: {
-          'Authorization': `Bearer ${accessToken}`,
+          Authorization: `Bearer ${accessToken}`,
         },
       });
-      
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      
+
       const data = await response.json();
-      
+
       if (!data.success) {
         throw new Error(data.error || "Failed to fetch test");
       }
-      
+
       console.log("DEBUG - Test data received:", data.data);
       console.log("DEBUG - Doctor field:", data.data?.doctor);
-      
+
       setTest(data.data);
     } catch (error: any) {
       console.error("Error fetching test:", error);
@@ -132,9 +134,16 @@ export default function TestDetailPage() {
   const patientInfo = safePatient(test?.patient);
   const chargesInfo = safeCharges(test?.charges);
 
-  const canEnterExam = test?.collectionStatus === "collected" && 
-                      test?.processingStatus !== "completed" &&
-                      test?.paymentVerified;
+  const canAddParameters =
+    test?.paymentVerified &&
+    test?.processingStatus !== "completed" &&
+    test?.status !== "cancelled";
+
+  const canCollectSample =
+    test?.paymentVerified &&
+    test?.collectionStatus !== "collected" &&
+    test?.status !== "cancelled" &&
+    test?.processingStatus === "completed";
 
   if (loading) {
     return (
@@ -157,7 +166,10 @@ export default function TestDetailPage() {
           <p className="text-muted-foreground mt-2">
             {error || "The requested test could not be found."}
           </p>
-          <Button onClick={() => router.push('/laboratory/tests')} className="mt-4">
+          <Button
+            onClick={() => router.push("/laboratory/tests")}
+            className="mt-4"
+          >
             Back to Tests
           </Button>
         </div>
@@ -179,14 +191,22 @@ export default function TestDetailPage() {
             </h1>
             <div className="flex items-center gap-2 mt-1">
               <Badge variant="outline">{test.testId}</Badge>
-              <Badge className={
-                test.processingStatus === "completed" ? "bg-green-100 text-green-800" :
-                test.collectionStatus === "collected" ? "bg-blue-100 text-blue-800" :
-                "bg-yellow-100 text-yellow-800"
-              }>
-                {test.processingStatus === "completed" ? "Completed" :
-                 test.collectionStatus === "collected" ? "Ready for Exam" :
-                 "Pending"}
+              <Badge
+                className={
+                  test.processingStatus === "completed" &&
+                  test.collectionStatus === "collected"
+                    ? "bg-green-100 text-green-800"
+                    : test.processingStatus === "completed"
+                      ? "bg-blue-100 text-blue-800"
+                      : "bg-yellow-100 text-yellow-800"
+                }
+              >
+                {test.processingStatus === "completed" &&
+                test.collectionStatus === "collected"
+                  ? "Completed"
+                  : test.processingStatus === "completed"
+                    ? "Ready for Collection"
+                    : "Pending"}
               </Badge>
             </div>
           </div>
@@ -196,11 +216,11 @@ export default function TestDetailPage() {
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh
           </Button>
-          {canEnterExam && (
+          {canAddParameters && (
             <Button asChild>
-              <Link href={`/laboratory/tests/${test._id}/exam`}>
+              <Link href={`/laboratory/tests/${test._id}/add-parameters`}>
                 <FileText className="h-4 w-4 mr-2" />
-                Enter Exam
+                Add Parameters
               </Link>
             </Button>
           )}
@@ -208,20 +228,22 @@ export default function TestDetailPage() {
       </div>
 
       {/* Status Alert */}
-      {test.processingStatus === "completed" ? (
+      {test.processingStatus === "completed" &&
+      test.collectionStatus === "collected" ? (
         <Alert className="bg-green-50 border-green-200 mb-6">
           <CheckCircle className="h-4 w-4 text-green-600" />
-          <AlertTitle className="text-green-800">Exam Results Entered</AlertTitle>
+          <AlertTitle className="text-green-800">Test Completed</AlertTitle>
           <AlertDescription className="text-green-700">
-            Laboratory exam results have been entered for this test.
+            This test has been completed and the sample has been collected.
           </AlertDescription>
         </Alert>
-      ) : test.collectionStatus === "collected" ? (
+      ) : test.processingStatus === "completed" &&
+        test.collectionStatus !== "collected" ? (
         <Alert className="bg-blue-50 border-blue-200 mb-6">
           <Clock className="h-4 w-4 text-blue-600" />
-          <AlertTitle>Ready for Exam Entry</AlertTitle>
+          <AlertTitle>Ready for Sample Collection</AlertTitle>
           <AlertDescription>
-            This test is ready for laboratory exam results entry.
+            Test parameters have been added. Ready to collect the sample.
           </AlertDescription>
         </Alert>
       ) : !test.paymentVerified && test.priority === "routine" ? (
@@ -229,7 +251,7 @@ export default function TestDetailPage() {
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>Payment Verification Required</AlertTitle>
           <AlertDescription>
-            Payment must be verified before sample collection.
+            Payment must be verified before adding test parameters.
           </AlertDescription>
         </Alert>
       ) : null}
@@ -260,7 +282,8 @@ export default function TestDetailPage() {
               <div>
                 <p className="text-sm text-muted-foreground">Age / Gender</p>
                 <p className="font-medium">
-                  {patientInfo.age ? `${patientInfo.age}y` : "N/A"} / {patientInfo.gender || "N/A"}
+                  {patientInfo.age ? `${patientInfo.age}y` : "N/A"} /{" "}
+                  {patientInfo.gender || "N/A"}
                 </p>
               </div>
             </div>
@@ -287,11 +310,15 @@ export default function TestDetailPage() {
             <Separator />
             <div>
               <p className="text-sm text-muted-foreground">Priority</p>
-              <Badge className={
-                test.priority === "emergency" ? "bg-red-100 text-red-800" :
-                test.priority === "urgent" ? "bg-orange-100 text-orange-800" :
-                "bg-blue-100 text-blue-800"
-              }>
+              <Badge
+                className={
+                  test.priority === "emergency"
+                    ? "bg-red-100 text-red-800"
+                    : test.priority === "urgent"
+                      ? "bg-orange-100 text-orange-800"
+                      : "bg-blue-100 text-blue-800"
+                }
+              >
                 {test.priority}
               </Badge>
             </div>
@@ -314,29 +341,46 @@ export default function TestDetailPage() {
             {test.category && (
               <div>
                 <p className="text-sm text-muted-foreground">Category</p>
-                <p className="font-medium">{test.category.replace(/_/g, ' ')}</p>
+                <p className="font-medium">
+                  {test.category.replace(/_/g, " ")}
+                </p>
               </div>
             )}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <p className="text-sm text-muted-foreground">Collection Status</p>
-                <Badge className={
-                  test.collectionStatus === "collected" ? "bg-green-100 text-green-800" :
-                  "bg-yellow-100 text-yellow-800"
-                }>
-                  {test.collectionStatus === "collected" ? "Collected" : "Pending"}
+                <p className="text-sm text-muted-foreground">
+                  Collection Status
+                </p>
+                <Badge
+                  className={
+                    test.collectionStatus === "collected"
+                      ? "bg-green-100 text-green-800"
+                      : "bg-yellow-100 text-yellow-800"
+                  }
+                >
+                  {test.collectionStatus === "collected"
+                    ? "Collected"
+                    : "Pending"}
                 </Badge>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Processing Status</p>
-                <Badge className={
-                  test.processingStatus === "completed" ? "bg-green-100 text-green-800" :
-                  test.processingStatus === "processing" ? "bg-blue-100 text-blue-800" :
-                  "bg-yellow-100 text-yellow-800"
-                }>
-                  {test.processingStatus === "completed" ? "Completed" :
-                   test.processingStatus === "processing" ? "Processing" :
-                   "Pending"}
+                <p className="text-sm text-muted-foreground">
+                  Processing Status
+                </p>
+                <Badge
+                  className={
+                    test.processingStatus === "completed"
+                      ? "bg-green-100 text-green-800"
+                      : test.processingStatus === "processing"
+                        ? "bg-blue-100 text-blue-800"
+                        : "bg-yellow-100 text-yellow-800"
+                  }
+                >
+                  {test.processingStatus === "completed"
+                    ? "Completed"
+                    : test.processingStatus === "processing"
+                      ? "Processing"
+                      : "Pending"}
                 </Badge>
               </div>
             </div>
@@ -361,12 +405,18 @@ export default function TestDetailPage() {
             <div>
               <p className="text-sm text-muted-foreground">Payment Status</p>
               <div className="flex items-center gap-2">
-                <Badge className={
-                  test.paymentVerified ? "bg-green-100 text-green-800" :
-                  chargesInfo.paymentStatus === "paid" ? "bg-green-100 text-green-800" :
-                  "bg-red-100 text-red-800"
-                }>
-                  {test.paymentVerified ? "Verified" : chargesInfo.paymentStatus}
+                <Badge
+                  className={
+                    test.paymentVerified
+                      ? "bg-green-100 text-green-800"
+                      : chargesInfo.paymentStatus === "paid"
+                        ? "bg-green-100 text-green-800"
+                        : "bg-red-100 text-red-800"
+                  }
+                >
+                  {test.paymentVerified
+                    ? "Verified"
+                    : chargesInfo.paymentStatus}
                 </Badge>
                 {test.paymentVerified && (
                   <CheckCircle className="h-4 w-4 text-green-500" />
@@ -380,12 +430,16 @@ export default function TestDetailPage() {
               </div>
               <div className="flex justify-between">
                 <span className="text-sm">Paid Amount:</span>
-                <span className="font-medium text-green-600">₹{chargesInfo.paid}</span>
+                <span className="font-medium text-green-600">
+                  ₹{chargesInfo.paid}
+                </span>
               </div>
               {chargesInfo.due > 0 && (
                 <div className="flex justify-between">
                   <span className="text-sm">Due Amount:</span>
-                  <span className="font-medium text-red-600">₹{chargesInfo.due}</span>
+                  <span className="font-medium text-red-600">
+                    ₹{chargesInfo.due}
+                  </span>
                 </div>
               )}
             </div>
@@ -407,26 +461,24 @@ export default function TestDetailPage() {
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap gap-4">
-            {canEnterExam ? (
-              <Button asChild size="lg">
-                <Link href={`/laboratory/tests/${test._id}/exam`}>
-                  <FileText className="h-4 w-4 mr-2" />
-                  Enter Exam Results
-                </Link>
-              </Button>
-            ) : test.collectionStatus !== "collected" && test.paymentVerified ? (
+            {canCollectSample ? (
               <Button asChild size="lg">
                 <Link href={`/laboratory/tests/${test._id}/collect`}>
                   <TestTube className="h-4 w-4 mr-2" />
                   Collect Sample
                 </Link>
               </Button>
+            ) : canAddParameters ? (
+              <Button asChild size="lg">
+                <Link href={`/laboratory/tests/${test._id}/add-parameters`}>
+                  <FileText className="h-4 w-4 mr-2" />
+                  Add Parameters
+                </Link>
+              </Button>
             ) : null}
-            
+
             <Button variant="outline" asChild>
-              <Link href="/laboratory/tests">
-                Back to All Tests
-              </Link>
+              <Link href="/laboratory/tests">Back to All Tests</Link>
             </Button>
           </div>
         </CardContent>

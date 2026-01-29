@@ -82,25 +82,42 @@ export async function PUT(
     });
 
     // Check if sample can be collected
-    if (!test.canCollectSample) {
-      console.log("Cannot collect sample. Conditions:", {
-        status: test.status,
-        collectionStatus: test.collectionStatus,
-        paymentVerified: test.paymentVerified,
-        priority: test.priority,
-        canCollectSample: test.canCollectSample,
-      });
+    // New workflow: Parameters must be added first (processingStatus === "completed")
+    if (test.processingStatus !== "completed") {
+      console.log(
+        "Cannot collect sample. Parameters not added yet. Conditions:",
+        {
+          status: test.status,
+          collectionStatus: test.collectionStatus,
+          processingStatus: test.processingStatus,
+          paymentVerified: test.paymentVerified,
+          priority: test.priority,
+        },
+      );
 
       return NextResponse.json(
         {
           success: false,
-          error: "Sample cannot be collected",
+          error: "Test parameters must be added before collecting sample",
           details: {
             status: test.status,
             collectionStatus: test.collectionStatus,
+            processingStatus: test.processingStatus,
             paymentVerified: test.paymentVerified,
             priority: test.priority,
-            canCollectSample: test.canCollectSample,
+          },
+        },
+        { status: 400 },
+      );
+    }
+
+    if (test.collectionStatus === "collected") {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Sample has already been collected",
+          details: {
+            collectionStatus: test.collectionStatus,
           },
         },
         { status: 400 },
@@ -112,7 +129,7 @@ export async function PUT(
 
     // Update the test with collection details
     test.collectionStatus = "collected";
-    test.status = "collected";
+    test.status = "completed"; // Sample collection is now the final step
 
     // Basic collection details
     test.collectionDetails = {

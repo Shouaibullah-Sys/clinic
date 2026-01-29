@@ -463,20 +463,20 @@ labTestSchema.virtual("isUrgent").get(function () {
 labTestSchema.virtual("canCollectSample").get(function () {
   const condition1 = this.status !== "cancelled";
   const condition2 = this.paymentVerified || this.priority !== "routine";
-  const effectiveCollectionStatus = this.collectionStatus || "pending";
-  const condition3 = ["pending", "scheduled"].includes(
-    effectiveCollectionStatus,
-  );
+  const condition3 = this.processingStatus === "completed"; // Parameters must be added first
+  const condition4 = this.collectionStatus !== "collected"; // Not already collected
 
-  return condition1 && condition2 && condition3;
+  return condition1 && condition2 && condition3 && condition4;
 });
 
 // Virtual for canProcess
 labTestSchema.virtual("canProcess").get(function () {
+  // New workflow: Can add parameters after payment is verified
+  // Sample collection is NOT required first
   return (
-    this.collectionStatus === "collected" &&
     this.paymentVerified &&
-    this.processingStatus === "pending"
+    this.processingStatus === "pending" &&
+    this.status !== "cancelled"
   );
 });
 

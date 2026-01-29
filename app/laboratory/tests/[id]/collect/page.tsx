@@ -2119,17 +2119,17 @@ export default function CollectSamplePage() {
     }
   };
 
-  // Check conditions
+  // Check conditions - Collect Sample is now the LAST step
   const condition1 = test?.status !== "cancelled";
   const condition2 = test?.paymentVerified || test?.priority !== "routine";
-  const effectiveCollectionStatus = test?.collectionStatus || "pending";
-  const condition3 = ["pending", "scheduled"].includes(
-    effectiveCollectionStatus,
-  );
+  const condition3 = test?.processingStatus === "completed"; // Parameters must be added first
+  const condition4 = test?.collectionStatus !== "collected";
 
-  const canCollectSample = condition1 && condition2 && condition3;
+  const canCollectSample = condition1 && condition2 && condition3 && condition4;
   const requiresPaymentVerification =
     test?.priority === "routine" && !test?.paymentVerified;
+  const requiresParameters =
+    test?.paymentVerified && test?.processingStatus !== "completed";
 
   if (loading) {
     return (
@@ -2224,7 +2224,8 @@ export default function CollectSamplePage() {
                 Please ensure:
                 <ul className="list-disc pl-5 mt-2 space-y-1">
                   <li>Payment is verified (for routine tests)</li>
-                  <li>Collection status is "pending" or "scheduled"</li>
+                  <li>Test parameters have been added</li>
+                  <li>Sample has not been collected yet</li>
                   <li>Test is not cancelled</li>
                 </ul>
                 <div className="mt-2 text-sm">
@@ -2233,6 +2234,7 @@ export default function CollectSamplePage() {
                     <li>
                       Payment Verified: {test.paymentVerified ? "Yes" : "No"}
                     </li>
+                    <li>Processing Status: {test.processingStatus}</li>
                     <li>Collection Status: {test.collectionStatus}</li>
                     <li>Test Status: {test.status}</li>
                     <li>Priority: {test.priority}</li>
@@ -2262,6 +2264,18 @@ export default function CollectSamplePage() {
                       }
                     >
                       Verify Payment
+                    </Button>
+                  )}
+                  {requiresParameters && (
+                    <Button
+                      variant="default"
+                      onClick={() =>
+                        router.push(
+                          `/laboratory/tests/${params.id}/add-parameters`,
+                        )
+                      }
+                    >
+                      Add Parameters
                     </Button>
                   )}
                 </div>
