@@ -3,7 +3,13 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,7 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { 
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -20,17 +26,17 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
-import { 
-  ArrowLeft, 
-  CreditCard, 
-  AlertTriangle, 
-  CheckCircle, 
+import {
+  ArrowLeft,
+  CreditCard,
+  AlertTriangle,
+  CheckCircle,
   Clock,
   Save,
   Receipt,
   DollarSign,
   User,
-  Calendar
+  Calendar,
 } from "lucide-react";
 import { format } from "date-fns";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -79,7 +85,7 @@ export default function VerifyPaymentPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   // Form state
   const [verify, setVerify] = useState(true);
   const [notes, setNotes] = useState("");
@@ -97,25 +103,28 @@ export default function VerifyPaymentPage() {
     try {
       setLoading(true);
       if (!accessToken) {
-        router.push('/login');
+        router.push("/login");
         return;
       }
 
-      const response = await fetch(`/api/laboratory/tests/${params.id}/verify-payment?info=true`, {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
+      const response = await fetch(
+        `/api/laboratory/tests/${params.id}/verify-payment?info=true`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
         },
-      });
-      
+      );
+
       if (response.status === 401) {
-        router.push('/login');
+        router.push("/login");
         return;
       }
-      
+
       const data = await response.json();
       setTest(data.data);
-      
+
       // Pre-fill form with existing payment details
       if (data.data?.charges?.paymentMethod) {
         setPaymentMethod(data.data.charges.paymentMethod);
@@ -132,49 +141,52 @@ export default function VerifyPaymentPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!test) return;
-    
+
     if (verify) {
       if (!confirmAmount || !confirmPatient || !confirmReceipt) {
         alert("Please confirm all requirements before verifying payment");
         return;
       }
-      
+
       if (!paymentMethod) {
         alert("Please select a payment method");
         return;
       }
     }
-    
+
     try {
       setSubmitting(true);
       if (!accessToken) {
-        router.push('/login');
+        router.push("/login");
         return;
       }
-      
-      const response = await fetch(`/api/laboratory/tests/${params.id}/verify-payment`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
+
+      const response = await fetch(
+        `/api/laboratory/tests/${params.id}/verify-payment`,
+        {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            verify,
+            notes,
+            paymentMethod: paymentMethod || undefined,
+            transactionId: transactionId || undefined,
+          }),
         },
-        body: JSON.stringify({
-          verify,
-          notes,
-          paymentMethod: paymentMethod || undefined,
-          transactionId: transactionId || undefined,
-        }),
-      });
-      
+      );
+
       if (response.status === 401) {
-        router.push('/login');
+        router.push("/login");
         return;
       }
-      
+
       const data = await response.json();
-      
+
       alert(data.message || "Payment verification updated successfully!");
       router.push(`/laboratory/tests/${params.id}`);
     } catch (err: any) {
@@ -187,17 +199,22 @@ export default function VerifyPaymentPage() {
   const getPaymentStatusColor = (status: string, verified: boolean) => {
     if (verified) return "bg-green-100 text-green-800";
     switch (status) {
-      case "paid": return "bg-green-100 text-green-800";
-      case "partial": return "bg-yellow-100 text-yellow-800";
-      case "pending": return "bg-red-100 text-red-800";
-      default: return "bg-gray-100 text-gray-800";
+      case "paid":
+        return "bg-green-100 text-green-800";
+      case "partial":
+        return "bg-yellow-100 text-yellow-800";
+      case "pending":
+        return "bg-red-100 text-red-800";
+      default:
+        return "bg-gray-100 text-gray-800";
     }
   };
 
-  const canVerifyPayment = test && 
-                          !test.paymentVerified && 
-                          (test.charges.paymentStatus === "paid" || 
-                           test.charges.paid >= test.charges.totalAmount);
+  const canVerifyPayment =
+    test &&
+    !test.paymentVerified &&
+    (test.charges.paymentStatus === "paid" ||
+      test.charges.paid >= test.charges.totalAmount);
 
   if (loading) {
     return (
@@ -227,7 +244,10 @@ export default function VerifyPaymentPage() {
             {error || "Failed to load test information. Please try again."}
           </AlertDescription>
         </Alert>
-        <Button onClick={() => router.push('/laboratory/tests')} className="mt-4">
+        <Button
+          onClick={() => router.push("/laboratory/tests")}
+          className="mt-4"
+        >
           Back to Tests
         </Button>
       </div>
@@ -246,7 +266,7 @@ export default function VerifyPaymentPage() {
             {test.paymentVerified ? "Payment Verification" : "Verify Payment"}
           </h1>
           <p className="text-muted-foreground">
-            {test.paymentVerified 
+            {test.paymentVerified
               ? "View payment verification details"
               : "Verify payment for test collection"}
           </p>
@@ -259,9 +279,12 @@ export default function VerifyPaymentPage() {
           {test.paymentVerified ? (
             <Alert className="bg-green-50 border-green-200">
               <CheckCircle className="h-4 w-4 text-green-600" />
-              <AlertTitle className="text-green-800">Payment Verified</AlertTitle>
+              <AlertTitle className="text-green-800">
+                Payment Verified
+              </AlertTitle>
               <AlertDescription className="text-green-700">
-                This payment has already been verified. Sample collection can proceed.
+                This payment has already been verified. Sample collection can
+                proceed.
               </AlertDescription>
             </Alert>
           ) : !canVerifyPayment ? (
@@ -269,19 +292,10 @@ export default function VerifyPaymentPage() {
               <AlertTriangle className="h-4 w-4" />
               <AlertTitle>Cannot Verify Payment</AlertTitle>
               <AlertDescription>
-                {test.charges.due > 0 
+                {test.charges.due > 0
                   ? `Payment is not complete. Amount due: ₹${test.charges.due}`
                   : "Payment verification is not available for this test."}
               </AlertDescription>
-              {test.charges.due > 0 && (
-                <Button 
-                  variant="outline" 
-                  className="mt-2"
-                  onClick={() => router.push(`/reception/lab-tests/${params.id}/charges`)}
-                >
-                  Update Payment
-                </Button>
-              )}
             </Alert>
           ) : null}
 
@@ -304,7 +318,9 @@ export default function VerifyPaymentPage() {
                       <Checkbox
                         id="verify-payment"
                         checked={verify}
-                        onCheckedChange={(checked) => setVerify(checked as boolean)}
+                        onCheckedChange={(checked) =>
+                          setVerify(checked as boolean)
+                        }
                       />
                       <Label htmlFor="verify-payment" className="font-normal">
                         I verify that payment has been received
@@ -316,11 +332,11 @@ export default function VerifyPaymentPage() {
 
                   <div className="space-y-4">
                     <Label>Payment Details</Label>
-                    
+
                     <div className="space-y-2">
                       <Label htmlFor="paymentMethod">Payment Method *</Label>
-                      <Select 
-                        value={paymentMethod} 
+                      <Select
+                        value={paymentMethod}
                         onValueChange={setPaymentMethod}
                         required
                       >
@@ -329,9 +345,13 @@ export default function VerifyPaymentPage() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="cash">Cash</SelectItem>
-                          <SelectItem value="card">Credit/Debit Card</SelectItem>
+                          <SelectItem value="card">
+                            Credit/Debit Card
+                          </SelectItem>
                           <SelectItem value="upi">UPI</SelectItem>
-                          <SelectItem value="netbanking">Net Banking</SelectItem>
+                          <SelectItem value="netbanking">
+                            Net Banking
+                          </SelectItem>
                           <SelectItem value="cheque">Cheque</SelectItem>
                           <SelectItem value="insurance">Insurance</SelectItem>
                           <SelectItem value="other">Other</SelectItem>
@@ -340,7 +360,9 @@ export default function VerifyPaymentPage() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="transactionId">Transaction ID (Optional)</Label>
+                      <Label htmlFor="transactionId">
+                        Transaction ID (Optional)
+                      </Label>
                       <Input
                         id="transactionId"
                         value={transactionId}
@@ -350,7 +372,9 @@ export default function VerifyPaymentPage() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="notes">Verification Notes (Optional)</Label>
+                      <Label htmlFor="notes">
+                        Verification Notes (Optional)
+                      </Label>
                       <Textarea
                         id="notes"
                         value={notes}
@@ -365,18 +389,21 @@ export default function VerifyPaymentPage() {
 
                   <div className="space-y-4">
                     <Label>Confirmations</Label>
-                    
+
                     <div className="flex items-start space-x-2">
                       <Checkbox
                         id="confirmAmount"
                         checked={confirmAmount}
-                        onCheckedChange={(checked) => setConfirmAmount(checked as boolean)}
+                        onCheckedChange={(checked) =>
+                          setConfirmAmount(checked as boolean)
+                        }
                         required
                       />
                       <Label htmlFor="confirmAmount" className="leading-none">
                         <div className="font-medium">Payment Amount</div>
                         <div className="text-sm text-muted-foreground mt-1">
-                          I confirm that the payment amount of ₹{test.charges.paid} has been received
+                          I confirm that the payment amount of ₹
+                          {test.charges.paid} has been received
                         </div>
                       </Label>
                     </div>
@@ -385,7 +412,9 @@ export default function VerifyPaymentPage() {
                       <Checkbox
                         id="confirmPatient"
                         checked={confirmPatient}
-                        onCheckedChange={(checked) => setConfirmPatient(checked as boolean)}
+                        onCheckedChange={(checked) =>
+                          setConfirmPatient(checked as boolean)
+                        }
                         required
                       />
                       <Label htmlFor="confirmPatient" className="leading-none">
@@ -400,7 +429,9 @@ export default function VerifyPaymentPage() {
                       <Checkbox
                         id="confirmReceipt"
                         checked={confirmReceipt}
-                        onCheckedChange={(checked) => setConfirmReceipt(checked as boolean)}
+                        onCheckedChange={(checked) =>
+                          setConfirmReceipt(checked as boolean)
+                        }
                         required
                       />
                       <Label htmlFor="confirmReceipt" className="leading-none">
@@ -413,9 +444,14 @@ export default function VerifyPaymentPage() {
                   </div>
 
                   <div className="flex gap-2">
-                    <Button 
-                      type="submit" 
-                      disabled={submitting || !confirmAmount || !confirmPatient || !confirmReceipt}
+                    <Button
+                      type="submit"
+                      disabled={
+                        submitting ||
+                        !confirmAmount ||
+                        !confirmPatient ||
+                        !confirmReceipt
+                      }
                       className="flex-1"
                     >
                       {submitting ? (
@@ -430,8 +466,8 @@ export default function VerifyPaymentPage() {
                         </>
                       )}
                     </Button>
-                    <Button 
-                      type="button" 
+                    <Button
+                      type="button"
                       variant="outline"
                       onClick={() => router.back()}
                     >
@@ -452,13 +488,18 @@ export default function VerifyPaymentPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <p className="text-sm text-muted-foreground">Verified By</p>
-                    <p className="font-medium">{test.paymentVerifiedBy?.name || "N/A"}</p>
+                    <p className="font-medium">
+                      {test.paymentVerifiedBy?.name || "N/A"}
+                    </p>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Verified At</p>
                     <p className="font-medium">
-                      {test.paymentVerifiedAt 
-                        ? format(new Date(test.paymentVerifiedAt), "MMM dd, yyyy HH:mm")
+                      {test.paymentVerifiedAt
+                        ? format(
+                            new Date(test.paymentVerifiedAt),
+                            "MMM dd, yyyy HH:mm",
+                          )
                         : "N/A"}
                     </p>
                   </div>
@@ -470,12 +511,14 @@ export default function VerifyPaymentPage() {
                     Verified
                   </Badge>
                 </div>
-                <Button 
-                  onClick={() => router.push(`/laboratory/tests/${params.id}/collect`)}
+                <Button
+                  onClick={() =>
+                    router.push(`/laboratory/tests/${params.id}/collect`)
+                  }
                   className="w-full"
                   disabled={test.collectionStatus !== "pending"}
                 >
-                  {test.collectionStatus === "pending" 
+                  {test.collectionStatus === "pending"
                     ? "Proceed to Sample Collection"
                     : `Collection Status: ${test.collectionStatus}`}
                 </Button>
@@ -501,21 +544,31 @@ export default function VerifyPaymentPage() {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Priority</p>
-                <Badge className={
-                  test.priority === "emergency" ? "bg-red-100 text-red-800 border-red-300" :
-                  test.priority === "urgent" ? "bg-orange-100 text-orange-800 border-orange-300" :
-                  "bg-blue-100 text-blue-800 border-blue-300"
-                }>
+                <Badge
+                  className={
+                    test.priority === "emergency"
+                      ? "bg-red-100 text-red-800 border-red-300"
+                      : test.priority === "urgent"
+                        ? "bg-orange-100 text-orange-800 border-orange-300"
+                        : "bg-blue-100 text-blue-800 border-blue-300"
+                  }
+                >
                   {test.priority}
                 </Badge>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Collection Status</p>
-                <Badge className={
-                  test.collectionStatus === "pending" ? "bg-yellow-100 text-yellow-800" :
-                  test.collectionStatus === "scheduled" ? "bg-blue-100 text-blue-800" :
-                  "bg-gray-100 text-gray-800"
-                }>
+                <p className="text-sm text-muted-foreground">
+                  Collection Status
+                </p>
+                <Badge
+                  className={
+                    test.collectionStatus === "pending"
+                      ? "bg-yellow-100 text-yellow-800"
+                      : test.collectionStatus === "scheduled"
+                        ? "bg-blue-100 text-blue-800"
+                        : "bg-gray-100 text-gray-800"
+                  }
+                >
                   {test.collectionStatus}
                 </Badge>
               </div>
@@ -562,59 +615,80 @@ export default function VerifyPaymentPage() {
               <div className="space-y-1">
                 <p className="text-sm text-muted-foreground">Payment Status</p>
                 <div className="flex items-center gap-2">
-                  <Badge className={getPaymentStatusColor(test.charges.paymentStatus, test.paymentVerified)}>
-                    {test.paymentVerified ? "Verified" : test.charges.paymentStatus}
+                  <Badge
+                    className={getPaymentStatusColor(
+                      test.charges.paymentStatus,
+                      test.paymentVerified,
+                    )}
+                  >
+                    {test.paymentVerified
+                      ? "Verified"
+                      : test.charges.paymentStatus}
                   </Badge>
                   {test.paymentVerified && (
                     <CheckCircle className="h-4 w-4 text-green-500" />
                   )}
                 </div>
               </div>
-              
               <div className="space-y-2">
                 <div className="flex justify-between">
                   <span className="text-sm">Total Amount:</span>
-                  <span className="font-medium">₹{test.charges.totalAmount}</span>
+                  <span className="font-medium">
+                    ₹{test.charges.totalAmount}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm">Paid Amount:</span>
-                  <span className="font-medium text-green-600">₹{test.charges.paid}</span>
+                  <span className="font-medium text-green-600">
+                    ₹{test.charges.paid}
+                  </span>
                 </div>
                 {test.charges.due > 0 && (
                   <div className="flex justify-between">
                     <span className="text-sm">Due Amount:</span>
-                    <span className="font-medium text-red-600">₹{test.charges.due}</span>
+                    <span className="font-medium text-red-600">
+                      ₹{test.charges.due}
+                    </span>
                   </div>
                 )}
               </div>
-              
-              if (test.charges.paymentMethod) {
+              if (test.charges.paymentMethod){" "}
+              {
                 <div>
-                  <p className="text-sm text-muted-foreground">Payment Method</p>
+                  <p className="text-sm text-muted-foreground">
+                    Payment Method
+                  </p>
                   <p className="font-medium">{test.charges.paymentMethod}</p>
                 </div>
               }
-              
-              if (test.charges.transactionId) {
+              if (test.charges.transactionId){" "}
+              {
                 <div>
-                  <p className="text-sm text-muted-foreground">Transaction ID</p>
+                  <p className="text-sm text-muted-foreground">
+                    Transaction ID
+                  </p>
                   <p className="font-medium">{test.charges.transactionId}</p>
                 </div>
               }
-              
-              if (test.charges.paymentDate) {
+              if (test.charges.paymentDate){" "}
+              {
                 <div>
                   <p className="text-sm text-muted-foreground">Payment Date</p>
                   <p className="font-medium">
-                    {format(new Date(test.charges.paymentDate!), "MMM dd, yyyy HH:mm")}
+                    {format(
+                      new Date(test.charges.paymentDate!),
+                      "MMM dd, yyyy HH:mm",
+                    )}
                   </p>
                 </div>
               }
-              
-              if (test.charges.collectedBy) {
+              if (test.charges.collectedBy){" "}
+              {
                 <div>
                   <p className="text-sm text-muted-foreground">Collected By</p>
-                  <p className="font-medium">{test.charges.collectedBy?.name}</p>
+                  <p className="font-medium">
+                    {test.charges.collectedBy?.name}
+                  </p>
                 </div>
               }
             </CardContent>
@@ -626,30 +700,21 @@ export default function VerifyPaymentPage() {
               <CardTitle>Quick Actions</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {!test.paymentVerified && test.charges.due > 0 && (
-                <Button 
-                  variant="outline" 
-                  className="w-full"
-                  onClick={() => router.push(`/reception/lab-tests/${params.id}/charges`)}
-                >
-                  <DollarSign className="h-4 w-4 mr-2" />
-                  Update Payment
-                </Button>
-              )}
-              
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 className="w-full"
                 onClick={() => router.push(`/laboratory/tests/${params.id}`)}
               >
                 <Receipt className="h-4 w-4 mr-2" />
                 View Test Details
               </Button>
-              
+
               {test.paymentVerified && test.collectionStatus === "pending" && (
-                <Button 
+                <Button
                   className="w-full"
-                  onClick={() => router.push(`/laboratory/tests/${params.id}/collect`)}
+                  onClick={() =>
+                    router.push(`/laboratory/tests/${params.id}/collect`)
+                  }
                 >
                   <CheckCircle className="h-4 w-4 mr-2" />
                   Collect Sample

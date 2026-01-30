@@ -45,12 +45,12 @@ import {
   DollarSign,
   CheckCircle,
   AlertTriangle,
-  Clock,
   RefreshCw,
   Printer,
   Loader2,
   Plus,
   Save,
+  Trash2,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { toast } from "sonner";
@@ -130,6 +130,23 @@ interface DirectLabTest {
   notes?: string;
 }
 
+interface SampleParameter {
+  id: string;
+  name: string;
+  unit: string;
+  normalRange: string;
+  result: string;
+}
+
+interface TestParameter {
+  id: string;
+  name: string;
+  value: string;
+  unit: string;
+  normalRange: string;
+  remarks: string;
+}
+
 interface TestTemplate {
   _id: string;
   testCode: string;
@@ -160,6 +177,7 @@ export default function DirectTestDetailPage() {
   const [template, setTemplate] = useState<TestTemplate | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [loadingTemplate, setLoadingTemplate] = useState(false);
 
   // Payment dialog state
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
@@ -186,6 +204,19 @@ export default function DirectTestDetailPage() {
   // Finalize state
   const [finalizing, setFinalizing] = useState(false);
 
+  // Edit parameters state (for main page editing)
+  const [editingParameters, setEditingParameters] = useState(false);
+  const [editableParameters, setEditableParameters] = useState<
+    Array<{
+      name: string;
+      value: string;
+      unit?: string;
+      normalRange: string;
+      remarks?: string;
+    }>
+  >([]);
+  const [savingParameters, setSavingParameters] = useState(false);
+
   // Collect sample state
   const [showCollectDialog, setShowCollectDialog] = useState(false);
   const [collecting, setCollecting] = useState(false);
@@ -193,6 +224,22 @@ export default function DirectTestDetailPage() {
   const [sampleCondition, setSampleCondition] = useState("satisfactory");
   const [collectionNotes, setCollectionNotes] = useState("");
   const [sampleConditionNotes, setSampleConditionNotes] = useState("");
+
+  // Specimen details state
+  const [selectedTestId, setSelectedTestId] = useState<string>("");
+  const [specimenQuantity, setSpecimenQuantity] = useState("");
+  const [specimenContainer, setSpecimenContainer] = useState("");
+  const [specimenRemarks, setSpecimenRemarks] = useState("");
+
+  // Sample parameters (specimen characteristics)
+  const [sampleParameters, setSampleParameters] = useState<SampleParameter[]>([
+    { id: "1", name: "", unit: "", normalRange: "", result: "" },
+  ]);
+
+  // Test parameters (actual results)
+  const [testParameters, setTestParameters] = useState<TestParameter[]>([
+    { id: "1", name: "", value: "", unit: "", normalRange: "", remarks: "" },
+  ]);
 
   useEffect(() => {
     fetchTestDetails();
@@ -227,22 +274,103 @@ export default function DirectTestDetailPage() {
       // Initialize results parameters from template if available
       if (data.data.results?.parameters) {
         setResultsParameters(
-          data.data.results.parameters.map((p: any) => ({
-            name: p.name,
-            value: String(p.value),
-            unit: p.unit,
-            normalRange: p.normalRange,
-            flag: p.flag,
-            remarks: p.remarks,
-          })),
+          data.data.results.parameters.map(
+            (
+              p: NonNullable<DirectLabTest["results"]>["parameters"][number],
+            ) => ({
+              name: p.name,
+              value: String(p.value),
+              unit: p.unit,
+              normalRange: p.normalRange,
+              flag: p.flag,
+              remarks: p.remarks,
+            }),
+          ),
         );
         setInterpretation(data.data.results.interpretation || "");
+        // Also initialize editable parameters
+        setEditableParameters(
+          data.data.results.parameters.map(
+            (
+              p: NonNullable<DirectLabTest["results"]>["parameters"][number],
+            ) => ({
+              name: p.name,
+              value: String(p.value),
+              unit: p.unit,
+              normalRange: p.normalRange,
+              remarks: p.remarks,
+            }),
+          ),
+        );
+      } else {
+        // If no results yet, try to fetch template to initialize parameters
+        await fetchTestTemplate(data.data);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error fetching test:", error);
-      setError(error.message || "Failed to load test details");
+      setError(
+        error instanceof Error ? error.message : "Failed to load test details",
+      );
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchTestTemplate = async (testData: DirectLabTest) => {
+    try {
+      setLoadingTemplate(true);
+
+      // Try to find the template by matching test name
+      const response = await fetch("/api/laboratory/templates", {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+
+      if (!response.ok) {
+        console.error("Failed to fetch templates");
+        return;
+      }
+
+      const data = await response.json();
+
+      if (data.success && data.data) {
+        // Find matching template by test name
+        const matchingTemplate = data.data.find(
+          (t: TestTemplate) => t.testName === testData.testName,
+        );
+
+        if (matchingTemplate && matchingTemplate.parameters) {
+          setTemplate(matchingTemplate);
+
+          // Initialize results parameters from template
+          const paramsFromTemplate = matchingTemplate.parameters.map(
+            (p: TestTemplate["parameters"][number]) => ({
+              name: p.parameterName,
+              value: "",
+              unit: p.unit || "",
+              normalRange: p.normalRange || "",
+              flag: "normal" as const,
+              remarks: "",
+            }),
+          );
+          setResultsParameters(paramsFromTemplate);
+          // Also initialize editable parameters
+          setEditableParameters(
+            paramsFromTemplate.map((p) => ({
+              name: p.name,
+              value: p.value,
+              unit: p.unit,
+              normalRange: p.normalRange,
+              remarks: p.remarks,
+            })),
+          );
+        }
+      }
+    } catch (error: unknown) {
+      console.error("Error fetching test template:", error);
+    } finally {
+      setLoadingTemplate(false);
     }
   };
 
@@ -291,8 +419,10 @@ export default function DirectTestDetailPage() {
       setPaymentMethod("");
       setPaymentNotes("");
       fetchTestDetails();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to process payment");
+    } catch (err: unknown) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to process payment",
+      );
     } finally {
       setProcessingPayment(false);
     }
@@ -314,9 +444,9 @@ export default function DirectTestDetailPage() {
       setSavingResults(true);
 
       const response = await fetch(
-        `/api/laboratory/tests/${test._id}/results`,
+        `/api/laboratory/direct-tests/${test._id}/results`,
         {
-          method: "POST",
+          method: "PUT",
           headers: {
             Authorization: `Bearer ${accessToken}`,
             "Content-Type": "application/json",
@@ -344,8 +474,10 @@ export default function DirectTestDetailPage() {
       toast.success("Test results saved successfully");
       setShowResultsDialog(false);
       fetchTestDetails();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to save results");
+    } catch (err: unknown) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to save results",
+      );
     } finally {
       setSavingResults(false);
     }
@@ -376,10 +508,67 @@ export default function DirectTestDetailPage() {
       const data = await response.json();
       toast.success("Test finalized successfully");
       fetchTestDetails();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to finalize test");
+    } catch (err: unknown) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to finalize test",
+      );
     } finally {
       setFinalizing(false);
+    }
+  };
+
+  const handleSaveEditableParameters = async () => {
+    if (!test) return;
+
+    // Validate all parameters have values
+    const invalidParams = editableParameters.filter(
+      (p) => !p.value || p.value.trim() === "",
+    );
+    if (invalidParams.length > 0) {
+      toast.error("Please fill in all parameter values");
+      return;
+    }
+
+    try {
+      setSavingParameters(true);
+
+      const response = await fetch(
+        `/api/laboratory/direct-tests/${test._id}/results`,
+        {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            parameters: editableParameters.map((p) => ({
+              name: p.name,
+              value: p.value,
+              unit: p.unit,
+              normalRange: p.normalRange,
+              flag: "normal" as const,
+              remarks: p.remarks,
+            })),
+            interpretation: interpretation || undefined,
+          }),
+        },
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to save parameters");
+      }
+
+      const data = await response.json();
+      toast.success("Parameters saved successfully");
+      setEditingParameters(false);
+      fetchTestDetails();
+    } catch (err: unknown) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to save parameters",
+      );
+    } finally {
+      setSavingParameters(false);
     }
   };
 
@@ -388,6 +577,15 @@ export default function DirectTestDetailPage() {
 
     try {
       setCollecting(true);
+
+      // Filter valid parameters
+      const validSampleParameters = sampleParameters.filter(
+        (p) => p.name.trim() && p.result.trim(),
+      );
+
+      const validTestParameters = testParameters.filter(
+        (p) => p.name.trim() && p.value.trim(),
+      );
 
       const response = await fetch(
         `/api/laboratory/direct-tests/${test._id}/collect`,
@@ -402,6 +600,25 @@ export default function DirectTestDetailPage() {
             sampleCondition,
             collectionNotes: collectionNotes || undefined,
             sampleConditionNotes: sampleConditionNotes || undefined,
+            specimen: {
+              type: selectedTestId,
+              quantity: specimenQuantity,
+              container: specimenContainer,
+              remarks: specimenRemarks,
+              parameters: validSampleParameters.map((p) => ({
+                name: p.name,
+                result: p.result,
+                unit: p.unit,
+                normalRange: p.normalRange,
+              })),
+            },
+            testParameters: validTestParameters.map((p) => ({
+              name: p.name,
+              value: p.value,
+              unit: p.unit,
+              normalRange: p.normalRange,
+              remarks: p.remarks,
+            })),
           }),
         },
       );
@@ -414,16 +631,103 @@ export default function DirectTestDetailPage() {
       const data = await response.json();
       toast.success("Sample collected successfully");
       setShowCollectDialog(false);
+      // Reset form
       setSampleId("");
       setSampleCondition("satisfactory");
       setCollectionNotes("");
       setSampleConditionNotes("");
+      setSelectedTestId("");
+      setSpecimenQuantity("");
+      setSpecimenContainer("");
+      setSpecimenRemarks("");
+      setSampleParameters([
+        { id: "1", name: "", unit: "", normalRange: "", result: "" },
+      ]);
+      setTestParameters([
+        {
+          id: "1",
+          name: "",
+          value: "",
+          unit: "",
+          normalRange: "",
+          remarks: "",
+        },
+      ]);
       fetchTestDetails();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to collect sample");
+    } catch (err: unknown) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to collect sample",
+      );
     } finally {
       setCollecting(false);
     }
+  };
+
+  // Sample parameter management functions
+  const addSampleParameter = () => {
+    const newId = (sampleParameters.length + 1).toString();
+    setSampleParameters([
+      ...sampleParameters,
+      {
+        id: newId,
+        name: "",
+        unit: "",
+        normalRange: "",
+        result: "",
+      },
+    ]);
+  };
+
+  const removeSampleParameter = (id: string) => {
+    if (sampleParameters.length > 1) {
+      setSampleParameters(sampleParameters.filter((p) => p.id !== id));
+    }
+  };
+
+  const updateSampleParameter = (
+    id: string,
+    field: keyof SampleParameter,
+    value: string,
+  ) => {
+    setSampleParameters(
+      sampleParameters.map((param) =>
+        param.id === id ? { ...param, [field]: value } : param,
+      ),
+    );
+  };
+
+  // Test parameter management functions
+  const addTestParameter = () => {
+    const newId = (testParameters.length + 1).toString();
+    setTestParameters([
+      ...testParameters,
+      {
+        id: newId,
+        name: "",
+        value: "",
+        unit: "",
+        normalRange: "",
+        remarks: "",
+      },
+    ]);
+  };
+
+  const removeTestParameter = (id: string) => {
+    if (testParameters.length > 1) {
+      setTestParameters(testParameters.filter((p) => p.id !== id));
+    }
+  };
+
+  const updateTestParameter = (
+    id: string,
+    field: keyof TestParameter,
+    value: string,
+  ) => {
+    setTestParameters(
+      testParameters.map((param) =>
+        param.id === id ? { ...param, [field]: value } : param,
+      ),
+    );
   };
 
   const canAddResults = test?.paymentVerified && !test?.results?.parameters;
@@ -973,87 +1277,100 @@ export default function DirectTestDetailPage() {
                       Enter the test results for each parameter
                     </DialogDescription>
                   </DialogHeader>
-                  <div className="space-y-4 py-4">
-                    {resultsParameters.map((param, index) => (
-                      <div
-                        key={index}
-                        className="border rounded-md p-4 space-y-3"
-                      >
-                        <div className="flex items-center justify-between">
-                          <h4 className="font-medium">{param.name}</h4>
-                          <Badge variant="outline">{param.unit || "N/A"}</Badge>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
+                  {loadingTemplate ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                      <span className="ml-3 text-muted-foreground">
+                        Loading test parameters...
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="space-y-4 py-4">
+                      {resultsParameters.map((param, index) => (
+                        <div
+                          key={index}
+                          className="border rounded-md p-4 space-y-3"
+                        >
+                          <div className="flex items-center justify-between">
+                            <h4 className="font-medium">{param.name}</h4>
+                            <Badge variant="outline">
+                              {param.unit || "N/A"}
+                            </Badge>
+                          </div>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <Label htmlFor={`value-${index}`}>Value</Label>
+                              <Input
+                                id={`value-${index}`}
+                                value={param.value}
+                                onChange={(e) => {
+                                  const newParams = [...resultsParameters];
+                                  newParams[index].value = e.target.value;
+                                  setResultsParameters(newParams);
+                                }}
+                                placeholder="Enter value"
+                              />
+                            </div>
+                            <div>
+                              <Label htmlFor={`flag-${index}`}>Flag</Label>
+                              <Select
+                                value={param.flag}
+                                onValueChange={(
+                                  value: "normal" | "low" | "high" | "critical",
+                                ) => {
+                                  const newParams = [...resultsParameters];
+                                  newParams[index].flag = value;
+                                  setResultsParameters(newParams);
+                                }}
+                              >
+                                <SelectTrigger id={`flag-${index}`}>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="normal">Normal</SelectItem>
+                                  <SelectItem value="low">Low</SelectItem>
+                                  <SelectItem value="high">High</SelectItem>
+                                  <SelectItem value="critical">
+                                    Critical
+                                  </SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
                           <div>
-                            <Label htmlFor={`value-${index}`}>Value</Label>
+                            <Label htmlFor={`remarks-${index}`}>
+                              Remarks (Optional)
+                            </Label>
                             <Input
-                              id={`value-${index}`}
-                              value={param.value}
+                              id={`remarks-${index}`}
+                              value={param.remarks || ""}
                               onChange={(e) => {
                                 const newParams = [...resultsParameters];
-                                newParams[index].value = e.target.value;
+                                newParams[index].remarks = e.target.value;
                                 setResultsParameters(newParams);
                               }}
-                              placeholder="Enter value"
+                              placeholder="Add remarks..."
                             />
                           </div>
-                          <div>
-                            <Label htmlFor={`flag-${index}`}>Flag</Label>
-                            <Select
-                              value={param.flag}
-                              onValueChange={(value: any) => {
-                                const newParams = [...resultsParameters];
-                                newParams[index].flag = value;
-                                setResultsParameters(newParams);
-                              }}
-                            >
-                              <SelectTrigger id={`flag-${index}`}>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="normal">Normal</SelectItem>
-                                <SelectItem value="low">Low</SelectItem>
-                                <SelectItem value="high">High</SelectItem>
-                                <SelectItem value="critical">
-                                  Critical
-                                </SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Normal Range: {param.normalRange}
+                          </p>
                         </div>
-                        <div>
-                          <Label htmlFor={`remarks-${index}`}>
-                            Remarks (Optional)
-                          </Label>
-                          <Input
-                            id={`remarks-${index}`}
-                            value={param.remarks || ""}
-                            onChange={(e) => {
-                              const newParams = [...resultsParameters];
-                              newParams[index].remarks = e.target.value;
-                              setResultsParameters(newParams);
-                            }}
-                            placeholder="Add remarks..."
-                          />
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          Normal Range: {param.normalRange}
-                        </p>
+                      ))}
+                      <div>
+                        <Label htmlFor="interpretation">
+                          Interpretation (Optional)
+                        </Label>
+                        <Textarea
+                          id="interpretation"
+                          placeholder="Add overall interpretation..."
+                          value={interpretation}
+                          onChange={(e) => setInterpretation(e.target.value)}
+                          rows={3}
+                        />
                       </div>
-                    ))}
-                    <div>
-                      <Label htmlFor="interpretation">
-                        Interpretation (Optional)
-                      </Label>
-                      <Textarea
-                        id="interpretation"
-                        placeholder="Add overall interpretation..."
-                        value={interpretation}
-                        onChange={(e) => setInterpretation(e.target.value)}
-                        rows={3}
-                      />
                     </div>
-                  </div>
+                  )}
                   <DialogFooter>
                     <Button
                       variant="outline"
@@ -1064,7 +1381,7 @@ export default function DirectTestDetailPage() {
                     </Button>
                     <Button
                       onClick={handleSaveResults}
-                      disabled={savingResults}
+                      disabled={savingResults || loadingTemplate}
                     >
                       {savingResults ? (
                         <>
@@ -1166,6 +1483,124 @@ export default function DirectTestDetailPage() {
         </CardContent>
       </Card>
 
+      {/* Editable Parameters Section - Displayed after payment */}
+      {test.paymentVerified && !test.finalized && (
+        <Card className="mt-6 border-blue-200 dark:border-blue-800">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <TestTube className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                  Test Parameters
+                </CardTitle>
+                <CardDescription>
+                  {editingParameters
+                    ? "Edit parameter values below"
+                    : "Click Edit to modify parameter values"}
+                </CardDescription>
+              </div>
+              <div className="flex gap-2">
+                {editingParameters ? (
+                  <>
+                    <Button
+                      variant="outline"
+                      onClick={() => setEditingParameters(false)}
+                      disabled={savingParameters}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={handleSaveEditableParameters}
+                      disabled={savingParameters}
+                    >
+                      {savingParameters ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="h-4 w-4 mr-2" />
+                          Save Parameters
+                        </>
+                      )}
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    onClick={() => setEditingParameters(true)}
+                    variant="outline"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Edit Parameters
+                  </Button>
+                )}
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {editableParameters.length > 0 ? (
+              <div className="space-y-4">
+                {editableParameters.map((param, index) => (
+                  <div
+                    key={index}
+                    className="border rounded-md p-4 space-y-3 bg-blue-50/50 dark:bg-blue-950/20"
+                  >
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-medium">{param.name}</h4>
+                      <Badge variant="outline">{param.unit || "N/A"}</Badge>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor={`param-value-${index}`}>Value</Label>
+                        <Input
+                          id={`param-value-${index}`}
+                          value={param.value}
+                          onChange={(e) => {
+                            const newParams = [...editableParameters];
+                            newParams[index].value = e.target.value;
+                            setEditableParameters(newParams);
+                          }}
+                          placeholder="Enter value"
+                          disabled={!editingParameters}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor={`param-remarks-${index}`}>
+                          Remarks (Optional)
+                        </Label>
+                        <Input
+                          id={`param-remarks-${index}`}
+                          value={param.remarks || ""}
+                          onChange={(e) => {
+                            const newParams = [...editableParameters];
+                            newParams[index].remarks = e.target.value;
+                            setEditableParameters(newParams);
+                          }}
+                          placeholder="Add remarks..."
+                          disabled={!editingParameters}
+                        />
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Normal Range: {param.normalRange}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <TestTube className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p>No parameters available</p>
+                <p className="text-sm mt-2">
+                  Parameters will be loaded from the test template
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Notes */}
       {test.notes && (
         <Card className="mt-6">
@@ -1196,75 +1631,381 @@ export default function DirectTestDetailPage() {
                     Collect Sample
                   </Button>
                 </DialogTrigger>
-                <DialogContent>
+                <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
                   <DialogHeader>
                     <DialogTitle>Collect Sample</DialogTitle>
                     <DialogDescription>
-                      Record sample collection details for this test
+                      Record sample collection details and test results for this
+                      test
                     </DialogDescription>
                   </DialogHeader>
-                  <div className="space-y-4 py-4">
-                    <div>
-                      <Label htmlFor="sampleId">Sample ID (Optional)</Label>
-                      <Input
-                        id="sampleId"
-                        placeholder="Enter sample ID"
-                        value={sampleId}
-                        onChange={(e) => setSampleId(e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="sampleCondition">Sample Condition</Label>
-                      <Select
-                        value={sampleCondition}
-                        onValueChange={setSampleCondition}
-                      >
-                        <SelectTrigger id="sampleCondition">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="satisfactory">
-                            Satisfactory
-                          </SelectItem>
-                          <SelectItem value="hemolyzed">Hemolyzed</SelectItem>
-                          <SelectItem value="clotted">Clotted</SelectItem>
-                          <SelectItem value="insufficient">
-                            Insufficient
-                          </SelectItem>
-                          <SelectItem value="contaminated">
-                            Contaminated
-                          </SelectItem>
-                          <SelectItem value="other">Other</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    {sampleCondition !== "satisfactory" && (
+                  <div className="space-y-6 py-4">
+                    {/* Basic Sample Information */}
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-semibold mb-3">
+                        Basic Sample Information
+                      </h3>
                       <div>
-                        <Label htmlFor="sampleConditionNotes">
-                          Condition Notes
+                        <Label htmlFor="sampleId">Sample ID (Optional)</Label>
+                        <Input
+                          id="sampleId"
+                          placeholder="Enter sample ID"
+                          value={sampleId}
+                          onChange={(e) => setSampleId(e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="sampleCondition">
+                          Sample Condition
+                        </Label>
+                        <Select
+                          value={sampleCondition}
+                          onValueChange={setSampleCondition}
+                        >
+                          <SelectTrigger id="sampleCondition">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="satisfactory">
+                              Satisfactory
+                            </SelectItem>
+                            <SelectItem value="hemolyzed">Hemolyzed</SelectItem>
+                            <SelectItem value="clotted">Clotted</SelectItem>
+                            <SelectItem value="insufficient">
+                              Insufficient
+                            </SelectItem>
+                            <SelectItem value="contaminated">
+                              Contaminated
+                            </SelectItem>
+                            <SelectItem value="other">Other</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {sampleCondition !== "satisfactory" && (
+                        <div>
+                          <Label htmlFor="sampleConditionNotes">
+                            Condition Notes
+                          </Label>
+                          <Textarea
+                            id="sampleConditionNotes"
+                            placeholder="Describe the sample condition..."
+                            value={sampleConditionNotes}
+                            onChange={(e) =>
+                              setSampleConditionNotes(e.target.value)
+                            }
+                            rows={2}
+                          />
+                        </div>
+                      )}
+                      <div>
+                        <Label htmlFor="collectionNotes">
+                          Collection Notes (Optional)
                         </Label>
                         <Textarea
-                          id="sampleConditionNotes"
-                          placeholder="Describe the sample condition..."
-                          value={sampleConditionNotes}
-                          onChange={(e) =>
-                            setSampleConditionNotes(e.target.value)
-                          }
+                          id="collectionNotes"
+                          placeholder="Add any notes about the collection..."
+                          value={collectionNotes}
+                          onChange={(e) => setCollectionNotes(e.target.value)}
                           rows={2}
                         />
                       </div>
-                    )}
-                    <div>
-                      <Label htmlFor="collectionNotes">
-                        Collection Notes (Optional)
-                      </Label>
-                      <Textarea
-                        id="collectionNotes"
-                        placeholder="Add any notes about the collection..."
-                        value={collectionNotes}
-                        onChange={(e) => setCollectionNotes(e.target.value)}
-                        rows={2}
-                      />
+                    </div>
+
+                    <Separator />
+
+                    {/* Specimen Details */}
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-semibold mb-3">
+                        Specimen Details
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="specimenType">Test Type</Label>
+                          <Select
+                            value={selectedTestId}
+                            onValueChange={setSelectedTestId}
+                          >
+                            <SelectTrigger id="specimenType">
+                              <SelectValue placeholder="Select test type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="blood">Blood Test</SelectItem>
+                              <SelectItem value="urine">Urine Test</SelectItem>
+                              <SelectItem value="stool">Stool Test</SelectItem>
+                              <SelectItem value="tissue">
+                                Tissue Test
+                              </SelectItem>
+                              <SelectItem value="saliva">
+                                Saliva Test
+                              </SelectItem>
+                              <SelectItem value="other">Other</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="specimenQuantity">Quantity</Label>
+                          <Input
+                            id="specimenQuantity"
+                            placeholder="e.g., 5ml, 10g"
+                            value={specimenQuantity}
+                            onChange={(e) =>
+                              setSpecimenQuantity(e.target.value)
+                            }
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="specimenContainer">Container</Label>
+                          <Input
+                            id="specimenContainer"
+                            placeholder="e.g., EDTA tube, sterile container"
+                            value={specimenContainer}
+                            onChange={(e) =>
+                              setSpecimenContainer(e.target.value)
+                            }
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="specimenRemarks">
+                          Specimen Remarks (Optional)
+                        </Label>
+                        <Textarea
+                          id="specimenRemarks"
+                          placeholder="Any special instructions or observations..."
+                          value={specimenRemarks}
+                          onChange={(e) => setSpecimenRemarks(e.target.value)}
+                          rows={2}
+                        />
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    {/* Sample Parameters (Specimen Characteristics) */}
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-lg font-semibold">
+                          Sample Parameters
+                        </h3>
+                        <Button
+                          type="button"
+                          onClick={addSampleParameter}
+                          variant="outline"
+                          size="sm"
+                        >
+                          <Plus className="h-4 w-4 mr-2" />
+                          Add Parameter
+                        </Button>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        Record specimen characteristics (volume, color, pH,
+                        etc.)
+                      </p>
+                      <div className="space-y-4">
+                        {sampleParameters.map((param) => (
+                          <div
+                            key={param.id}
+                            className="border rounded-lg p-4 space-y-3"
+                          >
+                            <div className="flex items-center justify-between">
+                              <h4 className="font-medium">Parameter</h4>
+                              {sampleParameters.length > 1 && (
+                                <Button
+                                  type="button"
+                                  onClick={() =>
+                                    removeSampleParameter(param.id)
+                                  }
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-red-600 hover:text-red-700"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              )}
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                              <div className="space-y-2">
+                                <Label>Parameter Name</Label>
+                                <Input
+                                  value={param.name}
+                                  onChange={(e) =>
+                                    updateSampleParameter(
+                                      param.id,
+                                      "name",
+                                      e.target.value,
+                                    )
+                                  }
+                                  placeholder="e.g., Volume, Color, pH"
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label>Result</Label>
+                                <Input
+                                  value={param.result}
+                                  onChange={(e) =>
+                                    updateSampleParameter(
+                                      param.id,
+                                      "result",
+                                      e.target.value,
+                                    )
+                                  }
+                                  placeholder="Enter result"
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label>Unit</Label>
+                                <Input
+                                  value={param.unit}
+                                  onChange={(e) =>
+                                    updateSampleParameter(
+                                      param.id,
+                                      "unit",
+                                      e.target.value,
+                                    )
+                                  }
+                                  placeholder="e.g., ml, g, pH"
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label>Normal Range</Label>
+                                <Input
+                                  value={param.normalRange}
+                                  onChange={(e) =>
+                                    updateSampleParameter(
+                                      param.id,
+                                      "normalRange",
+                                      e.target.value,
+                                    )
+                                  }
+                                  placeholder="e.g., 4.5-11.0"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    {/* Test Parameters (Actual Results) */}
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-lg font-semibold">
+                          Test Parameters (Results)
+                        </h3>
+                        <Button
+                          type="button"
+                          onClick={addTestParameter}
+                          variant="outline"
+                          size="sm"
+                        >
+                          <Plus className="h-4 w-4 mr-2" />
+                          Add Parameter
+                        </Button>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        Enter actual test result values. Parameter Name and
+                        Value are required.
+                      </p>
+                      <div className="space-y-4">
+                        {testParameters.map((param, index) => (
+                          <div
+                            key={param.id}
+                            className="border rounded-lg p-4 space-y-4 bg-blue-50/50 dark:bg-blue-950/20"
+                          >
+                            <div className="flex items-center justify-between">
+                              <h4 className="font-medium">
+                                Parameter #{index + 1}
+                              </h4>
+                              {testParameters.length > 1 && (
+                                <Button
+                                  type="button"
+                                  onClick={() => removeTestParameter(param.id)}
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-red-600 hover:text-red-700"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              )}
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                <Label>Parameter Name *</Label>
+                                <Input
+                                  value={param.name}
+                                  onChange={(e) =>
+                                    updateTestParameter(
+                                      param.id,
+                                      "name",
+                                      e.target.value,
+                                    )
+                                  }
+                                  placeholder="e.g., Hemoglobin, WBC Count"
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label>Value *</Label>
+                                <Input
+                                  value={param.value}
+                                  onChange={(e) =>
+                                    updateTestParameter(
+                                      param.id,
+                                      "value",
+                                      e.target.value,
+                                    )
+                                  }
+                                  placeholder="Enter test result value"
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label>Unit</Label>
+                                <Input
+                                  value={param.unit}
+                                  onChange={(e) =>
+                                    updateTestParameter(
+                                      param.id,
+                                      "unit",
+                                      e.target.value,
+                                    )
+                                  }
+                                  placeholder="e.g., g/dL, cells/μL"
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label>Normal Range</Label>
+                                <Input
+                                  value={param.normalRange}
+                                  onChange={(e) =>
+                                    updateTestParameter(
+                                      param.id,
+                                      "normalRange",
+                                      e.target.value,
+                                    )
+                                  }
+                                  placeholder="e.g., 13.5-17.5 g/dL"
+                                />
+                              </div>
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Remarks (Optional)</Label>
+                              <Textarea
+                                value={param.remarks || ""}
+                                onChange={(e) =>
+                                  updateTestParameter(
+                                    param.id,
+                                    "remarks",
+                                    e.target.value,
+                                  )
+                                }
+                                placeholder="Any additional remarks or notes..."
+                                rows={2}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
                   <DialogFooter>

@@ -10,6 +10,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
 import { useAuthStore } from "@/store/useAuthStore";
+import LabTestPDFGenerator from "@/components/laboratory/LabTestPDFGenerator";
 import {
   ArrowLeft,
   TestTube,
@@ -20,6 +21,7 @@ import {
   AlertTriangle,
   Clock,
   RefreshCw,
+  Printer,
 } from "lucide-react";
 
 interface LabTest {
@@ -137,6 +139,12 @@ export default function TestDetailPage() {
     (test?.paymentVerified || test?.priority !== "routine") &&
     test?.collectionStatus !== "collected" &&
     test?.status !== "cancelled";
+
+  const canPrintTest =
+    (test?.status === "completed" || test?.status === "reported") &&
+    test?.processingStatus === "completed" &&
+    test?.results?.parameters &&
+    test.results.parameters.length > 0;
 
   if (loading) {
     return (
@@ -418,13 +426,6 @@ export default function TestDetailPage() {
                 </div>
               )}
             </div>
-            {!test.paymentVerified && (
-              <Button variant="outline" className="w-full" asChild>
-                <Link href={`/laboratory/tests/${test._id}/verify-payment`}>
-                  Verify Payment
-                </Link>
-              </Button>
-            )}
           </CardContent>
         </Card>
       </div>
@@ -443,6 +444,16 @@ export default function TestDetailPage() {
                   Collect Sample
                 </Link>
               </Button>
+            )}
+
+            {canPrintTest && (
+              <LabTestPDFGenerator
+                test={test}
+                mode="print"
+                buttonVariant="default"
+                buttonSize="lg"
+                buttonLabel="Print Report"
+              />
             )}
 
             <Button variant="outline" asChild>

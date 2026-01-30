@@ -23,14 +23,7 @@ export async function GET(
     }
 
     // Check if user has access to laboratory
-    const allowedRoles = [
-      "laboratory",
-      "lab_technician",
-      "technician",
-      "admin",
-      "receptionist",
-      "doctor",
-    ];
+    const allowedRoles = ["lab_technician", "admin", "receptionist", "doctor"];
     if (!auth.userRole || !allowedRoles.includes(auth.userRole)) {
       return NextResponse.json(
         {

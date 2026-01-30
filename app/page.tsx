@@ -7,34 +7,34 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Warehouse,
-  Package,
-  ShoppingCart,
-  FileText,
-  Users,
-  Shield,
-  BarChart3,
+  Heart,
+  Stethoscope,
   Clock,
-  Smartphone,
-  Zap,
+  Shield,
+  Users,
+  Building,
   ArrowRight,
   CheckCircle2,
-  Star,
-  Play,
-  Home,
-  Building,
-  Scissors,
-  Calculator,
+  Phone,
+  MapPin,
+  Calendar,
+  Award,
+  Sparkles,
+  Ambulance,
+  Microscope,
+  Brain,
+  Bone,
   Eye,
-  DollarSign,
-  Shirt,
-  Ruler,
-  Clock3,
-  Target,
+  Baby,
+  Pill,
+  ClipboardCheck,
+  UserPlus,
+  FileText,
+  BarChart3,
+  Settings,
 } from "lucide-react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
-import Link from "next/link";
 
 // Register ScrollTrigger
 if (typeof window !== "undefined") {
@@ -59,10 +59,31 @@ export default function LandingPage() {
       // Redirect to appropriate dashboard based on role
       switch (user.role) {
         case "admin":
-          router.push("/dashboard");
+          router.push("/admin/dashboard");
+          break;
+        case "doctor":
+          router.push("/doctor/dashboard");
+          break;
+        case "nurse":
+          router.push("/nurse/dashboard");
+          break;
+        case "receptionist":
+          router.push("/reception/dashboard");
+          break;
+        case "pharmacist":
+          router.push("/pharmacy/dashboard");
+          break;
+        case "lab_technician":
+          router.push("/laboratory/dashboard");
+          break;
+        case "radiologist":
+          router.push("/radiology/dashboard");
+          break;
+        case "admission":
+          router.push("/admissions/dashboard");
           break;
         case "staff":
-          router.push("/dashboard");
+          router.push("/staff/dashboard");
           break;
         default:
           router.push("/dashboard");
@@ -77,19 +98,19 @@ export default function LandingPage() {
     tl.fromTo(
       titleRef.current,
       { y: 100, opacity: 0 },
-      { y: 0, opacity: 1, duration: 1, ease: "power3.out" }
+      { y: 0, opacity: 1, duration: 1, ease: "power3.out" },
     )
       .fromTo(
         subtitleRef.current,
         { y: 50, opacity: 0 },
         { y: 0, opacity: 1, duration: 0.8, ease: "power2.out" },
-        "-=0.5"
+        "-=0.5",
       )
       .fromTo(
         buttonRef.current,
         { scale: 0, opacity: 0 },
         { scale: 1, opacity: 1, duration: 0.6, ease: "back.out(1.7)" },
-        "-=0.3"
+        "-=0.3",
       );
 
     // Features section animations
@@ -107,7 +128,7 @@ export default function LandingPage() {
           end: "bottom 20%",
           toggleActions: "play none none reverse",
         },
-      }
+      },
     );
 
     // Stats counter animation
@@ -117,7 +138,7 @@ export default function LandingPage() {
       {
         textContent: (
           i: any,
-          target: { getAttribute: (arg0: string) => any }
+          target: { getAttribute: (arg0: string) => any },
         ) => {
           const endValue = parseInt(target.getAttribute("data-end") || "0");
           return endValue;
@@ -136,7 +157,7 @@ export default function LandingPage() {
           const value = Math.floor(targets[0].textContent || 0);
           targets[0].textContent = value.toLocaleString();
         },
-      }
+      },
     );
 
     // CTA section animation
@@ -153,20 +174,8 @@ export default function LandingPage() {
           end: "bottom 20%",
           toggleActions: "play none none reverse",
         },
-      }
+      },
     );
-
-    // Floating animation for hero icons
-    const floatingIcons = gsap.utils.toArray(".floating-icon");
-    floatingIcons.forEach((icon: any) => {
-      gsap.to(icon, {
-        y: -20,
-        duration: 2,
-        repeat: -1,
-        yoyo: true,
-        ease: "sine.inOut",
-      });
-    });
   }, []);
 
   const handleGetStarted = () => {
@@ -177,71 +186,170 @@ export default function LandingPage() {
     }
   };
 
+  const handleBookAppointment = () => {
+    router.push("/appointments");
+  };
+
+  const handleEmergency = () => {
+    router.push("/emergency");
+  };
+
+  const handleLogin = () => {
+    router.push("/login");
+  };
+
+  const handleRegister = () => {
+    router.push("/register");
+  };
+
   const features = [
     {
-      icon: <Shirt className="h-8 w-8" />,
-      title: "Tailor Order Management",
+      icon: <Stethoscope className="h-8 w-8" />,
+      title: "Expert Medical Specialists",
       description:
-        "Track customer orders, measurements, delivery dates, and order status with real-time updates and alerts.",
+        "Board-certified physicians and specialists providing comprehensive healthcare services across all major disciplines.",
       color: "text-blue-600",
     },
     {
-      icon: <ShoppingCart className="h-8 w-8" />,
-      title: "Customer & Sales Management",
+      icon: <Microscope className="h-8 w-8" />,
+      title: "Advanced Diagnostics",
       description:
-        "Manage customer profiles, track sales, handle payments, and maintain customer relationship history.",
+        "State-of-the-art imaging, laboratory, and diagnostic facilities for accurate and timely medical assessments.",
       color: "text-green-600",
     },
     {
-      icon: <BarChart3 className="h-8 w-8" />,
-      title: "Financial Analytics",
+      icon: <Ambulance className="h-8 w-8" />,
+      title: "24/7 Emergency Care",
       description:
-        "Comprehensive financial reports, profit analysis, expense tracking, and business performance metrics.",
+        "Round-the-clock emergency services with rapid response teams and fully equipped emergency department.",
+      color: "text-red-600",
+    },
+    {
+      icon: <ClipboardCheck className="h-8 w-8" />,
+      title: "Electronic Medical Records",
+      description:
+        "Secure digital record-keeping system accessible to authorized healthcare professionals for coordinated care.",
       color: "text-purple-600",
     },
     {
-      icon: <FileText className="h-8 w-8" />,
-      title: "Daily Records & Expenses",
+      icon: <Pill className="h-8 w-8" />,
+      title: "Integrated Pharmacy",
       description:
-        "Track daily tailoring operations, material expenses, labor costs, and business expenses in one place.",
+        "In-house pharmacy with automated dispensing systems and real-time medication tracking.",
+      color: "text-cyan-600",
+    },
+    {
+      icon: <Users className="h-8 w-8" />,
+      title: "Multi-disciplinary Teams",
+      description:
+        "Collaborative care approach with specialists, nurses, and support staff working together.",
       color: "text-orange-600",
     },
-    {
-      icon: <Shield className="h-8 w-8" />,
-      title: "Secure & Role-Based",
-      description:
-        "Enterprise-grade security with role-based access control for admin, tailors, and staff members.",
-      color: "text-pink-600",
-    },
-    {
-      icon: <Zap className="h-8 w-8" />,
-      title: "Fast & Efficient",
-      description:
-        "Optimized performance with quick order search, measurement tracking, and real-time data synchronization.",
-      color: "text-yellow-600",
-    },
+  ];
+
+  const departments = [
+    { name: "Cardiology", icon: <Heart className="h-6 w-6" /> },
+    { name: "Orthopedics", icon: <Bone className="h-6 w-6" /> },
+    { name: "Neurology", icon: <Brain className="h-6 w-6" /> },
+    { name: "Ophthalmology", icon: <Eye className="h-6 w-6" /> },
+    { name: "Pediatrics", icon: <Baby className="h-6 w-6" /> },
+    { name: "Emergency", icon: <Ambulance className="h-6 w-6" /> },
+    { name: "Oncology", icon: <Microscope className="h-6 w-6" /> },
+    { name: "General Surgery", icon: <Stethoscope className="h-6 w-6" /> },
   ];
 
   const stats = [
     {
+      number: 150,
+      label: "Expert Doctors",
+      icon: <Stethoscope className="h-6 w-6" />,
+    },
+    {
       number: 500,
-      label: "Tailor Businesses Trust Us",
+      label: "Hospital Beds",
       icon: <Building className="h-6 w-6" />,
     },
     {
-      number: 100000,
-      label: "Orders Processed",
-      icon: <Shirt className="h-6 w-6" />,
-    },
-    {
-      number: 99.9,
-      label: "System Uptime",
-      icon: <Shield className="h-6 w-6" />,
+      number: 50,
+      label: "Specialties",
+      icon: <Award className="h-6 w-6" />,
     },
     {
       number: 24,
-      label: "Support Hours",
+      label: "Emergency Services",
       icon: <Clock className="h-6 w-6" />,
+    },
+  ];
+
+  const hospitalRoles = [
+    {
+      role: "admin",
+      title: "Hospital Administrator",
+      description:
+        "Complete system access for managing hospital operations, staff, and financial reports.",
+      icon: <Settings className="h-8 w-8" />,
+      features: [
+        "User Management",
+        "Financial Reports",
+        "System Configuration",
+        "Staff Management",
+      ],
+      color: "bg-gradient-to-r from-purple-600 to-pink-600",
+    },
+    {
+      role: "doctor",
+      title: "Medical Doctor",
+      description:
+        "Comprehensive patient care tools including electronic medical records and prescriptions.",
+      icon: <Stethoscope className="h-8 w-8" />,
+      features: [
+        "Patient Records",
+        "Prescriptions",
+        "Appointments",
+        "Lab Results",
+      ],
+      color: "bg-gradient-to-r from-blue-600 to-cyan-600",
+    },
+    {
+      role: "nurse",
+      title: "Nursing Staff",
+      description:
+        "Patient monitoring, medication administration, and vital signs tracking.",
+      icon: <Heart className="h-8 w-8" />,
+      features: ["Vital Signs", "Medications", "Patient Care", "Admissions"],
+      color: "bg-gradient-to-r from-green-600 to-emerald-600",
+    },
+    {
+      role: "receptionist",
+      title: "Reception/Registration",
+      description:
+        "Patient registration, appointment scheduling, and billing management.",
+      icon: <UserPlus className="h-8 w-8" />,
+      features: ["Appointments", "Registration", "Billing", "Patient Check-in"],
+      color: "bg-gradient-to-r from-orange-600 to-yellow-600",
+    },
+    {
+      role: "pharmacist",
+      title: "Pharmacy Management",
+      description:
+        "Medication dispensing, inventory management, and prescription verification.",
+      icon: <Pill className="h-8 w-8" />,
+      features: [
+        "Prescriptions",
+        "Inventory",
+        "Dispensing",
+        "Stock Management",
+      ],
+      color: "bg-gradient-to-r from-teal-600 to-blue-600",
+    },
+    {
+      role: "lab_technician",
+      title: "Laboratory Technician",
+      description:
+        "Lab test management, results entry, and sample tracking system.",
+      icon: <Microscope className="h-8 w-8" />,
+      features: ["Lab Tests", "Results Entry", "Sample Tracking", "Reports"],
+      color: "bg-gradient-to-r from-indigo-600 to-purple-600",
     },
   ];
 
@@ -259,114 +367,144 @@ export default function LandingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-gray-900 dark:to-gray-800">
+    <div className="min-h-screen bg-linear-to-br from-slate-50 to-blue-50 dark:from-gray-900 dark:to-gray-800">
+      {/* Navigation Bar */}
+      <nav className="sticky top-0 z-50 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md border-b border-gray-200 dark:border-gray-700">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <div className="flex items-center">
+              <Heart className="h-8 w-8 text-blue-600 mr-2" />
+              <span className="text-xl font-bold text-gray-900 dark:text-white">
+                Sajad Barekzai Hospital
+              </span>
+            </div>
+            <div className="flex items-center space-x-4">
+              <Button
+                variant="ghost"
+                onClick={handleLogin}
+                className="dark:text-gray-300"
+              >
+                Login
+              </Button>
+              <Button
+                onClick={handleRegister}
+                className="bg-linear-to-r from-blue-600 to-cyan-600"
+              >
+                Register
+              </Button>
+            </div>
+          </div>
+        </div>
+      </nav>
+
       {/* Hero Section */}
       <section
         ref={heroRef}
-        className="relative min-h-screen flex items-center justify-center overflow-hidden"
+        className="relative min-h-[90vh] flex items-center justify-center overflow-hidden"
       >
         {/* Background Elements */}
         <div className="absolute inset-0 overflow-hidden">
-          <div className="absolute -top-40 -right-40 w-80 h-80 bg-blue-200 dark:bg-blue-900 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-pulse"></div>
-          <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-cyan-200 dark:bg-cyan-900 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-pulse"></div>
-          <div className="absolute top-40 left-40 w-80 h-80 bg-sky-200 dark:bg-sky-900 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-pulse"></div>
+          <div className="absolute -top-40 -right-40 w-80 h-80 bg-blue-200 dark:bg-blue-900 rounded-full mix-blend-multiply filter blur-xl opacity-70"></div>
+          <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-green-200 dark:bg-green-900 rounded-full mix-blend-multiply filter blur-xl opacity-70"></div>
         </div>
 
-        {/* Floating Tailor Icons */}
-        <Shirt
-          className="absolute top-20 left-20 text-blue-300 dark:text-blue-700 floating-icon"
-          size={40}
-        />
-        <Scissors
-          className="absolute top-32 right-32 text-green-300 dark:text-green-700 floating-icon"
-          size={35}
-        />
-        <Ruler
-          className="absolute bottom-40 left-32 text-purple-300 dark:text-purple-700 floating-icon"
-          size={30}
-        />
-        <Target
-          className="absolute bottom-20 right-20 text-cyan-300 dark:text-cyan-700 floating-icon"
-          size={45}
-        />
+        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid lg:grid-cols-2 gap-12 items-center">
+            <div>
+              <div className="mb-8">
+                <div className="inline-flex items-center px-4 py-2 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-sm font-medium mb-6">
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  Excellence in Healthcare Since 2005
+                </div>
+              </div>
 
-        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <div className="mb-8">
-            <div className="inline-flex items-center px-4 py-2 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-sm font-medium mb-6">
-              <Zap className="h-4 w-4 mr-2" />
-              Trusted by 500+ tailor businesses
+              <h1
+                ref={titleRef}
+                className="text-5xl md:text-6xl font-bold text-gray-900 dark:text-white mb-6 leading-tight"
+              >
+                Advanced Healthcare at{" "}
+                <span className="text-transparent bg-clip-text bg-linear-to-r from-blue-600 to-cyan-600">
+                  Sajad Barekzai Hospital
+                </span>
+              </h1>
+
+              <p
+                ref={subtitleRef}
+                className="text-xl text-gray-600 dark:text-gray-300 mb-8 leading-relaxed"
+              >
+                A premier healthcare institution providing comprehensive medical
+                services with compassion, cutting-edge technology, and expert
+                medical professionals dedicated to your well-being.
+              </p>
+
+              <div
+                ref={buttonRef}
+                className="flex flex-col sm:flex-row gap-4 mb-12"
+              >
+                <Button
+                  size="lg"
+                  className="px-8 py-3 text-lg bg-linear-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700"
+                  onClick={handleBookAppointment}
+                >
+                  Book Appointment
+                  <Calendar className="ml-2 h-5 w-5" />
+                </Button>
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="px-8 py-3 text-lg dark:border-gray-600 dark:text-gray-300"
+                  onClick={handleEmergency}
+                >
+                  <Phone className="mr-2 h-5 w-5" />
+                  Emergency: 102
+                </Button>
+              </div>
+
+              {/* Quick Stats */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm">
+                  <div className="flex items-center">
+                    <Clock className="h-5 w-5 text-blue-600 mr-2" />
+                    <span className="font-semibold dark:text-white">
+                      24/7 Service
+                    </span>
+                  </div>
+                </div>
+                <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm">
+                  <div className="flex items-center">
+                    <Shield className="h-5 w-5 text-green-600 mr-2" />
+                    <span className="font-semibold dark:text-white">
+                      ISO Certified
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
 
-          <h1
-            ref={titleRef}
-            className="text-5xl md:text-7xl font-bold text-gray-900 dark:text-white mb-6"
-          >
-            Tailor Business
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-cyan-600">
-              {" "}
-              Management System
-            </span>
-          </h1>
-
-          <p
-            ref={subtitleRef}
-            className="text-xl md:text-2xl text-gray-600 dark:text-gray-300 mb-8 max-w-3xl mx-auto leading-relaxed"
-          >
-            Streamline your tailoring business operations with our all-in-one
-            platform. Manage orders, track measurements, handle customer payments, and 
-            monitor business performance efficiently.
-          </p>
-
-          <div
-            ref={buttonRef}
-            className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-12"
-          >
-            <Button
-              size="lg"
-              className="px-8 py-3 text-lg bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700"
-              onClick={handleGetStarted}
-            >
-              Get Started Free
-              <ArrowRight className="ml-2 h-5 w-5" />
-            </Button>
-            <Button
-              size="lg"
-              variant="outline"
-              className="px-8 py-3 text-lg dark:border-gray-600 dark:text-gray-300"
-              onClick={() => router.push("/login")}
-            >
-              <Play className="mr-2 h-5 w-5" />
-              Watch Demo
-            </Button>
-          </div>
-
-          {/* Trust Badges */}
-          <div className="flex flex-wrap justify-center items-center gap-8 opacity-60 dark:opacity-70">
-            <div className="flex items-center">
-              <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />
-              <span className="text-sm dark:text-gray-300">
-                No credit card required
-              </span>
-            </div>
-            <div className="flex items-center">
-              <Clock3 className="h-5 w-5 text-blue-500 mr-2" />
-              <span className="text-sm dark:text-gray-300">
-                Setup in 5 minutes
-              </span>
-            </div>
-            <div className="flex items-center">
-              <Star className="h-5 w-5 text-yellow-500 mr-2" />
-              <span className="text-sm dark:text-gray-300">
-                Rated 4.8/5 by users
-              </span>
+            <div className="relative">
+              {/* Hospital Illustration Placeholder */}
+              <div className="bg-linear-to-br from-blue-500 to-cyan-600 rounded-2xl p-8 text-white">
+                <div className="aspect-square rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
+                  <Building className="h-32 w-32" />
+                </div>
+                <div className="mt-6 grid grid-cols-2 gap-4">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold">150+</div>
+                    <div className="text-sm opacity-90">Expert Doctors</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold">500+</div>
+                    <div className="text-sm opacity-90">Hospital Beds</div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       </section>
 
       {/* Stats Section */}
-      <section ref={statsRef} className="py-20 bg-white dark:bg-gray-800">
+      <section ref={statsRef} className="py-16 bg-white dark:bg-gray-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
             {stats.map((stat, index) => (
@@ -376,11 +514,11 @@ export default function LandingPage() {
                     {stat.icon}
                   </div>
                 </div>
-                <div className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-2">
+                <div className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
                   <span className="stat-number" data-end={stat.number}>
                     0
                   </span>
-                  {stat.number <= 100 && "%"}
+                  {stat.number <= 100 && "+"}
                 </div>
                 <div className="text-gray-600 dark:text-gray-300 font-medium">
                   {stat.label}
@@ -394,16 +532,16 @@ export default function LandingPage() {
       {/* Features Section */}
       <section
         ref={featuresRef}
-        className="py-20 bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-900 dark:to-gray-800"
+        className="py-20 bg-linear-to-b from-white to-blue-50 dark:from-gray-900 dark:to-gray-800"
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <h2 className="text-4xl md:text-5xl font-bold text-gray-900 dark:text-white mb-4">
-              Complete Tailor Business Solution
+              Comprehensive Medical Services
             </h2>
             <p className="text-xl text-gray-600 dark:text-gray-300 max-w-3xl mx-auto">
-              From order management to financial tracking, our platform covers all aspects 
-              of modern tailor business operations.
+              We offer a wide range of specialized healthcare services delivered
+              by expert medical professionals using advanced technology.
             </p>
           </div>
 
@@ -411,13 +549,13 @@ export default function LandingPage() {
             {features.map((feature, index) => (
               <Card
                 key={index}
-                className="feature-card border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-2 dark:bg-gray-800 dark:border-gray-700"
+                className="feature-card border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1 dark:bg-gray-800"
               >
                 <CardHeader>
                   <div
                     className={`p-3 rounded-full w-fit ${feature.color.replace(
                       "text",
-                      "bg"
+                      "bg",
                     )} bg-opacity-10`}
                   >
                     <div className={feature.color}>{feature.icon}</div>
@@ -437,303 +575,170 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Role-Based Features */}
+      {/* Hospital Management System Roles */}
       <section className="py-20 bg-white dark:bg-gray-900">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <h2 className="text-4xl md:text-5xl font-bold text-gray-900 dark:text-white mb-4">
-              Designed for Your Tailoring Business
+              Integrated Hospital Management System
             </h2>
             <p className="text-xl text-gray-600 dark:text-gray-300 max-w-3xl mx-auto">
-              Customized tools and dashboards for different roles in your tailoring business.
+              Role-based access control for different healthcare professionals
             </p>
           </div>
 
-          <Tabs defaultValue="owner" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="owner" className="flex items-center gap-2">
-                <DollarSign className="h-4 w-4" />
-                Business Owner
-              </TabsTrigger>
-              <TabsTrigger
-                value="tailor"
-                className="flex items-center gap-2"
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {hospitalRoles.map((role, index) => (
+              <Card
+                key={index}
+                className="border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-2 dark:bg-gray-800"
               >
-                <Scissors className="h-4 w-4" />
-                Tailor/Staff
-              </TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="owner" className="p-6">
-              <div className="grid md:grid-cols-2 gap-8 items-center">
-                <div>
-                  <h3 className="text-2xl font-bold mb-4 dark:text-white">
-                    Business Owner Dashboard
-                  </h3>
-                  <ul className="space-y-3">
-                    <li className="flex items-center dark:text-gray-300">
-                      <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />{" "}
-                      Financial Overview & Reports
-                    </li>
-                    <li className="flex items-center dark:text-gray-300">
-                      <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />{" "}
-                      Customer Management & Analytics
-                    </li>
-                    <li className="flex items-center dark:text-gray-300">
-                      <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />{" "}
-                      Expense Tracking & Profit Analysis
-                    </li>
-                    <li className="flex items-center dark:text-gray-300">
-                      <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />{" "}
-                      Staff Performance Monitoring
-                    </li>
-                    <li className="flex items-center dark:text-gray-300">
-                      <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />{" "}
-                      Business Growth Insights
-                    </li>
-                    <li className="flex items-center dark:text-gray-300">
-                      <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />{" "}
-                      Inventory & Material Management
-                    </li>
-                  </ul>
-                </div>
-                <div className="bg-gradient-to-br from-blue-500 to-cyan-600 rounded-lg p-8 text-white">
-                  <DollarSign className="h-16 w-16 mb-4" />
-                  <h4 className="text-xl font-bold mb-2">
-                    Complete Business Control
-                  </h4>
-                  <p>
-                    Monitor your tailoring business performance, track profits, 
-                    and make data-driven decisions with our comprehensive owner dashboard.
+                <CardHeader>
+                  <div className={`${role.color} rounded-lg p-4 w-fit mb-4`}>
+                    <div className="text-white">{role.icon}</div>
+                  </div>
+                  <CardTitle className="text-xl dark:text-white">
+                    {role.title}
+                  </CardTitle>
+                  <p className="text-gray-600 dark:text-gray-300 text-sm">
+                    {role.description}
                   </p>
-                </div>
-              </div>
-            </TabsContent>
-
-            <TabsContent value="tailor" className="p-6">
-              <div className="grid md:grid-cols-2 gap-8 items-center">
-                <div>
-                  <h3 className="text-2xl font-bold mb-4 dark:text-white">
-                    Tailor/Staff Dashboard
-                  </h3>
-                  <ul className="space-y-3">
-                    <li className="flex items-center dark:text-gray-300">
-                      <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />{" "}
-                      Order Management & Assignment
-                    </li>
-                    <li className="flex items-center dark:text-gray-300">
-                      <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />{" "}
-                      Customer Measurement Tracking
-                    </li>
-                    <li className="flex items-center dark:text-gray-300">
-                      <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />{" "}
-                      Work Progress Updates
-                    </li>
-                    <li className="flex items-center dark:text-gray-300">
-                      <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />{" "}
-                      Material Usage Recording
-                    </li>
-                    <li className="flex items-center dark:text-gray-300">
-                      <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />{" "}
-                      Delivery Status Updates
-                    </li>
-                    <li className="flex items-center dark:text-gray-300">
-                      <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />{" "}
-                      Daily Task Management
-                    </li>
-                  </ul>
-                </div>
-                <div className="bg-gradient-to-br from-purple-500 to-pink-600 rounded-lg p-8 text-white">
-                  <Scissors className="h-16 w-16 mb-4" />
-                  <h4 className="text-xl font-bold mb-2">
-                    Efficient Work Management
-                  </h4>
-                  <p>
-                    Streamline your tailoring work with easy order management, 
-                    measurement tracking, and progress updates.
-                  </p>
-                </div>
-              </div>
-            </TabsContent>
-          </Tabs>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {role.features.map((feature, idx) => (
+                      <div key={idx} className="flex items-center text-sm">
+                        <CheckCircle2 className="h-4 w-4 text-green-500 mr-2" />
+                        <span className="dark:text-gray-300">{feature}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <Button
+                    className="w-full mt-6"
+                    variant="outline"
+                    onClick={handleRegister}
+                  >
+                    Register as {role.title.split(" ")[0]}
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </div>
       </section>
 
-      {/* Pricing Section */}
-      <section className="py-20 bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-800 dark:to-gray-900">
+      {/* Departments Section */}
+      <section className="py-20 bg-gradient-to-b from-blue-50 to-white dark:from-gray-800 dark:to-gray-900">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <h2 className="text-4xl md:text-5xl font-bold text-gray-900 dark:text-white mb-4">
-              Simple, Transparent Pricing
+              Medical Departments
             </h2>
             <p className="text-xl text-gray-600 dark:text-gray-300 max-w-3xl mx-auto">
-              Choose the plan that fits your tailoring business needs. No hidden fees, no
-              surprises.
+              Specialized care across various medical disciplines
             </p>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-8">
-            {/* Basic Plan */}
-            <Card className="border-2 hover:border-blue-500 transition-all duration-300 dark:bg-gray-800 dark:border-gray-700">
-              <CardHeader>
-                <CardTitle className="text-2xl dark:text-white">
-                  Basic
-                </CardTitle>
-                <div className="text-4xl font-bold dark:text-white">
-                  $29
-                  <span className="text-lg text-gray-500 dark:text-gray-400">
-                    /month
-                  </span>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+            {departments.map((dept, index) => (
+              <div
+                key={index}
+                className="bg-white dark:bg-gray-800 rounded-lg p-6 text-center hover:shadow-lg transition-shadow duration-300 border border-gray-200 dark:border-gray-700"
+              >
+                <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300 mb-4">
+                  {dept.icon}
                 </div>
-              </CardHeader>
-              <CardContent>
-                <ul className="space-y-3 mb-6">
-                  <li className="flex items-center dark:text-gray-300">
-                    <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />
-                    Basic Order Management
-                  </li>
-                  <li className="flex items-center dark:text-gray-300">
-                    <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />
-                    Customer Management
-                  </li>
-                  <li className="flex items-center dark:text-gray-300">
-                    <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />1
-                    User License
-                  </li>
-                  <li className="flex items-center dark:text-gray-300">
-                    <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />
-                    Basic Support
-                  </li>
-                </ul>
-                <Button className="w-full" variant="outline">
-                  Get Started
-                </Button>
-              </CardContent>
-            </Card>
-
-            {/* Professional Plan (Recommended) */}
-            <Card className="border-2 border-blue-500 shadow-xl scale-105 dark:bg-gray-800">
-              <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
-                <div className="bg-blue-500 text-white px-4 py-1 rounded-full text-sm font-medium">
-                  Most Popular
-                </div>
+                <h3 className="font-semibold text-gray-900 dark:text-white">
+                  {dept.name}
+                </h3>
               </div>
-              <CardHeader>
-                <CardTitle className="text-2xl dark:text-white">
-                  Professional
-                </CardTitle>
-                <div className="text-4xl font-bold dark:text-white">
-                  $59
-                  <span className="text-lg text-gray-500 dark:text-gray-400">
-                    /month
-                  </span>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <ul className="space-y-3 mb-6">
-                  <li className="flex items-center dark:text-gray-300">
-                    <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />
-                    Advanced Order Management
-                  </li>
-                  <li className="flex items-center dark:text-gray-300">
-                    <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />
-                    Full Customer & Inventory System
-                  </li>
-                  <li className="flex items-center dark:text-gray-300">
-                    <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />
-                    Financial Reports & Analytics
-                  </li>
-                  <li className="flex items-center dark:text-gray-300">
-                    <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />
-                    Up to 5 Users
-                  </li>
-                  <li className="flex items-center dark:text-gray-300">
-                    <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />
-                    Priority Support
-                  </li>
-                  <li className="flex items-center dark:text-gray-300">
-                    <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />
-                    Advanced Measurement Tracking
-                  </li>
-                </ul>
-                <Button className="w-full bg-gradient-to-r from-blue-600 to-cyan-600">
-                  Get Started
-                </Button>
-              </CardContent>
-            </Card>
-
-            {/* Enterprise Plan */}
-            <Card className="border-2 hover:border-purple-500 transition-all duration-300 dark:bg-gray-800 dark:border-gray-700">
-              <CardHeader>
-                <CardTitle className="text-2xl dark:text-white">
-                  Enterprise
-                </CardTitle>
-                <div className="text-4xl font-bold dark:text-white">
-                  $129
-                  <span className="text-lg text-gray-500 dark:text-gray-400">
-                    /month
-                  </span>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <ul className="space-y-3 mb-6">
-                  <li className="flex items-center dark:text-gray-300">
-                    <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />
-                    Unlimited Everything
-                  </li>
-                  <li className="flex items-center dark:text-gray-300">
-                    <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />
-                    Custom Features Development
-                  </li>
-                  <li className="flex items-center dark:text-gray-300">
-                    <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />
-                    Unlimited Users
-                  </li>
-                  <li className="flex items-center dark:text-gray-300">
-                    <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />
-                    24/7 Premium Support
-                  </li>
-                  <li className="flex items-center dark:text-gray-300">
-                    <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />
-                    API Access
-                  </li>
-                  <li className="flex items-center dark:text-gray-300">
-                    <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />
-                    Dedicated Account Manager
-                  </li>
-                </ul>
-                <Button className="w-full" variant="outline">
-                  Contact Sales
-                </Button>
-              </CardContent>
-            </Card>
+            ))}
           </div>
         </div>
       </section>
 
-      {/* CTA Section */}
+      {/* Emergency CTA Section */}
+      <section className="py-20 bg-gradient-to-r from-red-600 to-pink-700 text-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid md:grid-cols-2 gap-12 items-center">
+            <div>
+              <h2 className="text-4xl md:text-5xl font-bold mb-6">
+                24/7 Emergency Services
+              </h2>
+              <p className="text-xl mb-8 opacity-90">
+                Our emergency department is fully equipped and staffed round the
+                clock to handle any medical emergency with immediate care.
+              </p>
+              <div className="space-y-4">
+                <div className="flex items-center">
+                  <CheckCircle2 className="h-6 w-6 text-green-300 mr-3" />
+                  <span className="text-lg">Rapid Response Team</span>
+                </div>
+                <div className="flex items-center">
+                  <CheckCircle2 className="h-6 w-6 text-green-300 mr-3" />
+                  <span className="text-lg">Advanced Life Support</span>
+                </div>
+                <div className="flex items-center">
+                  <CheckCircle2 className="h-6 w-6 text-green-300 mr-3" />
+                  <span className="text-lg">
+                    Immediate Specialist Consultation
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8">
+              <div className="text-center">
+                <Ambulance className="h-20 w-20 mx-auto mb-6" />
+                <div className="text-6xl font-bold mb-4">102</div>
+                <p className="text-xl font-semibold mb-6">Emergency Hotline</p>
+                <Button
+                  size="lg"
+                  className="w-full bg-white text-red-600 hover:bg-gray-100"
+                  onClick={handleEmergency}
+                >
+                  Call Emergency
+                  <Phone className="ml-2 h-5 w-5" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Login/Register CTA */}
       <section
         ref={ctaRef}
-        className="py-20 bg-gradient-to-r from-blue-600 to-cyan-700 text-white"
+        className="py-20 bg-gradient-to-br from-blue-600 to-cyan-700 text-white"
       >
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-4xl md:text-5xl font-bold mb-6">
-            Ready to Transform Your Tailoring Business?
+            Join Our Healthcare Team
           </h2>
           <p className="text-xl mb-8 opacity-90">
-            Join hundreds of tailoring businesses who trust our platform to streamline their operations.
+            Access the hospital management system with your assigned role and
+            contribute to providing excellent patient care.
           </p>
-          <Button
-            size="lg"
-            variant="secondary"
-            className="px-8 py-3 text-lg bg-white text-blue-600 hover:bg-gray-100"
-            onClick={handleGetStarted}
-          >
-            Start Your Free Trial
-            <ArrowRight className="ml-2 h-5 w-5" />
-          </Button>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <Button
+              size="lg"
+              variant="secondary"
+              className="px-8 py-3 text-lg bg-white text-blue-600 hover:bg-gray-100"
+              onClick={handleLogin}
+            >
+              Login to System
+              <ArrowRight className="ml-2 h-5 w-5" />
+            </Button>
+            <Button
+              size="lg"
+              className="px-8 py-3 text-lg bg-transparent border-2 border-white hover:bg-white/10"
+              onClick={handleRegister}
+            >
+              Register Account
+              <UserPlus className="ml-2 h-5 w-5" />
+            </Button>
+          </div>
           <p className="mt-4 text-sm opacity-75">
-            No credit card required • 30-day free trial • Setup in minutes
+            Access requires valid hospital credentials or administrator approval
           </p>
         </div>
       </section>
@@ -743,46 +748,65 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid md:grid-cols-4 gap-8">
             <div>
-              <h3 className="text-xl font-bold mb-4">
-                Tailor Management System
-              </h3>
-              <p className="text-gray-400">
-                Comprehensive solution for tailoring businesses to manage orders, 
-                customers, and finances efficiently.
+              <div className="flex items-center mb-4">
+                <Heart className="h-6 w-6 text-blue-400 mr-2" />
+                <h3 className="text-xl font-bold">Sajad Barekzai Hospital</h3>
+              </div>
+              <p className="text-gray-400 mb-4">
+                Providing exceptional healthcare services with compassion and
+                excellence.
               </p>
+              <div className="flex items-center text-gray-400">
+                <MapPin className="h-5 w-5 mr-2" />
+                <span>Kabul, Afghanistan</span>
+              </div>
             </div>
             <div>
-              <h4 className="font-semibold mb-4">Features</h4>
+              <h4 className="font-semibold mb-4">Quick Links</h4>
               <ul className="space-y-2 text-gray-400">
-                <li>Order Management</li>
-                <li>Customer Management</li>
-                <li>Measurement Tracking</li>
-                <li>Financial Tracking</li>
+                <li className="cursor-pointer hover:text-white">
+                  Find a Doctor
+                </li>
+                <li className="cursor-pointer hover:text-white">Departments</li>
+                <li className="cursor-pointer hover:text-white">
+                  Health Checkups
+                </li>
+                <li
+                  className="cursor-pointer hover:text-white"
+                  onClick={handleBookAppointment}
+                >
+                  Book Appointment
+                </li>
               </ul>
             </div>
             <div>
-              <h4 className="font-semibold mb-4">Company</h4>
+              <h4 className="font-semibold mb-4">Services</h4>
               <ul className="space-y-2 text-gray-400">
-                <li>About Us</li>
-                <li>Contact</li>
-                <li>Privacy Policy</li>
-                <li>Terms of Service</li>
+                <li>Emergency Care</li>
+                <li>OPD Services</li>
+                <li>Diagnostics</li>
+                <li>Surgery</li>
               </ul>
             </div>
             <div>
-              <h4 className="font-semibold mb-4">Contact</h4>
+              <h4 className="font-semibold mb-4">Contact Info</h4>
               <ul className="space-y-2 text-gray-400">
-                <li>support@tailormanagement.com</li>
-                <li>+1 (555) 123-4567</li>
-                <li>24/7 Support Available</li>
+                <li className="flex items-center">
+                  <Phone className="h-5 w-5 mr-2" />
+                  <span>+93 78 123 4567</span>
+                </li>
+                <li>Emergency: 102</li>
+                <li>info@sajadhospital.af</li>
+                <li>Mon-Sun: 24/7</li>
               </ul>
             </div>
           </div>
           <div className="border-t border-gray-800 mt-8 pt-8 text-center text-gray-400">
             <p>
-              © {new Date().getFullYear()} Tailor Management System. All rights
+              © {new Date().getFullYear()} Sajad Barekzai Hospital. All rights
               reserved.
             </p>
+            <p className="mt-2 text-sm">Hospital Management System v2.0</p>
           </div>
         </div>
       </footer>

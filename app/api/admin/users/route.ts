@@ -4,14 +4,6 @@ import { User } from "@/lib/models/User";
 import dbConnect from "@/lib/dbConnect";
 import { CreateUserSchema } from "@/lib/schemas/userSchema";
 import bcrypt from "bcryptjs";
-import { cookies } from "next/headers";
-import jwt from "jsonwebtoken";
-
-// Define types for JWT payload
-interface JwtPayload {
-  role: string;
-  key: string; // For other possible properties
-}
 
 // Type for user data without sensitive information
 type SafeUserData = Omit<
@@ -24,36 +16,43 @@ export async function GET(req: NextRequest) {
   await dbConnect();
 
   try {
-    // Verify admin role
-    const cookieStore = cookies();
-    const accessToken = (await cookieStore).get("accessToken")?.value;
+    // Get user info from middleware headers
+    const userId = req.headers.get("x-user-id");
+    const userRole = req.headers.get("x-user-role");
 
-    console.log("Access token present:", !!accessToken);
-    if (!accessToken) {
-      console.log("No access token, returning 401");
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    console.log("User from middleware:", { userId, userRole });
+
+    if (!userId || !userRole) {
+      console.log("No user info from middleware, returning 401");
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 },
+      );
     }
 
-    // Use jwt.verify instead of jwtDecode for proper verification
-    const decoded: JwtPayload = jwt.verify(accessToken, process.env.JWT_SECRET!) as JwtPayload;
-    console.log("Decoded token role:", decoded.role);
-    if (decoded.role !== "admin") {
+    if (userRole !== "admin") {
       console.log("User not admin, returning 403");
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return NextResponse.json(
+        { success: false, error: "Forbidden" },
+        { status: 403 },
+      );
     }
 
     console.log("Querying users from database");
     const users: SafeUserData[] = await User.find(
       {},
-      "-password -refreshTokens"
+      "-password -refreshTokens",
     );
     console.log("Found users count:", users.length);
-    return NextResponse.json({ data: users });
+    return NextResponse.json({ success: true, data: users });
   } catch (error: unknown) {
     console.error("Failed to fetch users:", error);
     const errorMessage =
       error instanceof Error ? error.message : "Failed to fetch users";
-    return NextResponse.json({ error: errorMessage }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: errorMessage },
+      { status: 500 },
+    );
   }
 }
 
@@ -61,17 +60,22 @@ export async function POST(req: NextRequest) {
   await dbConnect();
 
   try {
-    // Verify admin role
-    const cookieStore = cookies();
-    const accessToken = (await cookieStore).get("accessToken")?.value;
+    // Get user info from middleware headers
+    const userId = req.headers.get("x-user-id");
+    const userRole = req.headers.get("x-user-role");
 
-    if (!accessToken) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!userId || !userRole) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 },
+      );
     }
 
-    const decoded: JwtPayload = jwt.verify(accessToken, process.env.JWT_SECRET!) as JwtPayload;
-    if (decoded.role !== "admin") {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (userRole !== "admin") {
+      return NextResponse.json(
+        { success: false, error: "Forbidden" },
+        { status: 403 },
+      );
     }
 
     const body = await req.json();
@@ -85,7 +89,7 @@ export async function POST(req: NextRequest) {
           error: "Validation failed",
           details: validation.error.format(),
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -93,8 +97,8 @@ export async function POST(req: NextRequest) {
     const existingUser = await User.findOne({ email: body.email });
     if (existingUser) {
       return NextResponse.json(
-        { error: "Email already exists" },
-        { status: 400 }
+        { success: false, error: "Email already exists" },
+        { status: 400 },
       );
     }
 
@@ -109,11 +113,17 @@ export async function POST(req: NextRequest) {
     // Exclude password and refresh tokens
     const userObject = newUser.toObject();
     const { password, refreshTokens, ...userWithoutSensitive } = userObject;
-    return NextResponse.json(userWithoutSensitive, { status: 201 });
+    return NextResponse.json(
+      { success: true, data: userWithoutSensitive },
+      { status: 201 },
+    );
   } catch (error: unknown) {
     console.error("Failed to create user:", error);
     const errorMessage =
       error instanceof Error ? error.message : "Failed to create user";
-    return NextResponse.json({ error: errorMessage }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: errorMessage },
+      { status: 500 },
+    );
   }
 }

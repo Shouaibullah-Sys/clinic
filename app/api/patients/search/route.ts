@@ -3,44 +3,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
 import { Patient } from "@/lib/models/Patient";
-import { jwtVerify } from "jose";
-
-const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-this";
-
-async function verifyToken(token: string) {
-  try {
-    const secret = new TextEncoder().encode(JWT_SECRET);
-    const { payload } = await jwtVerify(token, secret);
-    return payload;
-  } catch (error) {
-    return null;
-  }
-}
+import { authenticateRequest } from "@/lib/auth";
 
 export async function GET(request: NextRequest) {
   try {
     await dbConnect();
 
-    // Get token from Authorization header
-    const authHeader = request.headers.get("authorization");
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    // Authenticate the request
+    const auth = await authenticateRequest(request);
+    if (!auth.success) {
       return NextResponse.json(
-        { success: false, error: "Unauthorized. No token provided." },
-        { status: 401 },
+        { success: false, error: auth.error },
+        { status: auth.status || 401 },
       );
     }
 
-    const token = authHeader.split(" ")[1];
-    const payload = await verifyToken(token);
-
-    if (!payload) {
-      return NextResponse.json(
-        { success: false, error: "Invalid or expired token." },
-        { status: 401 },
-      );
-    }
-
-    const userRole = payload.role as string;
+    const userRole = auth.userRole!;
 
     // Allow laboratory staff and other medical staff to search patients
     // Laboratory users need this to create direct lab tests
@@ -49,9 +27,9 @@ export async function GET(request: NextRequest) {
       "receptionist",
       "doctor",
       "nurse",
-      "laboratory",
       "lab_technician",
-      "technician",
+      "pharmacist",
+      "radiologist",
     ];
     if (!allowedRoles.includes(userRole)) {
       return NextResponse.json(

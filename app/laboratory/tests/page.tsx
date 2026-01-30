@@ -3,11 +3,17 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { 
+import {
   Table,
   TableBody,
   TableCell,
@@ -22,7 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { 
+import {
   Search,
   TestTube,
   Eye,
@@ -35,13 +41,15 @@ import {
   Stethoscope,
   Filter,
   FlaskConical,
-  AlertCircle
+  AlertCircle,
+  Printer,
 } from "lucide-react";
 import Link from "next/link";
 import { useAuthStore } from "@/store/useAuthStore";
 import { format, parseISO } from "date-fns";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import LabTestPDFGenerator from "@/components/laboratory/LabTestPDFGenerator";
 
 interface LabTest {
   _id: string;
@@ -101,28 +109,30 @@ export default function LaboratoryTestsPage() {
       console.log("Fetching lab tests for laboratory...");
       const url = `/api/laboratory/tests?tab=${activeTab}`;
       console.log("API URL:", url);
-      
+
       const response = await fetch(url, {
         headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
         },
       });
-      
+
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('API Error:', errorText);
-        toast.error(`Failed to fetch tests: ${response.status} ${response.statusText}`);
+        console.error("API Error:", errorText);
+        toast.error(
+          `Failed to fetch tests: ${response.status} ${response.statusText}`,
+        );
         return;
       }
-      
+
       const data = await response.json();
       console.log("API Response:", data);
-      
+
       if (data.success) {
         setTests(data.data || []);
         console.log(`Loaded ${data.data?.length || 0} lab tests`);
-        
+
         if (data.data?.length === 0) {
           console.log("No tests found. Possible reasons:");
           console.log("- No lab tests in database");
@@ -135,7 +145,7 @@ export default function LaboratoryTestsPage() {
         console.error("API Error:", data.error);
       }
     } catch (error) {
-      console.error('Error fetching tests:', error);
+      console.error("Error fetching tests:", error);
       toast.error("Network error. Please try again.");
     } finally {
       setLoading(false);
@@ -143,77 +153,79 @@ export default function LaboratoryTestsPage() {
   };
 
   // Replace your current tab filtering logic with this:
-const filteredTests = tests.filter(test => {
-  if (!searchQuery) return true;
-  const query = searchQuery.toLowerCase();
-  return (
-    test.testId.toLowerCase().includes(query) ||
-    test.testName.toLowerCase().includes(query) ||
-    test.patient.name.toLowerCase().includes(query) ||
-    test.patient.patientId.toLowerCase().includes(query) ||
-    (test.labReferenceId && test.labReferenceId.toLowerCase().includes(query))
-  );
-}).filter(test => {
-  // Apply tab filtering
-  if (activeTab === "pending") {
-    // Show tests that are pending collection
-    return (test.collectionStatus === "pending" || test.collectionStatus === "scheduled");
-  }
-  if (activeTab === "collected") {
-    // Show tests that are collected but not completed
-    return test.collectionStatus === "collected" && test.processingStatus !== "completed";
-  }
-  if (activeTab === "processing") {
-    // Show tests that are being processed
-    return test.processingStatus === "processing";
-  }
-  if (activeTab === "completed") {
-    // Show tests with completed processing but not reported
-    return test.processingStatus === "completed" && test.status !== "reported";
-  }
-  if (activeTab === "reported") {
-    // Show tests that have been reported
-    return test.status === "reported";
-  }
-  // "all" tab - show all except cancelled
-  return test.status !== "cancelled";
-}).filter(test => {
-  if (statusFilter === "all") return true;
-  if (statusFilter === "pending") return test.status === "pending" || test.status === "ordered";
-  if (statusFilter === "processing") return test.status === "processing";
-  if (statusFilter === "completed") return test.status === "completed" || test.status === "reported";
-  if (statusFilter === "cancelled") return test.status === "cancelled";
-  return true;
-}).filter(test => {
-  if (collectionStatusFilter === "all") return true;
-  return test.collectionStatus === collectionStatusFilter;
-});
+  const filteredTests = tests
+    .filter((test) => {
+      if (!searchQuery) return true;
+      const query = searchQuery.toLowerCase();
+      return (
+        test.testId.toLowerCase().includes(query) ||
+        test.testName.toLowerCase().includes(query) ||
+        test.patient.name.toLowerCase().includes(query) ||
+        test.patient.patientId.toLowerCase().includes(query) ||
+        (test.labReferenceId &&
+          test.labReferenceId.toLowerCase().includes(query))
+      );
+    })
+    .filter((test) => {
+      // Apply tab filtering
+      if (activeTab === "pending") {
+        // Show tests that are pending collection
+        return (
+          test.collectionStatus === "pending" ||
+          test.collectionStatus === "scheduled"
+        );
+      }
+      if (activeTab === "completed") {
+        // Show tests that are completed (collected with results)
+        return test.status === "completed";
+      }
+      if (activeTab === "reported") {
+        // Show tests that are reported
+        return test.status === "reported";
+      }
+      // "all" tab - show all except cancelled
+      return test.status !== "cancelled";
+    })
+    .filter((test) => {
+      if (statusFilter === "all") return true;
+      if (statusFilter === "pending")
+        return test.status === "pending" || test.status === "ordered";
+      if (statusFilter === "processing") return test.status === "processing";
+      if (statusFilter === "completed")
+        return test.status === "completed" || test.status === "reported";
+      if (statusFilter === "cancelled") return test.status === "cancelled";
+      return true;
+    })
+    .filter((test) => {
+      if (collectionStatusFilter === "all") return true;
+      return test.collectionStatus === collectionStatusFilter;
+    });
 
   const getStatusBadge = (test: LabTest) => {
     if (test.status === "cancelled") {
       return <Badge variant="destructive">Cancelled</Badge>;
     }
-    
+
     if (test.status === "reported") {
       return <Badge className=" text-green-800">Reported</Badge>;
     }
-    
+
     if (test.status === "completed") {
       return <Badge className=" text-blue-800">Completed</Badge>;
     }
-    
+
     if (test.status === "processing") {
       return <Badge className=" text-purple-800">Processing</Badge>;
     }
-    
+
     if (test.collectionStatus === "collected") {
       return <Badge className=" text-yellow-800">Ready for Processing</Badge>;
     }
-    
+
     if (test.collectionStatus === "pending") {
       return <Badge className=" text-gray-800">Pending Collection</Badge>;
     }
-    
+
     return <Badge variant="outline">{test.status || "Unknown"}</Badge>;
   };
 
@@ -225,9 +237,12 @@ const filteredTests = tests.filter(test => {
       rejected: { bg: "bg-red-100", text: "text-red-800" },
       insufficient: { bg: "bg-orange-100", text: "text-orange-800" },
     };
-    
-    const variant = variants[status] || { bg: "bg-gray-100", text: "text-gray-800" };
-    
+
+    const variant = variants[status] || {
+      bg: "bg-gray-100",
+      text: "text-gray-800",
+    };
+
     return (
       <Badge className={`${variant.bg} ${variant.text}`}>
         {status?.toUpperCase() || "UNKNOWN"}
@@ -237,27 +252,43 @@ const filteredTests = tests.filter(test => {
 
   const canProcessTest = (test: LabTest) => {
     // Can process if sample is collected and not already completed
-    return test.collectionStatus === "collected" && 
-           test.processingStatus !== "completed" &&
-           test.status !== "cancelled" &&
-           test.status !== "reported";
+    return (
+      test.collectionStatus === "collected" &&
+      test.processingStatus !== "completed" &&
+      test.status !== "cancelled" &&
+      test.status !== "reported"
+    );
   };
 
   const canCollectSample = (test: LabTest) => {
     // Can collect if pending/scheduled and payment is verified (or priority is urgent/emergency)
-    return (test.collectionStatus === "pending" || test.collectionStatus === "scheduled") &&
-           (test.paymentVerified || test.priority === "urgent" || test.priority === "emergency") &&
-           test.status !== "cancelled";
+    return (
+      (test.collectionStatus === "pending" ||
+        test.collectionStatus === "scheduled") &&
+      (test.paymentVerified ||
+        test.priority === "urgent" ||
+        test.priority === "emergency") &&
+      test.status !== "cancelled"
+    );
+  };
+
+  const canPrintTest = (test: LabTest) => {
+    // Can print if test is completed or reported (has results)
+    return (
+      (test.status === "completed" || test.status === "reported") &&
+      test.processingStatus === "completed"
+    );
   };
 
   const getTestCounts = () => {
-    const pending = tests.filter(t => t.collectionStatus === "pending" || t.collectionStatus === "scheduled").length;
-    const collected = tests.filter(t => t.collectionStatus === "collected" && t.processingStatus !== "completed").length;
-    const processing = tests.filter(t => t.processingStatus === "processing").length;
-    const completed = tests.filter(t => t.processingStatus === "completed").length;
-    const reported = tests.filter(t => t.status === "reported").length;
-    
-    return { pending, collected, processing, completed, reported };
+    const pending = tests.filter(
+      (t) =>
+        t.collectionStatus === "pending" || t.collectionStatus === "scheduled",
+    ).length;
+    const completed = tests.filter((t) => t.status === "completed").length;
+    const reported = tests.filter((t) => t.status === "reported").length;
+
+    return { pending, completed, reported };
   };
 
   const counts = getTestCounts();
@@ -283,13 +314,16 @@ const filteredTests = tests.filter(test => {
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Laboratory Tests</h1>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
+            Laboratory Tests
+          </h1>
           <p className="text-muted-foreground mt-1">
             Manage and process laboratory test samples
           </p>
           {user && (
             <p className="text-sm text-gray-500 mt-1">
-              Logged in as: <span className="font-medium">{user.name}</span> ({user.role})
+              Logged in as: <span className="font-medium">{user.name}</span> (
+              {user.role})
             </p>
           )}
         </div>
@@ -302,11 +336,13 @@ const filteredTests = tests.filter(test => {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
         <Card>
           <CardContent className="pt-6">
             <div className="text-center">
-              <div className="text-2xl font-bold text-blue-600">{counts.pending}</div>
+              <div className="text-2xl font-bold text-blue-600">
+                {counts.pending}
+              </div>
               <div className="text-sm text-gray-500">Pending Collection</div>
             </div>
           </CardContent>
@@ -314,23 +350,9 @@ const filteredTests = tests.filter(test => {
         <Card>
           <CardContent className="pt-6">
             <div className="text-center">
-              <div className="text-2xl font-bold text-green-600">{counts.collected}</div>
-              <div className="text-sm text-gray-500">Ready to Process</div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-center">
-              <div className="text-2xl font-bold text-purple-600">{counts.processing}</div>
-              <div className="text-sm text-gray-500">Processing</div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-center">
-              <div className="text-2xl font-bold text-emerald-600">{counts.completed}</div>
+              <div className="text-2xl font-bold text-emerald-600">
+                {counts.completed}
+              </div>
               <div className="text-sm text-gray-500">Completed</div>
             </div>
           </CardContent>
@@ -338,7 +360,9 @@ const filteredTests = tests.filter(test => {
         <Card>
           <CardContent className="pt-6">
             <div className="text-center">
-              <div className="text-2xl font-bold text-gray-600">{counts.reported}</div>
+              <div className="text-2xl font-bold text-gray-600">
+                {counts.reported}
+              </div>
               <div className="text-sm text-gray-500">Reported</div>
             </div>
           </CardContent>
@@ -347,12 +371,11 @@ const filteredTests = tests.filter(test => {
 
       {/* Tabs for different test categories */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
-        <TabsList className="grid grid-cols-5">
+        <TabsList className="grid grid-cols-4">
           <TabsTrigger value="all">All Tests</TabsTrigger>
           <TabsTrigger value="pending">Pending Collection</TabsTrigger>
-          <TabsTrigger value="collected">Collected</TabsTrigger>
-          <TabsTrigger value="processing">Processing</TabsTrigger>
           <TabsTrigger value="completed">Completed</TabsTrigger>
+          <TabsTrigger value="reported">Reported</TabsTrigger>
         </TabsList>
       </Tabs>
 
@@ -369,7 +392,7 @@ const filteredTests = tests.filter(test => {
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
-            
+
             <div>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger>
@@ -387,9 +410,12 @@ const filteredTests = tests.filter(test => {
                 </SelectContent>
               </Select>
             </div>
-            
+
             <div>
-              <Select value={collectionStatusFilter} onValueChange={setCollectionStatusFilter}>
+              <Select
+                value={collectionStatusFilter}
+                onValueChange={setCollectionStatusFilter}
+              >
                 <SelectTrigger>
                   <div className="flex items-center gap-2">
                     <FlaskConical className="h-4 w-4" />
@@ -426,7 +452,6 @@ const filteredTests = tests.filter(test => {
                   <TableHead>Test Details</TableHead>
                   <TableHead>Patient</TableHead>
                   <TableHead>Collection Status</TableHead>
-                  <TableHead>Processing Status</TableHead>
                   <TableHead>Priority</TableHead>
                   <TableHead>Ordered</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
@@ -435,17 +460,20 @@ const filteredTests = tests.filter(test => {
               <TableBody>
                 {filteredTests.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8">
+                    <TableCell colSpan={7} className="text-center py-8">
                       <TestTube className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                       <h3 className="text-lg font-medium">No tests found</h3>
                       <p className="text-muted-foreground mt-2">
-                        {searchQuery || statusFilter !== "all" ? "No tests match your filters" : "No lab tests available"}
+                        {searchQuery || statusFilter !== "all"
+                          ? "No tests match your filters"
+                          : "No lab tests available"}
                       </p>
                       {tests.length === 0 && (
                         <div className="mt-4">
                           <AlertCircle className="h-8 w-8 text-amber-500 mx-auto mb-2" />
                           <p className="text-sm text-amber-600">
-                            No lab tests found in database. Tests may need to be ordered by doctors first.
+                            No lab tests found in database. Tests may need to be
+                            ordered by doctors first.
                           </p>
                         </div>
                       )}
@@ -453,21 +481,30 @@ const filteredTests = tests.filter(test => {
                   </TableRow>
                 ) : (
                   filteredTests.map((test) => (
-                    <TableRow key={test._id} className={
-                      test.priority === "emergency" ? " hover:bg-red-100" :
-                      test.priority === "urgent" ? " hover:bg-orange-100" :
-                      ""
-                    }>
+                    <TableRow
+                      key={test._id}
+                      className={
+                        test.priority === "emergency"
+                          ? " hover:bg-red-100"
+                          : test.priority === "urgent"
+                            ? " hover:bg-orange-100"
+                            : ""
+                      }
+                    >
                       <TableCell className="font-mono font-bold">
                         {test.testId}
                         {test.labReferenceId && (
-                          <div className="text-xs text-gray-500">{test.labReferenceId}</div>
+                          <div className="text-xs text-gray-500">
+                            {test.labReferenceId}
+                          </div>
                         )}
                       </TableCell>
                       <TableCell>
                         <div>
                           <div className="font-medium">{test.testName}</div>
-                          <div className="text-sm text-gray-500">{test.category}</div>
+                          <div className="text-sm text-gray-500">
+                            {test.category}
+                          </div>
                           {test.specimen?.type && (
                             <div className="text-xs text-gray-400">
                               Specimen: {test.specimen.type}
@@ -493,21 +530,24 @@ const filteredTests = tests.filter(test => {
                       </TableCell>
                       <TableCell>
                         {getCollectionStatusBadge(test.collectionStatus)}
-                        {!test.paymentVerified && test.priority === "routine" && (
-                          <div className="text-xs text-amber-600 mt-1">
-                            Payment verification required
-                          </div>
-                        )}
+                        {!test.paymentVerified &&
+                          test.priority === "routine" && (
+                            <div className="text-xs text-amber-600 mt-1">
+                              Payment verification required
+                            </div>
+                          )}
                       </TableCell>
                       <TableCell>
-                        {getStatusBadge(test)}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className={
-                          test.priority === "emergency" ? "border-red-300 text-red-700 bg-red-50" :
-                          test.priority === "urgent" ? "border-orange-300 text-orange-700 bg-orange-50" :
-                          "border-blue-300 text-blue-700"
-                        }>
+                        <Badge
+                          variant="outline"
+                          className={
+                            test.priority === "emergency"
+                              ? "border-red-300 text-red-700 bg-red-50"
+                              : test.priority === "urgent"
+                                ? "border-orange-300 text-orange-700 bg-orange-50"
+                                : "border-blue-300 text-blue-700"
+                          }
+                        >
                           {test.priority}
                         </Badge>
                       </TableCell>
@@ -521,8 +561,8 @@ const filteredTests = tests.filter(test => {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
-                          <Button 
-                            variant="outline" 
+                          <Button
+                            variant="outline"
                             size="sm"
                             asChild
                             className="h-8 px-3"
@@ -532,56 +572,24 @@ const filteredTests = tests.filter(test => {
                               View
                             </Link>
                           </Button>
-                          
+
+                          {canPrintTest(test) && (
+                            <LabTestPDFGenerator
+                              test={test}
+                              mode="print"
+                              buttonVariant="outline"
+                              buttonSize="sm"
+                              buttonLabel="Print"
+                            />
+                          )}
+
                           {canCollectSample(test) && (
-                            <Button 
-                              size="sm"
-                              asChild
-                              className="h-8 px-3"
-                            >
-                              <Link href={`/laboratory/tests/${test._id}/collect`}>
+                            <Button size="sm" asChild className="h-8 px-3">
+                              <Link
+                                href={`/laboratory/tests/${test._id}/collect`}
+                              >
                                 <FlaskConical className="h-3 w-3 mr-1" />
                                 Collect
-                              </Link>
-                            </Button>
-                          )}
-                          
-                          {canProcessTest(test) && (
-                            <Button 
-                              size="sm"
-                              asChild
-                              className="h-8 px-3 bg-blue-600 hover:bg-blue-700"
-                            >
-                              <Link href={`/laboratory/tests/${test._id}/process`}>
-                                <FileText className="h-3 w-3 mr-1" />
-                                Process
-                              </Link>
-                            </Button>
-                          )}
-                          
-                          {test.processingStatus === "completed" && test.status !== "reported" && (
-                            <Button 
-                              size="sm"
-                              asChild
-                              className="h-8 px-3 bg-green-600 hover:bg-green-700"
-                            >
-                              <Link href={`/laboratory/tests/${test._id}/report`}>
-                                <CheckCircle className="h-3 w-3 mr-1" />
-                                Report
-                              </Link>
-                            </Button>
-                          )}
-                          
-                          {!test.paymentVerified && test.priority === "routine" && (
-                            <Button 
-                              variant="secondary" 
-                              size="sm"
-                              asChild
-                              className="h-8 px-3"
-                            >
-                              <Link href={`/laboratory/tests/${test._id}/verify-payment`}>
-                                <AlertTriangle className="h-3 w-3 mr-1" />
-                                Verify Payment
                               </Link>
                             </Button>
                           )}

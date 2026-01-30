@@ -11,6 +11,14 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,6 +43,7 @@ import {
   CheckCircle,
   AlertTriangle,
   Loader2,
+  Plus,
 } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
 import { toast } from "sonner";
@@ -84,6 +93,18 @@ export default function CreateDirectTestPage() {
   );
   const [searchingPatients, setSearchingPatients] = useState(false);
   const [showPatientDropdown, setShowPatientDropdown] = useState(false);
+
+  // New patient creation state
+  const [showCreatePatientDialog, setShowCreatePatientDialog] = useState(false);
+  const [creatingPatient, setCreatingPatient] = useState(false);
+  const [newPatient, setNewPatient] = useState({
+    name: "",
+    phone: "",
+    email: "",
+    dateOfBirth: "",
+    gender: "",
+    address: "",
+  });
 
   const [templates, setTemplates] = useState<TestTemplate[]>([]);
   const [templateSearchQuery, setTemplateSearchQuery] = useState("");
@@ -169,6 +190,63 @@ export default function CreateDirectTestPage() {
     setPatientSearchQuery(patient.name);
     setShowPatientDropdown(false);
     setPatientSearchResults([]);
+  };
+
+  const handleCreatePatient = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    // Validate required fields
+    if (!newPatient.name || !newPatient.phone) {
+      toast.error("Name and phone are required");
+      return;
+    }
+
+    try {
+      setCreatingPatient(true);
+
+      const response = await fetch("/api/patients", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: newPatient.name,
+          phone: newPatient.phone,
+          email: newPatient.email || undefined,
+          dateOfBirth: newPatient.dateOfBirth || undefined,
+          gender: newPatient.gender || undefined,
+          address: newPatient.address || undefined,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to create patient");
+      }
+
+      const data = await response.json();
+      toast.success("Patient created successfully");
+
+      // Select the newly created patient
+      setSelectedPatient(data.data);
+      setPatientSearchQuery(data.data.name);
+      setShowCreatePatientDialog(false);
+
+      // Reset form
+      setNewPatient({
+        name: "",
+        phone: "",
+        email: "",
+        dateOfBirth: "",
+        gender: "",
+        address: "",
+      });
+    } catch (err: any) {
+      toast.error(err.message || "Failed to create patient");
+    } finally {
+      setCreatingPatient(false);
+    }
   };
 
   const handleSelectTemplate = (template: TestTemplate) => {
@@ -338,6 +416,27 @@ export default function CreateDirectTestPage() {
                     ))}
                   </div>
                 )}
+
+                {/* No patients found - show create button */}
+                {showPatientDropdown &&
+                  patientSearchQuery.length >= 2 &&
+                  patientSearchResults.length === 0 &&
+                  !searchingPatients && (
+                    <div className="border rounded-md shadow-sm bg-background p-4">
+                      <p className="text-sm text-muted-foreground mb-3">
+                        No patients found matching "{patientSearchQuery}"
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full"
+                        onClick={() => setShowCreatePatientDialog(true)}
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        Create New Patient
+                      </Button>
+                    </div>
+                  )}
 
                 {/* Selected Patient */}
                 {selectedPatient && (
@@ -638,6 +737,139 @@ export default function CreateDirectTestPage() {
           </Button>
         </div>
       </form>
+
+      {/* Create Patient Dialog */}
+      <Dialog
+        open={showCreatePatientDialog}
+        onOpenChange={setShowCreatePatientDialog}
+      >
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Create New Patient</DialogTitle>
+            <DialogDescription>
+              Enter patient details to create a new patient record
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleCreatePatient} className="space-y-4 py-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="patientName">
+                  Name <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="patientName"
+                  value={newPatient.name}
+                  onChange={(e) =>
+                    setNewPatient({ ...newPatient, name: e.target.value })
+                  }
+                  placeholder="Enter patient name"
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="patientPhone">
+                  Phone <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="patientPhone"
+                  type="tel"
+                  value={newPatient.phone}
+                  onChange={(e) =>
+                    setNewPatient({ ...newPatient, phone: e.target.value })
+                  }
+                  placeholder="Enter phone number"
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="patientEmail">Email</Label>
+                <Input
+                  id="patientEmail"
+                  type="email"
+                  value={newPatient.email}
+                  onChange={(e) =>
+                    setNewPatient({ ...newPatient, email: e.target.value })
+                  }
+                  placeholder="Enter email address"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="patientGender">Gender</Label>
+                <Select
+                  value={newPatient.gender}
+                  onValueChange={(value) =>
+                    setNewPatient({ ...newPatient, gender: value })
+                  }
+                >
+                  <SelectTrigger id="patientGender">
+                    <SelectValue placeholder="Select gender" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="male">Male</SelectItem>
+                    <SelectItem value="female">Female</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="patientDateOfBirth">Date of Birth</Label>
+                <Input
+                  id="patientDateOfBirth"
+                  type="date"
+                  value={newPatient.dateOfBirth}
+                  onChange={(e) =>
+                    setNewPatient({
+                      ...newPatient,
+                      dateOfBirth: e.target.value,
+                    })
+                  }
+                />
+              </div>
+
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="patientAddress">Address</Label>
+                <Textarea
+                  id="patientAddress"
+                  value={newPatient.address}
+                  onChange={(e) =>
+                    setNewPatient({ ...newPatient, address: e.target.value })
+                  }
+                  placeholder="Enter patient address"
+                  rows={3}
+                />
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowCreatePatientDialog(false)}
+                disabled={creatingPatient}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={creatingPatient}>
+                {creatingPatient ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create Patient
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

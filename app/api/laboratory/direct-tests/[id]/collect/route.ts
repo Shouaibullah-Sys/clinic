@@ -56,6 +56,7 @@ export async function POST(
       collectionNotes,
       sampleConditionNotes,
       specimen,
+      testParameters,
     } = body;
 
     console.log("Sample collection payload for direct test:", body);
@@ -115,6 +116,36 @@ export async function POST(
       );
     }
 
+    // Validate test parameters if provided
+    if (testParameters && testParameters.length > 0) {
+      for (const param of testParameters) {
+        if (!param.name || param.value === undefined || param.value === "") {
+          return NextResponse.json(
+            {
+              success: false,
+              error: "Test parameters require at least name and value",
+            },
+            { status: 400 },
+          );
+        }
+      }
+    }
+
+    // Validate sample parameters if provided
+    if (specimen && specimen.parameters && specimen.parameters.length > 0) {
+      for (const param of specimen.parameters) {
+        if (!param.name || (!param.result && !param.value)) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: "Sample parameters require at least name and result",
+            },
+            { status: 400 },
+          );
+        }
+      }
+    }
+
     // Convert string userId to ObjectId
     const collectedBy = new mongoose.Types.ObjectId(auth.userId);
 
@@ -151,6 +182,23 @@ export async function POST(
             })),
           }),
       };
+    }
+
+    // Update results with test parameters if provided
+    if (testParameters && testParameters.length > 0) {
+      test.results = {
+        parameters: testParameters.map((p: any) => ({
+          name: p.name,
+          value: p.value,
+          unit: p.unit || "",
+          normalRange: p.normalRange || "",
+          remarks: p.remarks || "",
+        })),
+        reportedBy: collectedBy,
+        reportedAt: new Date(),
+      };
+      // Set processingStatus to completed since test parameters are added
+      test.processingStatus = "completed";
     }
 
     test.collectedAt = new Date();

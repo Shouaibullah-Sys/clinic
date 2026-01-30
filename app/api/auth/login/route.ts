@@ -16,135 +16,174 @@ export async function POST(request: NextRequest) {
   if (!process.env.JWT_SECRET) {
     return NextResponse.json(
       { error: "Server configuration error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 
   try {
     const body = await request.json();
-    
-    console.log('Login request received:', { 
-      email: body.email, 
-      passwordLength: body.password?.length 
-    });
-    
+
+    if (process.env.NODE_ENV === "development") {
+      console.log("Login request received:", {
+        email: body.email,
+        passwordLength: body.password?.length,
+      });
+    }
+
     // Validate input
     const validationResult = loginSchema.safeParse(body);
-    
+
     if (!validationResult.success) {
-      console.log('Validation failed:', validationResult.error.issues);
-      const errors = validationResult.error.issues.map(err => ({
-        field: err.path.join('.'),
-        message: err.message
+      if (process.env.NODE_ENV === "development") {
+        console.log("Validation failed:", validationResult.error.issues);
+      }
+      const errors = validationResult.error.issues.map((err) => ({
+        field: err.path.join("."),
+        message: err.message,
       }));
-      
+
       return NextResponse.json(
-        { 
-          error: "Validation failed", 
-          details: errors 
+        {
+          error: "Validation failed",
+          details: errors,
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     const { email, password } = validationResult.data;
 
-    console.log('Login attempt for:', email);
-    
+    if (process.env.NODE_ENV === "development") {
+      console.log("Login attempt for:", email);
+    }
+
     // Normalize email to lowercase for case-insensitive comparison
     const normalizedEmail = email.toLowerCase().trim();
-    console.log('Normalized email:', normalizedEmail);
+    if (process.env.NODE_ENV === "development") {
+      console.log("Normalized email:", normalizedEmail);
+    }
 
     try {
       await dbConnect();
-      console.log('Database connected successfully');
+      if (process.env.NODE_ENV === "development") {
+        console.log("Database connected successfully");
+      }
     } catch (dbError) {
-      console.error("Database connection error:", dbError);
+      if (process.env.NODE_ENV === "development") {
+        console.error("Database connection error:", dbError);
+      }
       return NextResponse.json(
         { error: "Database connection failed. Please try again later." },
-        { status: 503 }
+        { status: 503 },
       );
     }
 
     let user;
     try {
       // Find user with email (case-insensitive)
-      user = await User.findOne({ 
-        email: { $regex: new RegExp(`^${normalizedEmail}$`, 'i') }
+      user = await User.findOne({
+        email: { $regex: new RegExp(`^${normalizedEmail}$`, "i") },
       }).select("+password");
-      
-      console.log('User found:', user ? 'YES' : 'NO');
-      
-      if (user) {
-        console.log('User details:', {
-          email: user.email,
-          storedEmail: user.email,
-          approved: user.approved,
-          active: user.active,
-          hasPassword: !!user.password,
-          passwordLength: user.password?.length,
-          passwordStartsWith: user.password?.substring(0, 20) + '...'
-        });
+
+      if (process.env.NODE_ENV === "development") {
+        console.log("User found:", user ? "YES" : "NO");
+
+        if (user) {
+          console.log("User details:", {
+            email: user.email,
+            storedEmail: user.email,
+            approved: user.approved,
+            active: user.active,
+            hasPassword: !!user.password,
+            passwordLength: user.password?.length,
+            passwordStartsWith: user.password?.substring(0, 20) + "...",
+          });
+        }
       }
     } catch (queryError) {
-      console.error("Database query failed:", queryError);
+      if (process.env.NODE_ENV === "development") {
+        console.error("Database query failed:", queryError);
+      }
       return NextResponse.json(
         {
           error: "Database operation failed. Please try again later.",
         },
-        { status: 503 }
+        { status: 503 },
       );
     }
 
     if (!user) {
-      console.log('User not found for email:', normalizedEmail);
+      if (process.env.NODE_ENV === "development") {
+        console.log("User not found for email:", normalizedEmail);
+      }
       return NextResponse.json(
         { error: "Invalid email or password" },
-        { status: 401 }
+        { status: 401 },
       );
     }
 
-    console.log('Password comparison details:', {
-      inputPasswordLength: password.length,
-      inputPasswordFirst10: password.substring(0, 10) + (password.length > 10 ? '...' : ''),
-      storedHashFirst30: user.password.substring(0, 30) + '...',
-      storedHashLength: user.password.length
-    });
+    if (process.env.NODE_ENV === "development") {
+      console.log("Password comparison details:", {
+        inputPasswordLength: password.length,
+        inputPasswordFirst10:
+          password.substring(0, 10) + (password.length > 10 ? "..." : ""),
+        storedHashFirst30: user.password.substring(0, 30) + "...",
+        storedHashLength: user.password.length,
+      });
+    }
 
     // Compare passwords
     const isMatch = await bcrypt.compare(password, user.password);
-    console.log('Password match result:', isMatch);
+    if (process.env.NODE_ENV === "development") {
+      console.log("Password match result:", isMatch);
+    }
 
     if (!isMatch) {
-      console.log('Password comparison failed');
-      
-      // Debug: Try to hash the input to see what it produces
-      const testHash = await bcrypt.hash(password, 10);
-      console.log('Test hash of input (first 30 chars):', testHash.substring(0, 30) + '...');
-      console.log('Stored hash (first 30 chars):', user.password.substring(0, 30) + '...');
-  
-      // Check if stored hash is double-hashed (hash with 12 then 10)
-      const hash12 = await bcrypt.hash(password, 12);
-      const doubleHash = await bcrypt.hash(hash12, 10);
-      console.log('Double hash (12 then 10, first 30 chars):', doubleHash.substring(0, 30) + '...');
-      const isDoubleHashed = doubleHash.substring(0, 30) === user.password.substring(0, 30);
-      console.log('Is stored hash double-hashed?', isDoubleHashed);
-      
+      if (process.env.NODE_ENV === "development") {
+        console.log("Password comparison failed");
+
+        // Debug: Try to hash input to see what it produces
+        const testHash = await bcrypt.hash(password, 10);
+        console.log(
+          "Test hash of input (first 30 chars):",
+          testHash.substring(0, 30) + "...",
+        );
+        console.log(
+          "Stored hash (first 30 chars):",
+          user.password.substring(0, 30) + "...",
+        );
+
+        // Check if stored hash is double-hashed (hash with 12 then 10)
+        const hash12 = await bcrypt.hash(password, 12);
+        const doubleHash = await bcrypt.hash(hash12, 10);
+        console.log(
+          "Double hash (12 then 10, first 30 chars):",
+          doubleHash.substring(0, 30) + "...",
+        );
+        const isDoubleHashed =
+          doubleHash.substring(0, 30) === user.password.substring(0, 30);
+        console.log("Is stored hash double-hashed?", isDoubleHashed);
+      }
+
       return NextResponse.json(
-        { 
+        {
           error: "Invalid email or password",
-          hint: "Check your email and password. Passwords are case-sensitive."
+          hint: "Check your email and password. Passwords are case-sensitive.",
         },
-        { status: 401 }
+        { status: 401 },
       );
     }
 
-    console.log('Password comparison successful');
+    if (process.env.NODE_ENV === "development") {
+      console.log("Password comparison successful");
+    }
 
     if (!user.approved) {
-      console.log('User not approved:', user.email);
+      if (process.env.NODE_ENV === "development") {
+        console.log("User not approved:", user.email);
+      }
       return NextResponse.json(
-        { 
+        {
           error: "Account pending admin approval",
           user: {
             _id: user._id.toString(),
@@ -152,17 +191,19 @@ export async function POST(request: NextRequest) {
             email: user.email,
             role: user.role,
             approved: user.approved,
-          }
+          },
         },
-        { status: 403 }
+        { status: 403 },
       );
     }
 
     if (!user.active) {
-      console.log('User account inactive:', user.email);
+      if (process.env.NODE_ENV === "development") {
+        console.log("User account inactive:", user.email);
+      }
       return NextResponse.json(
         { error: "Account is deactivated" },
-        { status: 403 }
+        { status: 403 },
       );
     }
 
@@ -176,7 +217,7 @@ export async function POST(request: NextRequest) {
         name: user.name,
       },
       process.env.JWT_SECRET,
-      { expiresIn: "24h" }
+      { expiresIn: "24h" },
     );
 
     const refreshToken = jwt.sign(
@@ -185,7 +226,7 @@ export async function POST(request: NextRequest) {
         type: "refresh",
       },
       process.env.JWT_SECRET,
-      { expiresIn: "7d" }
+      { expiresIn: "7d" },
     );
 
     // Store refresh token in database (limit to 5 recent tokens)
@@ -200,8 +241,10 @@ export async function POST(request: NextRequest) {
 
     await userDoc.save();
 
-    console.log('Login successful for:', user.email);
-    console.log('Tokens generated');
+    if (process.env.NODE_ENV === "development") {
+      console.log("Login successful for:", user.email);
+      console.log("Tokens generated");
+    }
 
     const response = NextResponse.json({
       user: {
@@ -243,10 +286,12 @@ export async function POST(request: NextRequest) {
 
     return response;
   } catch (error) {
-    console.error("Login error:", error);
+    if (process.env.NODE_ENV === "development") {
+      console.error("Login error:", error);
+    }
     return NextResponse.json(
       { error: "Internal server error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

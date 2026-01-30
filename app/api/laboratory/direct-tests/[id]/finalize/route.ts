@@ -24,12 +24,7 @@ export async function POST(
     }
 
     // Only laboratory staff and admin can finalize tests
-    const allowedRoles = [
-      "laboratory",
-      "lab_technician",
-      "technician",
-      "admin",
-    ];
+    const allowedRoles = ["lab_technician", "admin"];
     if (!auth.userRole || !allowedRoles.includes(auth.userRole)) {
       return NextResponse.json(
         {
