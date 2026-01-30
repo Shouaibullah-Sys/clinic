@@ -463,23 +463,25 @@ export default function ReceptionDashboardPage() {
                       <Button
                         variant="outline"
                         className="justify-start h-auto py-3 px-4"
-                        onClick={() => router.push("/patients/checkin")}
+                        onClick={() =>
+                          router.push("/reception/lab-test-payments")
+                        }
                       >
                         <div className="flex items-center space-x-3">
-                          <div className="p-2 bg-green-100 rounded-lg">
-                            <CheckCircle2 className="h-4 w-4 text-green-600" />
+                          <div className="p-2 bg-blue-100 rounded-lg">
+                            <DollarSign className="h-4 w-4 text-blue-600" />
                           </div>
                           <div className="text-left">
-                            <p className="font-medium">Check-in Patient</p>
+                            <p className="font-medium">Lab Test Payment</p>
                             <p className="text-xs text-gray-500">
-                              Check in visitor
+                              Process lab test payments
                             </p>
                           </div>
                         </div>
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent>
-                      <p>Check in an arriving patient</p>
+                      <p>Process payments for direct lab tests</p>
                     </TooltipContent>
                   </Tooltip>
 

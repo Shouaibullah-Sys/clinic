@@ -40,6 +40,17 @@ export interface ILabTest extends mongoose.Document {
   priority: "routine" | "urgent" | "emergency";
   notes?: string;
 
+  // Direct lab test workflow fields
+  isDirectTest: boolean;
+  createdBy?: mongoose.Types.ObjectId;
+  createdAtDirect?: Date;
+  finalized: boolean;
+  finalizedAt?: Date;
+  finalizedBy?: mongoose.Types.ObjectId;
+  readyForPrint: boolean;
+  printedAt?: Date;
+  printedBy?: mongoose.Types.ObjectId;
+
   // Laboratory module fields
   labReferenceId?: string;
   collectionStatus:
@@ -147,6 +158,14 @@ interface LabTestModel extends mongoose.Model<ILabTest> {
     notes?: string,
   ): Promise<ILabTest | null>;
   unverifyPayment(testId: string): Promise<ILabTest | null>;
+  // Direct lab test workflow static methods
+  findDirectTests(): Promise<ILabTest[]>;
+  findDirectTestsByCreator(creatorId: string): Promise<ILabTest[]>;
+  findDirectTestsPendingFinalization(): Promise<ILabTest[]>;
+  findDirectTestsReadyForPrint(): Promise<ILabTest[]>;
+  finalizeTest(testId: string, finalizedBy: string): Promise<ILabTest | null>;
+  markReadyForPrint(testId: string, userId: string): Promise<ILabTest | null>;
+  markAsPrinted(testId: string, printedBy: string): Promise<ILabTest | null>;
 }
 
 const labTestChargesSchema = new Schema<ILabTestCharges>({
@@ -282,6 +301,41 @@ const labTestSchema = new Schema<ILabTest, LabTestModel>(
       trim: true,
     },
 
+    // Direct lab test workflow fields
+    isDirectTest: {
+      type: Boolean,
+      default: false,
+    },
+    createdBy: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+    },
+    createdAtDirect: {
+      type: Date,
+    },
+    finalized: {
+      type: Boolean,
+      default: false,
+    },
+    finalizedAt: {
+      type: Date,
+    },
+    finalizedBy: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+    },
+    readyForPrint: {
+      type: Boolean,
+      default: false,
+    },
+    printedAt: {
+      type: Date,
+    },
+    printedBy: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+    },
+
     // Laboratory module fields
     labReferenceId: {
       type: String,
@@ -414,6 +468,12 @@ labTestSchema.index({ paymentVerified: 1 });
 labTestSchema.index({ priority: 1 });
 labTestSchema.index({ labReferenceId: 1 }, { unique: true, sparse: true });
 
+// Direct lab test workflow indexes
+labTestSchema.index({ isDirectTest: 1 });
+labTestSchema.index({ finalized: 1 });
+labTestSchema.index({ readyForPrint: 1 });
+labTestSchema.index({ createdBy: 1 });
+
 // Compound indexes
 labTestSchema.index({ patient: 1, status: 1 });
 labTestSchema.index({ doctor: 1, status: 1 });
@@ -422,6 +482,15 @@ labTestSchema.index({ "charges.paymentStatus": 1, status: 1 });
 labTestSchema.index({ priority: 1, paymentVerified: 1 });
 labTestSchema.index({ collectionStatus: 1, processingStatus: 1 });
 labTestSchema.index({ patient: 1, orderedAt: -1 });
+
+// Direct lab test workflow compound indexes
+labTestSchema.index({ isDirectTest: 1, paymentVerified: 1 });
+labTestSchema.index({ isDirectTest: 1, finalized: 1 });
+labTestSchema.index({ isDirectTest: 1, readyForPrint: 1 });
+labTestSchema.index({ isDirectTest: 1, status: 1 });
+labTestSchema.index({ createdBy: 1, createdAtDirect: -1 });
+labTestSchema.index({ finalized: 1, readyForPrint: 1 });
+labTestSchema.index({ paymentVerified: 1, finalized: 1, readyForPrint: 1 });
 
 // Add these indexes for better laboratory query performance
 labTestSchema.index({ paymentVerified: 1, collectionStatus: 1 });
@@ -545,6 +614,11 @@ labTestSchema.pre("save", function (next) {
     labTest.testId = `LAB${year}${month}${random}`;
   }
 
+  // Set createdAtDirect for direct tests if not set
+  if (labTest.isDirectTest && !labTest.createdAtDirect) {
+    labTest.createdAtDirect = new Date();
+  }
+
   // Generate lab reference ID if not exists and test is collected
   if (!labTest.labReferenceId && labTest.collectionStatus === "collected") {
     const date = new Date();
@@ -598,6 +672,9 @@ labTestSchema.statics.findByAppointmentId = function (appointmentId: string) {
     .populate("paymentVerifiedBy", "name")
     .populate("processingDetails.processedBy", "name")
     .populate("verificationDetails.verifiedBy", "name")
+    .populate("createdBy", "name")
+    .populate("finalizedBy", "name")
+    .populate("printedBy", "name")
     .sort({ createdAt: -1 });
 };
 
@@ -607,6 +684,9 @@ labTestSchema.statics.findByPatientId = function (patientId: string) {
     .populate("doctor", "name specialization")
     .populate("charges.collectedBy", "name")
     .populate("paymentVerifiedBy", "name")
+    .populate("createdBy", "name")
+    .populate("finalizedBy", "name")
+    .populate("printedBy", "name")
     .sort({ orderedAt: -1 });
 };
 
@@ -616,6 +696,9 @@ labTestSchema.statics.findByDoctorId = function (doctorId: string) {
     .populate("appointment", "appointmentId date")
     .populate("charges.collectedBy", "name")
     .populate("paymentVerifiedBy", "name")
+    .populate("createdBy", "name")
+    .populate("finalizedBy", "name")
+    .populate("printedBy", "name")
     .sort({ orderedAt: -1 });
 };
 
@@ -632,6 +715,9 @@ labTestSchema.statics.getUnpaidTests = function (patientId?: string) {
     .populate("patient", "name patientId phone")
     .populate("doctor", "name")
     .populate("charges.collectedBy", "name")
+    .populate("createdBy", "name")
+    .populate("finalizedBy", "name")
+    .populate("printedBy", "name")
     .sort({ orderedAt: 1 });
 };
 
@@ -665,6 +751,105 @@ labTestSchema.statics.unverifyPayment = async function (
         paymentVerified: false,
         paymentVerifiedBy: null,
         paymentVerifiedAt: null,
+      },
+    },
+    { new: true },
+  );
+};
+
+// Direct lab test workflow static methods
+labTestSchema.statics.findDirectTests = function (): Promise<ILabTest[]> {
+  return this.find({ isDirectTest: true })
+    .populate("patient", "name patientId phone")
+    .populate("createdBy", "name")
+    .populate("finalizedBy", "name")
+    .populate("printedBy", "name")
+    .sort({ createdAtDirect: -1 });
+};
+
+labTestSchema.statics.findDirectTestsByCreator = function (
+  creatorId: string,
+): Promise<ILabTest[]> {
+  return this.find({ isDirectTest: true, createdBy: creatorId })
+    .populate("patient", "name patientId phone")
+    .populate("createdBy", "name")
+    .populate("finalizedBy", "name")
+    .populate("printedBy", "name")
+    .sort({ createdAtDirect: -1 });
+};
+
+labTestSchema.statics.findDirectTestsPendingFinalization = function (): Promise<
+  ILabTest[]
+> {
+  return this.find({
+    isDirectTest: true,
+    paymentVerified: true,
+    finalized: false,
+    status: { $in: ["completed", "reported"] },
+  })
+    .populate("patient", "name patientId phone")
+    .populate("createdBy", "name")
+    .sort({ createdAtDirect: -1 });
+};
+
+labTestSchema.statics.findDirectTestsReadyForPrint = function (): Promise<
+  ILabTest[]
+> {
+  return this.find({
+    isDirectTest: true,
+    finalized: true,
+    readyForPrint: true,
+    printedAt: null,
+  })
+    .populate("patient", "name patientId phone")
+    .populate("createdBy", "name")
+    .populate("finalizedBy", "name")
+    .sort({ finalizedAt: -1 });
+};
+
+labTestSchema.statics.finalizeTest = async function (
+  testId: string,
+  finalizedBy: string,
+): Promise<ILabTest | null> {
+  return this.findByIdAndUpdate(
+    testId,
+    {
+      $set: {
+        finalized: true,
+        finalizedAt: new Date(),
+        finalizedBy: finalizedBy,
+        readyForPrint: true,
+      },
+    },
+    { new: true },
+  );
+};
+
+labTestSchema.statics.markReadyForPrint = async function (
+  testId: string,
+  userId: string,
+): Promise<ILabTest | null> {
+  return this.findByIdAndUpdate(
+    testId,
+    {
+      $set: {
+        readyForPrint: true,
+      },
+    },
+    { new: true },
+  );
+};
+
+labTestSchema.statics.markAsPrinted = async function (
+  testId: string,
+  printedBy: string,
+): Promise<ILabTest | null> {
+  return this.findByIdAndUpdate(
+    testId,
+    {
+      $set: {
+        printedAt: new Date(),
+        printedBy: printedBy,
       },
     },
     { new: true },
@@ -743,6 +928,16 @@ labTestSchema.methods.getSummary = function () {
     collectionStatus: this.collectionStatus,
     processingStatus: this.processingStatus,
     verificationStatus: this.verificationStatus,
+    // Direct lab test workflow fields
+    isDirectTest: this.isDirectTest,
+    createdBy: this.createdBy,
+    createdAtDirect: this.createdAtDirect,
+    finalized: this.finalized,
+    finalizedAt: this.finalizedAt,
+    finalizedBy: this.finalizedBy,
+    readyForPrint: this.readyForPrint,
+    printedAt: this.printedAt,
+    printedBy: this.printedBy,
   };
 };
 
@@ -758,5 +953,50 @@ labTestSchema.methods.cancel = function (reason?: string) {
   return this.save();
 };
 
-export const LabTest = (models.LabTest ||
-  model<ILabTest, LabTestModel>("LabTest", labTestSchema)) as LabTestModel;
+// Direct lab test workflow instance methods
+labTestSchema.methods.finalize = function (finalizedBy: string) {
+  this.finalized = true;
+  this.finalizedAt = new Date();
+  this.finalizedBy = finalizedBy;
+  this.readyForPrint = true;
+  return this.save();
+};
+
+labTestSchema.methods.markReadyForPrint = function () {
+  this.readyForPrint = true;
+  return this.save();
+};
+
+labTestSchema.methods.markAsPrinted = function (printedBy: string) {
+  this.printedAt = new Date();
+  this.printedBy = printedBy;
+  return this.save();
+};
+
+labTestSchema.methods.isDirectLabTest = function () {
+  return this.isDirectTest === true;
+};
+
+labTestSchema.methods.canFinalize = function () {
+  return (
+    this.isDirectTest &&
+    this.paymentVerified &&
+    !this.finalized &&
+    (this.status === "completed" || this.status === "reported")
+  );
+};
+
+labTestSchema.methods.canPrint = function () {
+  return this.finalized && this.readyForPrint && !this.printedAt;
+};
+
+// Force recompilation of the model to ensure all fields are recognized
+// This fixes StrictPopulateError when trying to populate fields like createdBy
+if (models.LabTest) {
+  delete models.LabTest;
+}
+
+export const LabTest = model<ILabTest, LabTestModel>(
+  "LabTest",
+  labTestSchema,
+) as LabTestModel;

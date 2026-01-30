@@ -5,7 +5,13 @@ export interface IPayment extends mongoose.Document {
   patient: mongoose.Types.ObjectId;
   invoice?: mongoose.Types.ObjectId;
   appointment?: mongoose.Types.ObjectId;
-  paymentMethod: "cash" | "card" | "insurance" | "online" | "check" | "bank_transfer";
+  paymentMethod:
+    | "cash"
+    | "card"
+    | "insurance"
+    | "online"
+    | "check"
+    | "bank_transfer";
   cardType?: "visa" | "mastercard" | "amex" | "discover" | "other";
   cardLastFour?: string;
   transactionId?: string;
@@ -16,7 +22,13 @@ export interface IPayment extends mongoose.Document {
   status: "pending" | "completed" | "failed" | "refunded" | "partially_paid";
   paymentDate: Date;
   collectedBy: mongoose.Types.ObjectId;
-  department?: "consultation" | "pharmacy" | "laboratory" | "radiology" | "admission" | "other";
+  department?:
+    | "consultation"
+    | "pharmacy"
+    | "laboratory"
+    | "radiology"
+    | "admission"
+    | "other";
   serviceType?: string;
   notes?: string;
   refundedAmount?: number;
@@ -33,7 +45,7 @@ const paymentSchema = new Schema<IPayment>(
   {
     paymentId: {
       type: String,
-      required: true,
+      required: false,
       unique: true,
       uppercase: true,
     },
@@ -102,7 +114,14 @@ const paymentSchema = new Schema<IPayment>(
     },
     department: {
       type: String,
-      enum: ["consultation", "pharmacy", "laboratory", "radiology", "admission", "other"],
+      enum: [
+        "consultation",
+        "pharmacy",
+        "laboratory",
+        "radiology",
+        "admission",
+        "other",
+      ],
     },
     serviceType: {
       type: String,
@@ -135,11 +154,10 @@ const paymentSchema = new Schema<IPayment>(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 // Indexes for performance
-paymentSchema.index({ paymentId: 1 });
 paymentSchema.index({ patient: 1 });
 paymentSchema.index({ paymentDate: -1 });
 paymentSchema.index({ status: 1 });
@@ -153,19 +171,51 @@ paymentSchema.index({ patient: 1, status: 1 });
 paymentSchema.index({ paymentDate: 1, department: 1 });
 paymentSchema.index({ collectedBy: 1, paymentDate: -1 });
 
-// Pre-save hook to generate payment ID and calculate net amount
-paymentSchema.pre("save", function (next) {
+// Pre-validate hook to generate payment ID before validation
+paymentSchema.pre("validate", function (next) {
   // Generate payment ID if not exists
+  console.log(
+    "[Payment Pre-Validate Hook] Called. paymentId:",
+    this.paymentId,
+    "isNew:",
+    this.isNew,
+  );
   if (!this.paymentId || this.isNew) {
     const date = new Date();
     const year = date.getFullYear().toString().slice(-2);
     const month = (date.getMonth() + 1).toString().padStart(2, "0");
     const random = Math.floor(1000 + Math.random() * 9000);
     this.paymentId = `PAY${year}${month}${random}`;
+    console.log(
+      "[Payment Pre-Validate Hook] Generated paymentId:",
+      this.paymentId,
+    );
   }
+  next();
+});
 
+// Pre-save hook to ensure payment ID is always generated (backup)
+paymentSchema.pre("save", function (next) {
+  // Generate payment ID if not exists (backup to pre-validate)
+  if (!this.paymentId) {
+    const date = new Date();
+    const year = date.getFullYear().toString().slice(-2);
+    const month = (date.getMonth() + 1).toString().padStart(2, "0");
+    const random = Math.floor(1000 + Math.random() * 9000);
+    this.paymentId = `PAY${year}${month}${random}`;
+    console.log("[Payment Pre-Save Hook] Generated paymentId:", this.paymentId);
+  }
+  next();
+});
+
+// Pre-save hook to calculate net amount
+paymentSchema.pre("save", function (next) {
   // Calculate net amount
-  if (this.isModified("amount") || this.isModified("taxAmount") || this.isModified("discountAmount")) {
+  if (
+    this.isModified("amount") ||
+    this.isModified("taxAmount") ||
+    this.isModified("discountAmount")
+  ) {
     const tax = this.taxAmount || 0;
     const discount = this.discountAmount || 0;
     this.netAmount = this.amount + tax - discount;
@@ -207,7 +257,7 @@ paymentSchema.statics.findTodayPayments = function (date?: Date) {
   const targetDate = date || new Date();
   const startOfDay = new Date(targetDate.setHours(0, 0, 0, 0));
   const endOfDay = new Date(targetDate.setHours(23, 59, 59, 999));
-  
+
   return this.find({
     paymentDate: { $gte: startOfDay, $lt: endOfDay },
     status: "completed",
@@ -218,7 +268,7 @@ paymentSchema.statics.calculateDailyRevenue = async function (date?: Date) {
   const targetDate = date || new Date();
   const startOfDay = new Date(targetDate.setHours(0, 0, 0, 0));
   const endOfDay = new Date(targetDate.setHours(23, 59, 59, 999));
-  
+
   const result = await this.aggregate([
     {
       $match: {
@@ -241,7 +291,7 @@ paymentSchema.statics.calculateDailyRevenue = async function (date?: Date) {
       $sort: { totalNetAmount: -1 },
     },
   ]);
-  
+
   return result;
 };
 
@@ -249,19 +299,19 @@ paymentSchema.statics.calculateDailyRevenue = async function (date?: Date) {
 paymentSchema.methods.markAsRefunded = function (
   refundAmount: number,
   refundedBy: string,
-  reason?: string
+  reason?: string,
 ) {
   this.refundedAmount = refundAmount;
   this.refundedBy = new mongoose.Types.ObjectId(refundedBy);
   this.refundedDate = new Date();
   this.refundReason = reason;
-  
+
   if (refundAmount === this.netAmount) {
     this.status = "refunded";
   } else if (refundAmount < this.netAmount) {
     this.status = "partially_paid";
   }
-  
+
   return this.save();
 };
 
@@ -276,4 +326,5 @@ paymentSchema.set("toJSON", {
   },
 });
 
-export const Payment = models.Payment || model<IPayment>("Payment", paymentSchema);
+export const Payment =
+  models.Payment || model<IPayment>("Payment", paymentSchema);
