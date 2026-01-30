@@ -56,6 +56,7 @@ export async function PUT(
       collectionNotes,
       sampleConditionNotes,
       specimen,
+      testParameters,
     } = body;
 
     console.log("Sample collection payload:", body);
@@ -82,35 +83,8 @@ export async function PUT(
     });
 
     // Check if sample can be collected
-    // New workflow: Parameters must be added first (processingStatus === "completed")
-    if (test.processingStatus !== "completed") {
-      console.log(
-        "Cannot collect sample. Parameters not added yet. Conditions:",
-        {
-          status: test.status,
-          collectionStatus: test.collectionStatus,
-          processingStatus: test.processingStatus,
-          paymentVerified: test.paymentVerified,
-          priority: test.priority,
-        },
-      );
-
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Test parameters must be added before collecting sample",
-          details: {
-            status: test.status,
-            collectionStatus: test.collectionStatus,
-            processingStatus: test.processingStatus,
-            paymentVerified: test.paymentVerified,
-            priority: test.priority,
-          },
-        },
-        { status: 400 },
-      );
-    }
-
+    // New workflow: No prerequisite check for processingStatus since we're combining steps
+    // Only check if already collected
     if (test.collectionStatus === "collected") {
       return NextResponse.json(
         {
@@ -122,6 +96,36 @@ export async function PUT(
         },
         { status: 400 },
       );
+    }
+
+    // Validate test parameters if provided
+    if (testParameters && testParameters.length > 0) {
+      for (const param of testParameters) {
+        if (!param.name || param.value === undefined || param.value === "") {
+          return NextResponse.json(
+            {
+              success: false,
+              error: "Test parameters require at least name and value",
+            },
+            { status: 400 },
+          );
+        }
+      }
+    }
+
+    // Validate sample parameters if provided
+    if (specimen && specimen.parameters && specimen.parameters.length > 0) {
+      for (const param of specimen.parameters) {
+        if (!param.name || (!param.result && !param.value)) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: "Sample parameters require at least name and result",
+            },
+            { status: 400 },
+          );
+        }
+      }
     }
 
     // Convert string userId to ObjectId
@@ -141,7 +145,7 @@ export async function PUT(
       sampleConditionNotes: sampleConditionNotes || "",
     };
 
-    // Update specimen details
+    // Update specimen details with sample parameters
     if (specimen) {
       test.specimen = {
         type: specimen.type,
@@ -161,6 +165,23 @@ export async function PUT(
             })),
           }),
       };
+    }
+
+    // Update results with test parameters if provided
+    if (testParameters && testParameters.length > 0) {
+      test.results = {
+        parameters: testParameters.map((p: any) => ({
+          name: p.name,
+          value: p.value,
+          unit: p.unit || "",
+          normalRange: p.normalRange || "",
+          remarks: p.remarks || "",
+        })),
+        reportedBy: collectedBy,
+        reportedAt: new Date(),
+      };
+      // Set processingStatus to completed since test parameters are added
+      test.processingStatus = "completed";
     }
 
     test.collectedAt = new Date();
@@ -228,6 +249,7 @@ export async function PUT(
       .populate("patient", "name patientId")
       .populate("doctor", "name")
       .populate("collectionDetails.collectedBy", "name")
+      .populate("results.reportedBy", "name")
       .lean();
 
     return NextResponse.json({

@@ -12,7 +12,6 @@ import Link from "next/link";
 import { useAuthStore } from "@/store/useAuthStore";
 import {
   ArrowLeft,
-  FileText,
   TestTube,
   User,
   Stethoscope,
@@ -134,16 +133,10 @@ export default function TestDetailPage() {
   const patientInfo = safePatient(test?.patient);
   const chargesInfo = safeCharges(test?.charges);
 
-  const canAddParameters =
-    test?.paymentVerified &&
-    test?.processingStatus !== "completed" &&
-    test?.status !== "cancelled";
-
   const canCollectSample =
-    test?.paymentVerified &&
+    (test?.paymentVerified || test?.priority !== "routine") &&
     test?.collectionStatus !== "collected" &&
-    test?.status !== "cancelled" &&
-    test?.processingStatus === "completed";
+    test?.status !== "cancelled";
 
   if (loading) {
     return (
@@ -193,20 +186,14 @@ export default function TestDetailPage() {
               <Badge variant="outline">{test.testId}</Badge>
               <Badge
                 className={
-                  test.processingStatus === "completed" &&
                   test.collectionStatus === "collected"
                     ? "bg-green-100 text-green-800"
-                    : test.processingStatus === "completed"
-                      ? "bg-blue-100 text-blue-800"
-                      : "bg-yellow-100 text-yellow-800"
+                    : "bg-yellow-100 text-yellow-800"
                 }
               >
-                {test.processingStatus === "completed" &&
-                test.collectionStatus === "collected"
-                  ? "Completed"
-                  : test.processingStatus === "completed"
-                    ? "Ready for Collection"
-                    : "Pending"}
+                {test.collectionStatus === "collected"
+                  ? "Collected"
+                  : "Pending"}
               </Badge>
             </div>
           </div>
@@ -216,42 +203,30 @@ export default function TestDetailPage() {
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh
           </Button>
-          {canAddParameters && (
-            <Button asChild>
-              <Link href={`/laboratory/tests/${test._id}/add-parameters`}>
-                <FileText className="h-4 w-4 mr-2" />
-                Add Parameters
-              </Link>
-            </Button>
-          )}
         </div>
       </div>
 
       {/* Status Alert */}
-      {test.processingStatus === "completed" &&
-      test.collectionStatus === "collected" ? (
+      {test.collectionStatus === "collected" ? (
         <Alert className="bg-green-50 border-green-200 mb-6">
           <CheckCircle className="h-4 w-4 text-green-600" />
-          <AlertTitle className="text-green-800">Test Completed</AlertTitle>
+          <AlertTitle className="text-green-800">Sample Collected</AlertTitle>
           <AlertDescription className="text-green-700">
-            This test has been completed and the sample has been collected.
+            The sample has been collected successfully.
           </AlertDescription>
         </Alert>
-      ) : test.processingStatus === "completed" &&
-        test.collectionStatus !== "collected" ? (
+      ) : canCollectSample ? (
         <Alert className="bg-blue-50 border-blue-200 mb-6">
           <Clock className="h-4 w-4 text-blue-600" />
           <AlertTitle>Ready for Sample Collection</AlertTitle>
-          <AlertDescription>
-            Test parameters have been added. Ready to collect the sample.
-          </AlertDescription>
+          <AlertDescription>Ready to collect the sample.</AlertDescription>
         </Alert>
       ) : !test.paymentVerified && test.priority === "routine" ? (
         <Alert variant="destructive" className="mb-6">
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>Payment Verification Required</AlertTitle>
           <AlertDescription>
-            Payment must be verified before adding test parameters.
+            Payment must be verified before collecting the sample.
           </AlertDescription>
         </Alert>
       ) : null}
@@ -461,21 +436,14 @@ export default function TestDetailPage() {
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap gap-4">
-            {canCollectSample ? (
+            {canCollectSample && (
               <Button asChild size="lg">
                 <Link href={`/laboratory/tests/${test._id}/collect`}>
                   <TestTube className="h-4 w-4 mr-2" />
                   Collect Sample
                 </Link>
               </Button>
-            ) : canAddParameters ? (
-              <Button asChild size="lg">
-                <Link href={`/laboratory/tests/${test._id}/add-parameters`}>
-                  <FileText className="h-4 w-4 mr-2" />
-                  Add Parameters
-                </Link>
-              </Button>
-            ) : null}
+            )}
 
             <Button variant="outline" asChild>
               <Link href="/laboratory/tests">Back to All Tests</Link>

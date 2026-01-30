@@ -532,10 +532,9 @@ labTestSchema.virtual("isUrgent").get(function () {
 labTestSchema.virtual("canCollectSample").get(function () {
   const condition1 = this.status !== "cancelled";
   const condition2 = this.paymentVerified || this.priority !== "routine";
-  const condition3 = this.processingStatus === "completed"; // Parameters must be added first
-  const condition4 = this.collectionStatus !== "collected"; // Not already collected
+  const condition3 = this.collectionStatus !== "collected"; // Not already collected
 
-  return condition1 && condition2 && condition3 && condition4;
+  return condition1 && condition2 && condition3;
 });
 
 // Virtual for canProcess

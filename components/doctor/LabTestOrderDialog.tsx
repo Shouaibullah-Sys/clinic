@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -27,7 +27,17 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Loader2, Plus, TestTube } from "lucide-react";
+import {
+  Loader2,
+  Plus,
+  TestTube,
+  Search,
+  X,
+  CheckCircle2,
+  Clock,
+  Droplet,
+  AlertCircle,
+} from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
 
 // Define validation schema with Zod
@@ -48,16 +58,22 @@ interface LabTestOrderDialogProps {
   trigger?: React.ReactNode;
 }
 
-const COMMON_TESTS = [
-  { name: "Complete Blood Count (CBC)", category: "hematology", price: "500" },
-  { name: "Blood Glucose (Fasting)", category: "blood_test", price: "300" },
-  { name: "Lipid Profile", category: "blood_test", price: "800" },
-  { name: "Liver Function Test (LFT)", category: "blood_test", price: "1200" },
-  { name: "Kidney Function Test (KFT)", category: "blood_test", price: "1000" },
-  { name: "Thyroid Profile", category: "hormone_test", price: "1500" },
-  { name: "Urine Routine Examination", category: "urine_test", price: "400" },
-  { name: "Stool Examination", category: "stool_test", price: "350" },
-];
+interface LabTestTemplate {
+  _id: string;
+  testCode: string;
+  testName: string;
+  category: string;
+  description?: string;
+  specimenType?: string[];
+  containerType?: string[];
+  sampleVolume?: string;
+  fastingRequired?: boolean;
+  preparationInstructions?: string;
+  turnaroundTime?: string;
+  basePrice?: number;
+  active?: boolean;
+  parameters?: any[];
+}
 
 const TEST_CATEGORIES = [
   { value: "hematology", label: "Hematology" },
@@ -86,7 +102,14 @@ export function LabTestOrderDialog({
 }: LabTestOrderDialogProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<LabTestTemplate[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [showSearchResults, setShowSearchResults] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] =
+    useState<LabTestTemplate | null>(null);
   const { accessToken } = useAuthStore();
+  const searchDropdownRef = useRef<HTMLDivElement>(null);
 
   const {
     register,
@@ -104,11 +127,6 @@ export function LabTestOrderDialog({
       notes: "",
     },
   });
-
-  const handleSelectCommonTest = (test: (typeof COMMON_TESTS)[0]) => {
-    setValue("testName", test.name);
-    setValue("category", test.category);
-  };
 
   const onSubmit = async (data: LabTestFormValues) => {
     try {
@@ -163,9 +181,95 @@ export function LabTestOrderDialog({
   const handleOpenChange = (isOpen: boolean) => {
     if (!isOpen) {
       reset();
+      setSearchQuery("");
+      setSearchResults([]);
+      setShowSearchResults(false);
+      setSelectedTemplate(null);
     }
     setOpen(isOpen);
   };
+
+  // Debounced search function
+  useEffect(() => {
+    const debounceTimer = setTimeout(async () => {
+      if (searchQuery.trim().length >= 2) {
+        setSearchLoading(true);
+        try {
+          const response = await fetch(
+            `/api/laboratory/templates?search=${encodeURIComponent(searchQuery)}`,
+            {
+              headers: {
+                Authorization: `Bearer ${accessToken}`,
+              },
+            },
+          );
+
+          const result = await response.json();
+
+          if (result.success && result.data) {
+            setSearchResults(result.data);
+            setShowSearchResults(true);
+          } else {
+            setSearchResults([]);
+          }
+        } catch (error) {
+          console.error("Error fetching templates:", error);
+          setSearchResults([]);
+        } finally {
+          setSearchLoading(false);
+        }
+      } else {
+        setSearchResults([]);
+        setShowSearchResults(false);
+      }
+    }, 300); // 300ms debounce delay
+
+    return () => clearTimeout(debounceTimer);
+  }, [searchQuery, accessToken]);
+
+  // Handle template selection
+  const handleSelectTemplate = (template: LabTestTemplate) => {
+    setSelectedTemplate(template);
+    setValue("testName", template.testName);
+    setValue("category", template.category);
+
+    // Combine description and preparation instructions for notes
+    const notesParts: string[] = [];
+    if (template.description) {
+      notesParts.push(`Description: ${template.description}`);
+    }
+    if (template.preparationInstructions) {
+      notesParts.push(`Preparation: ${template.preparationInstructions}`);
+    }
+    setValue("notes", notesParts.join("\n\n"));
+
+    setSearchQuery("");
+    setSearchResults([]);
+    setShowSearchResults(false);
+  };
+
+  // Clear selected template
+  const handleClearTemplate = () => {
+    setSelectedTemplate(null);
+    setValue("testName", "");
+    setValue("category", "");
+    setValue("notes", "");
+  };
+
+  // Handle click outside search dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        searchDropdownRef.current &&
+        !searchDropdownRef.current.contains(event.target as Node)
+      ) {
+        setShowSearchResults(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -190,27 +294,87 @@ export function LabTestOrderDialog({
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-          {/* Quick Select Common Tests */}
-          <div className="space-y-3">
+          {/* Search Lab Test Templates */}
+          <div className="space-y-3" ref={searchDropdownRef}>
             <Label className="text-sm font-medium">
-              Quick Select Common Tests
+              Search Lab Test Templates
             </Label>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-              {COMMON_TESTS.map((test, index) => (
-                <Button
-                  key={index}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="Search by test name, code, or description..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onFocus={() => searchQuery && setShowSearchResults(true)}
+                className="pl-10"
+              />
+              {searchLoading && (
+                <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+              )}
+              {searchQuery && !searchLoading && (
+                <button
                   type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleSelectCommonTest(test)}
-                  className="justify-start h-auto py-2 hover:border-primary hover:bg-primary/5 transition-colors"
+                  onClick={() => {
+                    setSearchQuery("");
+                    setSearchResults([]);
+                    setShowSearchResults(false);
+                  }}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground"
                 >
-                  <div className="text-left">
-                    <p className="text-xs font-medium truncate">{test.name}</p>
-                  </div>
-                </Button>
-              ))}
+                  <X className="h-4 w-4" />
+                </button>
+              )}
             </div>
+
+            {/* Search Results Dropdown */}
+            {showSearchResults && searchResults.length > 0 && (
+              <div className="absolute z-50 w-full mt-1 bg-background border border-border rounded-md shadow-lg max-h-60 overflow-y-auto">
+                {searchResults.map((template) => (
+                  <button
+                    key={template._id}
+                    type="button"
+                    onClick={() => handleSelectTemplate(template)}
+                    className="w-full px-4 py-3 text-left hover:bg-muted transition-colors border-b border-border last:border-b-0"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">
+                          {template.testName}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-xs text-muted-foreground">
+                            Code: {template.testCode}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            •
+                          </span>
+                          <span className="text-xs text-muted-foreground capitalize">
+                            {template.category.replace(/_/g, " ")}
+                          </span>
+                        </div>
+                        {template.description && (
+                          <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                            {template.description}
+                          </p>
+                        )}
+                      </div>
+                      <CheckCircle2 className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {showSearchResults &&
+              searchResults.length === 0 &&
+              !searchLoading && (
+                <div className="absolute z-50 w-full mt-1 bg-background border border-border rounded-md shadow-lg p-4 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    No templates found matching "{searchQuery}"
+                  </p>
+                </div>
+              )}
           </div>
 
           {/* Inline Row: Test Name, Priority, and Category */}
@@ -300,6 +464,129 @@ export function LabTestOrderDialog({
               className="resize-none"
             />
           </div>
+
+          {/* Selected Template Details (Read-only) */}
+          {selectedTemplate && (
+            <div className="space-y-4 p-4 bg-muted/50 rounded-lg border border-border">
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-semibold flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-primary" />
+                  Template Details
+                </h4>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleClearTemplate}
+                  className="h-8 text-xs"
+                >
+                  <X className="h-3 w-3 mr-1" />
+                  Clear
+                </Button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {/* Specimen Type */}
+                {selectedTemplate.specimenType &&
+                  selectedTemplate.specimenType.length > 0 && (
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <Droplet className="h-3 w-3" />
+                        <span className="font-medium">Specimen Type</span>
+                      </div>
+                      <p className="text-sm">
+                        {selectedTemplate.specimenType.join(", ")}
+                      </p>
+                    </div>
+                  )}
+
+                {/* Sample Volume */}
+                {selectedTemplate.sampleVolume && (
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <Droplet className="h-3 w-3" />
+                      <span className="font-medium">Sample Volume</span>
+                    </div>
+                    <p className="text-sm">{selectedTemplate.sampleVolume}</p>
+                  </div>
+                )}
+
+                {/* Fasting Required */}
+                {selectedTemplate.fastingRequired !== undefined && (
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <AlertCircle className="h-3 w-3" />
+                      <span className="font-medium">Fasting Required</span>
+                    </div>
+                    <p className="text-sm">
+                      {selectedTemplate.fastingRequired ? (
+                        <span className="text-amber-600 font-medium">Yes</span>
+                      ) : (
+                        <span className="text-green-600 font-medium">No</span>
+                      )}
+                    </p>
+                  </div>
+                )}
+
+                {/* Turnaround Time */}
+                {selectedTemplate.turnaroundTime && (
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <Clock className="h-3 w-3" />
+                      <span className="font-medium">Turnaround Time</span>
+                    </div>
+                    <p className="text-sm">{selectedTemplate.turnaroundTime}</p>
+                  </div>
+                )}
+
+                {/* Base Price */}
+                {selectedTemplate.basePrice !== undefined && (
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <span className="font-medium">Base Price</span>
+                    </div>
+                    <p className="text-sm font-semibold text-primary">
+                      {selectedTemplate.basePrice.toLocaleString()} AFN
+                    </p>
+                  </div>
+                )}
+
+                {/* Test Code */}
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span className="font-medium">Test Code</span>
+                  </div>
+                  <p className="text-sm font-mono bg-background px-2 py-1 rounded border border-border inline-block">
+                    {selectedTemplate.testCode}
+                  </p>
+                </div>
+              </div>
+
+              {/* Parameters (if available) */}
+              {selectedTemplate.parameters &&
+                selectedTemplate.parameters.length > 0 && (
+                  <div className="space-y-2 pt-2 border-t border-border">
+                    <p className="text-xs font-medium text-muted-foreground">
+                      Parameters ({selectedTemplate.parameters.length})
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedTemplate.parameters.map(
+                        (param: any, index: number) => (
+                          <span
+                            key={index}
+                            className="text-xs bg-background px-2 py-1 rounded border border-border"
+                          >
+                            {param.name ||
+                              param.parameterName ||
+                              `Parameter ${index + 1}`}
+                          </span>
+                        ),
+                      )}
+                    </div>
+                  </div>
+                )}
+            </div>
+          )}
 
           <DialogFooter className="pt-4 border-t">
             <Button

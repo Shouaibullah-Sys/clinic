@@ -87,6 +87,15 @@ interface SampleParameter {
   result: string;
 }
 
+interface TestParameter {
+  id: string;
+  name: string;
+  value: string;
+  unit: string;
+  normalRange: string;
+  remarks: string;
+}
+
 interface LabTest {
   id: string;
   name: string;
@@ -1876,6 +1885,11 @@ export default function CollectSamplePage() {
     { id: "1", name: "", unit: "", normalRange: "", result: "" },
   ]);
 
+  // Test parameters (results)
+  const [testParameters, setTestParameters] = useState<TestParameter[]>([
+    { id: "1", name: "", value: "", unit: "", normalRange: "", remarks: "" },
+  ]);
+
   // Generate sample ID
   useEffect(() => {
     if (!sampleId) {
@@ -2060,6 +2074,40 @@ export default function CollectSamplePage() {
     );
   };
 
+  // Test parameters management functions
+  const addTestParameter = () => {
+    const newId = (testParameters.length + 1).toString();
+    setTestParameters([
+      ...testParameters,
+      {
+        id: newId,
+        name: "",
+        value: "",
+        unit: "",
+        normalRange: "",
+        remarks: "",
+      },
+    ]);
+  };
+
+  const removeTestParameter = (id: string) => {
+    if (testParameters.length > 1) {
+      setTestParameters(testParameters.filter((p) => p.id !== id));
+    }
+  };
+
+  const updateTestParameter = (
+    id: string,
+    field: keyof TestParameter,
+    value: string,
+  ) => {
+    setTestParameters(
+      testParameters.map((param) =>
+        param.id === id ? { ...param, [field]: value } : param,
+      ),
+    );
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -2069,6 +2117,11 @@ export default function CollectSamplePage() {
         router.push("/login");
         return;
       }
+
+      // Filter valid test parameters (name and value are required)
+      const validTestParameters = testParameters.filter(
+        (p) => p.name.trim() && p.value.trim(),
+      );
 
       const payload = {
         sampleId,
@@ -2082,6 +2135,15 @@ export default function CollectSamplePage() {
           parameters: parameters.filter(
             (p) => p.name.trim() && p.result.trim(),
           ),
+        },
+        results: {
+          parameters: validTestParameters.map((p) => ({
+            name: p.name,
+            value: p.value,
+            unit: p.unit,
+            normalRange: p.normalRange,
+            remarks: p.remarks,
+          })),
         },
       };
 
@@ -2122,14 +2184,11 @@ export default function CollectSamplePage() {
   // Check conditions - Collect Sample is now the LAST step
   const condition1 = test?.status !== "cancelled";
   const condition2 = test?.paymentVerified || test?.priority !== "routine";
-  const condition3 = test?.processingStatus === "completed"; // Parameters must be added first
-  const condition4 = test?.collectionStatus !== "collected";
+  const condition3 = test?.collectionStatus !== "collected";
 
-  const canCollectSample = condition1 && condition2 && condition3 && condition4;
+  const canCollectSample = condition1 && condition2 && condition3;
   const requiresPaymentVerification =
     test?.priority === "routine" && !test?.paymentVerified;
-  const requiresParameters =
-    test?.paymentVerified && test?.processingStatus !== "completed";
 
   if (loading) {
     return (
@@ -2224,7 +2283,6 @@ export default function CollectSamplePage() {
                 Please ensure:
                 <ul className="list-disc pl-5 mt-2 space-y-1">
                   <li>Payment is verified (for routine tests)</li>
-                  <li>Test parameters have been added</li>
                   <li>Sample has not been collected yet</li>
                   <li>Test is not cancelled</li>
                 </ul>
@@ -2234,7 +2292,6 @@ export default function CollectSamplePage() {
                     <li>
                       Payment Verified: {test.paymentVerified ? "Yes" : "No"}
                     </li>
-                    <li>Processing Status: {test.processingStatus}</li>
                     <li>Collection Status: {test.collectionStatus}</li>
                     <li>Test Status: {test.status}</li>
                     <li>Priority: {test.priority}</li>
@@ -2264,18 +2321,6 @@ export default function CollectSamplePage() {
                       }
                     >
                       Verify Payment
-                    </Button>
-                  )}
-                  {requiresParameters && (
-                    <Button
-                      variant="default"
-                      onClick={() =>
-                        router.push(
-                          `/laboratory/tests/${params.id}/add-parameters`,
-                        )
-                      }
-                    >
-                      Add Parameters
                     </Button>
                   )}
                 </div>
@@ -2552,6 +2597,149 @@ export default function CollectSamplePage() {
                     Parameters include name, unit, normal range, and result
                     fields. Default parameters are pre-filled based on the
                     selected test type. You can add, remove, or modify them.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Test Parameters (Results) */}
+            <Card className="border-blue-200 dark:border-blue-800">
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    <TestTube className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                    Test Parameters (Results)
+                  </span>
+                  <Button
+                    type="button"
+                    onClick={addTestParameter}
+                    variant="outline"
+                    size="sm"
+                    disabled={!canCollectSample}
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Parameter
+                  </Button>
+                </CardTitle>
+                <CardDescription>
+                  Enter test result values with parameter name, value, unit,
+                  normal range, and remarks
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {testParameters.map((param, index) => (
+                    <div
+                      key={param.id}
+                      className="p-4 border rounded-lg space-y-4 bg-blue-50/50 dark:bg-blue-950/20"
+                    >
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-medium">Parameter #{index + 1}</h3>
+                        {testParameters.length > 1 && (
+                          <Button
+                            type="button"
+                            onClick={() => removeTestParameter(param.id)}
+                            variant="ghost"
+                            size="sm"
+                            className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
+                            disabled={!canCollectSample}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Parameter Name *</Label>
+                          <Input
+                            value={param.name}
+                            onChange={(e) =>
+                              updateTestParameter(
+                                param.id,
+                                "name",
+                                e.target.value,
+                              )
+                            }
+                            placeholder="e.g., Hemoglobin, WBC Count"
+                            disabled={!canCollectSample}
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label>Value *</Label>
+                          <Input
+                            value={param.value}
+                            onChange={(e) =>
+                              updateTestParameter(
+                                param.id,
+                                "value",
+                                e.target.value,
+                              )
+                            }
+                            placeholder="Enter test result value"
+                            disabled={!canCollectSample}
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label>Unit</Label>
+                          <Input
+                            value={param.unit}
+                            onChange={(e) =>
+                              updateTestParameter(
+                                param.id,
+                                "unit",
+                                e.target.value,
+                              )
+                            }
+                            placeholder="e.g., g/dL, cells/μL"
+                            disabled={!canCollectSample}
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label>Normal Range</Label>
+                          <Input
+                            value={param.normalRange}
+                            onChange={(e) =>
+                              updateTestParameter(
+                                param.id,
+                                "normalRange",
+                                e.target.value,
+                              )
+                            }
+                            placeholder="e.g., 13.5-17.5 g/dL"
+                            disabled={!canCollectSample}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Remarks</Label>
+                        <Textarea
+                          value={param.remarks}
+                          onChange={(e) =>
+                            updateTestParameter(
+                              param.id,
+                              "remarks",
+                              e.target.value,
+                            )
+                          }
+                          placeholder="Any additional remarks or notes..."
+                          rows={2}
+                          disabled={!canCollectSample}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-4 text-sm text-muted-foreground">
+                  <p>
+                    Test parameters include the actual test results. Parameter
+                    Name and Value are required. Unit, Normal Range, and Remarks
+                    are optional.
                   </p>
                 </div>
               </CardContent>
