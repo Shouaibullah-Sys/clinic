@@ -197,7 +197,7 @@ interface ImagingService {
 export default function AppointmentDetailPage() {
   const router = useRouter();
   const params = useParams();
-  const { user, accessToken } = useAuthStore();
+  const { user, accessToken, isAuthenticated, isLoading } = useAuthStore();
   const [appointment, setAppointment] = useState<Appointment | null>(null);
   const [labTests, setLabTests] = useState<LabTest[]>([]);
   const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
@@ -214,6 +214,17 @@ export default function AppointmentDetailPage() {
     prescriptions: "appointment",
     imaging: "appointment",
   });
+
+  // Role-based access control
+  useEffect(() => {
+    if (!isLoading) {
+      if (!isAuthenticated) {
+        router.push("/login");
+      } else if (user?.role !== "receptionist" && user?.role !== "admin") {
+        router.push("/unauthorized");
+      }
+    }
+  }, [isAuthenticated, user, isLoading, router]);
 
   // Dialog states
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
@@ -916,6 +927,18 @@ export default function AppointmentDetailPage() {
     );
   }
 
+  // Show loading state while checking authentication and role
+  if (
+    isLoading ||
+    (isAuthenticated && user?.role !== "receptionist" && user?.role !== "admin")
+  ) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <p>Loading...</p>
+      </div>
+    );
+  }
+
   if (!appointment) {
     return (
       <div className="container mx-auto p-6">
@@ -929,7 +952,7 @@ export default function AppointmentDetailPage() {
               The appointment you're looking for doesn't exist or you don't have
               permission to view it.
             </p>
-            <Button onClick={() => router.push("/appointments")}>
+            <Button onClick={() => router.push("/reception/appointments")}>
               Back to Appointments
             </Button>
           </CardContent>
@@ -943,7 +966,10 @@ export default function AppointmentDetailPage() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" onClick={() => router.push("/appointments")}>
+          <Button
+            variant="ghost"
+            onClick={() => router.push("/reception/appointments")}
+          >
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back
           </Button>

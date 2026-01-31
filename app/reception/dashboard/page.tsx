@@ -75,7 +75,7 @@ interface RecentActivity {
 }
 
 export default function ReceptionDashboardPage() {
-  const { user } = useAuthStore();
+  const { user, isAuthenticated, isLoading } = useAuthStore();
   const router = useRouter();
   const [stats, setStats] = useState<ReceptionStats>({
     dailyVisitors: 0,
@@ -97,6 +97,17 @@ export default function ReceptionDashboardPage() {
   );
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Role-based access control
+  useEffect(() => {
+    if (!isLoading) {
+      if (!isAuthenticated) {
+        router.push("/login");
+      } else if (user?.role !== "receptionist" && user?.role !== "admin") {
+        router.push("/unauthorized");
+      }
+    }
+  }, [isAuthenticated, user, isLoading, router]);
 
   // Add this helper function near the top of your component
   const getAuthHeaders = () => {
@@ -234,6 +245,18 @@ export default function ReceptionDashboardPage() {
             </div>
           </CardContent>
         </Card>
+      </div>
+    );
+  }
+
+  // Show loading state while checking authentication and role
+  if (
+    isLoading ||
+    (isAuthenticated && user?.role !== "receptionist" && user?.role !== "admin")
+  ) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <p>Loading...</p>
       </div>
     );
   }
@@ -438,7 +461,9 @@ export default function ReceptionDashboardPage() {
                     <TooltipTrigger asChild>
                       <Button
                         className="justify-start h-auto py-3 px-4"
-                        onClick={() => router.push("/appointments/new")}
+                        onClick={() =>
+                          router.push("/reception/appointments/new")
+                        }
                       >
                         <div className="flex items-center space-x-3">
                           <div className="p-2 bg-blue-100 rounded-lg">
@@ -540,7 +565,7 @@ export default function ReceptionDashboardPage() {
                       <Button
                         variant="outline"
                         className="justify-start h-auto py-3 px-4"
-                        onClick={() => router.push("/appointments")}
+                        onClick={() => router.push("/reception/appointments")}
                       >
                         <div className="flex items-center space-x-3">
                           <div className="p-2 bg-purple-100 rounded-lg">

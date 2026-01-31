@@ -1,7 +1,7 @@
 // app/laboratory/layout.tsx
 "use client";
 import { useState, useEffect } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   ClipboardList,
@@ -33,8 +33,14 @@ export default function LaboratoryLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { user, logout, initialize, isLoading } = useAuthStore();
+
+  const handleLogout = async () => {
+    await logout();
+    router.push("/login");
+  };
 
   // Initialize auth state in useEffect
   useEffect(() => {
@@ -124,7 +130,7 @@ export default function LaboratoryLayout({
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={logout}
+                  onClick={handleLogout}
                   className="ml-auto"
                 >
                   Logout
@@ -198,7 +204,7 @@ export default function LaboratoryLayout({
                       variant="outline"
                       size="sm"
                       onClick={() => {
-                        logout();
+                        handleLogout();
                         setSidebarOpen(false);
                       }}
                       className="ml-auto"
@@ -223,7 +229,7 @@ export default function LaboratoryLayout({
                 <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground">
                   {user?.name?.charAt(0) || "U"}
                 </div>
-                <Button variant="outline" size="sm" onClick={logout}>
+                <Button variant="outline" size="sm" onClick={handleLogout}>
                   Logout
                 </Button>
               </div>

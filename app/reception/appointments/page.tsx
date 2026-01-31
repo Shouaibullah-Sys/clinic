@@ -1,4 +1,4 @@
-// app/appointments/page.tsx
+// app/reception/appointments/page.tsx
 
 "use client";
 
@@ -15,7 +15,6 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
@@ -23,7 +22,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -77,8 +75,6 @@ import {
   Download,
 } from "lucide-react";
 import { format, parseISO, isToday, isPast, isFuture } from "date-fns";
-import { cn } from "@/lib/utils";
-import { CalendarDateRangePicker } from "@/components/calendar-date-range-picker";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface Appointment {
@@ -121,7 +117,7 @@ interface Doctor {
 
 export default function AppointmentsPage() {
   const router = useRouter();
-  const { user, accessToken } = useAuthStore();
+  const { user, accessToken, isAuthenticated, isLoading } = useAuthStore();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [loading, setLoading] = useState(true);
@@ -137,6 +133,17 @@ export default function AppointmentsPage() {
   const [selectedAppointment, setSelectedAppointment] =
     useState<Appointment | null>(null);
   const [cancelReason, setCancelReason] = useState("");
+
+  // Role-based access control
+  useEffect(() => {
+    if (!isLoading) {
+      if (!isAuthenticated) {
+        router.push("/login");
+      } else if (user?.role !== "receptionist" && user?.role !== "admin") {
+        router.push("/unauthorized");
+      }
+    }
+  }, [isAuthenticated, user, isLoading, router]);
 
   useEffect(() => {
     fetchAppointments();
@@ -405,6 +412,18 @@ export default function AppointmentsPage() {
     );
   }
 
+  // Show loading state while checking authentication and role
+  if (
+    isLoading ||
+    (isAuthenticated && user?.role !== "receptionist" && user?.role !== "admin")
+  ) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <p>Loading...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 p-4 md:p-6">
       {/* Header */}
@@ -420,7 +439,7 @@ export default function AppointmentsPage() {
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh
           </Button>
-          <Button onClick={() => router.push("/appointments/new")}>
+          <Button onClick={() => router.push("/reception/appointments/new")}>
             <Plus className="h-4 w-4 mr-2" />
             New Appointment
           </Button>
@@ -590,7 +609,9 @@ export default function AppointmentsPage() {
                     <TableRow
                       key={appointment._id}
                       onClick={() =>
-                        router.push(`/appointments/${appointment._id}`)
+                        router.push(
+                          `/reception/appointments/${appointment._id}`,
+                        )
                       }
                       className="cursor-pointer hover:dark:--background"
                     >

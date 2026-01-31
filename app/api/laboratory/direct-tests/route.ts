@@ -113,14 +113,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Only laboratory staff and admin can create direct tests
-    const allowedRoles = ["lab_technician", "admin"];
+    // Only laboratory staff, receptionists, and admin can create direct tests
+    const allowedRoles = ["lab_technician", "admin", "receptionist"];
     if (!auth.userRole || !allowedRoles.includes(auth.userRole)) {
       return NextResponse.json(
         {
           success: false,
           error:
-            "Forbidden. Only laboratory staff can create direct lab tests.",
+            "Forbidden. Only laboratory staff and receptionists can create direct lab tests.",
         },
         { status: 403 },
       );
@@ -136,9 +136,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!body.testTemplateId) {
+    // Support both template-based and custom test creation
+    let testTemplate = null;
+    if (body.testTemplateId) {
+      // Verify test template exists
+      testTemplate = await LabTestTemplate.findById(body.testTemplateId);
+      if (!testTemplate) {
+        return NextResponse.json(
+          { success: false, error: "Test template not found" },
+          { status: 404 },
+        );
+      }
+
+      if (!testTemplate.active) {
+        return NextResponse.json(
+          { success: false, error: "Test template is not active" },
+          { status: 400 },
+        );
+      }
+    } else if (!body.testName) {
+      // If no template, test name is required
       return NextResponse.json(
-        { success: false, error: "Test template ID is required" },
+        { success: false, error: "Test name is required" },
         { status: 400 },
       );
     }
@@ -152,28 +171,63 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify test template exists
-    const testTemplate = await LabTestTemplate.findById(body.testTemplateId);
-    if (!testTemplate) {
-      return NextResponse.json(
-        { success: false, error: "Test template not found" },
-        { status: 404 },
-      );
-    }
+    // Determine test details from template or custom input
+    const testName = testTemplate?.testName || body.testName;
+    const category = testTemplate?.category || body.category || "general";
+    const description = testTemplate?.description || body.description;
+    const basePrice = testTemplate?.basePrice || body.price;
+    const specimenType =
+      testTemplate?.specimenType?.[0] || body.specimenType || "blood";
+    const turnaroundTime =
+      testTemplate?.turnaroundTime || body.turnaroundTime || 24;
 
-    if (!testTemplate.active) {
+    // Validate price
+    if (!basePrice || isNaN(basePrice) || basePrice <= 0) {
       return NextResponse.json(
-        { success: false, error: "Test template is not active" },
+        { success: false, error: "Valid test price is required" },
         { status: 400 },
       );
     }
 
+    // Validate priority
+    const validPriorities = ["routine", "urgent", "emergency"];
+    const priority = body.priority || "routine";
+    if (!validPriorities.includes(priority)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Invalid priority. Must be routine, urgent, or emergency",
+        },
+        { status: 400 },
+      );
+    }
+
+    // Prepare test parameters
+    let testParameters = [];
+    if (testTemplate && testTemplate.parameters) {
+      // Use template parameters
+      testParameters = testTemplate.parameters.map((param: any) => ({
+        parameterName: param.name || param.parameterName,
+        unit: param.unit || "",
+        normalRange: param.normalRange || "",
+        description: param.description || "",
+      }));
+    } else if (body.parameters && Array.isArray(body.parameters)) {
+      // Use custom parameters from request
+      testParameters = body.parameters.map((param: any) => ({
+        parameterName: param.parameterName || param.name,
+        unit: param.unit || "",
+        normalRange: param.normalRange || "",
+        description: param.description || "",
+      }));
+    }
+
     // Create the direct lab test
     const labTestData = {
-      testName: testTemplate.testName,
-      category: testTemplate.category,
-      description: testTemplate.description,
-      price: testTemplate.basePrice,
+      testName,
+      category,
+      description,
+      price: basePrice,
       patient: new mongoose.Types.ObjectId(body.patientId),
       orderedBy: new mongoose.Types.ObjectId(auth.userId!),
       orderedAt: new Date(),
@@ -181,10 +235,10 @@ export async function POST(request: NextRequest) {
       collectionStatus: "pending",
       processingStatus: "pending",
       verificationStatus: "pending",
-      priority: body.priority || "routine",
+      priority: priority,
       paymentVerified: false,
       specimen: {
-        type: testTemplate.specimenType?.[0] || "blood",
+        type: specimenType,
       },
       // Direct lab test specific fields
       isDirectTest: true,
@@ -192,15 +246,19 @@ export async function POST(request: NextRequest) {
       createdAtDirect: new Date(),
       finalized: false,
       readyForPrint: false,
+      // Store test parameters for custom tests
+      ...(testParameters.length > 0 && {
+        testParameters: testParameters,
+      }),
       // Initialize charges
       charges: {
-        basePrice: testTemplate.basePrice,
+        basePrice,
         tax: 0,
         discount: 0,
         otherCharges: 0,
-        totalAmount: testTemplate.basePrice,
+        totalAmount: basePrice,
         paid: 0,
-        due: testTemplate.basePrice,
+        due: basePrice,
         paymentStatus: "pending",
       },
       // Optional notes

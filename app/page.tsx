@@ -187,7 +187,7 @@ export default function LandingPage() {
   };
 
   const handleBookAppointment = () => {
-    router.push("/appointments");
+    router.push("/reception/appointments");
   };
 
   const handleEmergency = () => {

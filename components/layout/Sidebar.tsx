@@ -68,10 +68,10 @@ export function Sidebar() {
   };
 
   const toggleItem = (title: string) => {
-    setOpenItems(prev =>
+    setOpenItems((prev) =>
       prev.includes(title)
-        ? prev.filter(item => item !== title)
-        : [...prev, title]
+        ? prev.filter((item) => item !== title)
+        : [...prev, title],
     );
   };
 
@@ -82,7 +82,17 @@ export function Sidebar() {
         title: "Dashboard",
         href: "/dashboard",
         icon: <LayoutDashboard className="h-5 w-5" />,
-        allowedRoles: ["admin", "doctor", "nurse", "receptionist", "pharmacist", "lab_technician", "radiologist", "admission", "staff"],
+        allowedRoles: [
+          "admin",
+          "doctor",
+          "nurse",
+          "receptionist",
+          "pharmacist",
+          "lab_technician",
+          "radiologist",
+          "admission",
+          "staff",
+        ],
       },
     ];
 
@@ -100,26 +110,42 @@ export function Sidebar() {
           href: "/admin/settings",
           icon: <Settings className="h-5 w-5" />,
           allowedRoles: ["admin"],
-        }
+        },
       );
     }
 
     // Medical staff items (admin, doctor, nurse)
-    if (["admin", "doctor", "nurse", "admission", "receptionist"].includes(user?.role || "")) {
+    if (
+      ["admin", "doctor", "nurse", "admission", "receptionist"].includes(
+        user?.role || "",
+      )
+    ) {
       baseItems.push(
         {
           title: "Patients",
           href: "/patients",
           icon: <Users className="h-5 w-5" />,
-          allowedRoles: ["admin", "doctor", "nurse", "admission", "receptionist"],
+          allowedRoles: [
+            "admin",
+            "doctor",
+            "nurse",
+            "admission",
+            "receptionist",
+          ],
         },
         {
           title: "Admissions",
           href: "/admissions",
           icon: <Bed className="h-5 w-5" />,
-          allowedRoles: ["admin", "doctor", "nurse", "admission", "receptionist"],
+          allowedRoles: [
+            "admin",
+            "doctor",
+            "nurse",
+            "admission",
+            "receptionist",
+          ],
           badge: "12", // You can fetch this dynamically
-        }
+        },
       );
     }
 
@@ -137,7 +163,7 @@ export function Sidebar() {
           href: "/prescriptions",
           icon: <FileText className="h-5 w-5" />,
           allowedRoles: ["admin", "doctor"],
-        }
+        },
       );
     }
 
@@ -176,7 +202,7 @@ export function Sidebar() {
       baseItems.push(
         {
           title: "Appointments",
-          href: "/appointments",
+          href: "/reception/appointments",
           icon: <Calendar className="h-5 w-5" />,
           allowedRoles: ["admin", "receptionist"],
           badge: "3",
@@ -186,7 +212,7 @@ export function Sidebar() {
           href: "/billing",
           icon: <DollarSign className="h-5 w-5" />,
           allowedRoles: ["admin", "receptionist"],
-        }
+        },
       );
     }
 
@@ -204,12 +230,16 @@ export function Sidebar() {
           href: "/financial",
           icon: <CreditCard className="h-5 w-5" />,
           allowedRoles: ["admin"],
-        }
+        },
       );
     }
 
     // Services (all medical staff)
-    if (["admin", "doctor", "nurse", "receptionist", "admission"].includes(user?.role || "")) {
+    if (
+      ["admin", "doctor", "nurse", "receptionist", "admission"].includes(
+        user?.role || "",
+      )
+    ) {
       baseItems.push({
         title: "Services",
         href: "/services",
@@ -249,7 +279,17 @@ export function Sidebar() {
       title: "Help & Support",
       href: "/help",
       icon: <HelpCircle className="h-5 w-5" />,
-      allowedRoles: ["admin", "doctor", "nurse", "receptionist", "pharmacist", "lab_technician", "radiologist", "admission", "staff"],
+      allowedRoles: [
+        "admin",
+        "doctor",
+        "nurse",
+        "receptionist",
+        "pharmacist",
+        "lab_technician",
+        "radiologist",
+        "admission",
+        "staff",
+      ],
     });
 
     return baseItems;
@@ -258,7 +298,8 @@ export function Sidebar() {
   const navItems = getNavItems();
 
   const renderNavItem = (item: NavItem, depth = 0) => {
-    const isActive = pathname === item.href || pathname?.startsWith(item.href + "/");
+    const isActive =
+      pathname === item.href || pathname?.startsWith(item.href + "/");
     const hasChildren = item.children && item.children.length > 0;
     const isOpen = openItems.includes(item.title);
 
@@ -275,12 +316,19 @@ export function Sidebar() {
               className={cn(
                 "w-full justify-start h-10 px-3 font-normal",
                 isActive && "bg-accent text-accent-foreground",
-                collapsed && "px-2"
+                collapsed && "px-2",
               )}
               onClick={() => toggleItem(item.title)}
             >
-              <div className={cn("flex items-center gap-3", collapsed && "justify-center")}>
-                <div className={cn("transition-transform", isOpen && "rotate-90")}>
+              <div
+                className={cn(
+                  "flex items-center gap-3",
+                  collapsed && "justify-center",
+                )}
+              >
+                <div
+                  className={cn("transition-transform", isOpen && "rotate-90")}
+                >
                   {item.icon}
                 </div>
                 {!collapsed && (
@@ -291,18 +339,20 @@ export function Sidebar() {
                         {item.badge}
                       </Badge>
                     )}
-                    <ChevronRight className={cn(
-                      "h-4 w-4 transition-transform",
-                      isOpen && "rotate-90"
-                    )} />
+                    <ChevronRight
+                      className={cn(
+                        "h-4 w-4 transition-transform",
+                        isOpen && "rotate-90",
+                      )}
+                    />
                   </>
                 )}
               </div>
             </Button>
-            
+
             {isOpen && !collapsed && item.children && (
               <div className="ml-6 space-y-1 border-l pl-3">
-                {item.children.map(child => renderNavItem(child, depth + 1))}
+                {item.children.map((child) => renderNavItem(child, depth + 1))}
               </div>
             )}
           </>
@@ -313,10 +363,15 @@ export function Sidebar() {
               className={cn(
                 "w-full justify-start h-10 px-3 font-normal",
                 isActive && "bg-accent text-accent-foreground",
-                collapsed && "px-2"
+                collapsed && "px-2",
               )}
             >
-              <div className={cn("flex items-center gap-3", collapsed && "justify-center")}>
+              <div
+                className={cn(
+                  "flex items-center gap-3",
+                  collapsed && "justify-center",
+                )}
+              >
                 {item.icon}
                 {!collapsed && (
                   <>
@@ -340,7 +395,7 @@ export function Sidebar() {
     <aside
       className={cn(
         "sticky top-16 h-[calc(100vh-4rem)] border-r bg-background transition-all duration-300",
-        collapsed ? "w-16" : "w-64"
+        collapsed ? "w-16" : "w-64",
       )}
     >
       <div className="flex h-full flex-col">
@@ -364,14 +419,23 @@ export function Sidebar() {
               <div className="flex-1">
                 <p className="text-sm font-semibold">Hospital HMS</p>
                 <p className="text-xs text-muted-foreground">
-                  {user?.role === "admin" ? "Administration" :
-                   user?.role === "doctor" ? "Medical Department" :
-                   user?.role === "nurse" ? "Nursing" :
-                   user?.role === "admission" ? "Admissions" :
-                   user?.role === "receptionist" ? "Reception" :
-                   user?.role === "pharmacist" ? "Pharmacy" :
-                   user?.role === "lab_technician" ? "Laboratory" :
-                   user?.role === "radiologist" ? "Radiology" : "Staff"}
+                  {user?.role === "admin"
+                    ? "Administration"
+                    : user?.role === "doctor"
+                      ? "Medical Department"
+                      : user?.role === "nurse"
+                        ? "Nursing"
+                        : user?.role === "admission"
+                          ? "Admissions"
+                          : user?.role === "receptionist"
+                            ? "Reception"
+                            : user?.role === "pharmacist"
+                              ? "Pharmacy"
+                              : user?.role === "lab_technician"
+                                ? "Laboratory"
+                                : user?.role === "radiologist"
+                                  ? "Radiology"
+                                  : "Staff"}
                 </p>
               </div>
             </div>
@@ -381,7 +445,7 @@ export function Sidebar() {
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto p-4">
           <div className="space-y-2">
-            {navItems.map(item => renderNavItem(item))}
+            {navItems.map((item) => renderNavItem(item))}
           </div>
         </nav>
 
@@ -400,14 +464,15 @@ export function Sidebar() {
               <ChevronLeft className="h-4 w-4" />
             )}
           </Button>
-          
+
           {!collapsed && (
             <div className="mt-4 space-y-2">
               <div className="text-xs text-muted-foreground">
                 Logged in as: {user?.name}
               </div>
               <div className="text-xs text-muted-foreground">
-                Role: <span className="font-medium capitalize">{user?.role}</span>
+                Role:{" "}
+                <span className="font-medium capitalize">{user?.role}</span>
               </div>
             </div>
           )}

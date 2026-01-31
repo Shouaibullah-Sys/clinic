@@ -6,7 +6,13 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/useAuthStore";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -26,12 +32,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   CalendarIcon,
   Clock,
@@ -83,7 +84,12 @@ import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Switch } from "@/components/ui/switch";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "sonner";
@@ -94,16 +100,27 @@ const patientSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
   phone: z.string().min(10, "Phone number must be at least 10 digits"),
   email: z.string().email("Invalid email").optional().or(z.literal("")),
-  dateOfBirth: z.string().refine(date => isValid(new Date(date)), "Invalid date of birth"),
+  dateOfBirth: z
+    .string()
+    .refine((date) => isValid(new Date(date)), "Invalid date of birth"),
   gender: z.enum(["male", "female", "other"]),
 });
 
 const appointmentSchema = z.object({
   patientId: z.string().min(1, "Patient is required"),
   doctorId: z.string().min(1, "Doctor is required"),
-  appointmentDate: z.string().refine(date => isValid(new Date(date)), "Invalid date"),
+  appointmentDate: z
+    .string()
+    .refine((date) => isValid(new Date(date)), "Invalid date"),
   reason: z.string().min(10, "Reason must be at least 10 characters"),
-  appointmentType: z.enum(["consultation", "followup", "emergency", "checkup", "procedure", "other"]),
+  appointmentType: z.enum([
+    "consultation",
+    "followup",
+    "emergency",
+    "checkup",
+    "procedure",
+    "other",
+  ]),
   priority: z.enum(["low", "medium", "high", "emergency"]),
 });
 
@@ -167,14 +184,14 @@ const appointmentTypeIcons = {
 export default function NewAppointmentPage() {
   const router = useRouter();
   const { user, accessToken } = useAuthStore();
-  
+
   // Main states
   const [loading, setLoading] = useState(false);
   const [searching, setSearching] = useState(false);
   const [loadingDoctors, setLoadingDoctors] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isFullScreen, setIsFullScreen] = useState(false);
-  
+
   // Form state
   const [patientSearch, setPatientSearch] = useState("");
   const [searchResults, setSearchResults] = useState<Patient[]>([]);
@@ -182,10 +199,11 @@ export default function NewAppointmentPage() {
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [selectedDoctor, setSelectedDoctor] = useState<string>("");
   const [appointmentDate, setAppointmentDate] = useState<string>(
-    format(new Date(), "yyyy-MM-dd")
+    format(new Date(), "yyyy-MM-dd"),
   );
   const [duration] = useState<number>(20);
-  const [appointmentType, setAppointmentType] = useState<string>("consultation");
+  const [appointmentType, setAppointmentType] =
+    useState<string>("consultation");
   const [priority, setPriority] = useState<string>("medium");
   const [reason, setReason] = useState<string>("");
   const [symptoms, setSymptoms] = useState<string>("");
@@ -199,7 +217,10 @@ export default function NewAppointmentPage() {
     name: "",
     phone: "",
     email: "",
-    dateOfBirth: format(new Date(new Date().getFullYear() - 30, 0, 1), "yyyy-MM-dd"),
+    dateOfBirth: format(
+      new Date(new Date().getFullYear() - 30, 0, 1),
+      "yyyy-MM-dd",
+    ),
     gender: "male",
     address: "",
     emergencyContact: "",
@@ -209,18 +230,23 @@ export default function NewAppointmentPage() {
   });
 
   // Auto-numbering
-  const [todaysAppointmentsCount, setTodaysAppointmentsCount] = useState<number>(0);
+  const [todaysAppointmentsCount, setTodaysAppointmentsCount] =
+    useState<number>(0);
   const [showNoResults, setShowNoResults] = useState(false);
 
   // UX improvements
-  const [searchDebounce, setSearchDebounce] = useState<NodeJS.Timeout | null>(null);
+  const [searchDebounce, setSearchDebounce] = useState<NodeJS.Timeout | null>(
+    null,
+  );
   const [completionProgress, setCompletionProgress] = useState(0);
   const [isEmergency, setIsEmergency] = useState(false);
   const [showQuickActions, setShowQuickActions] = useState(true);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
-  const [activeSection, setActiveSection] = useState<"patient" | "doctor" | "details">("patient");
+  const [activeSection, setActiveSection] = useState<
+    "patient" | "doctor" | "details"
+  >("patient");
   const [estimatedTime, setEstimatedTime] = useState<string>("");
-  
+
   // Refs
   const searchInputRef = useRef<HTMLInputElement>(null);
   const mainContainerRef = useRef<HTMLDivElement>(null);
@@ -229,7 +255,7 @@ export default function NewAppointmentPage() {
   useEffect(() => {
     fetchDoctors();
     updateEstimatedTime();
-    
+
     // Focus search input on mount
     if (searchInputRef.current) {
       setTimeout(() => searchInputRef.current?.focus(), 300);
@@ -237,17 +263,17 @@ export default function NewAppointmentPage() {
 
     // Keyboard shortcuts
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.key === 'f') {
+      if (e.ctrlKey && e.key === "f") {
         e.preventDefault();
         setIsFullScreen(!isFullScreen);
       }
-      if (e.key === 'Escape' && isFullScreen) {
+      if (e.key === "Escape" && isFullScreen) {
         setIsFullScreen(false);
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isFullScreen]);
 
   // Update auto-number when doctor or date changes
@@ -294,23 +320,26 @@ export default function NewAppointmentPage() {
   };
 
   // Handle search with debounce
-  const handleSearchChange = useCallback((value: string) => {
-    setPatientSearch(value);
-    
-    if (searchDebounce) {
-      clearTimeout(searchDebounce);
-    }
-    
-    if (value.trim().length >= 2) {
-      const timeout = setTimeout(() => {
-        searchPatients(value);
-      }, 300);
-      setSearchDebounce(timeout);
-    } else {
-      setSearchResults([]);
-      setShowNoResults(false);
-    }
-  }, [searchDebounce]);
+  const handleSearchChange = useCallback(
+    (value: string) => {
+      setPatientSearch(value);
+
+      if (searchDebounce) {
+        clearTimeout(searchDebounce);
+      }
+
+      if (value.trim().length >= 2) {
+        const timeout = setTimeout(() => {
+          searchPatients(value);
+        }, 300);
+        setSearchDebounce(timeout);
+      } else {
+        setSearchResults([]);
+        setShowNoResults(false);
+      }
+    },
+    [searchDebounce],
+  );
 
   // Fetch doctors
   const fetchDoctors = async () => {
@@ -324,7 +353,7 @@ export default function NewAppointmentPage() {
       });
 
       const data = await response.json();
-      
+
       if (data.success) {
         setDoctors(data.data);
       } else {
@@ -346,24 +375,27 @@ export default function NewAppointmentPage() {
       setShowNoResults(false);
       return;
     }
-    
+
     try {
       setSearching(true);
       setError(null);
       setShowNoResults(false);
-      
-      const response = await fetch(`/api/patients/search?q=${encodeURIComponent(searchQuery)}&limit=10`, {
-        headers: {
-          "Content-Type": "application/json",
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+
+      const response = await fetch(
+        `/api/patients/search?q=${encodeURIComponent(searchQuery)}&limit=10`,
+        {
+          headers: {
+            "Content-Type": "application/json",
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
         },
-      });
-      
+      );
+
       const data = await response.json();
-      
+
       if (data.success) {
         setSearchResults(data.data);
-        
+
         if (data.data.length === 0 && searchQuery.trim().length >= 2) {
           setShowNoResults(true);
         }
@@ -393,15 +425,15 @@ export default function NewAppointmentPage() {
             "Content-Type": "application/json",
             ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
           },
-        }
+        },
       );
 
       const data = await response.json();
-      
+
       if (data.success) {
         const todaysCount = data.count || 0;
         setTodaysAppointmentsCount(todaysCount);
-        
+
         // Generate next auto-number
         const nextNumber = (todaysCount + 1).toString().padStart(3, "0");
         setAutoNumber(nextNumber);
@@ -429,7 +461,7 @@ export default function NewAppointmentPage() {
       const validationResult = patientSchema.safeParse(newPatientForm);
       if (!validationResult.success) {
         const errors: Record<string, string> = {};
-        validationResult.error.issues.forEach(err => {
+        validationResult.error.issues.forEach((err) => {
           if (err.path[0]) {
             errors[err.path[0] as string] = err.message;
           }
@@ -452,7 +484,7 @@ export default function NewAppointmentPage() {
       });
 
       const data = await response.json();
-      
+
       if (data.success) {
         const newPatient: Patient = {
           _id: data.data.id || data.data._id,
@@ -464,19 +496,22 @@ export default function NewAppointmentPage() {
           gender: data.data.gender,
           address: data.data.address,
         };
-        
+
         setSelectedPatient(newPatient);
         setShowNewPatientDialog(false);
         setPatientSearch("");
         setSearchResults([]);
         setShowNoResults(false);
-        
+
         // Reset form
         setNewPatientForm({
           name: "",
           phone: "",
           email: "",
-          dateOfBirth: format(new Date(new Date().getFullYear() - 30, 0, 1), "yyyy-MM-dd"),
+          dateOfBirth: format(
+            new Date(new Date().getFullYear() - 30, 0, 1),
+            "yyyy-MM-dd",
+          ),
           gender: "male",
           address: "",
           emergencyContact: "",
@@ -484,7 +519,7 @@ export default function NewAppointmentPage() {
           allergies: "",
           medicalHistory: "",
         });
-        
+
         toast.success("Patient created successfully!");
       } else {
         if (data.error && data.error.includes("already exists") && data.data) {
@@ -533,7 +568,7 @@ export default function NewAppointmentPage() {
       const validationResult = appointmentSchema.safeParse(validationData);
       if (!validationResult.success) {
         const errors: Record<string, string> = {};
-        validationResult.error.issues.forEach(err => {
+        validationResult.error.issues.forEach((err) => {
           if (err.path[0]) {
             errors[err.path[0] as string] = err.message;
           }
@@ -549,7 +584,7 @@ export default function NewAppointmentPage() {
       // Calculate appointment time
       const now = new Date();
       const appointmentDateTime = new Date(appointmentDate);
-      
+
       // Set appointment time - start at 9:00 AM or current time if later
       appointmentDateTime.setHours(9, 0, 0, 0);
       if (isToday(new Date(appointmentDate))) {
@@ -558,13 +593,14 @@ export default function NewAppointmentPage() {
           // Use current time rounded to next 20-minute interval
           const minutes = now.getMinutes();
           const remainder = minutes % 20;
-          const roundedMinutes = remainder > 0 ? minutes + (20 - remainder) : minutes;
+          const roundedMinutes =
+            remainder > 0 ? minutes + (20 - remainder) : minutes;
           appointmentDateTime.setHours(now.getHours(), roundedMinutes, 0, 0);
         }
       }
-      
+
       const endTime = addMinutes(appointmentDateTime, duration);
-      
+
       const appointmentData = {
         patientId: selectedPatient!._id,
         doctorId: selectedDoctor,
@@ -578,7 +614,7 @@ export default function NewAppointmentPage() {
         notes: notes.trim(),
         autoNumber,
       };
-      
+
       const response = await fetch("/api/appointments", {
         method: "POST",
         headers: {
@@ -587,21 +623,21 @@ export default function NewAppointmentPage() {
         },
         body: JSON.stringify(appointmentData),
       });
-      
+
       const data = await response.json();
-      
+
       if (data.success) {
         toast.success("Appointment created successfully!", {
           description: `Appointment #${data.data.autoNumber} scheduled`,
           action: {
             label: "View",
-            onClick: () => router.push("/appointments"),
+            onClick: () => router.push("/reception/appointments"),
           },
         });
-        
+
         // Reset form after delay
         setTimeout(() => {
-          router.push("/appointments");
+          router.push("/reception/appointments");
           router.refresh();
         }, 1500);
       } else {
@@ -624,7 +660,12 @@ export default function NewAppointmentPage() {
 
   // Helper functions
   const isFormValid = () => {
-    return selectedPatient && selectedDoctor && appointmentDate && reason.trim().length >= 10;
+    return (
+      selectedPatient &&
+      selectedDoctor &&
+      appointmentDate &&
+      reason.trim().length >= 10
+    );
   };
 
   const handleDoctorSelect = (doctorId: string) => {
@@ -632,11 +673,11 @@ export default function NewAppointmentPage() {
   };
 
   const handleSearchKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
+    if (e.key === "Enter") {
       e.preventDefault();
       searchPatients();
     }
-    if (e.key === 'Escape') {
+    if (e.key === "Escape") {
       clearSearch();
     }
   };
@@ -678,7 +719,7 @@ export default function NewAppointmentPage() {
     }
   };
 
-  const selectedDoctorInfo = doctors.find(d => d._id === selectedDoctor);
+  const selectedDoctorInfo = doctors.find((d) => d._id === selectedDoctor);
 
   // Quick action handlers
   const handleQuickAction = (action: string) => {
@@ -708,17 +749,25 @@ export default function NewAppointmentPage() {
 
   // Common symptoms quick selection
   const commonSymptoms = [
-    "Fever", "Headache", "Cough", "Fatigue", "Shortness of breath",
-    "Chest pain", "Abdominal pain", "Nausea", "Dizziness", "Joint pain"
+    "Fever",
+    "Headache",
+    "Cough",
+    "Fatigue",
+    "Shortness of breath",
+    "Chest pain",
+    "Abdominal pain",
+    "Nausea",
+    "Dizziness",
+    "Joint pain",
   ];
 
   const handleSymptomClick = (symptom: string) => {
-    setSymptoms(prev => {
-      const symptomsList = prev ? prev.split(',').map(s => s.trim()) : [];
+    setSymptoms((prev) => {
+      const symptomsList = prev ? prev.split(",").map((s) => s.trim()) : [];
       if (symptomsList.includes(symptom)) {
-        return symptomsList.filter(s => s !== symptom).join(', ');
+        return symptomsList.filter((s) => s !== symptom).join(", ");
       } else {
-        return [...symptomsList, symptom].join(', ');
+        return [...symptomsList, symptom].join(", ");
       }
     });
   };
@@ -732,7 +781,9 @@ export default function NewAppointmentPage() {
         break;
       case "followup":
         setAppointmentType("followup");
-        setReason("Follow-up appointment to monitor progress and adjust treatment plan");
+        setReason(
+          "Follow-up appointment to monitor progress and adjust treatment plan",
+        );
         break;
       case "emergency":
         setIsEmergency(true);
@@ -744,11 +795,11 @@ export default function NewAppointmentPage() {
   };
 
   return (
-    <div 
+    <div
       ref={mainContainerRef}
       className={cn(
         "min-h-screen bg-linear-to-br from-background to-muted/30",
-        isFullScreen && "fixed inset-0 z-50 bg-background overflow-auto"
+        isFullScreen && "fixed inset-0 z-50 bg-background overflow-auto",
       )}
     >
       {/* Top Navigation Bar */}
@@ -758,14 +809,14 @@ export default function NewAppointmentPage() {
             <div className="flex items-center gap-4">
               <Button
                 variant="ghost"
-                onClick={() => router.push("/appointments")}
+                onClick={() => router.push("/reception/appointments")}
                 className="gap-2 hover:bg-accent"
                 size="lg"
               >
                 <ArrowLeft className="h-5 w-5" />
                 <span className="hidden sm:inline">Back</span>
               </Button>
-              
+
               <div className="hidden md:flex items-center gap-4">
                 <div className="flex items-center gap-2 px-3 py-1.5 bg-primary/10 rounded-full">
                   <CalendarDays className="h-4 w-4 text-primary" />
@@ -830,10 +881,12 @@ export default function NewAppointmentPage() {
       </div>
 
       {/* Main Content */}
-      <div className={cn(
-        "mx-auto p-4 md:p-6 lg:p-8",
-        isFullScreen ? "max-w-none px-4 lg:px-8" : "max-w-7xl"
-      )}>
+      <div
+        className={cn(
+          "mx-auto p-4 md:p-6 lg:p-8",
+          isFullScreen ? "max-w-none px-4 lg:px-8" : "max-w-7xl",
+        )}
+      >
         {/* Progress Header */}
         <div className="mb-8">
           <div className="flex items-start justify-between gap-6 mb-8">
@@ -854,69 +907,107 @@ export default function NewAppointmentPage() {
 
               {/* Progress Indicators */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-6">
-                <div className={cn(
-                  "p-4 rounded-xl border-2 transition-all duration-300",
-                  activeSection === "patient" 
-                    ? "border-primary bg-primary/5 shadow-md" 
-                    : "border-border"
-                )}>
+                <div
+                  className={cn(
+                    "p-4 rounded-xl border-2 transition-all duration-300",
+                    activeSection === "patient"
+                      ? "border-primary bg-primary/5 shadow-md"
+                      : "border-border",
+                  )}
+                >
                   <div className="flex items-center gap-3">
-                    <div className={cn(
-                      "flex items-center justify-center w-8 h-8 rounded-full",
-                      selectedPatient ? "bg-green-500 text-white" : "bg-muted"
-                    )}>
-                      {selectedPatient ? <CheckCircle className="h-5 w-5" /> : "1"}
+                    <div
+                      className={cn(
+                        "flex items-center justify-center w-8 h-8 rounded-full",
+                        selectedPatient
+                          ? "bg-green-500 text-white"
+                          : "bg-muted",
+                      )}
+                    >
+                      {selectedPatient ? (
+                        <CheckCircle className="h-5 w-5" />
+                      ) : (
+                        "1"
+                      )}
                     </div>
                     <div>
                       <h3 className="font-semibold">Patient</h3>
                       <p className="text-sm text-muted-foreground">
-                        {selectedPatient ? selectedPatient.name : "Select patient"}
+                        {selectedPatient
+                          ? selectedPatient.name
+                          : "Select patient"}
                       </p>
                     </div>
                   </div>
                 </div>
 
-                <div className={cn(
-                  "p-4 rounded-xl border-2 transition-all duration-300",
-                  activeSection === "doctor" 
-                    ? "border-blue-500 bg-blue-500/5 shadow-md" 
-                    : "border-border"
-                )}>
+                <div
+                  className={cn(
+                    "p-4 rounded-xl border-2 transition-all duration-300",
+                    activeSection === "doctor"
+                      ? "border-blue-500 bg-blue-500/5 shadow-md"
+                      : "border-border",
+                  )}
+                >
                   <div className="flex items-center gap-3">
-                    <div className={cn(
-                      "flex items-center justify-center w-8 h-8 rounded-full",
-                      selectedDoctor ? "bg-green-500 text-white" : 
-                      selectedPatient ? "bg-blue-500 text-white" : "bg-muted"
-                    )}>
-                      {selectedDoctor ? <CheckCircle className="h-5 w-5" /> : "2"}
+                    <div
+                      className={cn(
+                        "flex items-center justify-center w-8 h-8 rounded-full",
+                        selectedDoctor
+                          ? "bg-green-500 text-white"
+                          : selectedPatient
+                            ? "bg-blue-500 text-white"
+                            : "bg-muted",
+                      )}
+                    >
+                      {selectedDoctor ? (
+                        <CheckCircle className="h-5 w-5" />
+                      ) : (
+                        "2"
+                      )}
                     </div>
                     <div>
                       <h3 className="font-semibold">Doctor</h3>
                       <p className="text-sm text-muted-foreground">
-                        {selectedDoctorInfo ? `Dr. ${selectedDoctorInfo.name}` : "Select doctor"}
+                        {selectedDoctorInfo
+                          ? `Dr. ${selectedDoctorInfo.name}`
+                          : "Select doctor"}
                       </p>
                     </div>
                   </div>
                 </div>
 
-                <div className={cn(
-                  "p-4 rounded-xl border-2 transition-all duration-300",
-                  activeSection === "details" 
-                    ? "border-purple-500 bg-purple-500/5 shadow-md" 
-                    : "border-border"
-                )}>
+                <div
+                  className={cn(
+                    "p-4 rounded-xl border-2 transition-all duration-300",
+                    activeSection === "details"
+                      ? "border-purple-500 bg-purple-500/5 shadow-md"
+                      : "border-border",
+                  )}
+                >
                   <div className="flex items-center gap-3">
-                    <div className={cn(
-                      "flex items-center justify-center w-8 h-8 rounded-full",
-                      isFormValid() ? "bg-green-500 text-white" : 
-                      selectedDoctor ? "bg-purple-500 text-white" : "bg-muted"
-                    )}>
-                      {isFormValid() ? <CheckCircle className="h-5 w-5" /> : "3"}
+                    <div
+                      className={cn(
+                        "flex items-center justify-center w-8 h-8 rounded-full",
+                        isFormValid()
+                          ? "bg-green-500 text-white"
+                          : selectedDoctor
+                            ? "bg-purple-500 text-white"
+                            : "bg-muted",
+                      )}
+                    >
+                      {isFormValid() ? (
+                        <CheckCircle className="h-5 w-5" />
+                      ) : (
+                        "3"
+                      )}
                     </div>
                     <div>
                       <h3 className="font-semibold">Details</h3>
                       <p className="text-sm text-muted-foreground">
-                        {reason ? "Complete details" : "Add appointment details"}
+                        {reason
+                          ? "Complete details"
+                          : "Add appointment details"}
                       </p>
                     </div>
                   </div>
@@ -926,7 +1017,9 @@ export default function NewAppointmentPage() {
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium">Completion</span>
-                      <span className="text-sm font-bold text-primary">{completionProgress}%</span>
+                      <span className="text-sm font-bold text-primary">
+                        {completionProgress}%
+                      </span>
                     </div>
                     <Progress value={completionProgress} className="h-2" />
                   </div>
@@ -941,10 +1034,12 @@ export default function NewAppointmentPage() {
           {/* Left Column - Form Steps */}
           <div className="lg:col-span-2 space-y-8">
             {/* Step 1: Patient Selection */}
-            <div className={cn(
-              "transition-all duration-300",
-              activeSection !== "patient" && "opacity-75"
-            )}>
+            <div
+              className={cn(
+                "transition-all duration-300",
+                activeSection !== "patient" && "opacity-75",
+              )}
+            >
               <Card className="border-2 border-primary/20 shadow-xl hover:shadow-2xl transition-all duration-300">
                 <CardHeader className="pb-4">
                   <div className="flex items-center justify-between">
@@ -954,7 +1049,9 @@ export default function NewAppointmentPage() {
                           <User className="h-6 w-6 text-white" />
                         </div>
                         <div>
-                          <CardTitle className="text-2xl">Step 1: Select Patient</CardTitle>
+                          <CardTitle className="text-2xl">
+                            Step 1: Select Patient
+                          </CardTitle>
                           <CardDescription>
                             Search existing patient or create new patient record
                           </CardDescription>
@@ -978,7 +1075,9 @@ export default function NewAppointmentPage() {
                             </div>
                             <div className="space-y-3">
                               <div className="flex items-center gap-3">
-                                <h3 className="text-xl font-bold">{selectedPatient.name}</h3>
+                                <h3 className="text-xl font-bold">
+                                  {selectedPatient.name}
+                                </h3>
                                 <Badge variant="default" className="gap-2">
                                   <CheckCircle className="h-3 w-3" />
                                   Selected
@@ -1022,7 +1121,10 @@ export default function NewAppointmentPage() {
                     <div className="space-y-6">
                       <div className="space-y-3">
                         <div className="flex items-center justify-between">
-                          <Label htmlFor="patientSearch" className="text-lg font-semibold">
+                          <Label
+                            htmlFor="patientSearch"
+                            className="text-lg font-semibold"
+                          >
                             Search Patient Database
                           </Label>
                           <span className="text-sm text-muted-foreground">
@@ -1037,7 +1139,9 @@ export default function NewAppointmentPage() {
                               id="patientSearch"
                               placeholder="Search by name, phone number, or patient ID..."
                               value={patientSearch}
-                              onChange={(e) => handleSearchChange(e.target.value)}
+                              onChange={(e) =>
+                                handleSearchChange(e.target.value)
+                              }
                               onKeyDown={handleSearchKeyDown}
                               className="pl-12 h-12 text-lg rounded-xl"
                             />
@@ -1065,7 +1169,10 @@ export default function NewAppointmentPage() {
                             )}
                             Search
                           </Button>
-                          <Dialog open={showNewPatientDialog} onOpenChange={setShowNewPatientDialog}>
+                          <Dialog
+                            open={showNewPatientDialog}
+                            onOpenChange={setShowNewPatientDialog}
+                          >
                             <DialogTrigger asChild>
                               <Button
                                 type="button"
@@ -1082,148 +1189,237 @@ export default function NewAppointmentPage() {
                                   Create New Patient
                                 </DialogTitle>
                                 <DialogDescription>
-                                  Fill in the patient details below. All fields marked with * are required.
+                                  Fill in the patient details below. All fields
+                                  marked with * are required.
                                 </DialogDescription>
                               </DialogHeader>
-                              
+
                               <Tabs defaultValue="basic" className="w-full">
                                 <TabsList className="grid w-full grid-cols-2 mb-6">
                                   <TabsTrigger value="basic" className="gap-2">
                                     <User className="h-4 w-4" />
                                     Basic Information
                                   </TabsTrigger>
-                                  <TabsTrigger value="medical" className="gap-2">
+                                  <TabsTrigger
+                                    value="medical"
+                                    className="gap-2"
+                                  >
                                     <Activity className="h-4 w-4" />
                                     Medical Information
                                   </TabsTrigger>
                                 </TabsList>
-                                
-                                <TabsContent value="basic" className="space-y-6">
+
+                                <TabsContent
+                                  value="basic"
+                                  className="space-y-6"
+                                >
                                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     <div className="space-y-2">
-                                      <Label htmlFor="name" className="font-medium">
+                                      <Label
+                                        htmlFor="name"
+                                        className="font-medium"
+                                      >
                                         Full Name *
                                       </Label>
                                       <Input
                                         id="name"
                                         placeholder="John Doe"
                                         value={newPatientForm.name}
-                                        onChange={(e) => setNewPatientForm(prev => ({
-                                          ...prev,
-                                          name: e.target.value
-                                        }))}
+                                        onChange={(e) =>
+                                          setNewPatientForm((prev) => ({
+                                            ...prev,
+                                            name: e.target.value,
+                                          }))
+                                        }
                                         required
-                                        className={formErrors.name ? "border-red-500" : ""}
+                                        className={
+                                          formErrors.name
+                                            ? "border-red-500"
+                                            : ""
+                                        }
                                       />
                                       {formErrors.name && (
-                                        <p className="text-sm text-red-500">{formErrors.name}</p>
+                                        <p className="text-sm text-red-500">
+                                          {formErrors.name}
+                                        </p>
                                       )}
                                     </div>
-                                    
+
                                     <div className="space-y-2">
-                                      <Label htmlFor="phone" className="font-medium">
+                                      <Label
+                                        htmlFor="phone"
+                                        className="font-medium"
+                                      >
                                         Phone Number *
                                       </Label>
                                       <Input
                                         id="phone"
                                         placeholder="+1 (555) 123-4567"
                                         value={newPatientForm.phone}
-                                        onChange={(e) => setNewPatientForm(prev => ({
-                                          ...prev,
-                                          phone: e.target.value
-                                        }))}
+                                        onChange={(e) =>
+                                          setNewPatientForm((prev) => ({
+                                            ...prev,
+                                            phone: e.target.value,
+                                          }))
+                                        }
                                         required
-                                        className={formErrors.phone ? "border-red-500" : ""}
+                                        className={
+                                          formErrors.phone
+                                            ? "border-red-500"
+                                            : ""
+                                        }
                                       />
                                       {formErrors.phone && (
-                                        <p className="text-sm text-red-500">{formErrors.phone}</p>
+                                        <p className="text-sm text-red-500">
+                                          {formErrors.phone}
+                                        </p>
                                       )}
                                     </div>
-                                    
+
                                     <div className="space-y-2">
-                                      <Label htmlFor="email">Email Address</Label>
+                                      <Label htmlFor="email">
+                                        Email Address
+                                      </Label>
                                       <Input
                                         id="email"
                                         type="email"
                                         placeholder="john@example.com"
                                         value={newPatientForm.email}
-                                        onChange={(e) => setNewPatientForm(prev => ({
-                                          ...prev,
-                                          email: e.target.value
-                                        }))}
-                                        className={formErrors.email ? "border-red-500" : ""}
+                                        onChange={(e) =>
+                                          setNewPatientForm((prev) => ({
+                                            ...prev,
+                                            email: e.target.value,
+                                          }))
+                                        }
+                                        className={
+                                          formErrors.email
+                                            ? "border-red-500"
+                                            : ""
+                                        }
                                       />
                                       {formErrors.email && (
-                                        <p className="text-sm text-red-500">{formErrors.email}</p>
+                                        <p className="text-sm text-red-500">
+                                          {formErrors.email}
+                                        </p>
                                       )}
                                     </div>
-                                    
+
                                     <div className="space-y-2">
-                                      <Label htmlFor="dateOfBirth" className="font-medium">
+                                      <Label
+                                        htmlFor="dateOfBirth"
+                                        className="font-medium"
+                                      >
                                         Date of Birth *
                                       </Label>
                                       <Input
                                         id="dateOfBirth"
                                         type="date"
                                         value={newPatientForm.dateOfBirth}
-                                        onChange={(e) => setNewPatientForm(prev => ({
-                                          ...prev,
-                                          dateOfBirth: e.target.value
-                                        }))}
+                                        onChange={(e) =>
+                                          setNewPatientForm((prev) => ({
+                                            ...prev,
+                                            dateOfBirth: e.target.value,
+                                          }))
+                                        }
                                         required
-                                        className={formErrors.dateOfBirth ? "border-red-500" : ""}
+                                        className={
+                                          formErrors.dateOfBirth
+                                            ? "border-red-500"
+                                            : ""
+                                        }
                                       />
                                       {formErrors.dateOfBirth && (
-                                        <p className="text-sm text-red-500">{formErrors.dateOfBirth}</p>
+                                        <p className="text-sm text-red-500">
+                                          {formErrors.dateOfBirth}
+                                        </p>
                                       )}
                                     </div>
-                                    
+
                                     <div className="space-y-2">
-                                      <Label htmlFor="gender" className="font-medium">
+                                      <Label
+                                        htmlFor="gender"
+                                        className="font-medium"
+                                      >
                                         Gender *
                                       </Label>
                                       <Select
                                         value={newPatientForm.gender}
-                                        onValueChange={(value: "male" | "female" | "other") => 
-                                          setNewPatientForm(prev => ({ ...prev, gender: value }))
+                                        onValueChange={(
+                                          value: "male" | "female" | "other",
+                                        ) =>
+                                          setNewPatientForm((prev) => ({
+                                            ...prev,
+                                            gender: value,
+                                          }))
                                         }
                                       >
                                         <SelectTrigger className="h-11">
                                           <SelectValue placeholder="Select gender" />
                                         </SelectTrigger>
                                         <SelectContent>
-                                          <SelectItem value="male">Male</SelectItem>
-                                          <SelectItem value="female">Female</SelectItem>
-                                          <SelectItem value="other">Other</SelectItem>
+                                          <SelectItem value="male">
+                                            Male
+                                          </SelectItem>
+                                          <SelectItem value="female">
+                                            Female
+                                          </SelectItem>
+                                          <SelectItem value="other">
+                                            Other
+                                          </SelectItem>
                                         </SelectContent>
                                       </Select>
                                       {formErrors.gender && (
-                                        <p className="text-sm text-red-500">{formErrors.gender}</p>
+                                        <p className="text-sm text-red-500">
+                                          {formErrors.gender}
+                                        </p>
                                       )}
                                     </div>
-                                    
+
                                     <div className="space-y-2">
-                                      <Label htmlFor="bloodGroup">Blood Group</Label>
+                                      <Label htmlFor="bloodGroup">
+                                        Blood Group
+                                      </Label>
                                       <Select
                                         value={newPatientForm.bloodGroup}
-                                        onValueChange={(value) => 
-                                          setNewPatientForm(prev => ({ ...prev, bloodGroup: value }))
+                                        onValueChange={(value) =>
+                                          setNewPatientForm((prev) => ({
+                                            ...prev,
+                                            bloodGroup: value,
+                                          }))
                                         }
                                       >
                                         <SelectTrigger className="h-11">
                                           <SelectValue placeholder="Select blood group" />
                                         </SelectTrigger>
                                         <SelectContent>
-                                          {["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-", "unknown"].map((group) => (
-                                            <SelectItem key={group} value={group}>{group}</SelectItem>
+                                          {[
+                                            "A+",
+                                            "A-",
+                                            "B+",
+                                            "B-",
+                                            "AB+",
+                                            "AB-",
+                                            "O+",
+                                            "O-",
+                                            "unknown",
+                                          ].map((group) => (
+                                            <SelectItem
+                                              key={group}
+                                              value={group}
+                                            >
+                                              {group}
+                                            </SelectItem>
                                           ))}
                                         </SelectContent>
                                       </Select>
                                     </div>
                                   </div>
-                                  
+
                                   <div className="space-y-2">
-                                    <Label htmlFor="address" className="flex items-center gap-2">
+                                    <Label
+                                      htmlFor="address"
+                                      className="flex items-center gap-2"
+                                    >
                                       <MapPin className="h-4 w-4" />
                                       Address
                                     </Label>
@@ -1231,16 +1427,21 @@ export default function NewAppointmentPage() {
                                       id="address"
                                       placeholder="123 Main Street, City, State, ZIP Code"
                                       value={newPatientForm.address}
-                                      onChange={(e) => setNewPatientForm(prev => ({
-                                        ...prev,
-                                        address: e.target.value
-                                      }))}
+                                      onChange={(e) =>
+                                        setNewPatientForm((prev) => ({
+                                          ...prev,
+                                          address: e.target.value,
+                                        }))
+                                      }
                                       rows={2}
                                     />
                                   </div>
-                                  
+
                                   <div className="space-y-2">
-                                    <Label htmlFor="emergencyContact" className="flex items-center gap-2">
+                                    <Label
+                                      htmlFor="emergencyContact"
+                                      className="flex items-center gap-2"
+                                    >
                                       <Phone className="h-4 w-4" />
                                       Emergency Contact
                                     </Label>
@@ -1248,18 +1449,26 @@ export default function NewAppointmentPage() {
                                       id="emergencyContact"
                                       placeholder="Emergency contact name and phone number"
                                       value={newPatientForm.emergencyContact}
-                                      onChange={(e) => setNewPatientForm(prev => ({
-                                        ...prev,
-                                        emergencyContact: e.target.value
-                                      }))}
+                                      onChange={(e) =>
+                                        setNewPatientForm((prev) => ({
+                                          ...prev,
+                                          emergencyContact: e.target.value,
+                                        }))
+                                      }
                                       className="h-11"
                                     />
                                   </div>
                                 </TabsContent>
-                                
-                                <TabsContent value="medical" className="space-y-6">
+
+                                <TabsContent
+                                  value="medical"
+                                  className="space-y-6"
+                                >
                                   <div className="space-y-2">
-                                    <Label htmlFor="allergies" className="flex items-center gap-2">
+                                    <Label
+                                      htmlFor="allergies"
+                                      className="flex items-center gap-2"
+                                    >
                                       <AlertCircle className="h-4 w-4" />
                                       Allergies
                                     </Label>
@@ -1267,19 +1476,24 @@ export default function NewAppointmentPage() {
                                       id="allergies"
                                       placeholder="List any allergies (e.g., Penicillin, Peanuts, Latex, etc.)"
                                       value={newPatientForm.allergies}
-                                      onChange={(e) => setNewPatientForm(prev => ({
-                                        ...prev,
-                                        allergies: e.target.value
-                                      }))}
+                                      onChange={(e) =>
+                                        setNewPatientForm((prev) => ({
+                                          ...prev,
+                                          allergies: e.target.value,
+                                        }))
+                                      }
                                       rows={3}
                                     />
                                     <p className="text-sm text-muted-foreground">
                                       Separate multiple allergies with commas
                                     </p>
                                   </div>
-                                  
+
                                   <div className="space-y-2">
-                                    <Label htmlFor="medicalHistory" className="flex items-center gap-2">
+                                    <Label
+                                      htmlFor="medicalHistory"
+                                      className="flex items-center gap-2"
+                                    >
                                       <Activity className="h-4 w-4" />
                                       Medical History
                                     </Label>
@@ -1287,19 +1501,22 @@ export default function NewAppointmentPage() {
                                       id="medicalHistory"
                                       placeholder="Previous medical conditions, surgeries, chronic illnesses, medications, etc."
                                       value={newPatientForm.medicalHistory}
-                                      onChange={(e) => setNewPatientForm(prev => ({
-                                        ...prev,
-                                        medicalHistory: e.target.value
-                                      }))}
+                                      onChange={(e) =>
+                                        setNewPatientForm((prev) => ({
+                                          ...prev,
+                                          medicalHistory: e.target.value,
+                                        }))
+                                      }
                                       rows={4}
                                     />
                                     <p className="text-sm text-muted-foreground">
-                                      Include any relevant medical history for better care
+                                      Include any relevant medical history for
+                                      better care
                                     </p>
                                   </div>
                                 </TabsContent>
                               </Tabs>
-                              
+
                               <DialogFooter className="gap-2">
                                 <Button
                                   type="button"
@@ -1313,7 +1530,11 @@ export default function NewAppointmentPage() {
                                 <Button
                                   type="button"
                                   onClick={createNewPatient}
-                                  disabled={creatingPatient || !newPatientForm.name.trim() || !newPatientForm.phone.trim()}
+                                  disabled={
+                                    creatingPatient ||
+                                    !newPatientForm.name.trim() ||
+                                    !newPatientForm.phone.trim()
+                                  }
                                   className="flex-1 bg-linear-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 gap-2"
                                 >
                                   {creatingPatient ? (
@@ -1341,7 +1562,9 @@ export default function NewAppointmentPage() {
                             <Loader2 className="h-8 w-8 animate-spin text-primary" />
                           </div>
                           <p className="font-medium">Searching patients...</p>
-                          <p className="text-sm text-muted-foreground mt-1">Please wait while we search our database</p>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            Please wait while we search our database
+                          </p>
                         </div>
                       ) : searchResults.length > 0 ? (
                         <div className="border rounded-xl overflow-hidden shadow-sm">
@@ -1349,9 +1572,12 @@ export default function NewAppointmentPage() {
                             <div className="flex items-center justify-between">
                               <div>
                                 <h3 className="font-semibold">
-                                  Found {searchResults.length} patient{searchResults.length !== 1 ? 's' : ''}
+                                  Found {searchResults.length} patient
+                                  {searchResults.length !== 1 ? "s" : ""}
                                 </h3>
-                                <p className="text-sm text-muted-foreground">Select a patient from the list below</p>
+                                <p className="text-sm text-muted-foreground">
+                                  Select a patient from the list below
+                                </p>
                               </div>
                               <Button
                                 variant="ghost"
@@ -1420,14 +1646,16 @@ export default function NewAppointmentPage() {
                             No Patients Found
                           </h3>
                           <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-                            No patients found matching "<span className="font-medium">{patientSearch}</span>"
+                            No patients found matching "
+                            <span className="font-medium">{patientSearch}</span>
+                            "
                           </p>
                           <div className="flex flex-col sm:flex-row gap-3 justify-center">
                             <Button
                               type="button"
                               variant="default"
                               onClick={() => {
-                                setNewPatientForm(prev => ({
+                                setNewPatientForm((prev) => ({
                                   ...prev,
                                   name: patientSearch.trim(),
                                   phone: "",
@@ -1458,10 +1686,12 @@ export default function NewAppointmentPage() {
 
             {/* Step 2: Doctor & Date Selection */}
             {selectedPatient && (
-              <div className={cn(
-                "transition-all duration-300",
-                activeSection !== "doctor" && "opacity-75"
-              )}>
+              <div
+                className={cn(
+                  "transition-all duration-300",
+                  activeSection !== "doctor" && "opacity-75",
+                )}
+              >
                 <Card className="border-2 border-blue-500/20 shadow-xl hover:shadow-2xl transition-all duration-300">
                   <CardHeader className="pb-4">
                     <div className="flex items-center justify-between">
@@ -1471,7 +1701,9 @@ export default function NewAppointmentPage() {
                             <Stethoscope className="h-6 w-6 text-white" />
                           </div>
                           <div>
-                            <CardTitle className="text-2xl">Step 2: Select Doctor & Date</CardTitle>
+                            <CardTitle className="text-2xl">
+                              Step 2: Select Doctor & Date
+                            </CardTitle>
                             <CardDescription>
                               Choose doctor and appointment date
                             </CardDescription>
@@ -1485,21 +1717,29 @@ export default function NewAppointmentPage() {
                   </CardHeader>
                   <CardContent className="space-y-6">
                     {/* Emergency Toggle */}
-                    <div className={cn(
-                      "p-4 rounded-xl border transition-all duration-300",
-                      isEmergency 
-                        ? "bg-red-500/10 border-red-500/30" 
-                        : "bg-linear-to-r from-blue-500/5 to-blue-500/10 border-blue-500/20"
-                    )}>
+                    <div
+                      className={cn(
+                        "p-4 rounded-xl border transition-all duration-300",
+                        isEmergency
+                          ? "bg-red-500/10 border-red-500/30"
+                          : "bg-linear-to-r from-blue-500/5 to-blue-500/10 border-blue-500/20",
+                      )}
+                    >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                          <AlertCircle className={cn(
-                            "h-6 w-6",
-                            isEmergency ? "text-red-500" : "text-blue-500"
-                          )} />
+                          <AlertCircle
+                            className={cn(
+                              "h-6 w-6",
+                              isEmergency ? "text-red-500" : "text-blue-500",
+                            )}
+                          />
                           <div>
-                            <h4 className="font-bold text-lg">Emergency Appointment</h4>
-                            <p className="text-sm text-muted-foreground">High priority scheduling</p>
+                            <h4 className="font-bold text-lg">
+                              Emergency Appointment
+                            </h4>
+                            <p className="text-sm text-muted-foreground">
+                              High priority scheduling
+                            </p>
                           </div>
                         </div>
                         <Switch
@@ -1521,7 +1761,10 @@ export default function NewAppointmentPage() {
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                       {/* Doctor Selection */}
                       <div className="space-y-3">
-                        <Label htmlFor="doctor" className="text-lg font-semibold">
+                        <Label
+                          htmlFor="doctor"
+                          className="text-lg font-semibold"
+                        >
                           Select Doctor *
                         </Label>
                         <div className="flex items-center justify-between mb-2">
@@ -1536,10 +1779,11 @@ export default function NewAppointmentPage() {
                             disabled={loadingDoctors}
                             className="h-8 w-8 p-0"
                           >
-                            {loadingDoctors ? 
-                              <Loader2 className="h-4 w-4 animate-spin" /> : 
+                            {loadingDoctors ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
                               <RefreshCw className="h-4 w-4" />
-                            }
+                            )}
                           </Button>
                         </div>
                         <Select
@@ -1555,19 +1799,28 @@ export default function NewAppointmentPage() {
                             {loadingDoctors ? (
                               <div className="p-8 text-center">
                                 <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
-                                <p className="text-sm text-muted-foreground">Loading doctors...</p>
+                                <p className="text-sm text-muted-foreground">
+                                  Loading doctors...
+                                </p>
                               </div>
                             ) : (
                               doctors.map((doctor) => (
-                                <SelectItem key={doctor._id} value={doctor._id} className="py-3">
+                                <SelectItem
+                                  key={doctor._id}
+                                  value={doctor._id}
+                                  className="py-3"
+                                >
                                   <div className="flex items-center gap-3">
                                     <div className="p-2 bg-blue-500/10 rounded-lg">
                                       <Stethoscope className="h-4 w-4 text-blue-500" />
                                     </div>
                                     <div className="flex-1">
-                                      <span className="font-semibold">Dr. {doctor.name}</span>
+                                      <span className="font-semibold">
+                                        Dr. {doctor.name}
+                                      </span>
                                       <p className="text-sm text-muted-foreground">
-                                        {doctor.specialization} • {doctor.department}
+                                        {doctor.specialization} •{" "}
+                                        {doctor.department}
                                       </p>
                                     </div>
                                   </div>
@@ -1583,9 +1836,12 @@ export default function NewAppointmentPage() {
                                 <Stethoscope className="h-5 w-5 text-blue-500" />
                               </div>
                               <div>
-                                <h5 className="font-semibold">Dr. {selectedDoctorInfo.name}</h5>
+                                <h5 className="font-semibold">
+                                  Dr. {selectedDoctorInfo.name}
+                                </h5>
                                 <p className="text-sm text-muted-foreground">
-                                  {selectedDoctorInfo.specialization} • {selectedDoctorInfo.department}
+                                  {selectedDoctorInfo.specialization} •{" "}
+                                  {selectedDoctorInfo.department}
                                 </p>
                               </div>
                             </div>
@@ -1614,7 +1870,9 @@ export default function NewAppointmentPage() {
                           <div className="p-4 bg-linear-to-r from-primary/5 to-primary/10 rounded-xl">
                             <div className="flex items-center gap-2">
                               <CalendarDays className="h-5 w-5 text-primary" />
-                              <span className="font-semibold">{formatDisplayDate(appointmentDate)}</span>
+                              <span className="font-semibold">
+                                {formatDisplayDate(appointmentDate)}
+                              </span>
                             </div>
                           </div>
                         </div>
@@ -1629,8 +1887,12 @@ export default function NewAppointmentPage() {
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="p-6 bg-linear-to-br from-primary/5 to-primary/10 rounded-2xl border border-primary/20">
                           <div className="flex items-center justify-between mb-4">
-                            <h4 className="font-semibold">Today's Appointments</h4>
-                            <Badge variant="secondary">{todaysAppointmentsCount}</Badge>
+                            <h4 className="font-semibold">
+                              Today's Appointments
+                            </h4>
+                            <Badge variant="secondary">
+                              {todaysAppointmentsCount}
+                            </Badge>
                           </div>
                           <div className="text-3xl font-bold text-primary">
                             #{autoNumber || "001"}
@@ -1660,10 +1922,12 @@ export default function NewAppointmentPage() {
 
             {/* Step 3: Appointment Details */}
             {selectedPatient && selectedDoctor && (
-              <div className={cn(
-                "transition-all duration-300",
-                activeSection !== "details" && "opacity-75"
-              )}>
+              <div
+                className={cn(
+                  "transition-all duration-300",
+                  activeSection !== "details" && "opacity-75",
+                )}
+              >
                 <Card className="border-2 border-purple-500/20 shadow-xl hover:shadow-2xl transition-all duration-300">
                   <CardHeader className="pb-4">
                     <div className="flex items-center justify-between">
@@ -1673,9 +1937,12 @@ export default function NewAppointmentPage() {
                             <FileText className="h-6 w-6 text-white" />
                           </div>
                           <div>
-                            <CardTitle className="text-2xl">Step 3: Appointment Details</CardTitle>
+                            <CardTitle className="text-2xl">
+                              Step 3: Appointment Details
+                            </CardTitle>
                             <CardDescription>
-                              Provide appointment details and additional information
+                              Provide appointment details and additional
+                              information
                             </CardDescription>
                           </div>
                         </div>
@@ -1688,7 +1955,9 @@ export default function NewAppointmentPage() {
                   <CardContent className="space-y-6">
                     {/* Quick Templates */}
                     <div className="space-y-3">
-                      <Label className="text-lg font-semibold">Quick Templates</Label>
+                      <Label className="text-lg font-semibold">
+                        Quick Templates
+                      </Label>
                       <div className="flex flex-wrap gap-2">
                         <Button
                           type="button"
@@ -1723,7 +1992,10 @@ export default function NewAppointmentPage() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       {/* Appointment Type */}
                       <div className="space-y-3">
-                        <Label htmlFor="appointmentType" className="font-semibold">
+                        <Label
+                          htmlFor="appointmentType"
+                          className="font-semibold"
+                        >
                           Appointment Type *
                         </Label>
                         <Select
@@ -1736,25 +2008,37 @@ export default function NewAppointmentPage() {
                             <SelectValue placeholder="Select type" />
                           </SelectTrigger>
                           <SelectContent>
-                            {Object.entries(appointmentTypeIcons).map(([value, icon]) => (
-                              <SelectItem key={value} value={value} className="py-3">
-                                <div className="flex items-center gap-3">
-                                  <span className="text-xl">{icon}</span>
-                                  <div>
-                                    <span className="capitalize">{value.replace("-", " ")}</span>
-                                    <p className="text-xs text-muted-foreground">
-                                      {value === "emergency" ? "High priority" : 
-                                       value === "consultation" ? "General visit" : 
-                                       value === "followup" ? "Follow-up" : "Other"}
-                                    </p>
+                            {Object.entries(appointmentTypeIcons).map(
+                              ([value, icon]) => (
+                                <SelectItem
+                                  key={value}
+                                  value={value}
+                                  className="py-3"
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <span className="text-xl">{icon}</span>
+                                    <div>
+                                      <span className="capitalize">
+                                        {value.replace("-", " ")}
+                                      </span>
+                                      <p className="text-xs text-muted-foreground">
+                                        {value === "emergency"
+                                          ? "High priority"
+                                          : value === "consultation"
+                                            ? "General visit"
+                                            : value === "followup"
+                                              ? "Follow-up"
+                                              : "Other"}
+                                      </p>
+                                    </div>
                                   </div>
-                                </div>
-                              </SelectItem>
-                            ))}
+                                </SelectItem>
+                              ),
+                            )}
                           </SelectContent>
                         </Select>
                       </div>
-                      
+
                       {/* Priority */}
                       <div className="space-y-3">
                         <Label htmlFor="priority" className="font-semibold">
@@ -1777,26 +2061,40 @@ export default function NewAppointmentPage() {
                             <SelectValue placeholder="Select priority" />
                           </SelectTrigger>
                           <SelectContent>
-                            {Object.entries(priorityColors).map(([value, className]) => (
-                              <SelectItem key={value} value={value} className="py-3">
-                                <div className="flex items-center gap-3">
-                                  <div className={`w-3 h-3 rounded-full ${className.split(' ')[0]}`}></div>
-                                  <div>
-                                    <span className="capitalize">{value}</span>
-                                    <p className="text-xs text-muted-foreground">
-                                      {value === "emergency" ? "Immediate attention" : 
-                                       value === "high" ? "Urgent" : 
-                                       value === "medium" ? "Standard" : "Low priority"}
-                                    </p>
+                            {Object.entries(priorityColors).map(
+                              ([value, className]) => (
+                                <SelectItem
+                                  key={value}
+                                  value={value}
+                                  className="py-3"
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <div
+                                      className={`w-3 h-3 rounded-full ${className.split(" ")[0]}`}
+                                    ></div>
+                                    <div>
+                                      <span className="capitalize">
+                                        {value}
+                                      </span>
+                                      <p className="text-xs text-muted-foreground">
+                                        {value === "emergency"
+                                          ? "Immediate attention"
+                                          : value === "high"
+                                            ? "Urgent"
+                                            : value === "medium"
+                                              ? "Standard"
+                                              : "Low priority"}
+                                      </p>
+                                    </div>
                                   </div>
-                                </div>
-                              </SelectItem>
-                            ))}
+                                </SelectItem>
+                              ),
+                            )}
                           </SelectContent>
                         </Select>
                       </div>
                     </div>
-                    
+
                     {/* Reason */}
                     <div className="space-y-3">
                       <Label htmlFor="reason" className="font-semibold">
@@ -1813,12 +2111,16 @@ export default function NewAppointmentPage() {
                       />
                       <div className="flex items-center justify-between text-sm text-muted-foreground">
                         <span>Detailed description helps doctor prepare</span>
-                        <span className={reason.length < 10 ? "text-red-500 font-medium" : ""}>
+                        <span
+                          className={
+                            reason.length < 10 ? "text-red-500 font-medium" : ""
+                          }
+                        >
                           {reason.length}/500 characters
                         </span>
                       </div>
                     </div>
-                    
+
                     {/* Symptoms */}
                     <div className="space-y-3">
                       <Label className="font-semibold flex items-center gap-2">
@@ -1827,14 +2129,17 @@ export default function NewAppointmentPage() {
                       </Label>
                       <div className="flex flex-wrap gap-2 mb-3">
                         {commonSymptoms.map((symptom) => {
-                          const isSelected = symptoms.split(',').map(s => s.trim()).includes(symptom);
+                          const isSelected = symptoms
+                            .split(",")
+                            .map((s) => s.trim())
+                            .includes(symptom);
                           return (
                             <Badge
                               key={symptom}
                               variant={isSelected ? "default" : "outline"}
                               className={cn(
                                 "cursor-pointer hover:scale-105 transition-all",
-                                isSelected && "bg-primary hover:bg-primary/90"
+                                isSelected && "bg-primary hover:bg-primary/90",
                               )}
                               onClick={() => handleSymptomClick(symptom)}
                             >
@@ -1851,10 +2156,13 @@ export default function NewAppointmentPage() {
                         className="min-h-24 resize-y rounded-xl"
                       />
                     </div>
-                    
+
                     {/* Notes */}
                     <div className="space-y-3">
-                      <Label htmlFor="notes" className="font-semibold flex items-center gap-2">
+                      <Label
+                        htmlFor="notes"
+                        className="font-semibold flex items-center gap-2"
+                      >
                         <FileText className="h-5 w-5" />
                         Additional Notes
                       </Label>
@@ -1887,7 +2195,7 @@ export default function NewAppointmentPage() {
                       Review all information before scheduling
                     </p>
                   </div>
-                  
+
                   <div className="space-y-3">
                     <Button
                       type="submit"
@@ -1908,12 +2216,12 @@ export default function NewAppointmentPage() {
                         </>
                       )}
                     </Button>
-                    
+
                     <div className="grid grid-cols-2 gap-2">
                       <Button
                         type="button"
                         variant="outline"
-                        onClick={() => router.push("/appointments")}
+                        onClick={() => router.push("/reception/appointments")}
                         className="h-11"
                         disabled={loading}
                       >
@@ -1939,7 +2247,7 @@ export default function NewAppointmentPage() {
                       </Button>
                     </div>
                   </div>
-                  
+
                   {!isFormValid() && (
                     <div className="p-4 bg-linear-to-r from-amber-500/5 to-amber-500/10 border border-amber-500/20 rounded-xl">
                       <div className="flex items-center gap-2 mb-3">
@@ -1949,13 +2257,25 @@ export default function NewAppointmentPage() {
                         </span>
                       </div>
                       <ul className="space-y-1.5 text-sm text-amber-600">
-                        {!selectedPatient && <li className="flex items-center gap-2">• Select or create a patient</li>}
-                        {!selectedDoctor && <li className="flex items-center gap-2">• Choose a doctor</li>}
-                        {reason.length < 10 && <li className="flex items-center gap-2">• Provide detailed reason ({reason.length}/10)</li>}
+                        {!selectedPatient && (
+                          <li className="flex items-center gap-2">
+                            • Select or create a patient
+                          </li>
+                        )}
+                        {!selectedDoctor && (
+                          <li className="flex items-center gap-2">
+                            • Choose a doctor
+                          </li>
+                        )}
+                        {reason.length < 10 && (
+                          <li className="flex items-center gap-2">
+                            • Provide detailed reason ({reason.length}/10)
+                          </li>
+                        )}
                       </ul>
                     </div>
                   )}
-                  
+
                   <div className="pt-4 border-t">
                     <div className="flex items-center gap-2 mb-3">
                       <Shield className="h-5 w-5 text-primary" />
@@ -1983,7 +2303,6 @@ export default function NewAppointmentPage() {
         </div>
 
         {/* Bottom Navigation */}
-        
       </div>
     </div>
   );
@@ -1991,18 +2310,18 @@ export default function NewAppointmentPage() {
 
 // Helper component for left chevron
 const ChevronLeft = ({ className }: { className?: string }) => (
-  <svg 
-    xmlns="http://www.w3.org/2000/svg" 
-    width="24" 
-    height="24" 
-    viewBox="0 0 24 24" 
-    fill="none" 
-    stroke="currentColor" 
-    strokeWidth="2" 
-    strokeLinecap="round" 
-    strokeLinejoin="round" 
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="24"
+    height="24"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
     className={className}
   >
-    <path d="m15 18-6-6 6-6"/>
+    <path d="m15 18-6-6 6-6" />
   </svg>
 );

@@ -4,13 +4,7 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
+// Card components removed - using table-based layouts instead
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -357,13 +351,22 @@ export default function DirectTestDetailPage() {
           setResultsParameters(paramsFromTemplate);
           // Also initialize editable parameters
           setEditableParameters(
-            paramsFromTemplate.map((p) => ({
-              name: p.name,
-              value: p.value,
-              unit: p.unit,
-              normalRange: p.normalRange,
-              remarks: p.remarks,
-            })),
+            paramsFromTemplate.map(
+              (p: {
+                name: string;
+                value: string;
+                unit: string;
+                normalRange: string;
+                flag: "normal";
+                remarks: string;
+              }) => ({
+                name: p.name,
+                value: p.value,
+                unit: p.unit,
+                normalRange: p.normalRange,
+                remarks: p.remarks,
+              }),
+            ),
           );
         }
       }
@@ -865,543 +868,417 @@ export default function DirectTestDetailPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Patient Info */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+        <div className="border rounded-lg overflow-hidden">
+          <div className="bg-muted/50 px-4 py-3 border-b">
+            <h3 className="font-semibold flex items-center gap-2">
               <User className="h-5 w-5" />
               Patient Information
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <p className="text-sm text-muted-foreground">Name</p>
-              <p className="font-medium">{test.patient.name}</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Patient ID</p>
-              <p className="font-medium">{test.patient.patientId}</p>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm text-muted-foreground">Phone</p>
-                <p className="font-medium">{test.patient.phone || "N/A"}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Email</p>
-                <p className="font-medium">{test.patient.email || "N/A"}</p>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm text-muted-foreground">Gender</p>
-                <p className="font-medium">{test.patient.gender || "N/A"}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Date of Birth</p>
-                <p className="font-medium">
+            </h3>
+          </div>
+          <table className="w-full">
+            <tbody>
+              <tr className="border-b">
+                <td className="p-3 text-sm text-muted-foreground w-1/3">
+                  Name
+                </td>
+                <td className="p-3 font-medium">{test.patient.name}</td>
+              </tr>
+              <tr className="border-b">
+                <td className="p-3 text-sm text-muted-foreground">
+                  Patient ID
+                </td>
+                <td className="p-3 font-medium">{test.patient.patientId}</td>
+              </tr>
+              <tr className="border-b">
+                <td className="p-3 text-sm text-muted-foreground">Phone</td>
+                <td className="p-3 font-medium">
+                  {test.patient.phone || "N/A"}
+                </td>
+              </tr>
+              <tr className="border-b">
+                <td className="p-3 text-sm text-muted-foreground">Email</td>
+                <td className="p-3 font-medium">
+                  {test.patient.email || "N/A"}
+                </td>
+              </tr>
+              <tr className="border-b">
+                <td className="p-3 text-sm text-muted-foreground">Gender</td>
+                <td className="p-3 font-medium">
+                  {test.patient.gender || "N/A"}
+                </td>
+              </tr>
+              <tr>
+                <td className="p-3 text-sm text-muted-foreground">
+                  Date of Birth
+                </td>
+                <td className="p-3 font-medium">
                   {test.patient.dateOfBirth
                     ? format(parseISO(test.patient.dateOfBirth), "MMM dd, yyyy")
                     : "N/A"}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
 
         {/* Test Details */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+        <div className="border rounded-lg overflow-hidden">
+          <div className="bg-muted/50 px-4 py-3 border-b">
+            <h3 className="font-semibold flex items-center gap-2">
               <TestTube className="h-5 w-5" />
               Test Details
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <p className="text-sm text-muted-foreground">Test Name</p>
-              <p className="font-medium">{test.testName}</p>
-            </div>
-            {test.description && (
-              <div>
-                <p className="text-sm text-muted-foreground">Description</p>
-                <p className="text-sm">{test.description}</p>
-              </div>
-            )}
-            <div>
-              <p className="text-sm text-muted-foreground">Category</p>
-              <Badge variant="outline">
-                {test.category.replace(/_/g, " ")}
-              </Badge>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm text-muted-foreground">Priority</p>
-                <Badge
-                  className={
-                    test.priority === "emergency"
-                      ? "bg-red-100 text-red-800"
-                      : test.priority === "urgent"
-                        ? "bg-orange-100 text-orange-800"
-                        : "bg-blue-100 text-blue-800"
-                  }
-                >
-                  {test.priority}
-                </Badge>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Specimen</p>
-                <p className="font-medium">{test.specimen?.type || "N/A"}</p>
-              </div>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Created</p>
-              <p className="font-medium">
-                {format(
-                  parseISO(test.createdAtDirect),
-                  "MMM dd, yyyy 'at' HH:mm",
-                )}
-              </p>
-            </div>
-            {test.createdBy && (
-              <div>
-                <p className="text-sm text-muted-foreground">Created By</p>
-                <p className="font-medium">{test.createdBy.name}</p>
-              </div>
-            )}
-            {test.finalized && test.finalizedAt && (
-              <div>
-                <p className="text-sm text-muted-foreground">Finalized</p>
-                <p className="font-medium">
+            </h3>
+          </div>
+          <table className="w-full">
+            <tbody>
+              <tr className="border-b">
+                <td className="p-3 text-sm text-muted-foreground w-1/3">
+                  Test Name
+                </td>
+                <td className="p-3 font-medium">{test.testName}</td>
+              </tr>
+              {test.description && (
+                <tr className="border-b">
+                  <td className="p-3 text-sm text-muted-foreground">
+                    Description
+                  </td>
+                  <td className="p-3 text-sm">{test.description}</td>
+                </tr>
+              )}
+              <tr className="border-b">
+                <td className="p-3 text-sm text-muted-foreground">Category</td>
+                <td className="p-3">
+                  <Badge variant="outline">
+                    {test.category.replace(/_/g, " ")}
+                  </Badge>
+                </td>
+              </tr>
+              <tr className="border-b">
+                <td className="p-3 text-sm text-muted-foreground">Priority</td>
+                <td className="p-3">
+                  <Badge
+                    className={
+                      test.priority === "emergency"
+                        ? "bg-red-100 text-red-800"
+                        : test.priority === "urgent"
+                          ? "bg-orange-100 text-orange-800"
+                          : "bg-blue-100 text-blue-800"
+                    }
+                  >
+                    {test.priority}
+                  </Badge>
+                </td>
+              </tr>
+              <tr className="border-b">
+                <td className="p-3 text-sm text-muted-foreground">Specimen</td>
+                <td className="p-3 font-medium">
+                  {test.specimen?.type || "N/A"}
+                </td>
+              </tr>
+              <tr className="border-b">
+                <td className="p-3 text-sm text-muted-foreground">Created</td>
+                <td className="p-3 font-medium">
                   {format(
-                    parseISO(test.finalizedAt),
+                    parseISO(test.createdAtDirect),
                     "MMM dd, yyyy 'at' HH:mm",
                   )}
-                </p>
-                {test.finalizedBy && (
-                  <p className="text-sm text-muted-foreground">
-                    by {test.finalizedBy.name}
-                  </p>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Payment Info */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <DollarSign className="h-5 w-5" />
-              Payment Information
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <p className="text-sm text-muted-foreground">Payment Status</p>
-              <div className="flex items-center gap-2">
-                {test.paymentVerified ? (
-                  <Badge className="bg-green-100 text-green-800">
-                    <CheckCircle className="h-3 w-3 mr-1" />
-                    Verified
-                  </Badge>
-                ) : (
-                  <Badge variant="outline">
-                    {test.charges?.paymentStatus || "pending"}
-                  </Badge>
-                )}
-              </div>
-            </div>
-            {test.charges && (
-              <>
-                <div className="space-y-2">
-                  <div className="flex justify-between">
-                    <span className="text-sm">Total Amount:</span>
-                    <span className="font-medium">
-                      {formatPrice(test.charges.totalAmount)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm">Paid Amount:</span>
-                    <span className="font-medium text-green-600">
-                      {formatPrice(test.charges.paid)}
-                    </span>
-                  </div>
-                  {test.charges.due > 0 && (
-                    <div className="flex justify-between">
-                      <span className="text-sm">Due Amount:</span>
-                      <span className="font-medium text-red-600">
-                        {formatPrice(test.charges.due)}
-                      </span>
-                    </div>
-                  )}
-                </div>
-                {test.charges.paymentDate && (
-                  <div>
-                    <p className="text-sm text-muted-foreground">
-                      Payment Date
-                    </p>
+                </td>
+              </tr>
+              {test.createdBy && (
+                <tr className="border-b">
+                  <td className="p-3 text-sm text-muted-foreground">
+                    Created By
+                  </td>
+                  <td className="p-3 font-medium">{test.createdBy.name}</td>
+                </tr>
+              )}
+              {test.finalized && test.finalizedAt && (
+                <tr>
+                  <td className="p-3 text-sm text-muted-foreground">
+                    Finalized
+                  </td>
+                  <td className="p-3">
                     <p className="font-medium">
                       {format(
-                        parseISO(test.charges.paymentDate),
-                        "MMM dd, yyyy",
+                        parseISO(test.finalizedAt),
+                        "MMM dd, yyyy 'at' HH:mm",
                       )}
                     </p>
-                  </div>
-                )}
-                {test.charges.paymentMethod && (
-                  <div>
-                    <p className="text-sm text-muted-foreground">
-                      Payment Method
-                    </p>
-                    <p className="font-medium capitalize">
-                      {test.charges.paymentMethod}
-                    </p>
-                  </div>
-                )}
-              </>
-            )}
-            {canProcessPayment && (
-              <Dialog
-                open={showPaymentDialog}
-                onOpenChange={setShowPaymentDialog}
-              >
-                <DialogTrigger asChild>
-                  <Button className="w-full">
-                    <DollarSign className="h-4 w-4 mr-2" />
-                    Process Payment
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Process Payment</DialogTitle>
-                    <DialogDescription>
-                      Enter payment details for this test
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-4 py-4">
-                    <div>
-                      <Label htmlFor="amount">Amount</Label>
-                      <Input
-                        id="amount"
-                        type="number"
-                        placeholder="Enter amount"
-                        value={paymentAmount}
-                        onChange={(e) => setPaymentAmount(e.target.value)}
-                      />
-                      {test.charges && (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Due: {formatPrice(test.charges.due)}
-                        </p>
-                      )}
-                    </div>
-                    <div>
-                      <Label htmlFor="paymentMethod">Payment Method</Label>
-                      <Select
-                        value={paymentMethod}
-                        onValueChange={setPaymentMethod}
-                      >
-                        <SelectTrigger id="paymentMethod">
-                          <SelectValue placeholder="Select method" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="cash">Cash</SelectItem>
-                          <SelectItem value="card">Card</SelectItem>
-                          <SelectItem value="online">Online</SelectItem>
-                          <SelectItem value="check">Check</SelectItem>
-                          <SelectItem value="bank_transfer">
-                            Bank Transfer
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label htmlFor="paymentNotes">Notes (Optional)</Label>
-                      <Textarea
-                        id="paymentNotes"
-                        placeholder="Add payment notes..."
-                        value={paymentNotes}
-                        onChange={(e) => setPaymentNotes(e.target.value)}
-                        rows={2}
-                      />
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <Button
-                      variant="outline"
-                      onClick={() => setShowPaymentDialog(false)}
-                      disabled={processingPayment}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      onClick={handleProcessPayment}
-                      disabled={processingPayment}
-                    >
-                      {processingPayment ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Processing...
-                        </>
-                      ) : (
-                        "Process Payment"
-                      )}
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-            )}
-          </CardContent>
-        </Card>
-
+                    {test.finalizedBy && (
+                      <p className="text-sm text-muted-foreground">
+                        by {test.finalizedBy.name}
+                      </p>
+                    )}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
         {/* Test Status */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+        <div className="border rounded-lg overflow-hidden">
+          <div className="bg-muted/50 px-4 py-3 border-b">
+            <h3 className="font-semibold flex items-center gap-2">
               <FileText className="h-5 w-5" />
               Test Status
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm text-muted-foreground">Status</p>
-                <Badge
-                  className={
-                    test.status === "completed" || test.status === "reported"
-                      ? "bg-green-100 text-green-800"
-                      : test.status === "processing"
-                        ? "bg-blue-100 text-blue-800"
+            </h3>
+          </div>
+          <table className="w-full">
+            <tbody>
+              <tr className="border-b">
+                <td className="p-3 text-sm text-muted-foreground w-1/3">
+                  Status
+                </td>
+                <td className="p-3">
+                  <Badge
+                    className={
+                      test.status === "completed" || test.status === "reported"
+                        ? "bg-green-100 text-green-800"
+                        : test.status === "processing"
+                          ? "bg-blue-100 text-blue-800"
+                          : "bg-yellow-100 text-yellow-800"
+                    }
+                  >
+                    {test.status}
+                  </Badge>
+                </td>
+              </tr>
+              <tr className="border-b">
+                <td className="p-3 text-sm text-muted-foreground">
+                  Collection
+                </td>
+                <td className="p-3">
+                  <Badge
+                    className={
+                      test.collectionStatus === "collected"
+                        ? "bg-green-100 text-green-800"
                         : "bg-yellow-100 text-yellow-800"
-                  }
-                >
-                  {test.status}
-                </Badge>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Collection</p>
-                <Badge
-                  className={
-                    test.collectionStatus === "collected"
-                      ? "bg-green-100 text-green-800"
-                      : "bg-yellow-100 text-yellow-800"
-                  }
-                >
-                  {test.collectionStatus}
-                </Badge>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm text-muted-foreground">Processing</p>
-                <Badge
-                  className={
-                    test.processingStatus === "completed"
-                      ? "bg-green-100 text-green-800"
-                      : test.processingStatus === "processing"
-                        ? "bg-blue-100 text-blue-800"
+                    }
+                  >
+                    {test.collectionStatus}
+                  </Badge>
+                </td>
+              </tr>
+              <tr className="border-b">
+                <td className="p-3 text-sm text-muted-foreground">
+                  Processing
+                </td>
+                <td className="p-3">
+                  <Badge
+                    className={
+                      test.processingStatus === "completed"
+                        ? "bg-green-100 text-green-800"
+                        : test.processingStatus === "processing"
+                          ? "bg-blue-100 text-blue-800"
+                          : "bg-yellow-100 text-yellow-800"
+                    }
+                  >
+                    {test.processingStatus}
+                  </Badge>
+                </td>
+              </tr>
+              <tr className="border-b">
+                <td className="p-3 text-sm text-muted-foreground">
+                  Verification
+                </td>
+                <td className="p-3">
+                  <Badge
+                    className={
+                      test.verificationStatus === "verified"
+                        ? "bg-green-100 text-green-800"
                         : "bg-yellow-100 text-yellow-800"
-                  }
-                >
-                  {test.processingStatus}
-                </Badge>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Verification</p>
-                <Badge
-                  className={
-                    test.verificationStatus === "verified"
-                      ? "bg-green-100 text-green-800"
-                      : "bg-yellow-100 text-yellow-800"
-                  }
-                >
-                  {test.verificationStatus}
-                </Badge>
-              </div>
-            </div>
-            <Separator />
-            <div>
-              <p className="text-sm text-muted-foreground">Finalized</p>
-              <Badge
-                className={
-                  test.finalized
-                    ? "bg-green-100 text-green-800"
-                    : "bg-gray-100 text-gray-800"
-                }
-              >
-                {test.finalized ? "Yes" : "No"}
-              </Badge>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Ready for Print</p>
-              <Badge
-                className={
-                  test.readyForPrint
-                    ? "bg-green-100 text-green-800"
-                    : "bg-gray-100 text-gray-800"
-                }
-              >
-                {test.readyForPrint ? "Yes" : "No"}
-              </Badge>
-            </div>
-          </CardContent>
-        </Card>
+                    }
+                  >
+                    {test.verificationStatus}
+                  </Badge>
+                </td>
+              </tr>
+              <tr className="border-b">
+                <td className="p-3 text-sm text-muted-foreground">Finalized</td>
+                <td className="p-3">
+                  <Badge
+                    className={
+                      test.finalized
+                        ? "bg-green-100 text-green-800"
+                        : "bg-gray-100 text-gray-800"
+                    }
+                  >
+                    {test.finalized ? "Yes" : "No"}
+                  </Badge>
+                </td>
+              </tr>
+              <tr>
+                <td className="p-3 text-sm text-muted-foreground">
+                  Ready for Print
+                </td>
+                <td className="p-3">
+                  <Badge
+                    className={
+                      test.readyForPrint
+                        ? "bg-green-100 text-green-800"
+                        : "bg-gray-100 text-gray-800"
+                    }
+                  >
+                    {test.readyForPrint ? "Yes" : "No"}
+                  </Badge>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Test Results */}
-      <Card className="mt-6">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Test Results</CardTitle>
-              <CardDescription>
-                {test.results?.parameters
-                  ? "Results have been added"
-                  : "Results not yet added"}
-              </CardDescription>
-            </div>
-            {canAddResults && (
-              <Dialog
-                open={showResultsDialog}
-                onOpenChange={setShowResultsDialog}
-              >
-                <DialogTrigger asChild>
-                  <Button>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Results
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
-                  <DialogHeader>
-                    <DialogTitle>Add Test Results</DialogTitle>
-                    <DialogDescription>
-                      Enter the test results for each parameter
-                    </DialogDescription>
-                  </DialogHeader>
-                  {loadingTemplate ? (
-                    <div className="flex items-center justify-center py-8">
-                      <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                      <span className="ml-3 text-muted-foreground">
-                        Loading test parameters...
-                      </span>
-                    </div>
-                  ) : (
-                    <div className="space-y-4 py-4">
-                      {resultsParameters.map((param, index) => (
-                        <div
-                          key={index}
-                          className="border rounded-md p-4 space-y-3"
-                        >
-                          <div className="flex items-center justify-between">
-                            <h4 className="font-medium">{param.name}</h4>
-                            <Badge variant="outline">
-                              {param.unit || "N/A"}
-                            </Badge>
-                          </div>
-                          <div className="grid grid-cols-2 gap-4">
-                            <div>
-                              <Label htmlFor={`value-${index}`}>Value</Label>
-                              <Input
-                                id={`value-${index}`}
-                                value={param.value}
-                                onChange={(e) => {
-                                  const newParams = [...resultsParameters];
-                                  newParams[index].value = e.target.value;
-                                  setResultsParameters(newParams);
-                                }}
-                                placeholder="Enter value"
-                              />
-                            </div>
-                            <div>
-                              <Label htmlFor={`flag-${index}`}>Flag</Label>
-                              <Select
-                                value={param.flag}
-                                onValueChange={(
-                                  value: "normal" | "low" | "high" | "critical",
-                                ) => {
-                                  const newParams = [...resultsParameters];
-                                  newParams[index].flag = value;
-                                  setResultsParameters(newParams);
-                                }}
-                              >
-                                <SelectTrigger id={`flag-${index}`}>
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="normal">Normal</SelectItem>
-                                  <SelectItem value="low">Low</SelectItem>
-                                  <SelectItem value="high">High</SelectItem>
-                                  <SelectItem value="critical">
-                                    Critical
-                                  </SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          </div>
+      <div className="border rounded-lg overflow-hidden mt-6">
+        <div className="bg-muted/50 px-4 py-3 border-b flex items-center justify-between">
+          <div>
+            <h3 className="font-semibold">Test Results</h3>
+            <p className="text-sm text-muted-foreground">
+              {test.results?.parameters
+                ? "Results have been added"
+                : "Results not yet added"}
+            </p>
+          </div>
+          {canAddResults && (
+            <Dialog
+              open={showResultsDialog}
+              onOpenChange={setShowResultsDialog}
+            >
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Results
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Add Test Results</DialogTitle>
+                  <DialogDescription>
+                    Enter the test results for each parameter
+                  </DialogDescription>
+                </DialogHeader>
+                {loadingTemplate ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                    <span className="ml-3 text-muted-foreground">
+                      Loading test parameters...
+                    </span>
+                  </div>
+                ) : (
+                  <div className="space-y-4 py-4">
+                    {resultsParameters.map((param, index) => (
+                      <div
+                        key={index}
+                        className="border rounded-md p-4 space-y-3"
+                      >
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-medium">{param.name}</h4>
+                          <Badge variant="outline">{param.unit || "N/A"}</Badge>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
                           <div>
-                            <Label htmlFor={`remarks-${index}`}>
-                              Remarks (Optional)
-                            </Label>
+                            <Label htmlFor={`value-${index}`}>Value</Label>
                             <Input
-                              id={`remarks-${index}`}
-                              value={param.remarks || ""}
+                              id={`value-${index}`}
+                              value={param.value}
                               onChange={(e) => {
                                 const newParams = [...resultsParameters];
-                                newParams[index].remarks = e.target.value;
+                                newParams[index].value = e.target.value;
                                 setResultsParameters(newParams);
                               }}
-                              placeholder="Add remarks..."
+                              placeholder="Enter value"
                             />
                           </div>
-                          <p className="text-xs text-muted-foreground">
-                            Normal Range: {param.normalRange}
-                          </p>
+                          <div>
+                            <Label htmlFor={`flag-${index}`}>Flag</Label>
+                            <Select
+                              value={param.flag}
+                              onValueChange={(
+                                value: "normal" | "low" | "high" | "critical",
+                              ) => {
+                                const newParams = [...resultsParameters];
+                                newParams[index].flag = value;
+                                setResultsParameters(newParams);
+                              }}
+                            >
+                              <SelectTrigger id={`flag-${index}`}>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="normal">Normal</SelectItem>
+                                <SelectItem value="low">Low</SelectItem>
+                                <SelectItem value="high">High</SelectItem>
+                                <SelectItem value="critical">
+                                  Critical
+                                </SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
                         </div>
-                      ))}
-                      <div>
-                        <Label htmlFor="interpretation">
-                          Interpretation (Optional)
-                        </Label>
-                        <Textarea
-                          id="interpretation"
-                          placeholder="Add overall interpretation..."
-                          value={interpretation}
-                          onChange={(e) => setInterpretation(e.target.value)}
-                          rows={3}
-                        />
+                        <div>
+                          <Label htmlFor={`remarks-${index}`}>
+                            Remarks (Optional)
+                          </Label>
+                          <Input
+                            id={`remarks-${index}`}
+                            value={param.remarks || ""}
+                            onChange={(e) => {
+                              const newParams = [...resultsParameters];
+                              newParams[index].remarks = e.target.value;
+                              setResultsParameters(newParams);
+                            }}
+                            placeholder="Add remarks..."
+                          />
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Normal Range: {param.normalRange}
+                        </p>
                       </div>
+                    ))}
+                    <div>
+                      <Label htmlFor="interpretation">
+                        Interpretation (Optional)
+                      </Label>
+                      <Textarea
+                        id="interpretation"
+                        placeholder="Add overall interpretation..."
+                        value={interpretation}
+                        onChange={(e) => setInterpretation(e.target.value)}
+                        rows={3}
+                      />
                     </div>
-                  )}
-                  <DialogFooter>
-                    <Button
-                      variant="outline"
-                      onClick={() => setShowResultsDialog(false)}
-                      disabled={savingResults}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      onClick={handleSaveResults}
-                      disabled={savingResults || loadingTemplate}
-                    >
-                      {savingResults ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Saving...
-                        </>
-                      ) : (
-                        <>
-                          <Save className="h-4 w-4 mr-2" />
-                          Save Results
-                        </>
-                      )}
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent>
+                  </div>
+                )}
+                <DialogFooter>
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowResultsDialog(false)}
+                    disabled={savingResults}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleSaveResults}
+                    disabled={savingResults || loadingTemplate}
+                  >
+                    {savingResults ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="h-4 w-4 mr-2" />
+                        Save Results
+                      </>
+                    )}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          )}
+        </div>
+        <div className="p-4">
           {test.results?.parameters ? (
             <div className="space-y-4">
               <div className="rounded-md border">
@@ -1480,65 +1357,63 @@ export default function DirectTestDetailPage() {
               )}
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {/* Editable Parameters Section - Displayed after payment */}
       {test.paymentVerified && !test.finalized && (
-        <Card className="mt-6 border-blue-200 dark:border-blue-800">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <TestTube className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                  Test Parameters
-                </CardTitle>
-                <CardDescription>
-                  {editingParameters
-                    ? "Edit parameter values below"
-                    : "Click Edit to modify parameter values"}
-                </CardDescription>
-              </div>
-              <div className="flex gap-2">
-                {editingParameters ? (
-                  <>
-                    <Button
-                      variant="outline"
-                      onClick={() => setEditingParameters(false)}
-                      disabled={savingParameters}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      onClick={handleSaveEditableParameters}
-                      disabled={savingParameters}
-                    >
-                      {savingParameters ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Saving...
-                        </>
-                      ) : (
-                        <>
-                          <Save className="h-4 w-4 mr-2" />
-                          Save Parameters
-                        </>
-                      )}
-                    </Button>
-                  </>
-                ) : (
-                  <Button
-                    onClick={() => setEditingParameters(true)}
-                    variant="outline"
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Edit Parameters
-                  </Button>
-                )}
-              </div>
+        <div className="border rounded-lg overflow-hidden mt-6 border-blue-200 dark:border-blue-800">
+          <div className="bg-muted/50 px-4 py-3 border-b flex items-center justify-between">
+            <div>
+              <h3 className="font-semibold flex items-center gap-2">
+                <TestTube className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                Test Parameters
+              </h3>
+              <p className="text-sm text-muted-foreground">
+                {editingParameters
+                  ? "Edit parameter values below"
+                  : "Click Edit to modify parameter values"}
+              </p>
             </div>
-          </CardHeader>
-          <CardContent>
+            <div className="flex gap-2">
+              {editingParameters ? (
+                <>
+                  <Button
+                    variant="outline"
+                    onClick={() => setEditingParameters(false)}
+                    disabled={savingParameters}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleSaveEditableParameters}
+                    disabled={savingParameters}
+                  >
+                    {savingParameters ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="h-4 w-4 mr-2" />
+                        Save Parameters
+                      </>
+                    )}
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  onClick={() => setEditingParameters(true)}
+                  variant="outline"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Edit Parameters
+                </Button>
+              )}
+            </div>
+          </div>
+          <div className="p-4">
             {editableParameters.length > 0 ? (
               <div className="space-y-4">
                 {editableParameters.map((param, index) => (
@@ -1597,28 +1472,28 @@ export default function DirectTestDetailPage() {
                 </p>
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       )}
 
       {/* Notes */}
       {test.notes && (
-        <Card className="mt-6">
-          <CardHeader>
-            <CardTitle>Notes</CardTitle>
-          </CardHeader>
-          <CardContent>
+        <div className="border rounded-lg overflow-hidden mt-6">
+          <div className="bg-muted/50 px-4 py-3 border-b">
+            <h3 className="font-semibold">Notes</h3>
+          </div>
+          <div className="p-4">
             <p className="text-sm">{test.notes}</p>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       )}
 
       {/* Actions */}
-      <Card className="mt-6">
-        <CardHeader>
-          <CardTitle>Actions</CardTitle>
-        </CardHeader>
-        <CardContent>
+      <div className="border rounded-lg overflow-hidden mt-6">
+        <div className="bg-muted/50 px-4 py-3 border-b">
+          <h3 className="font-semibold">Actions</h3>
+        </div>
+        <div className="p-4">
           <div className="flex flex-wrap gap-4">
             {canCollectSample && (
               <Dialog
@@ -2074,8 +1949,8 @@ export default function DirectTestDetailPage() {
               <Link href="/laboratory/direct-tests">Back to All Tests</Link>
             </Button>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }
