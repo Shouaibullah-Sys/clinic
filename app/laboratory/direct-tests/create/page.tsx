@@ -1621,17 +1621,6 @@ export default function CreateDirectTestPage() {
   );
   const [notes, setNotes] = useState("");
 
-  // Specimen details
-  const [specimenQuantity, setSpecimenQuantity] = useState("");
-  const [specimenContainer, setSpecimenContainer] = useState("");
-  const [specimenRemarks, setSpecimenRemarks] = useState("");
-
-  // Sample Parameters (for specimen details like volume, color, etc.)
-  const [parameters, setParameters] = useState<SampleParameter[]>([
-    { id: "1", name: "", unit: "", normalRange: "", result: "" },
-  ]);
-
-  // Test Parameters (Results) - for actual test results
   const [testParameters, setTestParameters] = useState<TestParameter[]>([
     { id: "1", name: "", value: "", unit: "", normalRange: "", remarks: "" },
   ]);
@@ -1672,7 +1661,7 @@ export default function CreateDirectTestPage() {
     return () => clearTimeout(timer);
   }, [patientSearchQuery, accessToken]);
 
-  // Handle test selection change - populate both sample and test parameters
+  // Handle test selection change - populate test parameters
   useEffect(() => {
     if (selectedTestId) {
       // Find the test in labTests and populate its parameters
@@ -1692,16 +1681,6 @@ export default function CreateDirectTestPage() {
             remarks: "",
           })),
         );
-        // Reset sample parameters to default empty
-        setParameters([
-          {
-            id: "1",
-            name: "",
-            unit: "",
-            normalRange: "",
-            result: "",
-          },
-        ]);
       } else {
         setSelectedTest(null);
         setTestParameters([
@@ -1712,15 +1691,6 @@ export default function CreateDirectTestPage() {
             unit: "",
             normalRange: "",
             remarks: "",
-          },
-        ]);
-        setParameters([
-          {
-            id: "1",
-            name: "",
-            unit: "",
-            normalRange: "",
-            result: "",
           },
         ]);
       }
@@ -1734,15 +1704,6 @@ export default function CreateDirectTestPage() {
           unit: "",
           normalRange: "",
           remarks: "",
-        },
-      ]);
-      setParameters([
-        {
-          id: "1",
-          name: "",
-          unit: "",
-          normalRange: "",
-          result: "",
         },
       ]);
     }
@@ -1846,39 +1807,6 @@ export default function CreateDirectTestPage() {
     setSelectedTestId(testId);
   };
 
-  // Sample Parameters management functions
-  const addParameter = () => {
-    const newId = (parameters.length + 1).toString();
-    setParameters([
-      ...parameters,
-      {
-        id: newId,
-        name: "",
-        unit: "",
-        normalRange: "",
-        result: "",
-      },
-    ]);
-  };
-
-  const removeParameter = (id: string) => {
-    if (parameters.length > 1) {
-      setParameters(parameters.filter((p) => p.id !== id));
-    }
-  };
-
-  const updateParameter = (
-    id: string,
-    field: keyof SampleParameter,
-    value: string,
-  ) => {
-    setParameters(
-      parameters.map((param) =>
-        param.id === id ? { ...param, [field]: value } : param,
-      ),
-    );
-  };
-
   // Test Parameters (Results) management functions
   const addTestParameter = () => {
     const newId = (testParameters.length + 1).toString();
@@ -1946,14 +1874,6 @@ export default function CreateDirectTestPage() {
         priority,
         notes: notes || undefined,
         specimenType: selectedTestId,
-        specimen: {
-          quantity: specimenQuantity,
-          container: specimenContainer,
-          remarks: specimenRemarks,
-          parameters: parameters.filter(
-            (p) => p.name.trim() && p.result.trim(),
-          ),
-        },
         results: {
           parameters: validTestParameters.map((p) => ({
             name: p.name,
@@ -2224,158 +2144,6 @@ export default function CreateDirectTestPage() {
                       );
                     })
                   )}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Specimen Details */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Specimen Details</CardTitle>
-                <CardDescription>
-                  Provide specimen collection details
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="specimenQuantity">Quantity</Label>
-                    <Input
-                      id="specimenQuantity"
-                      value={specimenQuantity}
-                      onChange={(e) => setSpecimenQuantity(e.target.value)}
-                      placeholder="e.g., 5ml, 10g"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="specimenContainer">Container</Label>
-                    <Input
-                      id="specimenContainer"
-                      value={specimenContainer}
-                      onChange={(e) => setSpecimenContainer(e.target.value)}
-                      placeholder="e.g., EDTA tube, sterile container"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="specimenRemarks">Remarks</Label>
-                    <Input
-                      id="specimenRemarks"
-                      value={specimenRemarks}
-                      onChange={(e) => setSpecimenRemarks(e.target.value)}
-                      placeholder="Any special instructions..."
-                    />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Sample Parameters */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center justify-between">
-                  <span>Sample Parameters</span>
-                  <Button
-                    type="button"
-                    onClick={addParameter}
-                    variant="outline"
-                    size="sm"
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Parameter
-                  </Button>
-                </CardTitle>
-                <CardDescription>
-                  Record sample parameters with name, unit, normal range, and
-                  result
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {parameters.map((param) => (
-                    <div
-                      key={param.id}
-                      className="p-4 border rounded-lg space-y-3"
-                    >
-                      <div className="flex items-center justify-between">
-                        <h3 className="font-medium">Parameter</h3>
-                        {parameters.length > 1 && (
-                          <Button
-                            type="button"
-                            onClick={() => removeParameter(param.id)}
-                            variant="ghost"
-                            size="sm"
-                            className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        )}
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                        <div className="space-y-2">
-                          <Label>Parameter Name</Label>
-                          <Input
-                            value={param.name}
-                            onChange={(e) =>
-                              updateParameter(param.id, "name", e.target.value)
-                            }
-                            placeholder="e.g., Volume, Color, pH"
-                          />
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label>Result</Label>
-                          <Input
-                            value={param.result}
-                            onChange={(e) =>
-                              updateParameter(
-                                param.id,
-                                "result",
-                                e.target.value,
-                              )
-                            }
-                            placeholder="Enter result"
-                          />
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label>Unit</Label>
-                          <Input
-                            value={param.unit}
-                            onChange={(e) =>
-                              updateParameter(param.id, "unit", e.target.value)
-                            }
-                            placeholder="e.g., ml, g, pH"
-                          />
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label>Normal Range</Label>
-                          <Input
-                            value={param.normalRange}
-                            onChange={(e) =>
-                              updateParameter(
-                                param.id,
-                                "normalRange",
-                                e.target.value,
-                              )
-                            }
-                            placeholder="e.g., 4.5-11.0"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="mt-4 text-sm text-muted-foreground">
-                  <p>
-                    Parameters include name, unit, normal range, and result
-                    fields. Default parameters are pre-filled based on the
-                    selected test type. You can add, remove, or modify them.
-                  </p>
                 </div>
               </CardContent>
             </Card>

@@ -124,14 +124,6 @@ interface DirectLabTest {
   notes?: string;
 }
 
-interface SampleParameter {
-  id: string;
-  name: string;
-  unit: string;
-  normalRange: string;
-  result: string;
-}
-
 interface TestParameter {
   id: string;
   name: string;
@@ -218,17 +210,6 @@ export default function DirectTestDetailPage() {
   const [sampleCondition, setSampleCondition] = useState("satisfactory");
   const [collectionNotes, setCollectionNotes] = useState("");
   const [sampleConditionNotes, setSampleConditionNotes] = useState("");
-
-  // Specimen details state
-  const [selectedTestId, setSelectedTestId] = useState<string>("");
-  const [specimenQuantity, setSpecimenQuantity] = useState("");
-  const [specimenContainer, setSpecimenContainer] = useState("");
-  const [specimenRemarks, setSpecimenRemarks] = useState("");
-
-  // Sample parameters (specimen characteristics)
-  const [sampleParameters, setSampleParameters] = useState<SampleParameter[]>([
-    { id: "1", name: "", unit: "", normalRange: "", result: "" },
-  ]);
 
   // Test parameters (actual results)
   const [testParameters, setTestParameters] = useState<TestParameter[]>([
@@ -582,10 +563,6 @@ export default function DirectTestDetailPage() {
       setCollecting(true);
 
       // Filter valid parameters
-      const validSampleParameters = sampleParameters.filter(
-        (p) => p.name.trim() && p.result.trim(),
-      );
-
       const validTestParameters = testParameters.filter(
         (p) => p.name.trim() && p.value.trim(),
       );
@@ -603,18 +580,6 @@ export default function DirectTestDetailPage() {
             sampleCondition,
             collectionNotes: collectionNotes || undefined,
             sampleConditionNotes: sampleConditionNotes || undefined,
-            specimen: {
-              type: selectedTestId,
-              quantity: specimenQuantity,
-              container: specimenContainer,
-              remarks: specimenRemarks,
-              parameters: validSampleParameters.map((p) => ({
-                name: p.name,
-                result: p.result,
-                unit: p.unit,
-                normalRange: p.normalRange,
-              })),
-            },
             testParameters: validTestParameters.map((p) => ({
               name: p.name,
               value: p.value,
@@ -639,13 +604,6 @@ export default function DirectTestDetailPage() {
       setSampleCondition("satisfactory");
       setCollectionNotes("");
       setSampleConditionNotes("");
-      setSelectedTestId("");
-      setSpecimenQuantity("");
-      setSpecimenContainer("");
-      setSpecimenRemarks("");
-      setSampleParameters([
-        { id: "1", name: "", unit: "", normalRange: "", result: "" },
-      ]);
       setTestParameters([
         {
           id: "1",
@@ -666,40 +624,6 @@ export default function DirectTestDetailPage() {
     }
   };
 
-  // Sample parameter management functions
-  const addSampleParameter = () => {
-    const newId = (sampleParameters.length + 1).toString();
-    setSampleParameters([
-      ...sampleParameters,
-      {
-        id: newId,
-        name: "",
-        unit: "",
-        normalRange: "",
-        result: "",
-      },
-    ]);
-  };
-
-  const removeSampleParameter = (id: string) => {
-    if (sampleParameters.length > 1) {
-      setSampleParameters(sampleParameters.filter((p) => p.id !== id));
-    }
-  };
-
-  const updateSampleParameter = (
-    id: string,
-    field: keyof SampleParameter,
-    value: string,
-  ) => {
-    setSampleParameters(
-      sampleParameters.map((param) =>
-        param.id === id ? { ...param, [field]: value } : param,
-      ),
-    );
-  };
-
-  // Test parameter management functions
   const addTestParameter = () => {
     const newId = (testParameters.length + 1).toString();
     setTestParameters([
@@ -1583,181 +1507,6 @@ export default function DirectTestDetailPage() {
                           onChange={(e) => setCollectionNotes(e.target.value)}
                           rows={2}
                         />
-                      </div>
-                    </div>
-
-                    <Separator />
-
-                    {/* Specimen Details */}
-                    <div className="space-y-4">
-                      <h3 className="text-lg font-semibold mb-3">
-                        Specimen Details
-                      </h3>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="specimenType">Test Type</Label>
-                          <Select
-                            value={selectedTestId}
-                            onValueChange={setSelectedTestId}
-                          >
-                            <SelectTrigger id="specimenType">
-                              <SelectValue placeholder="Select test type" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="blood">Blood Test</SelectItem>
-                              <SelectItem value="urine">Urine Test</SelectItem>
-                              <SelectItem value="stool">Stool Test</SelectItem>
-                              <SelectItem value="tissue">
-                                Tissue Test
-                              </SelectItem>
-                              <SelectItem value="saliva">
-                                Saliva Test
-                              </SelectItem>
-                              <SelectItem value="other">Other</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="specimenQuantity">Quantity</Label>
-                          <Input
-                            id="specimenQuantity"
-                            placeholder="e.g., 5ml, 10g"
-                            value={specimenQuantity}
-                            onChange={(e) =>
-                              setSpecimenQuantity(e.target.value)
-                            }
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="specimenContainer">Container</Label>
-                          <Input
-                            id="specimenContainer"
-                            placeholder="e.g., EDTA tube, sterile container"
-                            value={specimenContainer}
-                            onChange={(e) =>
-                              setSpecimenContainer(e.target.value)
-                            }
-                          />
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="specimenRemarks">
-                          Specimen Remarks (Optional)
-                        </Label>
-                        <Textarea
-                          id="specimenRemarks"
-                          placeholder="Any special instructions or observations..."
-                          value={specimenRemarks}
-                          onChange={(e) => setSpecimenRemarks(e.target.value)}
-                          rows={2}
-                        />
-                      </div>
-                    </div>
-
-                    <Separator />
-
-                    {/* Sample Parameters (Specimen Characteristics) */}
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <h3 className="text-lg font-semibold">
-                          Sample Parameters
-                        </h3>
-                        <Button
-                          type="button"
-                          onClick={addSampleParameter}
-                          variant="outline"
-                          size="sm"
-                        >
-                          <Plus className="h-4 w-4 mr-2" />
-                          Add Parameter
-                        </Button>
-                      </div>
-                      <p className="text-sm text-muted-foreground">
-                        Record specimen characteristics (volume, color, pH,
-                        etc.)
-                      </p>
-                      <div className="space-y-4">
-                        {sampleParameters.map((param) => (
-                          <div
-                            key={param.id}
-                            className="border rounded-lg p-4 space-y-3"
-                          >
-                            <div className="flex items-center justify-between">
-                              <h4 className="font-medium">Parameter</h4>
-                              {sampleParameters.length > 1 && (
-                                <Button
-                                  type="button"
-                                  onClick={() =>
-                                    removeSampleParameter(param.id)
-                                  }
-                                  variant="ghost"
-                                  size="sm"
-                                  className="text-red-600 hover:text-red-700"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              )}
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                              <div className="space-y-2">
-                                <Label>Parameter Name</Label>
-                                <Input
-                                  value={param.name}
-                                  onChange={(e) =>
-                                    updateSampleParameter(
-                                      param.id,
-                                      "name",
-                                      e.target.value,
-                                    )
-                                  }
-                                  placeholder="e.g., Volume, Color, pH"
-                                />
-                              </div>
-                              <div className="space-y-2">
-                                <Label>Result</Label>
-                                <Input
-                                  value={param.result}
-                                  onChange={(e) =>
-                                    updateSampleParameter(
-                                      param.id,
-                                      "result",
-                                      e.target.value,
-                                    )
-                                  }
-                                  placeholder="Enter result"
-                                />
-                              </div>
-                              <div className="space-y-2">
-                                <Label>Unit</Label>
-                                <Input
-                                  value={param.unit}
-                                  onChange={(e) =>
-                                    updateSampleParameter(
-                                      param.id,
-                                      "unit",
-                                      e.target.value,
-                                    )
-                                  }
-                                  placeholder="e.g., ml, g, pH"
-                                />
-                              </div>
-                              <div className="space-y-2">
-                                <Label>Normal Range</Label>
-                                <Input
-                                  value={param.normalRange}
-                                  onChange={(e) =>
-                                    updateSampleParameter(
-                                      param.id,
-                                      "normalRange",
-                                      e.target.value,
-                                    )
-                                  }
-                                  placeholder="e.g., 4.5-11.0"
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        ))}
                       </div>
                     </div>
 
