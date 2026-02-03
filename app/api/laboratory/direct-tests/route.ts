@@ -204,6 +204,7 @@ export async function POST(request: NextRequest) {
 
     // Prepare test parameters
     let testParameters = [];
+    let resultsParameters = [];
     if (testTemplate && testTemplate.parameters) {
       // Use template parameters
       testParameters = testTemplate.parameters.map((param: any) => ({
@@ -222,8 +223,25 @@ export async function POST(request: NextRequest) {
       }));
     }
 
+    // Handle results parameters (for direct tests with pre-entered results)
+    if (
+      body.results &&
+      body.results.parameters &&
+      Array.isArray(body.results.parameters)
+    ) {
+      // Store the results parameters with values
+      resultsParameters = body.results.parameters.map((param: any) => ({
+        name: param.name || param.parameterName,
+        value: param.value || "",
+        unit: param.unit || "",
+        normalRange: param.normalRange || "",
+        remarks: param.remarks || "",
+        flag: param.flag || "normal",
+      }));
+    }
+
     // Create the direct lab test
-    const labTestData = {
+    const labTestData: any = {
       testName,
       category,
       description,
@@ -249,6 +267,13 @@ export async function POST(request: NextRequest) {
       // Store test parameters for custom tests
       ...(testParameters.length > 0 && {
         testParameters: testParameters,
+      }),
+      // Store results parameters if provided (for direct tests with pre-entered results)
+      ...(resultsParameters.length > 0 && {
+        results: {
+          parameters: resultsParameters,
+          interpretation: body.results.interpretation || "",
+        },
       }),
       // Initialize charges
       charges: {

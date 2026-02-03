@@ -3,6 +3,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 import {
   Card,
   CardContent,
@@ -92,10 +94,11 @@ export default function DirectTestsPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [paymentStatusFilter, setPaymentStatusFilter] = useState("all");
   const [activeTab, setActiveTab] = useState("all");
+  const [printingId, setPrintingId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchTests();
-  }, [accessToken, activeTab]);
+  }, [accessToken]);
 
   const fetchTests = async () => {
     try {
@@ -106,7 +109,7 @@ export default function DirectTestsPage() {
       }
 
       console.log("Fetching direct lab tests...");
-      const url = `/api/laboratory/direct-tests?tab=${activeTab}`;
+      const url = `/api/laboratory/direct-tests`;
       console.log("API URL:", url);
 
       const response = await fetch(url, {
@@ -143,7 +146,24 @@ export default function DirectTestsPage() {
     }
   };
 
-  const filteredTests = tests
+  // Client-side filtering based on active tab
+  const getFilteredByTab = () => {
+    if (activeTab === "all") return tests;
+    if (activeTab === "pending") {
+      return tests.filter(
+        (t) => t.status === "pending" || t.status === "ordered",
+      );
+    }
+    if (activeTab === "processing") {
+      return tests.filter((t) => t.status === "processing");
+    }
+    if (activeTab === "ready-to-print") {
+      return tests.filter((t) => t.readyForPrint && !t.printedAt);
+    }
+    return tests;
+  };
+
+  const filteredTests = getFilteredByTab()
     .filter((test) => {
       if (!searchQuery) return true;
       const query = searchQuery.toLowerCase();
@@ -297,6 +317,193 @@ export default function DirectTestsPage() {
 
   const counts = getTestCounts();
 
+  const handlePrintPDF = async (test: DirectLabTest) => {
+    setPrintingId(test._id);
+
+    try {
+      // Mark the test as printed
+      await fetch(`/api/laboratory/direct-tests/${test._id}/print`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      // Generate PDF
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 14;
+      let yPos = margin;
+
+      const addText = (
+        text: string,
+        x: number,
+        y: number,
+        fontSize: number = 10,
+        fontStyle: string = "normal",
+        align: "left" | "center" | "right" = "left",
+      ) => {
+        doc.setFontSize(fontSize);
+        doc.setFont("helvetica", fontStyle);
+        doc.text(text, x, y, { align });
+        return y + fontSize * 0.4;
+      };
+
+      // Header
+      yPos = addText(
+        "LABORATORY TEST REPORT",
+        pageWidth / 2,
+        yPos,
+        18,
+        "bold",
+        "center",
+      );
+      yPos += 2;
+      yPos = addText(
+        "Sajad Barekzai Hospital",
+        pageWidth / 2,
+        yPos,
+        12,
+        "bold",
+        "center",
+      );
+      yPos = addText(
+        "Comprehensive Diagnostic Services",
+        pageWidth / 2,
+        yPos,
+        9,
+        "normal",
+        "center",
+      );
+      yPos += 4;
+
+      doc.setDrawColor(59, 130, 246);
+      doc.setLineWidth(0.5);
+      doc.line(margin, yPos, pageWidth - margin, yPos);
+      yPos += 6;
+
+      // Test Info
+      yPos = addText(`Test ID: ${test.testId}`, margin, yPos, 10, "bold");
+      yPos = addText(
+        `Lab Reference: ${test.testId}`,
+        pageWidth - margin,
+        yPos,
+        10,
+        "normal",
+        "right",
+      );
+      yPos += 2;
+      yPos = addText(`Test: ${test.testName}`, margin, yPos, 12, "bold");
+      yPos = addText(
+        `Category: ${test.category.replace(/_/g, " ")}`,
+        margin,
+        yPos,
+        9,
+      );
+      yPos += 2;
+
+      // Patient Info
+      yPos += 2;
+      yPos = addText("PATIENT INFORMATION", margin, yPos, 11, "bold");
+      yPos += 2;
+
+      const patientInfo = [
+        ["Name:", test.patient.name || "N/A"],
+        ["Patient ID:", test.patient.patientId || "N/A"],
+        ["Gender:", "N/A"],
+        ["Phone:", test.patient.phone || "N/A"],
+      ];
+
+      autoTable(doc, {
+        startY: yPos,
+        head: [],
+        body: patientInfo,
+        theme: "plain",
+        styles: { fontSize: 9, cellPadding: 1 },
+        columnStyles: {
+          0: { fontStyle: "bold", cellWidth: 40 },
+          1: { cellWidth: 60 },
+        },
+      });
+
+      yPos = (doc as any).lastAutoTable.finalY + 4;
+
+      // Test Details
+      yPos = addText("TEST DETAILS", margin, yPos, 11, "bold");
+      yPos += 2;
+
+      const formatDate = (dateString?: string) => {
+        if (!dateString) return "N/A";
+        return new Date(dateString).toLocaleDateString("en-US", {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+      };
+
+      const testDetails = [
+        ["Ordered Date:", formatDate(test.createdAtDirect)],
+        ["Specimen Type:", test.specimen?.type || "N/A"],
+        ["Collection Status:", test.collectionStatus?.toUpperCase() || "N/A"],
+        ["Status:", test.status?.toUpperCase() || "N/A"],
+      ];
+
+      autoTable(doc, {
+        startY: yPos,
+        head: [],
+        body: testDetails,
+        theme: "plain",
+        styles: { fontSize: 9, cellPadding: 1 },
+        columnStyles: {
+          0: { fontStyle: "bold", cellWidth: 50 },
+          1: { cellWidth: 50 },
+        },
+      });
+
+      yPos = (doc as any).lastAutoTable.finalY + 4;
+
+      // Footer
+      yPos = pageHeight - 30;
+      doc.setDrawColor(200, 200, 200);
+      doc.setLineWidth(0.3);
+      doc.line(margin, yPos, pageWidth - margin, yPos);
+      yPos += 5;
+
+      yPos = addText(
+        "This is a computer-generated report.",
+        pageWidth / 2,
+        yPos,
+        8,
+        "normal",
+        "center",
+      );
+      yPos = addText(
+        `Report generated on: ${new Date().toLocaleString()}`,
+        pageWidth / 2,
+        yPos,
+        8,
+        "normal",
+        "center",
+      );
+
+      // Print
+      doc.autoPrint();
+      window.open(doc.output("bloburl"), "_blank");
+
+      // Refresh tests to update printed status
+      fetchTests();
+    } catch (err) {
+      console.error("Error printing PDF:", err);
+      toast.error("Failed to generate print job");
+    } finally {
+      setPrintingId(null);
+    }
+  };
+
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat("en-IN", {
       style: "currency",
@@ -355,7 +562,7 @@ export default function DirectTestsPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <Card>
           <CardContent className="pt-6">
             <div className="text-center">
@@ -387,27 +594,7 @@ export default function DirectTestsPage() {
         <Card>
           <CardContent className="pt-6">
             <div className="text-center">
-              <div className="text-2xl font-bold text-emerald-600">
-                {counts.completed}
-              </div>
-              <div className="text-sm text-gray-500">Completed</div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-center">
               <div className="text-2xl font-bold text-green-600">
-                {counts.finalized}
-              </div>
-              <div className="text-sm text-gray-500">Finalized</div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-center">
-              <div className="text-2xl font-bold text-orange-600">
                 {counts.readyForPrint}
               </div>
               <div className="text-sm text-gray-500">Ready to Print</div>
@@ -422,7 +609,7 @@ export default function DirectTestsPage() {
           <TabsTrigger value="all">All Tests</TabsTrigger>
           <TabsTrigger value="pending">Pending</TabsTrigger>
           <TabsTrigger value="processing">Processing</TabsTrigger>
-          <TabsTrigger value="completed">Completed</TabsTrigger>
+          <TabsTrigger value="ready-to-print">Ready to Print</TabsTrigger>
         </TabsList>
       </Tabs>
 
@@ -644,15 +831,18 @@ export default function DirectTestsPage() {
                           {test.readyForPrint && !test.printedAt && (
                             <Button
                               size="sm"
-                              asChild
+                              onClick={() => handlePrintPDF(test)}
+                              disabled={printingId === test._id}
                               className="h-8 px-3 bg-green-600 hover:bg-green-700"
                             >
-                              <Link
-                                href={`/laboratory/direct-tests/${test._id}/print`}
-                              >
-                                <Printer className="h-3 w-3 mr-1" />
-                                Print
-                              </Link>
+                              {printingId === test._id ? (
+                                <>Printing...</>
+                              ) : (
+                                <>
+                                  <Printer className="h-3 w-3 mr-1" />
+                                  Print
+                                </>
+                              )}
                             </Button>
                           )}
                         </div>

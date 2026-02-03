@@ -2,33 +2,12 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
-// Card components removed - using table-based layouts instead
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import Link from "next/link";
 import { useAuthStore } from "@/store/useAuthStore";
 import {
@@ -36,18 +15,16 @@ import {
   FileText,
   TestTube,
   User,
-  DollarSign,
   CheckCircle,
   AlertTriangle,
   RefreshCw,
   Printer,
   Loader2,
-  Plus,
-  Save,
-  Trash2,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { toast } from "sonner";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 
 interface DirectLabTest {
   _id: string;
@@ -124,97 +101,15 @@ interface DirectLabTest {
   notes?: string;
 }
 
-interface TestParameter {
-  id: string;
-  name: string;
-  value: string;
-  unit: string;
-  normalRange: string;
-  remarks: string;
-}
-
-interface TestTemplate {
-  _id: string;
-  testCode: string;
-  testName: string;
-  category: string;
-  description?: string;
-  specimenType: string[];
-  basePrice: number;
-  turnaroundTime: number;
-  parameters: Array<{
-    parameterCode: string;
-    parameterName: string;
-    unit?: string;
-    normalRange: string;
-    criticalLow?: number;
-    criticalHigh?: number;
-    maleRange?: string;
-    femaleRange?: string;
-    childRange?: string;
-  }>;
-}
-
 export default function DirectTestDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { accessToken, user } = useAuthStore();
+  const { accessToken } = useAuthStore();
   const [test, setTest] = useState<DirectLabTest | null>(null);
-  const [template, setTemplate] = useState<TestTemplate | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [loadingTemplate, setLoadingTemplate] = useState(false);
-
-  // Payment dialog state
-  const [showPaymentDialog, setShowPaymentDialog] = useState(false);
-  const [paymentAmount, setPaymentAmount] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState("");
-  const [paymentNotes, setPaymentNotes] = useState("");
-  const [processingPayment, setProcessingPayment] = useState(false);
-
-  // Results dialog state
-  const [showResultsDialog, setShowResultsDialog] = useState(false);
-  const [resultsParameters, setResultsParameters] = useState<
-    Array<{
-      name: string;
-      value: string;
-      unit?: string;
-      normalRange: string;
-      flag?: "normal" | "low" | "high" | "critical";
-      remarks?: string;
-    }>
-  >([]);
-  const [interpretation, setInterpretation] = useState("");
-  const [savingResults, setSavingResults] = useState(false);
-
-  // Finalize state
   const [finalizing, setFinalizing] = useState(false);
-
-  // Edit parameters state (for main page editing)
-  const [editingParameters, setEditingParameters] = useState(false);
-  const [editableParameters, setEditableParameters] = useState<
-    Array<{
-      name: string;
-      value: string;
-      unit?: string;
-      normalRange: string;
-      remarks?: string;
-    }>
-  >([]);
-  const [savingParameters, setSavingParameters] = useState(false);
-
-  // Collect sample state
-  const [showCollectDialog, setShowCollectDialog] = useState(false);
-  const [collecting, setCollecting] = useState(false);
-  const [sampleId, setSampleId] = useState("");
-  const [sampleCondition, setSampleCondition] = useState("satisfactory");
-  const [collectionNotes, setCollectionNotes] = useState("");
-  const [sampleConditionNotes, setSampleConditionNotes] = useState("");
-
-  // Test parameters (actual results)
-  const [testParameters, setTestParameters] = useState<TestParameter[]>([
-    { id: "1", name: "", value: "", unit: "", normalRange: "", remarks: "" },
-  ]);
+  const [printing, setPrinting] = useState(false);
 
   useEffect(() => {
     fetchTestDetails();
@@ -245,42 +140,6 @@ export default function DirectTestDetailPage() {
       }
 
       setTest(data.data);
-
-      // Initialize results parameters from template if available
-      if (data.data.results?.parameters) {
-        setResultsParameters(
-          data.data.results.parameters.map(
-            (
-              p: NonNullable<DirectLabTest["results"]>["parameters"][number],
-            ) => ({
-              name: p.name,
-              value: String(p.value),
-              unit: p.unit,
-              normalRange: p.normalRange,
-              flag: p.flag,
-              remarks: p.remarks,
-            }),
-          ),
-        );
-        setInterpretation(data.data.results.interpretation || "");
-        // Also initialize editable parameters
-        setEditableParameters(
-          data.data.results.parameters.map(
-            (
-              p: NonNullable<DirectLabTest["results"]>["parameters"][number],
-            ) => ({
-              name: p.name,
-              value: String(p.value),
-              unit: p.unit,
-              normalRange: p.normalRange,
-              remarks: p.remarks,
-            }),
-          ),
-        );
-      } else {
-        // If no results yet, try to fetch template to initialize parameters
-        await fetchTestTemplate(data.data);
-      }
     } catch (error: unknown) {
       console.error("Error fetching test:", error);
       setError(
@@ -288,182 +147,6 @@ export default function DirectTestDetailPage() {
       );
     } finally {
       setLoading(false);
-    }
-  };
-
-  const fetchTestTemplate = async (testData: DirectLabTest) => {
-    try {
-      setLoadingTemplate(true);
-
-      // Try to find the template by matching test name
-      const response = await fetch("/api/laboratory/templates", {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      });
-
-      if (!response.ok) {
-        console.error("Failed to fetch templates");
-        return;
-      }
-
-      const data = await response.json();
-
-      if (data.success && data.data) {
-        // Find matching template by test name
-        const matchingTemplate = data.data.find(
-          (t: TestTemplate) => t.testName === testData.testName,
-        );
-
-        if (matchingTemplate && matchingTemplate.parameters) {
-          setTemplate(matchingTemplate);
-
-          // Initialize results parameters from template
-          const paramsFromTemplate = matchingTemplate.parameters.map(
-            (p: TestTemplate["parameters"][number]) => ({
-              name: p.parameterName,
-              value: "",
-              unit: p.unit || "",
-              normalRange: p.normalRange || "",
-              flag: "normal" as const,
-              remarks: "",
-            }),
-          );
-          setResultsParameters(paramsFromTemplate);
-          // Also initialize editable parameters
-          setEditableParameters(
-            paramsFromTemplate.map(
-              (p: {
-                name: string;
-                value: string;
-                unit: string;
-                normalRange: string;
-                flag: "normal";
-                remarks: string;
-              }) => ({
-                name: p.name,
-                value: p.value,
-                unit: p.unit,
-                normalRange: p.normalRange,
-                remarks: p.remarks,
-              }),
-            ),
-          );
-        }
-      }
-    } catch (error: unknown) {
-      console.error("Error fetching test template:", error);
-    } finally {
-      setLoadingTemplate(false);
-    }
-  };
-
-  const handleProcessPayment = async () => {
-    if (!test) return;
-
-    const amount = parseFloat(paymentAmount);
-    if (isNaN(amount) || amount <= 0) {
-      toast.error("Please enter a valid payment amount");
-      return;
-    }
-
-    if (!paymentMethod) {
-      toast.error("Please select a payment method");
-      return;
-    }
-
-    try {
-      setProcessingPayment(true);
-
-      const response = await fetch(
-        `/api/laboratory/direct-tests/${test._id}/payment`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            amount,
-            paymentMethod,
-            notes: paymentNotes || undefined,
-          }),
-        },
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to process payment");
-      }
-
-      const data = await response.json();
-      toast.success("Payment processed successfully");
-      setShowPaymentDialog(false);
-      setPaymentAmount("");
-      setPaymentMethod("");
-      setPaymentNotes("");
-      fetchTestDetails();
-    } catch (err: unknown) {
-      toast.error(
-        err instanceof Error ? err.message : "Failed to process payment",
-      );
-    } finally {
-      setProcessingPayment(false);
-    }
-  };
-
-  const handleSaveResults = async () => {
-    if (!test) return;
-
-    // Validate all parameters have values
-    const invalidParams = resultsParameters.filter(
-      (p) => !p.value || p.value.trim() === "",
-    );
-    if (invalidParams.length > 0) {
-      toast.error("Please fill in all parameter values");
-      return;
-    }
-
-    try {
-      setSavingResults(true);
-
-      const response = await fetch(
-        `/api/laboratory/direct-tests/${test._id}/results`,
-        {
-          method: "PUT",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            parameters: resultsParameters.map((p) => ({
-              name: p.name,
-              value: p.value,
-              unit: p.unit,
-              normalRange: p.normalRange,
-              flag: p.flag,
-              remarks: p.remarks,
-            })),
-            interpretation: interpretation || undefined,
-          }),
-        },
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to save results");
-      }
-
-      const data = await response.json();
-      toast.success("Test results saved successfully");
-      setShowResultsDialog(false);
-      fetchTestDetails();
-    } catch (err: unknown) {
-      toast.error(
-        err instanceof Error ? err.message : "Failed to save results",
-      );
-    } finally {
-      setSavingResults(false);
     }
   };
 
@@ -501,169 +184,292 @@ export default function DirectTestDetailPage() {
     }
   };
 
-  const handleSaveEditableParameters = async () => {
+  const handlePrintPDF = async () => {
     if (!test) return;
 
-    // Validate all parameters have values
-    const invalidParams = editableParameters.filter(
-      (p) => !p.value || p.value.trim() === "",
-    );
-    if (invalidParams.length > 0) {
-      toast.error("Please fill in all parameter values");
-      return;
-    }
+    setPrinting(true);
 
     try {
-      setSavingParameters(true);
-
-      const response = await fetch(
-        `/api/laboratory/direct-tests/${test._id}/results`,
-        {
-          method: "PUT",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            parameters: editableParameters.map((p) => ({
-              name: p.name,
-              value: p.value,
-              unit: p.unit,
-              normalRange: p.normalRange,
-              flag: "normal" as const,
-              remarks: p.remarks,
-            })),
-            interpretation: interpretation || undefined,
-          }),
+      // Mark the test as printed
+      await fetch(`/api/laboratory/direct-tests/${test._id}/print`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
         },
-      );
+      });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to save parameters");
+      // Generate PDF
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 14;
+      let yPos = margin;
+
+      const addText = (
+        text: string,
+        x: number,
+        y: number,
+        fontSize: number = 10,
+        fontStyle: string = "normal",
+        align: "left" | "center" | "right" = "left",
+      ) => {
+        doc.setFontSize(fontSize);
+        doc.setFont("helvetica", fontStyle);
+        doc.text(text, x, y, { align });
+        return y + fontSize * 0.4;
+      };
+
+      const isAbnormal = (param: {
+        name: string;
+        value: string | number;
+        unit?: string;
+        normalRange: string;
+        flag?: "normal" | "low" | "high" | "critical";
+        remarks?: string;
+      }): boolean => {
+        if (!param.normalRange || !param.remarks) return false;
+        const remarks = param.remarks.toLowerCase();
+        return (
+          remarks.includes("abnormal") ||
+          remarks.includes("high") ||
+          remarks.includes("low") ||
+          remarks.includes("critical")
+        );
+      };
+
+      // Header
+      yPos = addText(
+        "LABORATORY TEST REPORT",
+        pageWidth / 2,
+        yPos,
+        18,
+        "bold",
+        "center",
+      );
+      yPos += 2;
+      yPos = addText(
+        "Sajad Barekzai Hospital",
+        pageWidth / 2,
+        yPos,
+        12,
+        "bold",
+        "center",
+      );
+      yPos = addText(
+        "Comprehensive Diagnostic Services",
+        pageWidth / 2,
+        yPos,
+        9,
+        "normal",
+        "center",
+      );
+      yPos += 4;
+
+      doc.setDrawColor(59, 130, 246);
+      doc.setLineWidth(0.5);
+      doc.line(margin, yPos, pageWidth - margin, yPos);
+      yPos += 6;
+
+      // Test Info
+      yPos = addText(`Test ID: ${test.testId}`, margin, yPos, 10, "bold");
+      yPos = addText(
+        `Lab Reference: ${test.testId}`,
+        pageWidth - margin,
+        yPos,
+        10,
+        "normal",
+        "right",
+      );
+      yPos += 2;
+      yPos = addText(`Test: ${test.testName}`, margin, yPos, 12, "bold");
+      yPos = addText(
+        `Category: ${test.category.replace(/_/g, " ")}`,
+        margin,
+        yPos,
+        9,
+      );
+      yPos += 2;
+
+      // Patient Info
+      yPos += 2;
+      yPos = addText("PATIENT INFORMATION", margin, yPos, 11, "bold");
+      yPos += 2;
+
+      const patientInfo = [
+        ["Name:", test.patient.name || "N/A"],
+        ["Patient ID:", test.patient.patientId || "N/A"],
+        ["Gender:", test.patient.gender || "N/A"],
+        ["Phone:", test.patient.phone || "N/A"],
+      ];
+
+      autoTable(doc, {
+        startY: yPos,
+        head: [],
+        body: patientInfo,
+        theme: "plain",
+        styles: { fontSize: 9, cellPadding: 1 },
+        columnStyles: {
+          0: { fontStyle: "bold", cellWidth: 40 },
+          1: { cellWidth: 60 },
+        },
+      });
+
+      yPos = (doc as any).lastAutoTable.finalY + 4;
+
+      // Test Details
+      yPos = addText("TEST DETAILS", margin, yPos, 11, "bold");
+      yPos += 2;
+
+      const formatDate = (dateString?: string) => {
+        if (!dateString) return "N/A";
+        return new Date(dateString).toLocaleDateString("en-US", {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+      };
+
+      const testDetails = [
+        ["Ordered Date:", formatDate(test.createdAtDirect)],
+        ["Completed Date:", formatDate(test.finalizedAt)],
+        ["Specimen Type:", test.specimen?.type || "N/A"],
+        ["Collection Status:", test.collectionStatus?.toUpperCase() || "N/A"],
+        ["Processing Status:", test.processingStatus?.toUpperCase() || "N/A"],
+      ];
+
+      autoTable(doc, {
+        startY: yPos,
+        head: [],
+        body: testDetails,
+        theme: "plain",
+        styles: { fontSize: 9, cellPadding: 1 },
+        columnStyles: {
+          0: { fontStyle: "bold", cellWidth: 50 },
+          1: { cellWidth: 50 },
+        },
+      });
+
+      yPos = (doc as any).lastAutoTable.finalY + 4;
+
+      // Test Results
+      if (test.results?.parameters && test.results.parameters.length > 0) {
+        yPos = addText("TEST RESULTS", margin, yPos, 11, "bold");
+        yPos += 2;
+
+        const resultsTableData = test.results.parameters.map((param) => {
+          const abnormal = isAbnormal(param);
+          return [
+            param.name,
+            `${param.value} ${param.unit || ""}`,
+            param.normalRange || "-",
+            param.remarks || "-",
+          ];
+        });
+
+        autoTable(doc, {
+          startY: yPos,
+          head: [["Parameter", "Result", "Reference Range", "Remarks"]],
+          body: resultsTableData,
+          styles: { fontSize: 9 },
+          headStyles: {
+            fillColor: [59, 130, 246],
+            fontStyle: "bold",
+            halign: "center",
+          },
+          columnStyles: {
+            0: { cellWidth: 50, fontStyle: "bold" },
+            1: { cellWidth: 35, halign: "center" },
+            2: { cellWidth: 45 },
+            3: { cellWidth: 40 },
+          },
+          didParseCell: (data) => {
+            const rowIndex = data.row.index;
+            const param = test.results?.parameters?.[rowIndex];
+            if (param && isAbnormal(param)) {
+              data.cell.styles.textColor = [220, 38, 38];
+              data.cell.styles.fontStyle = "bold";
+            }
+          },
+        });
+
+        yPos = (doc as any).lastAutoTable.finalY + 4;
+
+        if (test.results.reportedBy) {
+          yPos = addText(
+            `Reported By: ${test.results.reportedBy.name}`,
+            margin,
+            yPos,
+            9,
+          );
+        }
+        if (test.results.reportedAt) {
+          yPos = addText(
+            `Reported At: ${formatDate(test.results.reportedAt)}`,
+            margin,
+            yPos,
+            9,
+          );
+        }
+        yPos += 4;
+      } else {
+        yPos = addText(
+          "No results available for this test.",
+          margin,
+          yPos,
+          10,
+          "italic",
+        );
+        yPos += 4;
       }
 
-      const data = await response.json();
-      toast.success("Parameters saved successfully");
-      setEditingParameters(false);
-      fetchTestDetails();
-    } catch (err: unknown) {
-      toast.error(
-        err instanceof Error ? err.message : "Failed to save parameters",
-      );
-    } finally {
-      setSavingParameters(false);
-    }
-  };
-
-  const handleCollectSample = async () => {
-    if (!test) return;
-
-    try {
-      setCollecting(true);
-
-      // Filter valid parameters
-      const validTestParameters = testParameters.filter(
-        (p) => p.name.trim() && p.value.trim(),
-      );
-
-      const response = await fetch(
-        `/api/laboratory/direct-tests/${test._id}/collect`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            sampleId: sampleId || undefined,
-            sampleCondition,
-            collectionNotes: collectionNotes || undefined,
-            sampleConditionNotes: sampleConditionNotes || undefined,
-            testParameters: validTestParameters.map((p) => ({
-              name: p.name,
-              value: p.value,
-              unit: p.unit,
-              normalRange: p.normalRange,
-              remarks: p.remarks,
-            })),
-          }),
-        },
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to collect sample");
+      // Footer
+      if (yPos > pageHeight - 40) {
+        doc.addPage();
+        yPos = margin;
       }
 
-      const data = await response.json();
-      toast.success("Sample collected successfully");
-      setShowCollectDialog(false);
-      // Reset form
-      setSampleId("");
-      setSampleCondition("satisfactory");
-      setCollectionNotes("");
-      setSampleConditionNotes("");
-      setTestParameters([
-        {
-          id: "1",
-          name: "",
-          value: "",
-          unit: "",
-          normalRange: "",
-          remarks: "",
-        },
-      ]);
-      fetchTestDetails();
-    } catch (err: unknown) {
-      toast.error(
-        err instanceof Error ? err.message : "Failed to collect sample",
+      yPos = pageHeight - 30;
+      doc.setDrawColor(200, 200, 200);
+      doc.setLineWidth(0.3);
+      doc.line(margin, yPos, pageWidth - margin, yPos);
+      yPos += 5;
+
+      yPos = addText(
+        "This is a computer-generated report.",
+        pageWidth / 2,
+        yPos,
+        8,
+        "normal",
+        "center",
       );
+      yPos = addText(
+        `Report generated on: ${new Date().toLocaleString()}`,
+        pageWidth / 2,
+        yPos,
+        8,
+        "normal",
+        "center",
+      );
+
+      // Print
+      doc.autoPrint();
+      window.open(doc.output("bloburl"), "_blank");
+
+      // Refresh test details to update printed status
+      fetchTestDetails();
+    } catch (err) {
+      console.error("Error printing PDF:", err);
+      toast.error("Failed to generate print job");
     } finally {
-      setCollecting(false);
+      setPrinting(false);
     }
   };
 
-  const addTestParameter = () => {
-    const newId = (testParameters.length + 1).toString();
-    setTestParameters([
-      ...testParameters,
-      {
-        id: newId,
-        name: "",
-        value: "",
-        unit: "",
-        normalRange: "",
-        remarks: "",
-      },
-    ]);
-  };
-
-  const removeTestParameter = (id: string) => {
-    if (testParameters.length > 1) {
-      setTestParameters(testParameters.filter((p) => p.id !== id));
-    }
-  };
-
-  const updateTestParameter = (
-    id: string,
-    field: keyof TestParameter,
-    value: string,
-  ) => {
-    setTestParameters(
-      testParameters.map((param) =>
-        param.id === id ? { ...param, [field]: value } : param,
-      ),
-    );
-  };
-
-  const canAddResults = test?.paymentVerified && !test?.results?.parameters;
-  const canFinalize =
-    test?.paymentVerified && test?.results?.parameters && !test?.finalized;
+  const canFinalize = test?.paymentVerified && !test?.finalized;
   const canPrint = test?.finalized && test?.readyForPrint;
-  const canProcessPayment = test?.charges?.paymentStatus !== "paid";
-  const canCollectSample =
-    test?.paymentVerified && test?.collectionStatus !== "collected";
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat("en-IN", {
@@ -744,11 +550,18 @@ export default function DirectTestDetailPage() {
             Refresh
           </Button>
           {canPrint && (
-            <Button asChild>
-              <Link href={`/laboratory/direct-tests/${test._id}/print`}>
-                <Printer className="h-4 w-4 mr-2" />
-                Print
-              </Link>
+            <Button onClick={handlePrintPDF} disabled={printing}>
+              {printing ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Printing...
+                </>
+              ) : (
+                <>
+                  <Printer className="h-4 w-4 mr-2" />
+                  Print
+                </>
+              )}
             </Button>
           )}
         </div>
@@ -768,27 +581,18 @@ export default function DirectTestDetailPage() {
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>Payment Verification Required</AlertTitle>
           <AlertDescription>
-            Payment must be verified before collecting sample or adding test
-            results.
+            Payment must be verified by receptionist before finalizing the test.
           </AlertDescription>
         </Alert>
-      ) : test.collectionStatus === "collected" ? (
+      ) : (
         <Alert className="bg-blue-50 border-blue-200 mb-6">
           <CheckCircle className="h-4 w-4 text-blue-600" />
-          <AlertTitle className="text-blue-800">Sample Collected</AlertTitle>
+          <AlertTitle className="text-blue-800">Ready to Finalize</AlertTitle>
           <AlertDescription className="text-blue-700">
-            Sample has been collected. Ready to add test results.
+            Payment verified. You can finalize this test now.
           </AlertDescription>
         </Alert>
-      ) : test.results?.parameters ? (
-        <Alert className="bg-blue-50 border-blue-200 mb-6">
-          <CheckCircle className="h-4 w-4 text-blue-600" />
-          <AlertTitle className="text-blue-800">Results Added</AlertTitle>
-          <AlertDescription className="text-blue-700">
-            Test results have been added. Ready to finalize.
-          </AlertDescription>
-        </Alert>
-      ) : null}
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Patient Info */}
@@ -939,6 +743,85 @@ export default function DirectTestDetailPage() {
             </tbody>
           </table>
         </div>
+
+        {/* Payment Details */}
+        <div className="border rounded-lg overflow-hidden">
+          <div className="bg-muted/50 px-4 py-3 border-b">
+            <h3 className="font-semibold flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              Payment Details
+            </h3>
+          </div>
+          <table className="w-full">
+            <tbody>
+              <tr className="border-b">
+                <td className="p-3 text-sm text-muted-foreground w-1/3">
+                  Total Amount
+                </td>
+                <td className="p-3 font-medium">
+                  {formatPrice(test.charges?.totalAmount || 0)}
+                </td>
+              </tr>
+              <tr className="border-b">
+                <td className="p-3 text-sm text-muted-foreground">Paid</td>
+                <td className="p-3 font-medium text-green-600">
+                  {formatPrice(test.charges?.paid || 0)}
+                </td>
+              </tr>
+              <tr className="border-b">
+                <td className="p-3 text-sm text-muted-foreground">Due</td>
+                <td className="p-3 font-medium text-red-600">
+                  {formatPrice(test.charges?.due || 0)}
+                </td>
+              </tr>
+              <tr className="border-b">
+                <td className="p-3 text-sm text-muted-foreground">
+                  Payment Status
+                </td>
+                <td className="p-3">
+                  <Badge
+                    className={
+                      test.charges?.paymentStatus === "paid"
+                        ? "bg-green-100 text-green-800"
+                        : test.charges?.paymentStatus === "partial"
+                          ? "bg-yellow-100 text-yellow-800"
+                          : "bg-red-100 text-red-800"
+                    }
+                  >
+                    {test.charges?.paymentStatus || "N/A"}
+                  </Badge>
+                </td>
+              </tr>
+              <tr className="border-b">
+                <td className="p-3 text-sm text-muted-foreground">
+                  Payment Verified
+                </td>
+                <td className="p-3">
+                  <Badge
+                    className={
+                      test.paymentVerified
+                        ? "bg-green-100 text-green-800"
+                        : "bg-red-100 text-red-800"
+                    }
+                  >
+                    {test.paymentVerified ? "Yes" : "No"}
+                  </Badge>
+                </td>
+              </tr>
+              {test.paymentVerifiedBy && (
+                <tr>
+                  <td className="p-3 text-sm text-muted-foreground">
+                    Verified By
+                  </td>
+                  <td className="p-3 font-medium">
+                    {test.paymentVerifiedBy.name}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
         {/* Test Status */}
         <div className="border rounded-lg overflow-hidden">
           <div className="bg-muted/50 px-4 py-3 border-b">
@@ -964,22 +847,6 @@ export default function DirectTestDetailPage() {
                     }
                   >
                     {test.status}
-                  </Badge>
-                </td>
-              </tr>
-              <tr className="border-b">
-                <td className="p-3 text-sm text-muted-foreground">
-                  Collection
-                </td>
-                <td className="p-3">
-                  <Badge
-                    className={
-                      test.collectionStatus === "collected"
-                        ? "bg-green-100 text-green-800"
-                        : "bg-yellow-100 text-yellow-800"
-                    }
-                  >
-                    {test.collectionStatus}
                   </Badge>
                 </td>
               </tr>
@@ -1054,156 +921,21 @@ export default function DirectTestDetailPage() {
 
       {/* Test Results */}
       <div className="border rounded-lg overflow-hidden mt-6">
-        <div className="bg-muted/50 px-4 py-3 border-b flex items-center justify-between">
+        <div className="bg-muted/50 px-4 py-3 border-b">
           <div>
             <h3 className="font-semibold">Test Results</h3>
             <p className="text-sm text-muted-foreground">
-              {test.results?.parameters
-                ? "Results have been added"
-                : "Results not yet added"}
+              {test.results?.parameters && test.results.parameters.length > 0
+                ? `${test.results.parameters.length} parameter(s) recorded`
+                : "No results recorded yet"}
             </p>
           </div>
-          {canAddResults && (
-            <Dialog
-              open={showResultsDialog}
-              onOpenChange={setShowResultsDialog}
-            >
-              <DialogTrigger asChild>
-                <Button>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Results
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
-                <DialogHeader>
-                  <DialogTitle>Add Test Results</DialogTitle>
-                  <DialogDescription>
-                    Enter the test results for each parameter
-                  </DialogDescription>
-                </DialogHeader>
-                {loadingTemplate ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                    <span className="ml-3 text-muted-foreground">
-                      Loading test parameters...
-                    </span>
-                  </div>
-                ) : (
-                  <div className="space-y-4 py-4">
-                    {resultsParameters.map((param, index) => (
-                      <div
-                        key={index}
-                        className="border rounded-md p-4 space-y-3"
-                      >
-                        <div className="flex items-center justify-between">
-                          <h4 className="font-medium">{param.name}</h4>
-                          <Badge variant="outline">{param.unit || "N/A"}</Badge>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <Label htmlFor={`value-${index}`}>Value</Label>
-                            <Input
-                              id={`value-${index}`}
-                              value={param.value}
-                              onChange={(e) => {
-                                const newParams = [...resultsParameters];
-                                newParams[index].value = e.target.value;
-                                setResultsParameters(newParams);
-                              }}
-                              placeholder="Enter value"
-                            />
-                          </div>
-                          <div>
-                            <Label htmlFor={`flag-${index}`}>Flag</Label>
-                            <Select
-                              value={param.flag}
-                              onValueChange={(
-                                value: "normal" | "low" | "high" | "critical",
-                              ) => {
-                                const newParams = [...resultsParameters];
-                                newParams[index].flag = value;
-                                setResultsParameters(newParams);
-                              }}
-                            >
-                              <SelectTrigger id={`flag-${index}`}>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="normal">Normal</SelectItem>
-                                <SelectItem value="low">Low</SelectItem>
-                                <SelectItem value="high">High</SelectItem>
-                                <SelectItem value="critical">
-                                  Critical
-                                </SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        </div>
-                        <div>
-                          <Label htmlFor={`remarks-${index}`}>
-                            Remarks (Optional)
-                          </Label>
-                          <Input
-                            id={`remarks-${index}`}
-                            value={param.remarks || ""}
-                            onChange={(e) => {
-                              const newParams = [...resultsParameters];
-                              newParams[index].remarks = e.target.value;
-                              setResultsParameters(newParams);
-                            }}
-                            placeholder="Add remarks..."
-                          />
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          Normal Range: {param.normalRange}
-                        </p>
-                      </div>
-                    ))}
-                    <div>
-                      <Label htmlFor="interpretation">
-                        Interpretation (Optional)
-                      </Label>
-                      <Textarea
-                        id="interpretation"
-                        placeholder="Add overall interpretation..."
-                        value={interpretation}
-                        onChange={(e) => setInterpretation(e.target.value)}
-                        rows={3}
-                      />
-                    </div>
-                  </div>
-                )}
-                <DialogFooter>
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowResultsDialog(false)}
-                    disabled={savingResults}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    onClick={handleSaveResults}
-                    disabled={savingResults || loadingTemplate}
-                  >
-                    {savingResults ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Saving...
-                      </>
-                    ) : (
-                      <>
-                        <Save className="h-4 w-4 mr-2" />
-                        Save Results
-                      </>
-                    )}
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-          )}
         </div>
         <div className="p-4">
-          {test.results?.parameters ? (
+          {test.results &&
+          "parameters" in test.results &&
+          Array.isArray(test.results.parameters) &&
+          test.results.parameters.length > 0 ? (
             <div className="space-y-4">
               <div className="rounded-md border">
                 <table className="w-full">
@@ -1215,7 +947,6 @@ export default function DirectTestDetailPage() {
                       <th className="text-left p-3 font-medium">
                         Normal Range
                       </th>
-                      <th className="text-left p-3 font-medium">Flag</th>
                       <th className="text-left p-3 font-medium">Remarks</th>
                     </tr>
                   </thead>
@@ -1227,21 +958,6 @@ export default function DirectTestDetailPage() {
                         <td className="p-3">{param.unit || "-"}</td>
                         <td className="p-3 text-sm text-muted-foreground">
                           {param.normalRange}
-                        </td>
-                        <td className="p-3">
-                          <Badge
-                            className={
-                              param.flag === "critical"
-                                ? "bg-red-100 text-red-800"
-                                : param.flag === "high"
-                                  ? "bg-orange-100 text-orange-800"
-                                  : param.flag === "low"
-                                    ? "bg-blue-100 text-blue-800"
-                                    : "bg-green-100 text-green-800"
-                            }
-                          >
-                            {param.flag || "normal"}
-                          </Badge>
                         </td>
                         <td className="p-3 text-sm">{param.remarks || "-"}</td>
                       </tr>
@@ -1273,132 +989,11 @@ export default function DirectTestDetailPage() {
           ) : (
             <div className="text-center py-8 text-muted-foreground">
               <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>No results added yet</p>
-              {canAddResults && (
-                <p className="text-sm mt-2">
-                  Click "Add Results" to enter test results
-                </p>
-              )}
+              <p>No results recorded yet</p>
             </div>
           )}
         </div>
       </div>
-
-      {/* Editable Parameters Section - Displayed after payment */}
-      {test.paymentVerified && !test.finalized && (
-        <div className="border rounded-lg overflow-hidden mt-6 border-blue-200 dark:border-blue-800">
-          <div className="bg-muted/50 px-4 py-3 border-b flex items-center justify-between">
-            <div>
-              <h3 className="font-semibold flex items-center gap-2">
-                <TestTube className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                Test Parameters
-              </h3>
-              <p className="text-sm text-muted-foreground">
-                {editingParameters
-                  ? "Edit parameter values below"
-                  : "Click Edit to modify parameter values"}
-              </p>
-            </div>
-            <div className="flex gap-2">
-              {editingParameters ? (
-                <>
-                  <Button
-                    variant="outline"
-                    onClick={() => setEditingParameters(false)}
-                    disabled={savingParameters}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    onClick={handleSaveEditableParameters}
-                    disabled={savingParameters}
-                  >
-                    {savingParameters ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Saving...
-                      </>
-                    ) : (
-                      <>
-                        <Save className="h-4 w-4 mr-2" />
-                        Save Parameters
-                      </>
-                    )}
-                  </Button>
-                </>
-              ) : (
-                <Button
-                  onClick={() => setEditingParameters(true)}
-                  variant="outline"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Edit Parameters
-                </Button>
-              )}
-            </div>
-          </div>
-          <div className="p-4">
-            {editableParameters.length > 0 ? (
-              <div className="space-y-4">
-                {editableParameters.map((param, index) => (
-                  <div
-                    key={index}
-                    className="border rounded-md p-4 space-y-3 bg-blue-50/50 dark:bg-blue-950/20"
-                  >
-                    <div className="flex items-center justify-between">
-                      <h4 className="font-medium">{param.name}</h4>
-                      <Badge variant="outline">{param.unit || "N/A"}</Badge>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <Label htmlFor={`param-value-${index}`}>Value</Label>
-                        <Input
-                          id={`param-value-${index}`}
-                          value={param.value}
-                          onChange={(e) => {
-                            const newParams = [...editableParameters];
-                            newParams[index].value = e.target.value;
-                            setEditableParameters(newParams);
-                          }}
-                          placeholder="Enter value"
-                          disabled={!editingParameters}
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor={`param-remarks-${index}`}>
-                          Remarks (Optional)
-                        </Label>
-                        <Input
-                          id={`param-remarks-${index}`}
-                          value={param.remarks || ""}
-                          onChange={(e) => {
-                            const newParams = [...editableParameters];
-                            newParams[index].remarks = e.target.value;
-                            setEditableParameters(newParams);
-                          }}
-                          placeholder="Add remarks..."
-                          disabled={!editingParameters}
-                        />
-                      </div>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Normal Range: {param.normalRange}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                <TestTube className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>No parameters available</p>
-                <p className="text-sm mt-2">
-                  Parameters will be loaded from the test template
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* Notes */}
       {test.notes && (
@@ -1419,254 +1014,6 @@ export default function DirectTestDetailPage() {
         </div>
         <div className="p-4">
           <div className="flex flex-wrap gap-4">
-            {canCollectSample && (
-              <Dialog
-                open={showCollectDialog}
-                onOpenChange={setShowCollectDialog}
-              >
-                <DialogTrigger asChild>
-                  <Button className="bg-blue-600 hover:bg-blue-700">
-                    <TestTube className="h-4 w-4 mr-2" />
-                    Collect Sample
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
-                  <DialogHeader>
-                    <DialogTitle>Collect Sample</DialogTitle>
-                    <DialogDescription>
-                      Record sample collection details and test results for this
-                      test
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-6 py-4">
-                    {/* Basic Sample Information */}
-                    <div className="space-y-4">
-                      <h3 className="text-lg font-semibold mb-3">
-                        Basic Sample Information
-                      </h3>
-                      <div>
-                        <Label htmlFor="sampleId">Sample ID (Optional)</Label>
-                        <Input
-                          id="sampleId"
-                          placeholder="Enter sample ID"
-                          value={sampleId}
-                          onChange={(e) => setSampleId(e.target.value)}
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="sampleCondition">
-                          Sample Condition
-                        </Label>
-                        <Select
-                          value={sampleCondition}
-                          onValueChange={setSampleCondition}
-                        >
-                          <SelectTrigger id="sampleCondition">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="satisfactory">
-                              Satisfactory
-                            </SelectItem>
-                            <SelectItem value="hemolyzed">Hemolyzed</SelectItem>
-                            <SelectItem value="clotted">Clotted</SelectItem>
-                            <SelectItem value="insufficient">
-                              Insufficient
-                            </SelectItem>
-                            <SelectItem value="contaminated">
-                              Contaminated
-                            </SelectItem>
-                            <SelectItem value="other">Other</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      {sampleCondition !== "satisfactory" && (
-                        <div>
-                          <Label htmlFor="sampleConditionNotes">
-                            Condition Notes
-                          </Label>
-                          <Textarea
-                            id="sampleConditionNotes"
-                            placeholder="Describe the sample condition..."
-                            value={sampleConditionNotes}
-                            onChange={(e) =>
-                              setSampleConditionNotes(e.target.value)
-                            }
-                            rows={2}
-                          />
-                        </div>
-                      )}
-                      <div>
-                        <Label htmlFor="collectionNotes">
-                          Collection Notes (Optional)
-                        </Label>
-                        <Textarea
-                          id="collectionNotes"
-                          placeholder="Add any notes about the collection..."
-                          value={collectionNotes}
-                          onChange={(e) => setCollectionNotes(e.target.value)}
-                          rows={2}
-                        />
-                      </div>
-                    </div>
-
-                    <Separator />
-
-                    {/* Test Parameters (Actual Results) */}
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <h3 className="text-lg font-semibold">
-                          Test Parameters (Results)
-                        </h3>
-                        <Button
-                          type="button"
-                          onClick={addTestParameter}
-                          variant="outline"
-                          size="sm"
-                        >
-                          <Plus className="h-4 w-4 mr-2" />
-                          Add Parameter
-                        </Button>
-                      </div>
-                      <p className="text-sm text-muted-foreground">
-                        Enter actual test result values. Parameter Name and
-                        Value are required.
-                      </p>
-                      <div className="space-y-4">
-                        {testParameters.map((param, index) => (
-                          <div
-                            key={param.id}
-                            className="border rounded-lg p-4 space-y-4 bg-blue-50/50 dark:bg-blue-950/20"
-                          >
-                            <div className="flex items-center justify-between">
-                              <h4 className="font-medium">
-                                Parameter #{index + 1}
-                              </h4>
-                              {testParameters.length > 1 && (
-                                <Button
-                                  type="button"
-                                  onClick={() => removeTestParameter(param.id)}
-                                  variant="ghost"
-                                  size="sm"
-                                  className="text-red-600 hover:text-red-700"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              )}
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              <div className="space-y-2">
-                                <Label>Parameter Name *</Label>
-                                <Input
-                                  value={param.name}
-                                  onChange={(e) =>
-                                    updateTestParameter(
-                                      param.id,
-                                      "name",
-                                      e.target.value,
-                                    )
-                                  }
-                                  placeholder="e.g., Hemoglobin, WBC Count"
-                                />
-                              </div>
-                              <div className="space-y-2">
-                                <Label>Value *</Label>
-                                <Input
-                                  value={param.value}
-                                  onChange={(e) =>
-                                    updateTestParameter(
-                                      param.id,
-                                      "value",
-                                      e.target.value,
-                                    )
-                                  }
-                                  placeholder="Enter test result value"
-                                />
-                              </div>
-                              <div className="space-y-2">
-                                <Label>Unit</Label>
-                                <Input
-                                  value={param.unit}
-                                  onChange={(e) =>
-                                    updateTestParameter(
-                                      param.id,
-                                      "unit",
-                                      e.target.value,
-                                    )
-                                  }
-                                  placeholder="e.g., g/dL, cells/μL"
-                                />
-                              </div>
-                              <div className="space-y-2">
-                                <Label>Normal Range</Label>
-                                <Input
-                                  value={param.normalRange}
-                                  onChange={(e) =>
-                                    updateTestParameter(
-                                      param.id,
-                                      "normalRange",
-                                      e.target.value,
-                                    )
-                                  }
-                                  placeholder="e.g., 13.5-17.5 g/dL"
-                                />
-                              </div>
-                            </div>
-                            <div className="space-y-2">
-                              <Label>Remarks (Optional)</Label>
-                              <Textarea
-                                value={param.remarks || ""}
-                                onChange={(e) =>
-                                  updateTestParameter(
-                                    param.id,
-                                    "remarks",
-                                    e.target.value,
-                                  )
-                                }
-                                placeholder="Any additional remarks or notes..."
-                                rows={2}
-                              />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <Button
-                      variant="outline"
-                      onClick={() => setShowCollectDialog(false)}
-                      disabled={collecting}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      onClick={handleCollectSample}
-                      disabled={collecting}
-                      className="bg-blue-600 hover:bg-blue-700"
-                    >
-                      {collecting ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Collecting...
-                        </>
-                      ) : (
-                        <>
-                          <TestTube className="h-4 w-4 mr-2" />
-                          Collect Sample
-                        </>
-                      )}
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-            )}
-            {canAddResults && (
-              <Button onClick={() => setShowResultsDialog(true)}>
-                <Plus className="h-4 w-4 mr-2" />
-                Add Results
-              </Button>
-            )}
             {canFinalize && (
               <Button
                 onClick={handleFinalizeTest}
@@ -1687,11 +1034,18 @@ export default function DirectTestDetailPage() {
               </Button>
             )}
             {canPrint && (
-              <Button asChild>
-                <Link href={`/laboratory/direct-tests/${test._id}/print`}>
-                  <Printer className="h-4 w-4 mr-2" />
-                  Print Report
-                </Link>
+              <Button onClick={handlePrintPDF} disabled={printing}>
+                {printing ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Printing...
+                  </>
+                ) : (
+                  <>
+                    <Printer className="h-4 w-4 mr-2" />
+                    Print Report
+                  </>
+                )}
               </Button>
             )}
             <Button variant="outline" asChild>

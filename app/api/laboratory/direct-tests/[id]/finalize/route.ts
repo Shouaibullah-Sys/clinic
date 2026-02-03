@@ -97,44 +97,12 @@ export async function POST(
       );
     }
 
-    // Check if test status allows finalization
-    const allowedStatuses = ["completed", "reported"];
-    if (!allowedStatuses.includes(labTest.status)) {
-      console.log(
-        `[DEBUG] Finalization failed: Invalid status. Current: ${labTest.status}, Required: ${allowedStatuses.join(" or ")}`,
-      );
-      return NextResponse.json(
-        {
-          success: false,
-          error: `Cannot finalize test. Test status must be 'completed' or 'reported'. Current status: ${labTest.status}`,
-        },
-        { status: 400 },
-      );
-    }
-
-    // Check if results exist
-    if (
-      !labTest.results ||
-      !labTest.results.parameters ||
-      labTest.results.parameters.length === 0
-    ) {
-      console.log(
-        `[DEBUG] Finalization failed: No results added. Results: ${JSON.stringify(labTest.results)}`,
-      );
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Cannot finalize test. Test results have not been added.",
-        },
-        { status: 400 },
-      );
-    }
-
-    // Finalize the test
+    // Finalize the test - simplified flow: just verify payment and finalize
     labTest.finalized = true;
     labTest.finalizedAt = new Date();
     labTest.finalizedBy = new mongoose.Types.ObjectId(auth.userId!);
     labTest.readyForPrint = true;
+    labTest.status = "completed";
 
     await labTest.save();
 
