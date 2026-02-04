@@ -42,6 +42,7 @@ import {
   TrendingUp,
   FileCheck,
   UserCheck,
+  Scan,
   Toolbox,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -192,8 +193,16 @@ export function Sidebar() {
       baseItems.push({
         title: "Radiology",
         href: "/radiology",
-        icon: <ImageIcon className="h-5 w-5" />,
+        icon: <Scan className="h-5 w-5" />,
         allowedRoles: ["admin", "radiologist"],
+        children: [
+          {
+            title: "Direct Exams",
+            href: "/radiology/direct-exams",
+            icon: <ImageIcon className="h-4 w-4" />,
+            allowedRoles: ["admin", "radiologist"],
+          },
+        ],
       });
     }
 

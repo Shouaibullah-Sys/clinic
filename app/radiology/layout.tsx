@@ -1,16 +1,15 @@
 // app/radiology/layout.tsx
 "use client";
 import { useState, useEffect } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
-  Activity,
-  FileText,
-  User,
+  ClipboardList,
   Home,
   Menu,
   X,
-  File,
+  FileText,
+  Scan,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeProvider } from "@/providers/ThemeProvider";
@@ -18,13 +17,13 @@ import { useAuthStore } from "@/store/useAuthStore";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import SessionChecker from "@/components/SessionChecker";
+import { Metadata } from "next";
 
 const navLinks = [
   { href: "/radiology/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/radiology/imaging", label: "Imaging", icon: File },
-  { href: "/radiology/imaging/reception", label: "Imaging Reception", icon: Activity },
-  { href: "/radiology/imaging/radiologist", label: "Radiologist", icon: User },
+  { href: "/radiology/imaging", label: "Exams", icon: ClipboardList },
+  { href: "/radiology/direct-exams", label: "Direct Exams", icon: Scan },
+  { href: "/radiology/templates", label: "Templates", icon: FileText },
 ];
 
 export default function RadiologyLayout({
@@ -33,8 +32,14 @@ export default function RadiologyLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { user, logout, initialize, isLoading } = useAuthStore();
+
+  const handleLogout = async () => {
+    await logout();
+    router.push("/login");
+  };
 
   // Initialize auth state in useEffect
   useEffect(() => {
@@ -67,7 +72,6 @@ export default function RadiologyLayout({
       enableSystem
       disableTransitionOnChange
     >
-      <SessionChecker />
       <div className="flex min-h-screen">
         {/* Desktop Sidebar */}
         <aside className="hidden md:block w-64 border-r bg-muted/40">
@@ -91,7 +95,7 @@ export default function RadiologyLayout({
                       "flex items-center gap-3 rounded-lg px-3 py-2 transition-all",
                       pathname === link.href
                         ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:bg-accent"
+                        : "text-muted-foreground hover:bg-accent",
                     )}
                   >
                     <link.icon className="h-4 w-4" />
@@ -125,7 +129,7 @@ export default function RadiologyLayout({
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={logout}
+                  onClick={handleLogout}
                   className="ml-auto"
                 >
                   Logout
@@ -147,7 +151,7 @@ export default function RadiologyLayout({
               <SheetContent side="left" className="sm:max-w-xs">
                 <nav className="grid gap-6 text-lg font-medium">
                   <div className="flex items-center justify-between mb-4">
-                    <span className="font-semibold">Radiology</span>
+                    <span className="font-semibold">Radiology Module</span>
                     <Button
                       variant="ghost"
                       size="icon"
@@ -166,7 +170,7 @@ export default function RadiologyLayout({
                         "flex items-center gap-4 px-2.5",
                         pathname === link.href
                           ? "text-foreground"
-                          : "text-muted-foreground hover:text-foreground"
+                          : "text-muted-foreground hover:text-foreground",
                       )}
                     >
                       <link.icon className="h-5 w-5" />
@@ -199,7 +203,7 @@ export default function RadiologyLayout({
                       variant="outline"
                       size="sm"
                       onClick={() => {
-                        logout();
+                        handleLogout();
                         setSidebarOpen(false);
                       }}
                       className="ml-auto"
@@ -224,7 +228,7 @@ export default function RadiologyLayout({
                 <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground">
                   {user?.name?.charAt(0) || "U"}
                 </div>
-                <Button variant="outline" size="sm" onClick={logout}>
+                <Button variant="outline" size="sm" onClick={handleLogout}>
                   Logout
                 </Button>
               </div>

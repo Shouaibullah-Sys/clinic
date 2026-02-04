@@ -44,6 +44,11 @@ import {
   Loader2,
   Plus,
   Trash2,
+  X,
+  ChevronDown,
+  ChevronUp,
+  Filter,
+  Sparkles,
 } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
 import { toast } from "sonner";
@@ -1625,13 +1630,26 @@ export default function CreateDirectTestPage() {
     { id: "1", name: "", value: "", unit: "", normalRange: "", remarks: "" },
   ]);
 
-  // Search states
+  // Smart Search states
   const [patientSearchQuery, setPatientSearchQuery] = useState("");
   const [patientSearchResults, setPatientSearchResults] = useState<Patient[]>(
     [],
   );
   const [searchingPatients, setSearchingPatients] = useState(false);
   const [showPatientDropdown, setShowPatientDropdown] = useState(false);
+  const [recentPatients, setRecentPatients] = useState<Patient[]>([]);
+  const [debounceTimer, setDebounceTimer] = useState<NodeJS.Timeout | null>(
+    null,
+  );
+
+  // Test search states
+  const [testSearchQuery, setTestSearchQuery] = useState("");
+  const [testSearchResults, setTestSearchResults] = useState<LabTest[]>([]);
+  const [showTestDropdown, setShowTestDropdown] = useState(false);
+  const [popularTests, setPopularTests] = useState<LabTest[]>([]);
+  const [expandedCategories, setExpandedCategories] = useState<{
+    [key: string]: boolean;
+  }>({});
 
   // New patient creation state
   const [showCreatePatientDialog, setShowCreatePatientDialog] = useState(false);
@@ -1645,32 +1663,136 @@ export default function CreateDirectTestPage() {
     address: "",
   });
 
-  const [testSearchQuery, setTestSearchQuery] = useState("");
-
-  // Search patients with debounce
+  // Load recent patients on component mount
   useEffect(() => {
-    const timer = setTimeout(() => {
-      if (patientSearchQuery.length >= 2) {
-        searchPatients();
-      } else {
-        setPatientSearchResults([]);
-        setShowPatientDropdown(false);
-      }
-    }, 300);
+    loadRecentPatients();
+    loadPopularTests();
 
-    return () => clearTimeout(timer);
-  }, [patientSearchQuery, accessToken]);
+    // Initialize all categories as expanded by default
+    const initialExpanded: { [key: string]: boolean } = {};
+    labTests.forEach((category) => {
+      initialExpanded[category.name] = true;
+    });
+    setExpandedCategories(initialExpanded);
+  }, []);
+
+  const loadRecentPatients = async () => {
+    try {
+      if (!accessToken) return;
+
+      const response = await fetch("/api/patients/recent?limit=5", {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setRecentPatients(data.data || []);
+      }
+    } catch (err) {
+      console.error("Error loading recent patients:", err);
+    }
+  };
+
+  const loadPopularTests = () => {
+    // Simulate popular tests - in a real app, this would come from an API
+    const popular = [
+      labTests.flatMap((c) => c.tests).find((t) => t.id === "h1")!, // CBC
+      labTests.flatMap((c) => c.tests).find((t) => t.id === "cc6")!, // LFT
+      labTests.flatMap((c) => c.tests).find((t) => t.id === "cc7")!, // KFT
+      labTests.flatMap((c) => c.tests).find((t) => t.id === "cc5")!, // Lipid Profile
+      labTests.flatMap((c) => c.tests).find((t) => t.id === "cp1")!, // Urine Routine
+    ].filter(Boolean);
+    setPopularTests(popular);
+  };
+
+  // Smart patient search with debounce
+  useEffect(() => {
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+    }
+
+    if (patientSearchQuery.length >= 2) {
+      const timer = setTimeout(() => {
+        searchPatients();
+      }, 300);
+      setDebounceTimer(timer);
+    } else if (patientSearchQuery.length === 0) {
+      setPatientSearchResults([]);
+      setShowPatientDropdown(false);
+    }
+
+    return () => {
+      if (debounceTimer) {
+        clearTimeout(debounceTimer);
+      }
+    };
+  }, [patientSearchQuery]);
+
+  // Smart test search - update testSearchResults for dropdown
+  useEffect(() => {
+    if (testSearchQuery.trim() === "") {
+      setTestSearchResults([]);
+      setShowTestDropdown(false);
+      return;
+    }
+
+    const query = testSearchQuery.toLowerCase().trim();
+    const results: LabTest[] = [];
+
+    labTests.forEach((category) => {
+      category.tests.forEach((test) => {
+        const testName = test.name.toLowerCase();
+        const categoryName = category.name.toLowerCase();
+
+        // Smart matching: check for partial matches, acronyms, etc.
+        const words = testName.split(/\s+/);
+        const acronym = words.map((w) => w[0]).join("");
+
+        if (
+          testName.includes(query) ||
+          categoryName.includes(query) ||
+          acronym.includes(query) ||
+          words.some((word) => word.startsWith(query)) ||
+          testName
+            .replace(/[^a-z0-9]/g, "")
+            .includes(query.replace(/[^a-z0-9]/g, ""))
+        ) {
+          results.push(test);
+        }
+      });
+    });
+
+    // Sort by relevance
+    results.sort((a, b) => {
+      const aName = a.name.toLowerCase();
+      const bName = b.name.toLowerCase();
+
+      // Exact match gets highest priority
+      if (aName === query) return -1;
+      if (bName === query) return 1;
+
+      // Starts with query gets second priority
+      if (aName.startsWith(query)) return -1;
+      if (bName.startsWith(query)) return 1;
+
+      // Otherwise sort alphabetically
+      return aName.localeCompare(bName);
+    });
+
+    setTestSearchResults(results.slice(0, 10));
+    setShowTestDropdown(results.length > 0);
+  }, [testSearchQuery]);
 
   // Handle test selection change - populate test parameters
   useEffect(() => {
     if (selectedTestId) {
-      // Find the test in labTests and populate its parameters
       const test = labTests
         .flatMap((category) => category.tests)
         .find((t) => t.id === selectedTestId);
       if (test) {
         setSelectedTest(test);
-        // Populate test parameters (results) from the test definition
         setTestParameters(
           test.parameters.map((p) => ({
             id: p.id,
@@ -1749,7 +1871,6 @@ export default function CreateDirectTestPage() {
   const handleCreatePatient = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Validate required fields
     if (!newPatient.name || !newPatient.phone) {
       toast.error("Name and phone are required");
       return;
@@ -1782,12 +1903,11 @@ export default function CreateDirectTestPage() {
       const data = await response.json();
       toast.success("Patient created successfully");
 
-      // Select the newly created patient
       setSelectedPatient(data.data);
       setPatientSearchQuery(data.data.name);
       setShowCreatePatientDialog(false);
+      loadRecentPatients();
 
-      // Reset form
       setNewPatient({
         name: "",
         phone: "",
@@ -1805,9 +1925,23 @@ export default function CreateDirectTestPage() {
 
   const handleSelectTest = (testId: string) => {
     setSelectedTestId(testId);
+    setTestSearchQuery("");
+    setShowTestDropdown(false);
   };
 
-  // Test Parameters (Results) management functions
+  const toggleCategory = (categoryName: string) => {
+    setExpandedCategories((prev) => ({
+      ...prev,
+      [categoryName]: !prev[categoryName],
+    }));
+  };
+
+  const handleClearSearch = () => {
+    setTestSearchQuery("");
+    setTestSearchResults([]);
+    setShowTestDropdown(false);
+  };
+
   const addTestParameter = () => {
     const newId = (testParameters.length + 1).toString();
     setTestParameters([
@@ -1858,7 +1992,6 @@ export default function CreateDirectTestPage() {
       setSubmitting(true);
       setError(null);
 
-      // Filter valid test parameters (name and value are required)
       const validTestParameters = testParameters.filter(
         (p) => p.name.trim() && p.value.trim(),
       );
@@ -1901,8 +2034,6 @@ export default function CreateDirectTestPage() {
 
       const data = await response.json();
       toast.success("Direct lab test created successfully");
-
-      // Redirect to test details page
       router.push(`/laboratory/direct-tests/${data.data._id}`);
     } catch (err: any) {
       setError(err.message || "Failed to create direct lab test");
@@ -1912,15 +2043,29 @@ export default function CreateDirectTestPage() {
     }
   };
 
-  const filteredTests = labTests.flatMap((category) => {
-    if (!testSearchQuery) return category.tests;
+  // FIX 1: Show all tests by default
+  // FIX 2: When searching, filter tests but still show them
+  const filteredTests = labTests.map((category) => {
+    if (!testSearchQuery) {
+      // When no search query, show all tests
+      return {
+        ...category,
+        tests: category.tests,
+      };
+    }
+
     const query = testSearchQuery.toLowerCase();
-    return category.tests.filter(
+    const filteredCategoryTests = category.tests.filter(
       (test) =>
         test.name.toLowerCase().includes(query) ||
         test.id.toLowerCase().includes(query) ||
         category.name.toLowerCase().includes(query),
     );
+
+    return {
+      ...category,
+      tests: filteredCategoryTests,
+    };
   });
 
   if (loading) {
@@ -1977,86 +2122,145 @@ export default function CreateDirectTestPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                {/* Smart Patient Search */}
                 <div className="relative">
-                  <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search by name, phone, or patient ID..."
-                    className="pl-9"
-                    value={patientSearchQuery}
-                    onChange={(e) => setPatientSearchQuery(e.target.value)}
-                    onFocus={() => {
-                      if (patientSearchResults.length > 0) {
-                        setShowPatientDropdown(true);
-                      }
-                    }}
-                    onBlur={() => {
-                      // Delay hiding dropdown to allow click events
-                      setTimeout(() => setShowPatientDropdown(false), 200);
-                    }}
-                  />
+                  <div className="relative">
+                    <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search by name, phone, or patient ID..."
+                      className="pl-9 pr-9"
+                      value={patientSearchQuery}
+                      onChange={(e) => setPatientSearchQuery(e.target.value)}
+                      onFocus={() => {
+                        if (
+                          patientSearchQuery.length >= 2 ||
+                          recentPatients.length > 0
+                        ) {
+                          setShowPatientDropdown(true);
+                        }
+                      }}
+                    />
+                    {patientSearchQuery && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-2 top-2 h-6 w-6"
+                        onClick={() => {
+                          setPatientSearchQuery("");
+                          setShowPatientDropdown(false);
+                          setSelectedPatient(null);
+                        }}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    )}
+                  </div>
                   {searchingPatients && (
-                    <Loader2 className="absolute right-3 top-3 h-4 w-4 animate-spin text-muted-foreground" />
+                    <div className="absolute right-3 top-3">
+                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                    </div>
                   )}
                 </div>
 
-                {/* Patient Dropdown */}
-                {showPatientDropdown && patientSearchResults.length > 0 && (
-                  <div className="border rounded-md shadow-sm bg-background max-h-60 overflow-y-auto">
-                    {patientSearchResults.map((patient) => (
-                      <button
-                        key={patient._id}
-                        type="button"
-                        className="w-full text-left px-3 py-2 hover:bg-accent transition-colors border-b last:border-b-0"
-                        onClick={() => handleSelectPatient(patient)}
-                      >
-                        <div className="font-medium">{patient.name}</div>
-                        <div className="text-sm text-muted-foreground">
-                          ID: {patient.patientId}
-                          {patient.phone && ` • ${patient.phone}`}
+                {/* Patient Dropdown with Smart Features */}
+                {showPatientDropdown && (
+                  <div className="border rounded-md shadow-sm bg-background overflow-hidden">
+                    {/* Recent Patients */}
+                    {!patientSearchQuery && recentPatients.length > 0 && (
+                      <div className="border-b">
+                        <div className="px-3 py-2 bg-muted/50 text-xs font-medium text-muted-foreground">
+                          Recent Patients
                         </div>
-                      </button>
-                    ))}
+                        {recentPatients.map((patient) => (
+                          <button
+                            key={patient._id}
+                            type="button"
+                            className="w-full text-left px-3 py-2 hover:bg-accent transition-colors flex items-center gap-3"
+                            onClick={() => handleSelectPatient(patient)}
+                          >
+                            <User className="h-4 w-4 text-muted-foreground" />
+                            <div>
+                              <div className="font-medium">{patient.name}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {patient.patientId}
+                              </div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Search Results */}
+                    {patientSearchResults.length > 0 && (
+                      <div>
+                        <div className="px-3 py-2 bg-muted/50 text-xs font-medium text-muted-foreground">
+                          Search Results
+                        </div>
+                        {patientSearchResults.map((patient) => (
+                          <button
+                            key={patient._id}
+                            type="button"
+                            className="w-full text-left px-3 py-2 hover:bg-accent transition-colors flex items-center justify-between"
+                            onClick={() => handleSelectPatient(patient)}
+                          >
+                            <div className="flex items-center gap-3">
+                              <User className="h-4 w-4 text-muted-foreground" />
+                              <div>
+                                <div className="font-medium">
+                                  {patient.name}
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                  {patient.patientId} • {patient.phone}
+                                </div>
+                              </div>
+                            </div>
+                            <Badge variant="outline" className="text-xs">
+                              Select
+                            </Badge>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* No Results */}
+                    {patientSearchQuery &&
+                      patientSearchResults.length === 0 &&
+                      !searchingPatients && (
+                        <div className="p-4 text-center">
+                          <p className="text-sm text-muted-foreground mb-3">
+                            No patients found matching "{patientSearchQuery}"
+                          </p>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="w-full"
+                            onClick={() => setShowCreatePatientDialog(true)}
+                          >
+                            <Plus className="h-4 w-4 mr-2" />
+                            Create New Patient
+                          </Button>
+                        </div>
+                      )}
                   </div>
                 )}
 
-                {/* No patients found - show create button */}
-                {showPatientDropdown &&
-                  patientSearchQuery.length >= 2 &&
-                  patientSearchResults.length === 0 &&
-                  !searchingPatients && (
-                    <div className="border rounded-md shadow-sm bg-background p-4">
-                      <p className="text-sm text-muted-foreground mb-3">
-                        No patients found matching "{patientSearchQuery}"
-                      </p>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="w-full"
-                        onClick={() => setShowCreatePatientDialog(true)}
-                      >
-                        <Plus className="h-4 w-4 mr-2" />
-                        Create New Patient
-                      </Button>
-                    </div>
-                  )}
-
                 {/* Selected Patient */}
                 {selectedPatient && (
-                  <div className="p-4 bg-muted/50 rounded-md border">
+                  <div className="p-4 bg-green-50 dark:bg-green-950/20 rounded-md border border-green-200 dark:border-green-800">
                     <div className="flex items-start justify-between">
-                      <div>
-                        <div className="font-medium flex items-center gap-2">
-                          <CheckCircle className="h-4 w-4 text-green-600" />
-                          {selectedPatient.name}
-                        </div>
-                        <div className="text-sm text-muted-foreground mt-1">
-                          Patient ID: {selectedPatient.patientId}
-                        </div>
-                        {selectedPatient.phone && (
-                          <div className="text-sm text-muted-foreground">
-                            Phone: {selectedPatient.phone}
+                      <div className="flex items-center gap-3">
+                        <CheckCircle className="h-5 w-5 text-green-600" />
+                        <div>
+                          <div className="font-medium">
+                            {selectedPatient.name}
                           </div>
-                        )}
+                          <div className="text-sm text-muted-foreground">
+                            Patient ID: {selectedPatient.patientId}
+                            {selectedPatient.phone &&
+                              ` • Phone: ${selectedPatient.phone}`}
+                          </div>
+                        </div>
                       </div>
                       <Button
                         type="button"
@@ -2081,69 +2285,180 @@ export default function CreateDirectTestPage() {
                 <CardTitle className="flex items-center gap-2">
                   <TestTube className="h-5 w-5" />
                   Select Test Type
+                  <Badge variant="outline" className="ml-2">
+                    <Sparkles className="h-3 w-3 mr-1" />
+                    Smart Search
+                  </Badge>
                 </CardTitle>
                 <CardDescription>
-                  Choose a test type from available options
+                  Search tests by name, category, or acronym
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                {/* Smart Test Search */}
                 <div className="relative">
-                  <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search tests..."
-                    className="pl-9"
-                    value={testSearchQuery}
-                    onChange={(e) => setTestSearchQuery(e.target.value)}
-                  />
+                  <div className="relative">
+                    <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search tests (e.g., 'cbc', 'liver', 'urine routine')..."
+                      className="pl-9 pr-9"
+                      value={testSearchQuery}
+                      onChange={(e) => setTestSearchQuery(e.target.value)}
+                      onFocus={() => setShowTestDropdown(true)}
+                    />
+                    {testSearchQuery && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-2 top-2 h-6 w-6"
+                        onClick={handleClearSearch}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    )}
+                  </div>
+
+                  {/* Smart Test Search Dropdown */}
+                  {showTestDropdown && testSearchResults.length > 0 && (
+                    <div className="absolute z-50 w-full mt-1 border rounded-md shadow-lg bg-background max-h-80 overflow-y-auto">
+                      <div className="p-2 border-b">
+                        <div className="text-xs font-medium text-muted-foreground px-2">
+                          Quick Results ({testSearchResults.length})
+                        </div>
+                      </div>
+                      {testSearchResults.map((test) => {
+                        const category = labTests.find((cat) =>
+                          cat.tests.some((t) => t.id === test.id),
+                        )?.name;
+
+                        return (
+                          <button
+                            key={test.id}
+                            type="button"
+                            className="w-full text-left px-4 py-3 hover:bg-accent transition-colors border-b last:border-b-0"
+                            onClick={() => handleSelectTest(test.id)}
+                          >
+                            <div className="flex items-center justify-between gap-4">
+                              <div className="flex-1">
+                                <div className="font-medium">{test.name}</div>
+                                <div className="text-sm text-muted-foreground">
+                                  {category} • {test.parameters.length}{" "}
+                                  parameters
+                                </div>
+                              </div>
+                              <Badge variant="secondary" className="text-xs">
+                                ₹{test.price}
+                              </Badge>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
 
-                <div className="border rounded-md max-h-80 overflow-y-auto">
-                  {filteredTests.length === 0 ? (
-                    <div className="p-8 text-center text-muted-foreground">
-                      No tests found
+                {/* Popular Tests */}
+                {!testSearchQuery && popularTests.length > 0 && (
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Filter className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm font-medium">Popular Tests</span>
                     </div>
-                  ) : (
-                    labTests.map((category) => {
-                      const categoryTests = category.tests.filter((test) => {
-                        if (!testSearchQuery) return true;
-                        const query = testSearchQuery.toLowerCase();
-                        return (
-                          test.name.toLowerCase().includes(query) ||
-                          test.id.toLowerCase().includes(query) ||
-                          category.name.toLowerCase().includes(query)
-                        );
-                      });
+                    <div className="flex flex-wrap gap-2">
+                      {popularTests.map((test) => (
+                        <Badge
+                          key={test.id}
+                          variant="outline"
+                          className="cursor-pointer hover:bg-accent transition-colors"
+                          onClick={() => handleSelectTest(test.id)}
+                        >
+                          {test.name}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
-                      if (categoryTests.length === 0) return null;
+                {/* Test Categories - FIXED: Show all tests by default, filter when searching */}
+                <div className="border rounded-md overflow-hidden">
+                  {filteredTests.map((category) => {
+                    const isExpanded =
+                      expandedCategories[category.name] !== false;
 
-                      return (
-                        <div key={category.name}>
-                          <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/50">
-                            {category.name}
+                    // Show category only if it has tests or if we're not searching
+                    if (category.tests.length === 0 && testSearchQuery)
+                      return null;
+
+                    return (
+                      <div key={category.name}>
+                        <button
+                          type="button"
+                          className="w-full px-4 py-3 flex items-center justify-between hover:bg-accent transition-colors border-b bg-muted/30"
+                          onClick={() => toggleCategory(category.name)}
+                        >
+                          <div className="flex items-center gap-3">
+                            {isExpanded ? (
+                              <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                            ) : (
+                              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                            )}
+                            <span className="font-medium">{category.name}</span>
+                            <Badge variant="secondary" className="text-xs">
+                              {category.tests.length}
+                            </Badge>
                           </div>
-                          {categoryTests.map((test) => (
-                            <button
-                              key={test.id}
-                              type="button"
-                              className={`w-full text-left px-4 py-3 hover:bg-accent transition-colors border-b last:border-b-0 ${
-                                selectedTestId === test.id ? "bg-accent" : ""
-                              }`}
-                              onClick={() => handleSelectTest(test.id)}
-                            >
-                              <div className="flex items-start justify-between gap-4">
+                          <span className="text-sm text-muted-foreground">
+                            {isExpanded
+                              ? "Click to collapse"
+                              : "Click to expand"}
+                          </span>
+                        </button>
+
+                        {isExpanded && (
+                          <div className="bg-background">
+                            {category.tests.map((test) => (
+                              <button
+                                key={test.id}
+                                type="button"
+                                className={`w-full text-left px-4 py-3 hover:bg-accent transition-colors border-b last:border-b-0 flex items-center justify-between ${
+                                  selectedTestId === test.id ? "bg-accent" : ""
+                                }`}
+                                onClick={() => handleSelectTest(test.id)}
+                              >
                                 <div className="flex-1">
                                   <div className="font-medium">{test.name}</div>
                                   <div className="text-sm text-muted-foreground">
                                     {test.parameters.length} parameters
                                   </div>
                                 </div>
-                              </div>
-                            </button>
-                          ))}
-                        </div>
-                      );
-                    })
-                  )}
+                                <div className="flex items-center gap-4">
+                                  <Badge variant="outline" className="text-xs">
+                                    ₹{test.price}
+                                  </Badge>
+                                  {selectedTestId === test.id && (
+                                    <CheckCircle className="h-4 w-4 text-green-600" />
+                                  )}
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  {/* Show message when no tests match search */}
+                  {testSearchQuery &&
+                    filteredTests.every((cat) => cat.tests.length === 0) && (
+                      <div className="p-8 text-center text-muted-foreground">
+                        <Search className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                        <p>No tests found matching "{testSearchQuery}"</p>
+                        <p className="text-sm mt-1">
+                          Try a different search term
+                        </p>
+                      </div>
+                    )}
                 </div>
               </CardContent>
             </Card>
@@ -2313,11 +2628,17 @@ export default function CreateDirectTestPage() {
                     </div>
                   </div>
 
-                  <div>
-                    <Label>Parameters</Label>
-                    <p className="text-sm mt-1">
-                      {selectedTest.parameters.length} parameters
-                    </p>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label>Price</Label>
+                      <p className="font-medium mt-1">₹{selectedTest.price}</p>
+                    </div>
+                    <div>
+                      <Label>Parameters</Label>
+                      <p className="font-medium mt-1 text-center">
+                        {selectedTest.parameters.length}
+                      </p>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -2342,9 +2663,24 @@ export default function CreateDirectTestPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="routine">Routine</SelectItem>
-                      <SelectItem value="urgent">Urgent</SelectItem>
-                      <SelectItem value="emergency">Emergency</SelectItem>
+                      <SelectItem value="routine">
+                        <div className="flex items-center gap-2">
+                          <Clock className="h-4 w-4" />
+                          Routine
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="urgent">
+                        <div className="flex items-center gap-2">
+                          <AlertTriangle className="h-4 w-4 text-orange-500" />
+                          Urgent
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="emergency">
+                        <div className="flex items-center gap-2">
+                          <AlertTriangle className="h-4 w-4 text-red-500" />
+                          Emergency
+                        </div>
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground mt-1">
@@ -2383,6 +2719,10 @@ export default function CreateDirectTestPage() {
                     <span className="font-medium">{selectedTest.name}</span>
                   </div>
                   <div className="flex justify-between">
+                    <span className="text-sm text-muted-foreground">Price</span>
+                    <span className="font-medium">₹{selectedTest.price}</span>
+                  </div>
+                  <div className="flex justify-between">
                     <span className="text-sm text-muted-foreground">
                       Priority
                     </span>
@@ -2390,13 +2730,13 @@ export default function CreateDirectTestPage() {
                       variant="outline"
                       className={
                         priority === "emergency"
-                          ? "border-red-300 text-red-700 bg-red-50"
+                          ? "border-red-300 text-red-700 bg-red-50 dark:bg-red-950/20 dark:text-red-400"
                           : priority === "urgent"
-                            ? "border-orange-300 text-orange-700 bg-orange-50"
-                            : ""
+                            ? "border-orange-300 text-orange-700 bg-orange-50 dark:bg-orange-950/20 dark:text-orange-400"
+                            : "border-green-300 text-green-700 bg-green-50 dark:bg-green-950/20 dark:text-green-400"
                       }
                     >
-                      {priority}
+                      {priority.charAt(0).toUpperCase() + priority.slice(1)}
                     </Badge>
                   </div>
                 </CardContent>
@@ -2418,6 +2758,7 @@ export default function CreateDirectTestPage() {
           <Button
             type="submit"
             disabled={submitting || !selectedPatient || !selectedTestId}
+            className="min-w-[200px]"
           >
             {submitting ? (
               <>
