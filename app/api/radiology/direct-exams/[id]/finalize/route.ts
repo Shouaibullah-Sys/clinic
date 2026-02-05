@@ -24,7 +24,12 @@ export async function POST(
     }
 
     // Only radiology staff and admin can finalize exams
-    const allowedRoles = ["radiology_technician", "admin"];
+    const allowedRoles = [
+      "radiology_technician",
+      "radiologist",
+      "doctor",
+      "admin",
+    ];
     if (!auth.userRole || !allowedRoles.includes(auth.userRole)) {
       return NextResponse.json(
         {

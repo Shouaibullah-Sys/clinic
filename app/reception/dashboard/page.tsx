@@ -515,6 +515,35 @@ export default function ReceptionDashboardPage() {
                       <Button
                         variant="outline"
                         className="justify-start h-auto py-3 px-4"
+                        onClick={() =>
+                          router.push("/reception/radiology-exam-payments")
+                        }
+                      >
+                        <div className="flex items-center space-x-3">
+                          <div className="p-2 bg-purple-100 rounded-lg">
+                            <DollarSign className="h-4 w-4 text-purple-600" />
+                          </div>
+                          <div className="text-left">
+                            <p className="font-medium">
+                              Radiology Exam Payment
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              Process radiology exam payments
+                            </p>
+                          </div>
+                        </div>
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Process payments for direct radiology exams</p>
+                    </TooltipContent>
+                  </Tooltip>
+
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="justify-start h-auto py-3 px-4"
                         onClick={() => router.push("/reception/discounts/new")}
                       >
                         <div className="flex items-center space-x-3">

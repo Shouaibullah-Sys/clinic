@@ -23,8 +23,13 @@ export async function POST(
       );
     }
 
-    // Only radiology staff and admin can mark exams as printed
-    const allowedRoles = ["radiology_technician", "admin"];
+    // Only radiology staff, radiologists, and admin can mark exams as printed
+    const allowedRoles = [
+      "radiology_technician",
+      "radiologist",
+      "doctor",
+      "admin",
+    ];
     if (!auth.userRole || !allowedRoles.includes(auth.userRole)) {
       return NextResponse.json(
         {

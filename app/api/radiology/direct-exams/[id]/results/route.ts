@@ -22,12 +22,18 @@ export async function PUT(
       );
     }
 
-    // Only radiology technicians can add findings
-    if (auth.userRole !== "radiology_technician" && auth.userRole !== "admin") {
+    // Only radiology technicians, radiologists, and doctors can add findings
+    const allowedRoles = [
+      "radiology_technician",
+      "radiologist",
+      "doctor",
+      "admin",
+    ];
+    if (!auth.userRole || !allowedRoles.includes(auth.userRole)) {
       return NextResponse.json(
         {
           success: false,
-          error: "Only radiology technicians can add exam findings",
+          error: "Only radiology staff can add exam findings",
         },
         { status: 403 },
       );

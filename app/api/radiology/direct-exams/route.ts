@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
     // Check if user has access to radiology
     const allowedRoles = [
       "radiology_technician",
+      "radiologist",
       "admin",
       "receptionist",
       "doctor",
