@@ -1,111 +1,204 @@
 import { NextRequest, NextResponse } from "next/server";
-import  dbConnect  from "@/lib/dbConnect";
+import dbConnect from "@/lib/dbConnect";
 import { User } from "@/lib/models/User";
 import { Patient } from "@/lib/models/Patient";
 import { Appointment } from "@/lib/models/Appointment";
 import { Payment } from "@/lib/models/Payment";
 import { DiscountRequest } from "@/lib/models/DiscountRequest";
+import { DailyExpense } from "@/lib/models/DailyExpense";
+import { LabTest } from "@/lib/models/LabTest";
+import { RadiologyExam } from "@/lib/models/RadiologyExam";
 
 export async function GET(request: NextRequest) {
   try {
     await dbConnect();
-    
+
     // Get user info from middleware headers
     const userId = request.headers.get("x-user-id");
     const userRole = request.headers.get("x-user-role");
-    
+
     if (!userId || !userRole) {
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
-        { status: 401 }
+        { status: 401 },
       );
     }
-    
+
     // Only receptionist and admin can access
     if (!["admin", "receptionist"].includes(userRole)) {
       return NextResponse.json(
         { success: false, error: "Forbidden" },
-        { status: 403 }
+        { status: 403 },
       );
     }
-    
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
-    
+
     // Get daily visitors (patients seen today)
     const dailyVisitors = await Patient.countDocuments({
-      updatedAt: { $gte: today, $lt: tomorrow }
+      updatedAt: { $gte: today, $lt: tomorrow },
     });
-    
+
     // Get today's appointments
     const appointments = await Appointment.countDocuments({
-      date: { $gte: today, $lt: tomorrow }
+      date: { $gte: today, $lt: tomorrow },
     });
-    
+
     // Get pending appointments for today
     const pendingAppointments = await Appointment.countDocuments({
       date: { $gte: today, $lt: tomorrow },
-      status: "pending"
+      status: "pending",
     });
-    
+
     // Get waiting patients (checked in but not seen)
     const waitingPatients = await Appointment.countDocuments({
       date: { $gte: today, $lt: tomorrow },
-      status: "checked-in"
+      status: "checked-in",
     });
-    
+
     // Get check-ins (patients checked in today)
     const checkIns = await Appointment.countDocuments({
       checkInTime: { $gte: today, $lt: tomorrow },
-      status: { $in: ["checked-in", "completed"] }
+      status: { $in: ["checked-in", "completed"] },
     });
-    
+
     // Get today's revenue
     const todayPayments = await Payment.aggregate([
       {
         $match: {
           paymentDate: { $gte: today, $lt: tomorrow },
-          status: "completed"
-        }
+          status: "completed",
+        },
       },
       {
         $group: {
           _id: null,
-          totalRevenue: { $sum: "$amount" }
-        }
-      }
+          totalRevenue: { $sum: "$amount" },
+        },
+      },
     ]);
-    
+
     const todayRevenue = todayPayments[0]?.totalRevenue || 0;
-    
+
+    // Get today's total expenses (all expenses, regardless of status)
+    const todayExpenses = await DailyExpense.aggregate([
+      {
+        $match: {
+          date: { $gte: today, $lt: tomorrow },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalAmount: { $sum: "$amount" },
+        },
+      },
+    ]);
+
+    const totalExpensesToday = todayExpenses[0]?.totalAmount || 0;
+
+    // Get today's appointments total amount
+    const todayAppointmentsAmount = await Appointment.aggregate([
+      {
+        $match: {
+          date: { $gte: today, $lt: tomorrow },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalAmount: { $sum: "$fees" },
+        },
+      },
+    ]);
+
+    const totalAppointmentsToday = todayAppointmentsAmount[0]?.totalAmount || 0;
+
+    // Get today's approved discounts total amount
+    const todayApprovedDiscounts = await DiscountRequest.aggregate([
+      {
+        $match: {
+          updatedAt: { $gte: today, $lt: tomorrow },
+          status: "approved",
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalDiscount: { $sum: "$requestedAmount" },
+        },
+      },
+    ]);
+
+    const totalApprovedDiscountsToday =
+      todayApprovedDiscounts[0]?.totalDiscount || 0;
+
+    // Get today's lab payments (paid tests)
+    const todayLabPayments = await LabTest.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: today, $lt: tomorrow },
+          "charges.paymentStatus": "paid",
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalAmount: { $sum: "$charges.totalAmount" },
+        },
+      },
+    ]);
+
+    const totalLabPaymentsToday = todayLabPayments[0]?.totalAmount || 0;
+
+    // Get today's radiology payments (paid exams)
+    const todayRadiologyPayments = await RadiologyExam.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: today, $lt: tomorrow },
+          "charges.paymentStatus": "paid",
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalAmount: { $sum: "$charges.totalAmount" },
+        },
+      },
+    ]);
+
+    const totalRadiologyPaymentsToday =
+      todayRadiologyPayments[0]?.totalAmount || 0;
+
     // Get pending discounts
     const pendingDiscounts = await DiscountRequest.countDocuments({
-      status: "pending"
+      status: "pending",
     });
-    
+
     // Get system cash total (cash payments today)
     const systemCashTotal = await Payment.aggregate([
       {
         $match: {
           paymentDate: { $gte: today, $lt: tomorrow },
           status: "completed",
-          paymentMethod: "cash"
-        }
+          paymentMethod: "cash",
+        },
       },
       {
         $group: {
           _id: null,
-          total: { $sum: "$amount" }
-        }
-      }
+          total: { $sum: "$amount" },
+        },
+      },
     ]);
-    
+
     // Get daily cash balance (from cash reconciliation - this would come from a separate model)
     // For now, using system cash total as default
     const dailyCashBalance = systemCashTotal[0]?.total || 0;
-    
+
     const stats = {
       dailyVisitors,
       appointments,
@@ -115,19 +208,24 @@ export async function GET(request: NextRequest) {
       todayRevenue,
       pendingDiscounts,
       dailyCashBalance,
-      systemCashTotal: systemCashTotal[0]?.total || 0
+      systemCashTotal: systemCashTotal[0]?.total || 0,
+      // New fields for cash dashboard
+      totalExpensesToday,
+      totalAppointmentsToday,
+      totalApprovedDiscountsToday,
+      totalLabPaymentsToday,
+      totalRadiologyPaymentsToday,
     };
-    
+
     return NextResponse.json({
       success: true,
-      data: stats
+      data: stats,
     });
-    
   } catch (error) {
     console.error("Error fetching reception stats:", error);
     return NextResponse.json(
       { success: false, error: "Failed to fetch reception statistics" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

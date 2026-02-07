@@ -9,68 +9,78 @@ export interface ICashAtHand extends Document {
   cashierId: string;
   shift: "morning" | "evening" | "night";
   date: Date;
-  transactionType: "opening" | "closing" | "deposit" | "withdrawal" | "adjustment" | "transfer";
-  
+  transactionType:
+    | "opening"
+    | "closing"
+    | "deposit"
+    | "withdrawal"
+    | "adjustment"
+    | "transfer";
+
   // Cash denominations (physical money counting)
   denominations: {
     // Notes
-    thousand: number;    // 1000
+    thousand: number; // 1000
     fiveHundred: number; // 500
-    twoHundred: number;  // 200
-    oneHundred: number;  // 100
-    fifty: number;       // 50
-    twenty: number;      // 20
-    ten: number;         // 10
-    five: number;        // 5
+    twoHundred: number; // 200
+    oneHundred: number; // 100
+    fifty: number; // 50
+    twenty: number; // 20
+    ten: number; // 10
+    five: number; // 5
     // Coins
-    two: number;         // 2
-    one: number;         // 1
-    half: number;        // 0.50
-    quarter: number;     // 0.25
-    tenCents: number;    // 0.10
-    fiveCents: number;   // 0.05
+    two: number; // 2
+    one: number; // 1
+    half: number; // 0.50
+    quarter: number; // 0.25
+    tenCents: number; // 0.10
+    fiveCents: number; // 0.05
   };
-  
+
   // Calculated totals
-  calculatedTotal: number;  // Sum of denominations
-  declaredAmount: number;   // Amount declared by cashier
-  variance: number;        // Difference between calculated and declared
-  
+  calculatedTotal: number; // Sum of denominations
+  declaredAmount: number; // Amount declared by cashier
+  variance: number; // Difference between calculated and declared
+
   // Transaction details
-  amount: number;          // Transaction amount (for deposits/withdrawals)
+  amount: number; // Transaction amount (for deposits/withdrawals)
   previousBalance: number;
   newBalance: number;
-  
+
   // Sources/Destinations
-  source?: string;         // For deposits: "patient_payment", "insurance", "other"
-  destination?: string;    // For withdrawals: "bank_deposit", "petty_cash", "supplier_payment"
+  source?: string; // For deposits: "patient_payment", "insurance", "other"
+  destination?: string; // For withdrawals: "bank_deposit", "petty_cash", "supplier_payment"
   referenceNumber?: string;
-  
+
   // Verification
   verifiedBy?: mongoose.Types.ObjectId | IUser;
   verifiedByName?: string;
   verificationTime?: Date;
   verificationStatus: "pending" | "verified" | "discrepancy" | "rejected";
-  
+
   // Discrepancy handling
   discrepancyNotes?: string;
   discrepancyResolved: boolean;
   resolvedBy?: mongoose.Types.ObjectId | IUser;
   resolutionNotes?: string;
-  
+
   // Supporting documents
   receiptNumber?: string;
   supportingDocs?: string[]; // URLs to scanned documents
-  
+
   // Audit trail
   status: "active" | "cancelled" | "voided";
   cancelledBy?: mongoose.Types.ObjectId | IUser;
   cancellationReason?: string;
-  
+
   notes?: string;
   createdAt: Date;
   updatedAt: Date;
-  
+
+  // Updated by tracking (for edits)
+  updatedBy?: mongoose.Types.ObjectId | IUser;
+  updatedByName?: string;
+
   // Virtuals
   cashierInfo: any;
   verifierInfo: any;
@@ -111,10 +121,17 @@ const CashAtHandSchema = new Schema<ICashAtHand>(
     },
     transactionType: {
       type: String,
-      enum: ["opening", "closing", "deposit", "withdrawal", "adjustment", "transfer"],
+      enum: [
+        "opening",
+        "closing",
+        "deposit",
+        "withdrawal",
+        "adjustment",
+        "transfer",
+      ],
       required: true,
     },
-    
+
     // Cash denominations
     denominations: {
       thousand: { type: Number, default: 0, min: 0 },
@@ -132,7 +149,7 @@ const CashAtHandSchema = new Schema<ICashAtHand>(
       tenCents: { type: Number, default: 0, min: 0 },
       fiveCents: { type: Number, default: 0, min: 0 },
     },
-    
+
     // Calculated amounts
     calculatedTotal: {
       type: Number,
@@ -148,7 +165,7 @@ const CashAtHandSchema = new Schema<ICashAtHand>(
       type: Number,
       default: 0,
     },
-    
+
     // Transaction amounts
     amount: {
       type: Number,
@@ -163,7 +180,7 @@ const CashAtHandSchema = new Schema<ICashAtHand>(
       type: Number,
       default: 0,
     },
-    
+
     // Transaction details
     source: {
       type: String,
@@ -177,7 +194,7 @@ const CashAtHandSchema = new Schema<ICashAtHand>(
       type: String,
       trim: true,
     },
-    
+
     // Verification
     verifiedBy: {
       type: Schema.Types.ObjectId,
@@ -195,7 +212,7 @@ const CashAtHandSchema = new Schema<ICashAtHand>(
       enum: ["pending", "verified", "discrepancy", "rejected"],
       default: "pending",
     },
-    
+
     // Discrepancy handling
     discrepancyNotes: {
       type: String,
@@ -213,17 +230,19 @@ const CashAtHandSchema = new Schema<ICashAtHand>(
       type: String,
       trim: true,
     },
-    
+
     // Supporting documents
     receiptNumber: {
       type: String,
       trim: true,
     },
-    supportingDocs: [{
-      type: String,
-      trim: true,
-    }],
-    
+    supportingDocs: [
+      {
+        type: String,
+        trim: true,
+      },
+    ],
+
     // Audit trail
     status: {
       type: String,
@@ -238,8 +257,18 @@ const CashAtHandSchema = new Schema<ICashAtHand>(
       type: String,
       trim: true,
     },
-    
+
     notes: {
+      type: String,
+      trim: true,
+    },
+
+    // Updated by tracking (for edits)
+    updatedBy: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+    },
+    updatedByName: {
       type: String,
       trim: true,
     },
@@ -248,7 +277,7 @@ const CashAtHandSchema = new Schema<ICashAtHand>(
     timestamps: true,
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
-  }
+  },
 );
 
 // Indexes for efficient querying
@@ -301,25 +330,25 @@ CashAtHandSchema.virtual("shiftTiming").get(function () {
 CashAtHandSchema.pre("save", function (next) {
   // Calculate total from denominations
   const denom = this.denominations;
-  this.calculatedTotal = 
-    (denom.thousand * 1000) +
-    (denom.fiveHundred * 500) +
-    (denom.twoHundred * 200) +
-    (denom.oneHundred * 100) +
-    (denom.fifty * 50) +
-    (denom.twenty * 20) +
-    (denom.ten * 10) +
-    (denom.five * 5) +
-    (denom.two * 2) +
-    (denom.one * 1) +
-    (denom.half * 0.5) +
-    (denom.quarter * 0.25) +
-    (denom.tenCents * 0.1) +
-    (denom.fiveCents * 0.05);
-  
+  this.calculatedTotal =
+    denom.thousand * 1000 +
+    denom.fiveHundred * 500 +
+    denom.twoHundred * 200 +
+    denom.oneHundred * 100 +
+    denom.fifty * 50 +
+    denom.twenty * 20 +
+    denom.ten * 10 +
+    denom.five * 5 +
+    denom.two * 2 +
+    denom.one * 1 +
+    denom.half * 0.5 +
+    denom.quarter * 0.25 +
+    denom.tenCents * 0.1 +
+    denom.fiveCents * 0.05;
+
   // Calculate variance
   this.variance = this.calculatedTotal - this.declaredAmount;
-  
+
   // Auto-generate transaction ID if not provided
   if (!this.transactionId) {
     const date = new Date();
@@ -329,29 +358,33 @@ CashAtHandSchema.pre("save", function (next) {
     const random = Math.floor(1000 + Math.random() * 9000);
     this.transactionId = `CASH${year}${month}${day}${random}`;
   }
-  
+
   // For opening balance, amount should equal declared amount
   if (this.transactionType === "opening") {
     this.amount = this.declaredAmount;
     this.previousBalance = 0;
     this.newBalance = this.declaredAmount;
   }
-  
+
   // For closing balance
   if (this.transactionType === "closing") {
     this.amount = this.declaredAmount;
   }
-  
+
   // Update verification status based on variance
   if (this.variance !== 0 && this.verificationStatus === "pending") {
     this.verificationStatus = "discrepancy";
   }
-  
+
   next();
 });
 
 // Static methods
-CashAtHandSchema.statics.findByCashierId = function (cashierId: string, startDate?: Date, endDate?: Date) {
+CashAtHandSchema.statics.findByCashierId = function (
+  cashierId: string,
+  startDate?: Date,
+  endDate?: Date,
+) {
   const query: any = { cashierId };
   if (startDate && endDate) {
     query.date = { $gte: startDate, $lte: endDate };
@@ -364,18 +397,18 @@ CashAtHandSchema.statics.getCashSummary = async function (date: Date) {
   startOfDay.setHours(0, 0, 0, 0);
   const endOfDay = new Date(date);
   endOfDay.setHours(23, 59, 59, 999);
-  
+
   const transactions = await this.find({
     date: { $gte: startOfDay, $lte: endOfDay },
     status: "active",
   }).sort({ date: 1 });
-  
+
   let openingBalance = 0;
   let closingBalance = 0;
   let totalDeposits = 0;
   let totalWithdrawals = 0;
   const cashierSummaries: Record<string, any> = {};
-  
+
   transactions.forEach((txn: ICashAtHand) => {
     if (txn.transactionType === "opening") {
       openingBalance = txn.amount;
@@ -386,7 +419,7 @@ CashAtHandSchema.statics.getCashSummary = async function (date: Date) {
     } else if (txn.transactionType === "withdrawal") {
       totalWithdrawals += txn.amount;
     }
-    
+
     // Track by cashier
     if (!cashierSummaries[txn.cashierId]) {
       cashierSummaries[txn.cashierId] = {
@@ -399,20 +432,24 @@ CashAtHandSchema.statics.getCashSummary = async function (date: Date) {
         totalVariance: 0,
       };
     }
-    
+
     cashierSummaries[txn.cashierId].totalTransactions++;
     if (txn.variance) {
       cashierSummaries[txn.cashierId].totalVariance += Math.abs(txn.variance);
     }
-    
-    if (txn.transactionType === "opening") cashierSummaries[txn.cashierId].openingCount++;
-    if (txn.transactionType === "closing") cashierSummaries[txn.cashierId].closingCount++;
-    if (txn.transactionType === "deposit") cashierSummaries[txn.cashierId].depositCount++;
-    if (txn.transactionType === "withdrawal") cashierSummaries[txn.cashierId].withdrawalCount++;
+
+    if (txn.transactionType === "opening")
+      cashierSummaries[txn.cashierId].openingCount++;
+    if (txn.transactionType === "closing")
+      cashierSummaries[txn.cashierId].closingCount++;
+    if (txn.transactionType === "deposit")
+      cashierSummaries[txn.cashierId].depositCount++;
+    if (txn.transactionType === "withdrawal")
+      cashierSummaries[txn.cashierId].withdrawalCount++;
   });
-  
+
   const expectedBalance = openingBalance + totalDeposits - totalWithdrawals;
-  
+
   return {
     date,
     openingBalance,
@@ -426,7 +463,10 @@ CashAtHandSchema.statics.getCashSummary = async function (date: Date) {
   };
 };
 
-CashAtHandSchema.statics.findDiscrepancies = function (startDate: Date, endDate: Date) {
+CashAtHandSchema.statics.findDiscrepancies = function (
+  startDate: Date,
+  endDate: Date,
+) {
   return this.find({
     date: { $gte: startDate, $lte: endDate },
     verificationStatus: "discrepancy",
@@ -435,27 +475,33 @@ CashAtHandSchema.statics.findDiscrepancies = function (startDate: Date, endDate:
 };
 
 // Instance methods
-CashAtHandSchema.methods.verifyTransaction = async function (verifierId: mongoose.Types.ObjectId, verifierName: string) {
+CashAtHandSchema.methods.verifyTransaction = async function (
+  verifierId: mongoose.Types.ObjectId,
+  verifierName: string,
+) {
   this.verifiedBy = verifierId;
   this.verifiedByName = verifierName;
   this.verificationTime = new Date();
-  
+
   if (this.variance === 0) {
     this.verificationStatus = "verified";
     this.discrepancyResolved = true;
     this.resolvedBy = verifierId;
     this.resolutionNotes = "Variance resolved during verification";
   }
-  
+
   return this.save();
 };
 
-CashAtHandSchema.methods.resolveDiscrepancy = async function (resolverId: mongoose.Types.ObjectId, notes: string) {
+CashAtHandSchema.methods.resolveDiscrepancy = async function (
+  resolverId: mongoose.Types.ObjectId,
+  notes: string,
+) {
   this.discrepancyResolved = true;
   this.resolvedBy = resolverId;
   this.resolutionNotes = notes;
   this.verificationStatus = "verified";
-  
+
   // Create adjustment transaction if needed
   if (this.variance !== 0) {
     const CashAtHand = this.constructor as any;
@@ -470,9 +516,10 @@ CashAtHandSchema.methods.resolveDiscrepancy = async function (resolverId: mongoo
       declaredAmount: this.calculatedTotal, // Use calculated total as declared
       amount: Math.abs(this.variance),
       previousBalance: this.newBalance,
-      newBalance: this.variance > 0 
-        ? this.newBalance + this.variance 
-        : this.newBalance - Math.abs(this.variance),
+      newBalance:
+        this.variance > 0
+          ? this.newBalance + this.variance
+          : this.newBalance - Math.abs(this.variance),
       source: this.variance > 0 ? "variance_addition" : "variance_deduction",
       notes: `Adjustment for variance in transaction ${this.transactionId}: ${notes}`,
       verificationStatus: "verified",
@@ -481,14 +528,17 @@ CashAtHandSchema.methods.resolveDiscrepancy = async function (resolverId: mongoo
       verificationTime: new Date(),
       discrepancyResolved: true,
     });
-    
+
     await adjustment.save();
   }
-  
+
   return this.save();
 };
 
-CashAtHandSchema.methods.cancelTransaction = async function (cancelledById: mongoose.Types.ObjectId, reason: string) {
+CashAtHandSchema.methods.cancelTransaction = async function (
+  cancelledById: mongoose.Types.ObjectId,
+  reason: string,
+) {
   this.status = "cancelled";
   this.cancelledBy = cancelledById;
   this.cancellationReason = reason;
@@ -497,11 +547,19 @@ CashAtHandSchema.methods.cancelTransaction = async function (cancelledById: mong
 
 // Interface for static methods
 interface CashAtHandModel extends mongoose.Model<ICashAtHand> {
-  findByCashierId(cashierId: string, startDate?: Date, endDate?: Date): Promise<ICashAtHand[]>;
+  findByCashierId(
+    cashierId: string,
+    startDate?: Date,
+    endDate?: Date,
+  ): Promise<ICashAtHand[]>;
   getCashSummary(date: Date): Promise<any>;
   findDiscrepancies(startDate: Date, endDate: Date): Promise<ICashAtHand[]>;
 }
 
-export const CashAtHand = (models.CashAtHand || model<ICashAtHand, CashAtHandModel>("CashAtHand", CashAtHandSchema)) as CashAtHandModel;
+export const CashAtHand = (models.CashAtHand ||
+  model<ICashAtHand, CashAtHandModel>(
+    "CashAtHand",
+    CashAtHandSchema,
+  )) as CashAtHandModel;
 
 // Supporting models for cash management

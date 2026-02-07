@@ -73,8 +73,23 @@ import {
   XCircle,
   RefreshCw,
   Download,
+  CalendarDays,
+  CalendarRange,
+  ChevronDown,
 } from "lucide-react";
-import { format, parseISO, isToday, isPast, isFuture } from "date-fns";
+import {
+  format,
+  parseISO,
+  isToday,
+  isPast,
+  isFuture,
+  startOfWeek,
+  endOfWeek,
+  startOfMonth,
+  endOfMonth,
+  addDays,
+  subDays,
+} from "date-fns";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface Appointment {
@@ -115,6 +130,13 @@ interface Doctor {
   department: string;
 }
 
+interface TimeRange {
+  label: string;
+  value: string;
+  startDate: Date;
+  endDate: Date;
+}
+
 export default function AppointmentsPage() {
   const router = useRouter();
   const { user, accessToken, isAuthenticated, isLoading } = useAuthStore();
@@ -134,6 +156,14 @@ export default function AppointmentsPage() {
     useState<Appointment | null>(null);
   const [cancelReason, setCancelReason] = useState("");
 
+  // Add time range filter state
+  const [timeRange, setTimeRange] = useState<TimeRange>({
+    label: "Today",
+    value: "today",
+    startDate: new Date(),
+    endDate: new Date(),
+  });
+
   // Role-based access control
   useEffect(() => {
     if (!isLoading) {
@@ -145,10 +175,101 @@ export default function AppointmentsPage() {
     }
   }, [isAuthenticated, user, isLoading, router]);
 
+  // Initialize time range on component mount
+  useEffect(() => {
+    updateTimeRange("today");
+  }, []);
+
   useEffect(() => {
     fetchAppointments();
     fetchDoctors();
-  }, [page, selectedDate, selectedStatus, selectedDoctor]);
+  }, [page, timeRange, selectedStatus, selectedDoctor]);
+
+  const updateTimeRange = (range: string) => {
+    const today = new Date();
+    let startDate = new Date();
+    let endDate = new Date();
+
+    switch (range) {
+      case "today":
+        startDate = today;
+        endDate = today;
+        setTimeRange({
+          label: "Today",
+          value: "today",
+          startDate,
+          endDate,
+        });
+        setSelectedDate(today);
+        break;
+      case "tomorrow":
+        startDate = addDays(today, 1);
+        endDate = addDays(today, 1);
+        setTimeRange({
+          label: "Tomorrow",
+          value: "tomorrow",
+          startDate,
+          endDate,
+        });
+        setSelectedDate(startDate);
+        break;
+      case "this-week":
+        startDate = startOfWeek(today, { weekStartsOn: 1 }); // Monday
+        endDate = endOfWeek(today, { weekStartsOn: 1 }); // Sunday
+        setTimeRange({
+          label: "This Week",
+          value: "this-week",
+          startDate,
+          endDate,
+        });
+        setSelectedDate(today);
+        break;
+      case "next-week":
+        startDate = startOfWeek(addDays(today, 7), { weekStartsOn: 1 });
+        endDate = endOfWeek(addDays(today, 7), { weekStartsOn: 1 });
+        setTimeRange({
+          label: "Next Week",
+          value: "next-week",
+          startDate,
+          endDate,
+        });
+        setSelectedDate(startDate);
+        break;
+      case "this-month":
+        startDate = startOfMonth(today);
+        endDate = endOfMonth(today);
+        setTimeRange({
+          label: "This Month",
+          value: "this-month",
+          startDate,
+          endDate,
+        });
+        setSelectedDate(today);
+        break;
+      case "next-month":
+        startDate = startOfMonth(addDays(today, 31));
+        endDate = endOfMonth(addDays(today, 31));
+        setTimeRange({
+          label: "Next Month",
+          value: "next-month",
+          startDate,
+          endDate,
+        });
+        setSelectedDate(startDate);
+        break;
+      case "all":
+        setTimeRange({
+          label: "All Time",
+          value: "all",
+          startDate: new Date(0), // Beginning of time
+          endDate: new Date(8640000000000000), // Far future
+        });
+        setSelectedDate(undefined);
+        break;
+      default:
+        break;
+    }
+  };
 
   const fetchAppointments = async () => {
     try {
@@ -159,8 +280,13 @@ export default function AppointmentsPage() {
         limit: "20",
       });
 
-      if (selectedDate) {
-        params.set("date", selectedDate.toISOString().split("T")[0]);
+      // Only add date range if not "all" time
+      if (timeRange.value !== "all") {
+        params.set(
+          "startDate",
+          timeRange.startDate.toISOString().split("T")[0],
+        );
+        params.set("endDate", timeRange.endDate.toISOString().split("T")[0]);
       }
 
       if (selectedStatus !== "all") {
@@ -382,6 +508,48 @@ export default function AppointmentsPage() {
     }
   };
 
+  // Calculate stats based on current time range
+  const calculateStats = () => {
+    const todayAppointments = appointments.filter((a) =>
+      isToday(parseISO(a.date)),
+    );
+    const waitingPatients = appointments.filter(
+      (a) => a.status === "checked-in",
+    );
+    const completedToday = appointments.filter(
+      (a) => a.status === "completed" && isToday(parseISO(a.date)),
+    );
+    const noShows = appointments.filter((a) => a.status === "no-show");
+
+    // Calculate range-specific stats
+    const rangeAppointments = appointments.filter((a) => {
+      const appointmentDate = parseISO(a.date);
+      return (
+        appointmentDate >= timeRange.startDate &&
+        appointmentDate <= timeRange.endDate
+      );
+    });
+
+    const upcomingAppointments = rangeAppointments.filter(
+      (a) =>
+        isFuture(parseISO(a.date)) ||
+        (isToday(parseISO(a.date)) &&
+          a.status !== "completed" &&
+          a.status !== "cancelled"),
+    );
+
+    return {
+      totalToday: todayAppointments.length,
+      waiting: waitingPatients.length,
+      completed: completedToday.length,
+      noShows: noShows.length,
+      rangeTotal: rangeAppointments.length,
+      upcoming: upcomingAppointments.length,
+    };
+  };
+
+  const stats = calculateStats();
+
   const filteredAppointments = appointments.filter((appointment) => {
     if (!searchQuery) return true;
 
@@ -446,19 +614,107 @@ export default function AppointmentsPage() {
         </div>
       </div>
 
+      {/* Time Range Filter */}
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <CalendarDays className="h-5 w-5 text-gray-500" />
+              <div>
+                <h3 className="font-medium">Time Range</h3>
+                <p className="text-sm text-gray-500">
+                  Showing appointments for {timeRange.label}
+                  {timeRange.value !== "all" && (
+                    <span className="ml-1">
+                      ({format(timeRange.startDate, "MMM d, yyyy")} -{" "}
+                      {format(timeRange.endDate, "MMM d, yyyy")})
+                    </span>
+                  )}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="gap-2">
+                    <CalendarRange className="h-4 w-4" />
+                    {timeRange.label}
+                    <ChevronDown className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuLabel>Select Time Range</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => updateTimeRange("today")}>
+                    <CalendarIcon className="h-4 w-4 mr-2" />
+                    Today
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => updateTimeRange("tomorrow")}>
+                    <CalendarIcon className="h-4 w-4 mr-2" />
+                    Tomorrow
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => updateTimeRange("this-week")}
+                  >
+                    <CalendarIcon className="h-4 w-4 mr-2" />
+                    This Week
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => updateTimeRange("next-week")}
+                  >
+                    <CalendarIcon className="h-4 w-4 mr-2" />
+                    Next Week
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => updateTimeRange("this-month")}
+                  >
+                    <CalendarIcon className="h-4 w-4 mr-2" />
+                    This Month
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => updateTimeRange("next-month")}
+                  >
+                    <CalendarIcon className="h-4 w-4 mr-2" />
+                    Next Month
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => updateTimeRange("all")}>
+                    <CalendarIcon className="h-4 w-4 mr-2" />
+                    All Time
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Total Today</CardTitle>
+            <CardTitle className="text-sm font-medium flex items-center justify-between">
+              <span>Total in Range</span>
+              <Badge variant="outline" className="text-xs">
+                {timeRange.label}
+              </Badge>
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {appointments.filter((a) => isToday(parseISO(a.date))).length}
-            </div>
+            <div className="text-2xl font-bold">{stats.rangeTotal}</div>
             <p className="text-xs text-gray-500">
-              Appointments scheduled for today
+              Appointments in selected range
             </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Upcoming</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.upcoming}</div>
+            <p className="text-xs text-gray-500">Upcoming appointments</p>
           </CardContent>
         </Card>
 
@@ -467,34 +723,20 @@ export default function AppointmentsPage() {
             <CardTitle className="text-sm font-medium">Waiting</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {appointments.filter((a) => a.status === "checked-in").length}
-            </div>
+            <div className="text-2xl font-bold">{stats.waiting}</div>
             <p className="text-xs text-gray-500">Patients waiting</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Completed</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Completed Today
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {appointments.filter((a) => a.status === "completed").length}
-            </div>
+            <div className="text-2xl font-bold">{stats.completed}</div>
             <p className="text-xs text-gray-500">Today's completed</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">No Shows</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {appointments.filter((a) => a.status === "no-show").length}
-            </div>
-            <p className="text-xs text-gray-500">Missed appointments</p>
           </CardContent>
         </Card>
       </div>
@@ -517,7 +759,7 @@ export default function AppointmentsPage() {
             </div>
 
             <div className="space-y-2">
-              <Label>Date</Label>
+              <Label>Specific Date</Label>
               <div className="relative">
                 <CalendarIcon className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                 <Input
@@ -573,11 +815,28 @@ export default function AppointmentsPage() {
       {/* Appointments Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Appointments List</CardTitle>
-          <CardDescription>
-            Showing {filteredAppointments.length} of {appointments.length}{" "}
-            appointments
-          </CardDescription>
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <CardTitle>Appointments List</CardTitle>
+              <CardDescription>
+                Showing {filteredAppointments.length} of {appointments.length}{" "}
+                appointments for {timeRange.label}
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  // Export functionality can be added here
+                  console.log("Export clicked");
+                }}
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Export
+              </Button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="rounded-md border">
@@ -587,11 +846,11 @@ export default function AppointmentsPage() {
                   <TableHead>ID</TableHead>
                   <TableHead>Patient</TableHead>
                   <TableHead>Doctor</TableHead>
-                  <TableHead>Date</TableHead>
+                  <TableHead>Date & Time</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Priority</TableHead>
-                  <TableHead className="text-right">View</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -599,21 +858,41 @@ export default function AppointmentsPage() {
                   <TableRow>
                     <TableCell
                       colSpan={8}
-                      className="text-center py-8 text-gray-500"
+                      className="text-center py-12 text-gray-500"
                     >
-                      No appointments found
+                      <div className="flex flex-col items-center justify-center">
+                        <CalendarDays className="h-12 w-12 text-gray-300 mb-4" />
+                        <p className="text-lg font-medium mb-2">
+                          No appointments found
+                        </p>
+                        <p className="text-sm text-gray-500 mb-4">
+                          Try adjusting your filters or select a different time
+                          range
+                        </p>
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            updateTimeRange("all");
+                            setSearchQuery("");
+                            setSelectedStatus("all");
+                            setSelectedDoctor("all");
+                          }}
+                        >
+                          Clear All Filters
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ) : (
                   filteredAppointments.map((appointment) => (
                     <TableRow
                       key={appointment._id}
+                      className="hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer"
                       onClick={() =>
                         router.push(
                           `/reception/appointments/${appointment._id}`,
                         )
                       }
-                      className="cursor-pointer hover:dark:--background"
                     >
                       <TableCell className="font-medium">
                         {appointment.appointmentId}
@@ -633,9 +912,7 @@ export default function AppointmentsPage() {
                           <p className="font-medium">
                             {appointment.doctor?.name
                               ? `Dr. ${appointment.doctor.name}`
-                              : appointment.doctor
-                                ? appointment.doctor.toString()
-                                : "Doctor not assigned"}
+                              : "Not assigned"}
                           </p>
                           <p className="text-sm text-gray-500">
                             {appointment.doctor.specialization}
@@ -643,9 +920,14 @@ export default function AppointmentsPage() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <p className="font-medium">
-                          {format(parseISO(appointment.date), "MMM d, yyyy")}
-                        </p>
+                        <div>
+                          <p className="font-medium">
+                            {format(parseISO(appointment.date), "MMM d, yyyy")}
+                          </p>
+                          <p className="text-sm text-gray-500">
+                            {appointment.startTime} - {appointment.endTime}
+                          </p>
+                        </div>
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline">
@@ -659,10 +941,64 @@ export default function AppointmentsPage() {
                         {getPriorityBadge(appointment.priority)}
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button variant="ghost" size="sm">
-                          <Eye className="h-4 w-4 mr-2" />
-                          View
-                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                router.push(
+                                  `/reception/appointments/${appointment._id}`,
+                                );
+                              }}
+                            >
+                              <Eye className="h-4 w-4 mr-2" />
+                              View Details
+                            </DropdownMenuItem>
+                            {appointment.status === "scheduled" && (
+                              <DropdownMenuItem
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleCheckIn(appointment._id);
+                                }}
+                              >
+                                <CheckCircle className="h-4 w-4 mr-2" />
+                                Check In
+                              </DropdownMenuItem>
+                            )}
+                            {appointment.status === "checked-in" && (
+                              <DropdownMenuItem
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleCheckOut(appointment._id);
+                                }}
+                              >
+                                <CheckCircle className="h-4 w-4 mr-2" />
+                                Check Out
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedAppointment(appointment);
+                                setCancelDialogOpen(true);
+                              }}
+                              className="text-red-600"
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Cancel Appointment
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </TableCell>
                     </TableRow>
                   ))
@@ -677,7 +1013,8 @@ export default function AppointmentsPage() {
       {totalPages > 1 && (
         <div className="flex items-center justify-between">
           <div className="text-sm text-gray-500">
-            Page {page} of {totalPages}
+            Page {page} of {totalPages} • Showing {filteredAppointments.length}{" "}
+            appointments
           </div>
           <div className="flex gap-2">
             <Button
@@ -746,6 +1083,13 @@ export default function AppointmentsPage() {
                     </p>
                   </div>
                   <div>
+                    <p className="text-gray-500">Time</p>
+                    <p className="font-medium">
+                      {selectedAppointment.startTime} -{" "}
+                      {selectedAppointment.endTime}
+                    </p>
+                  </div>
+                  <div className="col-span-2">
                     <p className="text-gray-500">Reason</p>
                     <p className="font-medium">{selectedAppointment.reason}</p>
                   </div>

@@ -6,7 +6,13 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/useAuthStore";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -29,36 +35,40 @@ interface PatientSearchResult {
 }
 
 export default function NewDiscountRequestPage() {
-   const router = useRouter();
-   const { user, accessToken } = useAuthStore();
-   const formRef = useRef<HTMLFormElement>(null);
-   const [loading, setLoading] = useState(false);
+  const router = useRouter();
+  const { user, accessToken } = useAuthStore();
+  const formRef = useRef<HTMLFormElement>(null);
+  const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<PatientSearchResult[]>([]);
-  const [selectedPatient, setSelectedPatient] = useState<PatientSearchResult | null>(null);
+  const [selectedPatient, setSelectedPatient] =
+    useState<PatientSearchResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  
+
   // Check if user has permission
   useEffect(() => {
     if (user && !["admin", "receptionist"].includes(user.role)) {
       router.push("/unauthorized");
     }
   }, [user, router]);
-  
+
   const handlePatientSearch = async () => {
     if (!searchQuery.trim()) return;
-    
+
     try {
-      const response = await fetch(`/api/patients/search?q=${encodeURIComponent(searchQuery)}`, {
-        headers: {
-          "Content-Type": "application/json",
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      const response = await fetch(
+        `/api/patients/search?q=${encodeURIComponent(searchQuery)}`,
+        {
+          headers: {
+            "Content-Type": "application/json",
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
         },
-      });
-      
+      );
+
       const data = await response.json();
-      
+
       if (data.success) {
         setSearchResults(data.data);
       } else {
@@ -69,7 +79,7 @@ export default function NewDiscountRequestPage() {
       setError("Failed to search patients");
     }
   };
-  
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
@@ -84,14 +94,19 @@ export default function NewDiscountRequestPage() {
       requestCategory: formData.get("category"),
       originalAmount: formData.get("originalAmount") || formData.get("amount"),
     };
-    
+
     // Validation
-    if (!data.patientId || !data.requestedAmount || !data.reason || !data.requestCategory) {
+    if (
+      !data.patientId ||
+      !data.requestedAmount ||
+      !data.reason ||
+      !data.requestCategory
+    ) {
       setError("Please fill in all required fields");
       setLoading(false);
       return;
     }
-    
+
     try {
       const response = await fetch("/api/dashboard/reception/discounts", {
         method: "POST",
@@ -101,9 +116,9 @@ export default function NewDiscountRequestPage() {
         },
         body: JSON.stringify(data),
       });
-      
+
       const result = await response.json();
-      
+
       if (result.success) {
         setSuccess("Discount request submitted successfully!");
         // Clear form
@@ -125,27 +140,25 @@ export default function NewDiscountRequestPage() {
       setLoading(false);
     }
   };
-  
+
   if (!user || !["admin", "receptionist"].includes(user.role)) {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">
           <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
           <h2 className="text-xl font-semibold mb-2">Unauthorized Access</h2>
-          <p className="text-gray-600">You don't have permission to access this page.</p>
+          <p className="text-gray-600">
+            You don't have permission to access this page.
+          </p>
         </div>
       </div>
     );
   }
-  
+
   return (
     <div className="container mx-auto p-4 md:p-6 max-w-4xl">
       <div className="mb-6">
-        <Button
-          variant="ghost"
-          onClick={() => router.back()}
-          className="mb-4"
-        >
+        <Button variant="ghost" onClick={() => router.back()} className="mb-4">
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back to Dashboard
         </Button>
@@ -154,12 +167,13 @@ export default function NewDiscountRequestPage() {
           Submit a discount request for patient approval
         </p>
       </div>
-      
+
       <Card>
         <CardHeader>
           <CardTitle>Discount Request Form</CardTitle>
           <CardDescription>
-            Fill in the details below to submit a discount request. All fields are required.
+            Fill in the details below to submit a discount request. All fields
+            are required.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -169,14 +183,14 @@ export default function NewDiscountRequestPage() {
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
-          
+
           {success && (
             <Alert className="mb-6 bg-green-50 text-green-800 border-green-200">
               <AlertCircle className="h-4 w-4 text-green-600" />
               <AlertDescription>{success}</AlertDescription>
             </Alert>
           )}
-          
+
           <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
             {/* Patient Search */}
             <div className="space-y-4">
@@ -199,7 +213,7 @@ export default function NewDiscountRequestPage() {
                   Search
                 </Button>
               </div>
-              
+
               {/* Search Results */}
               {searchResults.length > 0 && (
                 <div className="border rounded-lg p-4 max-h-60 overflow-y-auto">
@@ -209,7 +223,9 @@ export default function NewDiscountRequestPage() {
                       <div
                         key={patient._id}
                         className={`p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors ${
-                          selectedPatient?._id === patient._id ? "bg-blue-50 border-blue-200" : ""
+                          selectedPatient?._id === patient._id
+                            ? "bg-blue-50 border-blue-200"
+                            : ""
                         }`}
                         onClick={() => {
                           setSelectedPatient(patient);
@@ -219,22 +235,28 @@ export default function NewDiscountRequestPage() {
                         <p className="font-medium">{patient.name}</p>
                         <div className="text-sm text-gray-500">
                           {patient.phone && <span>Phone: {patient.phone}</span>}
-                          {patient.email && <span className="ml-4">Email: {patient.email}</span>}
+                          {patient.email && (
+                            <span className="ml-4">Email: {patient.email}</span>
+                          )}
                         </div>
                       </div>
                     ))}
                   </div>
                 </div>
               )}
-              
+
               {/* Selected Patient */}
               {selectedPatient && (
                 <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="font-semibold text-green-800">Selected Patient</p>
+                      <p className="font-semibold text-green-800">
+                        Selected Patient
+                      </p>
                       <p className="text-green-700">{selectedPatient.name}</p>
-                      <p className="text-sm text-green-600">{selectedPatient.phone}</p>
+                      <p className="text-sm text-green-600">
+                        {selectedPatient.phone}
+                      </p>
                     </div>
                     <Button
                       type="button"
@@ -254,7 +276,7 @@ export default function NewDiscountRequestPage() {
                 </div>
               )}
             </div>
-            
+
             {/* Discount Details */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
@@ -264,16 +286,24 @@ export default function NewDiscountRequestPage() {
                     <SelectValue placeholder="Select category" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="financial_hardship">Financial Hardship</SelectItem>
-                    <SelectItem value="senior_citizen">Senior Citizen</SelectItem>
-                    <SelectItem value="staff_discount">Staff Discount</SelectItem>
-                    <SelectItem value="insurance_coverage">Insurance Coverage</SelectItem>
+                    <SelectItem value="financial_hardship">
+                      Financial Hardship
+                    </SelectItem>
+                    <SelectItem value="senior_citizen">
+                      Senior Citizen
+                    </SelectItem>
+                    <SelectItem value="staff_discount">
+                      Staff Discount
+                    </SelectItem>
+                    <SelectItem value="insurance_coverage">
+                      Insurance Coverage
+                    </SelectItem>
                     <SelectItem value="promotional">Promotional</SelectItem>
                     <SelectItem value="other">Other</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              
+
               <div className="space-y-2">
                 <Label htmlFor="originalAmount">Original Amount ($)</Label>
                 <Input
@@ -285,7 +315,7 @@ export default function NewDiscountRequestPage() {
                   min="0"
                 />
               </div>
-              
+
               <div className="space-y-2">
                 <Label htmlFor="amount">Discount Amount ($) *</Label>
                 <Input
@@ -297,10 +327,12 @@ export default function NewDiscountRequestPage() {
                   min="0"
                   required
                 />
-                <p className="text-xs text-gray-500">The amount to be discounted</p>
+                <p className="text-xs text-gray-500">
+                  The amount to be discounted
+                </p>
               </div>
             </div>
-            
+
             {/* Reason */}
             <div className="space-y-2">
               <Label htmlFor="reason">Reason for Discount *</Label>
@@ -316,7 +348,7 @@ export default function NewDiscountRequestPage() {
                 Provide a clear justification for the discount request
               </p>
             </div>
-            
+
             {/* Submit Buttons */}
             <div className="flex flex-col sm:flex-row gap-4 pt-4">
               <Button
@@ -343,33 +375,17 @@ export default function NewDiscountRequestPage() {
                 )}
               </Button>
             </div>
-            
+
             {!selectedPatient && (
               <Alert className="mt-4">
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
-                  Please select a patient before submitting the discount request.
+                  Please select a patient before submitting the discount
+                  request.
                 </AlertDescription>
               </Alert>
             )}
           </form>
-        </CardContent>
-      </Card>
-      
-      {/* Information Card */}
-      <Card className="mt-6">
-        <CardHeader>
-          <CardTitle className="text-sm">Discount Request Guidelines</CardTitle>
-        </CardHeader>
-        <CardContent className="text-sm text-gray-600 space-y-2">
-          <ul className="list-disc pl-5 space-y-1">
-            <li>All discount requests require admin approval</li>
-            <li>Provide detailed justification for financial hardship cases</li>
-            <li>Senior citizen discounts require age verification</li>
-            <li>Staff discounts require supervisor approval</li>
-            <li>Requests are typically processed within 24-48 hours</li>
-            <li>You will be notified once the request is approved or rejected</li>
-          </ul>
         </CardContent>
       </Card>
     </div>

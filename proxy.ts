@@ -274,6 +274,12 @@ export async function proxy(request: NextRequest) {
       headers.set("x-user-id", userId);
       headers.set("x-user-role", userRole);
 
+      // Add user name if available in token
+      const userName = payload.name as string;
+      if (userName) {
+        headers.set("x-user-name", userName);
+      }
+
       return NextResponse.next({
         request: {
           headers,

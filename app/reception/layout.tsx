@@ -1,4 +1,4 @@
-// app/laboratory/layout.tsx
+// app/reception/layout.tsx
 "use client";
 import { useState, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
@@ -8,9 +8,11 @@ import {
   Home,
   Menu,
   X,
-  HandCoins,
-  FileText,
-  TestTube,
+  UserCheck,
+  Users,
+  CalendarCheck,
+  DollarSign,
+  Receipt,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeProvider } from "@/providers/ThemeProvider";
@@ -21,13 +23,32 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Metadata } from "next";
 
 const navLinks = [
-  { href: "/laboratory/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/laboratory/tests", label: "Tests", icon: ClipboardList },
-  { href: "/laboratory/direct-tests", label: "Direct Tests", icon: TestTube },
-  { href: "/laboratory/templates", label: "Templates", icon: FileText },
+  { href: "/reception/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  {
+    href: "/reception/appointments",
+    label: "Appointments",
+    icon: CalendarCheck,
+  },
+  {
+    href: "/reception/discounts/new",
+    label: "Discounts Request",
+    icon: DollarSign,
+  },
+  {
+    href: "/reception/lab-test-payments",
+    label: "Lab Test Payments",
+    icon: Users,
+  },
+  {
+    href: "/reception/radiology-exam-payments",
+    label: "Radiology Payments",
+    icon: Users,
+  },
+  { href: "/reception/expenses", label: "Expenses", icon: Receipt },
+  { href: "/reception/cash", label: "Cash at Hand", icon: DollarSign },
 ];
 
-export default function LaboratoryLayout({
+export default function ReceptionLayout({
   children,
 }: {
   children: React.ReactNode;
@@ -79,10 +100,10 @@ export default function LaboratoryLayout({
           <div className="flex h-full flex-col gap-2">
             <div className="flex h-14 items-center border-b px-4 lg:h-15">
               <Link
-                href="/laboratory/dashboard"
+                href="/reception/dashboard"
                 className="flex items-center gap-2 font-semibold"
               >
-                <span className="text-lg">Laboratory Module</span>
+                <span className="text-lg">Reception Module</span>
               </Link>
             </div>
 
@@ -152,7 +173,7 @@ export default function LaboratoryLayout({
               <SheetContent side="left" className="sm:max-w-xs">
                 <nav className="grid gap-6 text-lg font-medium">
                   <div className="flex items-center justify-between mb-4">
-                    <span className="font-semibold">Laboratory Module</span>
+                    <span className="font-semibold">Reception Module</span>
                     <Button
                       variant="ghost"
                       size="icon"
