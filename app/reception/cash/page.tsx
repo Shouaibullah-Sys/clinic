@@ -19,6 +19,7 @@ import {
   TrendingDown,
   Calendar,
   Receipt,
+  Minus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -53,10 +54,6 @@ interface Denominations {
   five: number;
   two: number;
   one: number;
-  half: number;
-  quarter: number;
-  tenCents: number;
-  fiveCents: number;
 }
 
 interface CashTransaction {
@@ -86,10 +83,6 @@ const DENOMINATION_VALUES = {
   five: 5,
   two: 2,
   one: 1,
-  half: 0.5,
-  quarter: 0.25,
-  tenCents: 0.1,
-  fiveCents: 0.05,
 };
 
 export default function CashPage() {
@@ -128,14 +121,11 @@ export default function CashPage() {
     five: 0,
     two: 0,
     one: 0,
-    half: 0,
-    quarter: 0,
-    tenCents: 0,
-    fiveCents: 0,
   });
 
   const [declaredAmount, setDeclaredAmount] = useState("");
   const [shift, setShift] = useState("morning");
+  const [deduction, setDeduction] = useState("");
 
   // Edit state
   const [editDeclaredAmount, setEditDeclaredAmount] = useState("");
@@ -151,10 +141,6 @@ export default function CashPage() {
     five: 0,
     two: 0,
     one: 0,
-    half: 0,
-    quarter: 0,
-    tenCents: 0,
-    fiveCents: 0,
   });
 
   const calculateTotal = () => {
@@ -176,8 +162,32 @@ export default function CashPage() {
     }));
   };
 
+  // Calculate expected totals
+  const expectedFromAppointments = dailyStats.totalAppointmentsToday;
+  const expectedFromLab = dailyStats.totalLabPaymentsToday;
+  const expectedFromRadiology = dailyStats.totalRadiologyPaymentsToday;
+  const approvedDiscounts = dailyStats.totalApprovedDiscountsToday;
+  const todaysExpenses = dailyStats.totalExpensesToday;
+
+  // Total Expected Amount = (Appointments + Lab + Radiology) - Discounts
+  const totalExpectedAmount =
+    expectedFromAppointments +
+    expectedFromLab +
+    expectedFromRadiology -
+    approvedDiscounts;
+
+  // Net Cash After Expenses = Total Expected - Today's Expenses
+  const netCashAfterExpenses = totalExpectedAmount - todaysExpenses;
+
+  // Final Calculated Amount = Net Cash After Expenses - Deduction
+  const finalCalculatedAmount =
+    netCashAfterExpenses - (parseFloat(deduction) || 0);
+
+  // Calculated Total (from denominations)
   const calculatedTotal = calculateTotal();
-  const variance = calculatedTotal - (parseFloat(declaredAmount) || 0);
+
+  // Variance = Calculated Total - Final Calculated Amount
+  const variance = calculatedTotal - finalCalculatedAmount;
 
   const resetCollection = () => {
     setDenominations({
@@ -191,12 +201,9 @@ export default function CashPage() {
       five: 0,
       two: 0,
       one: 0,
-      half: 0,
-      quarter: 0,
-      tenCents: 0,
-      fiveCents: 0,
     });
     setDeclaredAmount("");
+    setDeduction("");
     setShift("morning");
   };
 
@@ -284,7 +291,7 @@ export default function CashPage() {
         body: JSON.stringify({
           transactionType: "deposit",
           denominations,
-          declaredAmount: parseFloat(declaredAmount) || calculatedTotal,
+          declaredAmount: finalCalculatedAmount,
           shift,
           source: "patient_payment",
         }),
@@ -409,6 +416,11 @@ export default function CashPage() {
     }
   };
 
+  // Format currency to AFN
+  const formatCurrency = (amount: number) => {
+    return `${amount.toFixed(2)} AFN`;
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -434,7 +446,7 @@ export default function CashPage() {
                 Collection
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="max-w-[90vw] lg:max-w-[90%] max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Daily Collection Calculator</DialogTitle>
                 <DialogDescription>
@@ -443,147 +455,196 @@ export default function CashPage() {
                 </DialogDescription>
               </DialogHeader>
 
-              <div className="grid gap-6 md:grid-cols-2">
-                {/* Notes Section */}
-                <div className="space-y-4">
-                  <h3 className="font-semibold flex items-center gap-2">
-                    <Banknote className="h-4 w-4" /> Notes
-                  </h3>
-                  {[
-                    { key: "thousand", label: "1000" },
-                    { key: "fiveHundred", label: "500" },
-                    { key: "twoHundred", label: "200" },
-                    { key: "oneHundred", label: "100" },
-                    { key: "fifty", label: "50" },
-                    { key: "twenty", label: "20" },
-                    { key: "ten", label: "10" },
-                    { key: "five", label: "5" },
-                  ].map(({ key, label }) => (
-                    <div
-                      key={key}
-                      className="flex items-center justify-between"
-                    >
-                      <Label className="w-20">{label} x</Label>
-                      <Input
-                        type="number"
-                        min="0"
-                        className="w-24"
-                        value={denominations[key as keyof Denominations]}
-                        onChange={(e) =>
-                          handleDenominationChange(
-                            key as keyof Denominations,
-                            e.target.value,
-                          )
-                        }
-                      />
-                      <span className="w-24 text-right text-muted-foreground">
-                        ={" "}
-                        {(
-                          denominations[key as keyof Denominations] *
-                          parseFloat(label)
-                        ).toFixed(2)}
-                      </span>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Left Column: Denominations */}
+                <div className="space-y-6">
+                  {/* Notes Section */}
+                  <div className="space-y-4">
+                    <h3 className="font-semibold flex items-center gap-2">
+                      <Banknote className="h-4 w-4" /> Afghan Afghani (AFN)
+                    </h3>
+                    <div className="space-y-3">
+                      {[
+                        { key: "thousand", label: "1000" },
+                        { key: "fiveHundred", label: "500" },
+                        { key: "twoHundred", label: "200" },
+                        { key: "oneHundred", label: "100" },
+                        { key: "fifty", label: "50" },
+                        { key: "twenty", label: "20" },
+                        { key: "ten", label: "10" },
+                        { key: "five", label: "5" },
+                        { key: "two", label: "2" },
+                        { key: "one", label: "1" },
+                      ].map(({ key, label }) => (
+                        <div
+                          key={key}
+                          className="flex items-center justify-between"
+                        >
+                          <Label className="w-16">{label} AFN x</Label>
+                          <Input
+                            type="number"
+                            min="0"
+                            className="w-20"
+                            value={denominations[key as keyof Denominations]}
+                            onChange={(e) =>
+                              handleDenominationChange(
+                                key as keyof Denominations,
+                                e.target.value,
+                              )
+                            }
+                          />
+                          <span className="w-24 text-right text-muted-foreground">
+                            ={" "}
+                            {(
+                              denominations[key as keyof Denominations] *
+                              parseFloat(label)
+                            ).toFixed(2)}{" "}
+                            AFN
+                          </span>
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  </div>
                 </div>
 
-                {/* Coins Section */}
-                <div className="space-y-4">
-                  <h3 className="font-semibold flex items-center gap-2">
-                    <DollarSign className="h-4 w-4" /> Coins
-                  </h3>
-                  {[
-                    { key: "two", label: "2" },
-                    { key: "one", label: "1" },
-                    { key: "half", label: "0.50" },
-                    { key: "quarter", label: "0.25" },
-                    { key: "tenCents", label: "0.10" },
-                    { key: "fiveCents", label: "0.05" },
-                  ].map(({ key, label }) => (
-                    <div
-                      key={key}
-                      className="flex items-center justify-between"
-                    >
-                      <Label className="w-20">{label} x</Label>
-                      <Input
-                        type="number"
-                        min="0"
-                        className="w-24"
-                        value={denominations[key as keyof Denominations]}
-                        onChange={(e) =>
-                          handleDenominationChange(
-                            key as keyof Denominations,
-                            e.target.value,
-                          )
-                        }
-                      />
-                      <span className="w-24 text-right text-muted-foreground">
-                        ={" "}
-                        {(
-                          denominations[key as keyof Denominations] *
-                          parseFloat(label)
-                        ).toFixed(2)}
+                {/* Right Column: Summary & Calculations */}
+                <div className="space-y-6">
+                  {/* Expected Collection Summary */}
+                  <div className="rounded-lg border p-4 space-y-3">
+                    <h3 className="font-semibold flex items-center gap-2">
+                      <Calculator className="h-4 w-4" /> Expected Collection
+                      Summary
+                    </h3>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span>Appointments:</span>
+                        <span className="font-medium">
+                          {formatCurrency(expectedFromAppointments)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span>Lab Payments:</span>
+                        <span className="font-medium">
+                          {formatCurrency(expectedFromLab)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span>Radiology Payments:</span>
+                        <span className="font-medium">
+                          {formatCurrency(expectedFromRadiology)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-sm text-orange-600">
+                        <span className="flex items-center gap-1">
+                          <TrendingDown className="h-3 w-3" /> Approved
+                          Discounts:
+                        </span>
+                        <span className="font-medium">
+                          -{formatCurrency(approvedDiscounts)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-sm font-semibold border-t pt-2">
+                        <span>Total Expected Amount:</span>
+                        <span className="text-lg">
+                          {formatCurrency(totalExpectedAmount)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-sm text-red-600">
+                        <span className="flex items-center gap-1">
+                          <Receipt className="h-3 w-3" /> Less: Today's
+                          Expenses:
+                        </span>
+                        <span className="font-medium">
+                          -{formatCurrency(todaysExpenses)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-sm font-semibold border-t pt-2">
+                        <span>Net Cash After Expenses:</span>
+                        <span className="text-lg">
+                          {formatCurrency(netCashAfterExpenses)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Denomination Summary & Controls */}
+                  <div className="rounded-lg bg-muted p-4 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-lg font-semibold">
+                        Calculated Total (from denominations):
+                      </span>
+                      <span className="text-2xl font-bold">
+                        {formatCurrency(calculatedTotal)}
                       </span>
                     </div>
-                  ))}
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Shift</Label>
+                        <Select value={shift} onValueChange={setShift}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="morning">Morning</SelectItem>
+                            <SelectItem value="evening">Evening</SelectItem>
+                            <SelectItem value="night">Night</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Deduction (for expenses/other)</Label>
+                        <Input
+                          type="number"
+                          placeholder="0.00"
+                          value={deduction}
+                          onChange={(e) => setDeduction(e.target.value)}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Final Amount & Variance */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+                        <span className="font-semibold text-green-700">
+                          Final Deposit Amount:
+                        </span>
+                        <span className="text-2xl font-bold text-green-700">
+                          {formatCurrency(finalCalculatedAmount)}
+                        </span>
+                      </div>
+
+                      {/* Variance Display */}
+                      <div
+                        className={`flex items-center justify-between p-3 rounded-lg ${
+                          variance === 0
+                            ? "bg-green-100 text-green-700"
+                            : variance > 0
+                              ? "bg-yellow-100 text-yellow-700"
+                              : "bg-red-100 text-red-700"
+                        }`}
+                      >
+                        <span className="font-medium">
+                          Variance (Counted - Expected):
+                        </span>
+                        <span className="font-bold text-lg">
+                          {variance > 0 ? "+" : ""}
+                          {formatCurrency(variance)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {/* Summary */}
-              <div className="rounded-lg bg-muted p-4 space-y-4">
-                <div className="flex items-center justify-between text-lg font-semibold">
-                  <span>Calculated Total:</span>
-                  <span className="text-2xl">
-                    ${calculatedTotal.toFixed(2)}
-                  </span>
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>Shift</Label>
-                    <Select value={shift} onValueChange={setShift}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="morning">Morning</SelectItem>
-                        <SelectItem value="evening">Evening</SelectItem>
-                        <SelectItem value="night">Night</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Declared Amount (Optional)</Label>
-                    <Input
-                      type="number"
-                      placeholder="Enter declared amount"
-                      value={declaredAmount}
-                      onChange={(e) => setDeclaredAmount(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                {declaredAmount && (
-                  <div
-                    className={`flex items-center justify-between p-3 rounded-lg ${variance === 0 ? "bg-green-100 text-green-700" : variance > 0 ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-700"}`}
-                  >
-                    <span className="font-medium">Variance:</span>
-                    <span className="font-bold">
-                      {variance > 0 ? "+" : ""}
-                      {variance.toFixed(2)}
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              <DialogFooter className="flex gap-2">
+              <DialogFooter className="flex gap-2 pt-4 border-t">
                 <Button variant="outline" onClick={resetCollection}>
                   Reset
                 </Button>
                 <Button onClick={handleAddCollection}>
                   <Plus className="mr-2 h-4 w-4" />
-                  Add Collection
+                  Add Collection ({formatCurrency(finalCalculatedAmount)})
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -602,7 +663,7 @@ export default function CashPage() {
 
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label>Declared Amount</Label>
+                  <Label>Declared Amount (AFN)</Label>
                   <Input
                     type="number"
                     placeholder="Enter declared amount"
@@ -628,16 +689,16 @@ export default function CashPage() {
                 {editingTransaction && (
                   <div className="rounded-lg bg-muted p-3 text-sm">
                     <p>
-                      <strong>Current Amount:</strong> $
-                      {editingTransaction.declaredAmount.toFixed(2)}
+                      <strong>Current Amount:</strong>{" "}
+                      {formatCurrency(editingTransaction.declaredAmount)}
                     </p>
                     <p>
-                      <strong>Calculated Total:</strong> $
-                      {editingTransaction.calculatedTotal.toFixed(2)}
+                      <strong>Calculated Total:</strong>{" "}
+                      {formatCurrency(editingTransaction.calculatedTotal)}
                     </p>
                     <p>
-                      <strong>Variance:</strong> $
-                      {editingTransaction.variance.toFixed(2)}
+                      <strong>Variance:</strong>{" "}
+                      {formatCurrency(editingTransaction.variance)}
                     </p>
                   </div>
                 )}
@@ -663,7 +724,7 @@ export default function CashPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              ${summary.cashOnHand.toFixed(2)}
+              {formatCurrency(summary.cashOnHand)}
             </div>
             <p className="text-xs text-muted-foreground">Closing balance</p>
           </CardContent>
@@ -678,7 +739,7 @@ export default function CashPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              ${summary.todayCollection.toFixed(2)}
+              {formatCurrency(summary.todayCollection)}
             </div>
             <p className="text-xs text-muted-foreground">
               {
@@ -717,7 +778,7 @@ export default function CashPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-red-600">
-              ${dailyStats.totalExpensesToday.toFixed(2)}
+              {formatCurrency(dailyStats.totalExpensesToday)}
             </div>
             <p className="text-xs text-muted-foreground">All expenses today</p>
           </CardContent>
@@ -730,7 +791,7 @@ export default function CashPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-blue-600">
-              ${dailyStats.totalAppointmentsToday.toFixed(2)}
+              {formatCurrency(dailyStats.totalAppointmentsToday)}
             </div>
             <p className="text-xs text-muted-foreground">Total fees today</p>
           </CardContent>
@@ -745,7 +806,7 @@ export default function CashPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-orange-600">
-              ${dailyStats.totalApprovedDiscountsToday.toFixed(2)}
+              {formatCurrency(dailyStats.totalApprovedDiscountsToday)}
             </div>
             <p className="text-xs text-muted-foreground">Discounts today</p>
           </CardContent>
@@ -758,7 +819,7 @@ export default function CashPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-purple-600">
-              ${dailyStats.totalLabPaymentsToday.toFixed(2)}
+              {formatCurrency(dailyStats.totalLabPaymentsToday)}
             </div>
             <p className="text-xs text-muted-foreground">Paid tests today</p>
           </CardContent>
@@ -773,77 +834,12 @@ export default function CashPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-cyan-600">
-              ${dailyStats.totalRadiologyPaymentsToday.toFixed(2)}
+              {formatCurrency(dailyStats.totalRadiologyPaymentsToday)}
             </div>
             <p className="text-xs text-muted-foreground">Paid exams today</p>
           </CardContent>
         </Card>
       </div>
-
-      {/* Transaction Form */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Quick Transaction</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <div className="space-y-2">
-              <Label htmlFor="type">Transaction Type</Label>
-              <Select
-                value={transactionType}
-                onValueChange={setTransactionType}
-              >
-                <SelectTrigger id="type">
-                  <SelectValue placeholder="Select type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="payment">Payment</SelectItem>
-                  <SelectItem value="refund">Refund</SelectItem>
-                  <SelectItem value="advance">Advance</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="amount">Amount</Label>
-              <Input
-                id="amount"
-                type="number"
-                placeholder="0.00"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="method">Payment Method</Label>
-              <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                <SelectTrigger id="method">
-                  <SelectValue placeholder="Select method" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="cash">Cash</SelectItem>
-                  <SelectItem value="card">Card</SelectItem>
-                  <SelectItem value="insurance">Insurance</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>&nbsp;</Label>
-              <Button className="w-full">
-                {transactionType === "payment" ? (
-                  <ArrowUpRight className="mr-2 h-4 w-4" />
-                ) : (
-                  <ArrowDownLeft className="mr-2 h-4 w-4" />
-                )}
-                {transactionType === "payment" ? "Collect" : "Refund"}
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Recent Transactions */}
       <Card>
         <CardHeader>
@@ -896,12 +892,12 @@ export default function CashPage() {
                               tx.transactionType === "closing"
                             ? "-"
                             : ""}
-                        ${(tx.amount || 0).toFixed(2)}
+                        {formatCurrency(tx.amount || 0)}
                       </p>
                       {tx.variance !== 0 && (
                         <p className="text-xs text-yellow-600">
                           Variance: {tx.variance > 0 ? "+" : ""}
-                          {tx.variance.toFixed(2)}
+                          {formatCurrency(tx.variance)}
                         </p>
                       )}
                       <span

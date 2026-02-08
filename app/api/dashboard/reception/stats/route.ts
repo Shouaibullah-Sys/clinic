@@ -100,7 +100,7 @@ export async function GET(request: NextRequest) {
 
     const totalExpensesToday = todayExpenses[0]?.totalAmount || 0;
 
-    // Get today's appointments total amount
+    // Get today's appointments total amount (using doctor's consultationFee)
     const todayAppointmentsAmount = await Appointment.aggregate([
       {
         $match: {
@@ -108,14 +108,36 @@ export async function GET(request: NextRequest) {
         },
       },
       {
+        $lookup: {
+          from: "users",
+          localField: "doctor",
+          foreignField: "_id",
+          as: "doctorData",
+        },
+      },
+      {
+        $unwind: {
+          path: "$doctorData",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+      {
         $group: {
           _id: null,
-          totalAmount: { $sum: "$fees" },
+          totalAmount: { $sum: "$doctorData.consultationFee" },
         },
       },
     ]);
 
+    console.log(
+      "[Stats API] Today's appointments amount query result:",
+      todayAppointmentsAmount,
+    );
     const totalAppointmentsToday = todayAppointmentsAmount[0]?.totalAmount || 0;
+    console.log(
+      "[Stats API] Total appointments today:",
+      totalAppointmentsToday,
+    );
 
     // Get today's approved discounts total amount
     const todayApprovedDiscounts = await DiscountRequest.aggregate([

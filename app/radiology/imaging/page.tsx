@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 // app/radiology/imaging/page.tsx
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
@@ -6,7 +6,13 @@ import { ImagingTable } from "@/components/data-table/imaging-table";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useImagingRecords } from "@/lib/hooks/use-services";
 import { Search, Plus, Filter, Download, RefreshCw } from "lucide-react";
 import { useState } from "react";
@@ -28,18 +34,23 @@ export default function ImagingServicesPage() {
   // Calculate statistics from real data
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  
-  const todayRecords = imagingRecords.filter(r => new Date(r.createdAt) >= today);
-  
+
+  const todayRecords = imagingRecords.filter(
+    (r) => new Date(r.createdAt) >= today,
+  );
+
   const todaySchedule = {
-    xray: todayRecords.filter(r => r.imagingType === "x-ray").length,
-    ct: todayRecords.filter(r => r.imagingType === "ct-scan").length,
-    mri: todayRecords.filter(r => r.imagingType === "mri").length,
-    ultrasound: todayRecords.filter(r => r.imagingType === "ultrasound").length,
+    xray: todayRecords.filter((r) => r.imagingType === "x-ray").length,
+    ct: todayRecords.filter((r) => r.imagingType === "ct-scan").length,
+    mri: todayRecords.filter((r) => r.imagingType === "mri").length,
+    ultrasound: todayRecords.filter((r) => r.imagingType === "ultrasound")
+      .length,
   };
-  
-  const pendingReports = imagingRecords.filter(r => r.reportStatus === "pending").length;
-  
+
+  const pendingReports = imagingRecords.filter(
+    (r) => r.reportStatus === "pending",
+  ).length;
+
   const handleRefresh = async () => {
     try {
       await refetch();
@@ -58,19 +69,23 @@ export default function ImagingServicesPage() {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Imaging Services</h1>
+            <h1 className="text-3xl font-bold tracking-tight">
+              Imaging Services
+            </h1>
             <p className="text-muted-foreground">
               Manage X-Ray, CT Scan, MRI, and Ultrasound services
             </p>
           </div>
           <div className="flex gap-2">
-            <Button onClick={handleRefresh} disabled={isLoading} variant="outline">
-              <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+            <Button
+              onClick={handleRefresh}
+              disabled={isLoading}
+              variant="outline"
+            >
+              <RefreshCw
+                className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`}
+              />
               Refresh
-            </Button>
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              New Imaging
             </Button>
           </div>
         </div>
@@ -84,12 +99,7 @@ export default function ImagingServicesPage() {
               <TabsTrigger value="mri">MRI</TabsTrigger>
               <TabsTrigger value="ultrasound">Ultrasound</TabsTrigger>
             </TabsList>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm">
-                <Download className="mr-2 h-4 w-4" />
-                Export
-              </Button>
-            </div>
+            <div className="flex items-center gap-2"></div>
           </div>
 
           <div className="flex flex-col sm:flex-row gap-4">
@@ -100,14 +110,21 @@ export default function ImagingServicesPage() {
                   placeholder="Search patients, body parts..."
                   className="pl-10"
                   value={filters.search}
-                  onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+                  onChange={(e) =>
+                    setFilters({ ...filters, search: e.target.value })
+                  }
                 />
               </div>
             </div>
             <div className="flex gap-2">
               <Select
                 value={filters.status || "all"}
-                onValueChange={(value) => setFilters({ ...filters, status: value === "all" ? "" : value })}
+                onValueChange={(value) =>
+                  setFilters({
+                    ...filters,
+                    status: value === "all" ? "" : value,
+                  })
+                }
               >
                 <SelectTrigger className="w-35">
                   <SelectValue placeholder="Status" />
@@ -122,7 +139,9 @@ export default function ImagingServicesPage() {
               </Select>
               <Select
                 value={filters.type || "all"}
-                onValueChange={(value) => setFilters({ ...filters, type: value === "all" ? "" : value })}
+                onValueChange={(value) =>
+                  setFilters({ ...filters, type: value === "all" ? "" : value })
+                }
               >
                 <SelectTrigger className="w-35">
                   <SelectValue placeholder="Type" />
@@ -145,16 +164,26 @@ export default function ImagingServicesPage() {
             <ImagingTable data={imagingRecords} />
           </TabsContent>
           <TabsContent value="xray">
-            <ImagingTable data={imagingRecords.filter(d => d.imagingType === "x-ray")} />
+            <ImagingTable
+              data={imagingRecords.filter((d) => d.imagingType === "x-ray")}
+            />
           </TabsContent>
           <TabsContent value="ct">
-            <ImagingTable data={imagingRecords.filter(d => d.imagingType === "ct-scan")} />
+            <ImagingTable
+              data={imagingRecords.filter((d) => d.imagingType === "ct-scan")}
+            />
           </TabsContent>
           <TabsContent value="mri">
-            <ImagingTable data={imagingRecords.filter(d => d.imagingType === "mri")} />
+            <ImagingTable
+              data={imagingRecords.filter((d) => d.imagingType === "mri")}
+            />
           </TabsContent>
           <TabsContent value="ultrasound">
-            <ImagingTable data={imagingRecords.filter(d => d.imagingType === "ultrasound")} />
+            <ImagingTable
+              data={imagingRecords.filter(
+                (d) => d.imagingType === "ultrasound",
+              )}
+            />
           </TabsContent>
         </Tabs>
 
@@ -176,7 +205,9 @@ export default function ImagingServicesPage() {
               </div>
               <div className="flex justify-between">
                 <span>Ultrasound</span>
-                <span className="font-semibold">{todaySchedule.ultrasound}</span>
+                <span className="font-semibold">
+                  {todaySchedule.ultrasound}
+                </span>
               </div>
             </div>
           </div>
@@ -191,7 +222,9 @@ export default function ImagingServicesPage() {
 
           <div className="bg-card rounded-lg border p-6">
             <h3 className="font-semibold mb-2">Total Records</h3>
-            <div className="text-3xl font-bold mb-2">{imagingRecords.length}</div>
+            <div className="text-3xl font-bold mb-2">
+              {imagingRecords.length}
+            </div>
             <p className="text-sm text-muted-foreground">
               Total imaging records in database
             </p>

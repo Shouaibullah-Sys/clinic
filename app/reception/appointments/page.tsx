@@ -183,7 +183,12 @@ export default function AppointmentsPage() {
   useEffect(() => {
     fetchAppointments();
     fetchDoctors();
-  }, [page, timeRange, selectedStatus, selectedDoctor]);
+  }, [page, timeRange, selectedStatus, selectedDoctor, searchQuery]);
+
+  // Reset page to 1 when filters change (except page itself)
+  useEffect(() => {
+    setPage(1);
+  }, [timeRange, selectedStatus, selectedDoctor, searchQuery]);
 
   const updateTimeRange = (range: string) => {
     const today = new Date();
@@ -295,6 +300,11 @@ export default function AppointmentsPage() {
 
       if (selectedDoctor !== "all") {
         params.set("doctorId", selectedDoctor);
+      }
+
+      // Add search query if provided
+      if (searchQuery.trim()) {
+        params.set("search", searchQuery.trim());
       }
 
       const response = await fetch(`/api/appointments?${params.toString()}`, {
@@ -550,18 +560,8 @@ export default function AppointmentsPage() {
 
   const stats = calculateStats();
 
-  const filteredAppointments = appointments.filter((appointment) => {
-    if (!searchQuery) return true;
-
-    const query = searchQuery.toLowerCase();
-    return (
-      appointment.patient.name.toLowerCase().includes(query) ||
-      appointment.patient.phone.toLowerCase().includes(query) ||
-      appointment.appointmentId.toLowerCase().includes(query) ||
-      (appointment.doctor?.name || "").toLowerCase().includes(query) ||
-      appointment.reason.toLowerCase().includes(query)
-    );
-  });
+  // Since we're now doing server-side filtering, filteredAppointments is just appointments
+  const filteredAppointments = appointments;
 
   if (loading && appointments.length === 0) {
     return (
@@ -876,6 +876,7 @@ export default function AppointmentsPage() {
                             setSearchQuery("");
                             setSelectedStatus("all");
                             setSelectedDoctor("all");
+                            setPage(1);
                           }}
                         >
                           Clear All Filters

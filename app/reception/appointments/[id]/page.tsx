@@ -59,7 +59,6 @@ import {
   Copy,
   AlertCircle,
   Scan,
-  AlertTriangle,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { toast } from "sonner";
@@ -155,6 +154,19 @@ interface Prescription {
   notes?: string;
   status: string;
   expiryDate: string;
+  charges?: {
+    basePrice?: number;
+    tax?: number;
+    discount?: number;
+    otherCharges?: number;
+    totalAmount?: number;
+    paid?: number;
+    due?: number;
+    paymentStatus: string;
+    paymentMethod?: string;
+    transactionId?: string;
+  };
+  paymentVerified?: boolean;
 }
 
 interface ImagingService {
@@ -239,7 +251,11 @@ export default function AppointmentDetailPage() {
     price: 0,
   });
   const [processingPayment, setProcessingPayment] = useState(false);
-  const [paymentType, setPaymentType] = useState<"lab" | "imaging">("lab");
+  const [selectedPrescription, setSelectedPrescription] =
+    useState<Prescription | null>(null);
+  const [paymentType, setPaymentType] = useState<
+    "lab" | "imaging" | "prescription"
+  >("lab");
 
   useEffect(() => {
     if (params.id && accessToken) {
@@ -502,7 +518,7 @@ export default function AppointmentDetailPage() {
   };
 
   // Helper function to determine if payment should be disabled
-  const isPaymentDisabled = (item: LabTest | ImagingService) => {
+  const isPaymentDisabled = (item: LabTest | ImagingService | Prescription) => {
     if ("testId" in item) {
       return item.charges?.paymentStatus === "paid";
     }
@@ -515,13 +531,20 @@ export default function AppointmentDetailPage() {
       );
     }
 
+    if ("prescriptionId" in item) {
+      return (
+        item.charges?.paymentStatus === "paid" || item.paymentVerified === true
+      );
+    }
+
     return false;
   };
 
-  // Process payment for lab test
+  // Process payment for lab test, imaging, or prescription
   const handleProcessPayment = async () => {
     if (paymentType === "lab" && !selectedLabTest) return;
     if (paymentType === "imaging" && !selectedImagingService) return;
+    if (paymentType === "prescription" && !selectedPrescription) return;
 
     if (
       paymentType === "lab" &&
@@ -539,6 +562,16 @@ export default function AppointmentDetailPage() {
       isPaymentDisabled(selectedImagingService)
     ) {
       toast.error("This imaging service has already been paid");
+      setPaymentDialogOpen(false);
+      return;
+    }
+
+    if (
+      paymentType === "prescription" &&
+      selectedPrescription &&
+      isPaymentDisabled(selectedPrescription)
+    ) {
+      toast.error("This prescription has already been paid");
       setPaymentDialogOpen(false);
       return;
     }
@@ -564,6 +597,13 @@ export default function AppointmentDetailPage() {
           paidAmount: paymentForm.amount,
           transactionId: paymentForm.transactionId,
           verifyPayment: true,
+        };
+      } else if (paymentType === "prescription" && selectedPrescription) {
+        url = `/api/reception/prescriptions/${selectedPrescription._id}/payment`;
+        body = {
+          paymentMethod: paymentForm.paymentMethod,
+          amount: paymentForm.amount,
+          transactionId: paymentForm.transactionId,
         };
       } else {
         return;
@@ -751,6 +791,78 @@ export default function AppointmentDetailPage() {
       .catch(() => toast.error("Failed to copy to clipboard"));
   };
 
+  // Print prescription receipt
+  const handlePrintPrescriptionReceipt = (prescription: Prescription) => {
+    const medsText = prescription.medications
+      .map(
+        (med) =>
+          `${med.name} - ${med.dosage} - ${med.frequency} - ${med.duration} - Qty: ${med.quantity} - ${((med.price || 0) * (med.quantity || 1)).toFixed(2)}`,
+      )
+      .join("\n");
+
+    const total = calculatePrescriptionTotal(prescription);
+    const receiptContent = `
+      HOSPITAL RECEIPT
+      =================
+      Receipt #: ${prescription.charges?.transactionId || `TXN-${Date.now()}`}
+      Date: ${format(new Date(), "yyyy-MM-dd HH:mm")}
+      
+      Patient: ${appointment?.patient?.name}
+      Patient ID: ${appointment?.patient?.patientId}
+      
+      Prescription #: ${prescription.prescriptionId}
+      Doctor: Dr. ${prescription.doctor.name}
+      Date: ${format(parseISO(prescription.prescribedDate), "yyyy-MM-dd")}
+      Diagnosis: ${prescription.diagnosis}
+      
+      Medications:
+      ${medsText}
+      
+      Charges:
+        Base Price: ${total.toFixed(2)}
+        Tax: ${prescription.charges?.tax?.toFixed(2) || "0.00"}
+        Other Charges: ${prescription.charges?.otherCharges?.toFixed(2) || "0.00"}
+        Discount: -${prescription.charges?.discount?.toFixed(2) || "0.00"}
+        -----------------
+        Total: ${(prescription.charges?.totalAmount || total).toFixed(2)}
+      
+      Payment:
+        Method: ${prescription.charges?.paymentMethod || "cash"}
+        Amount Paid: ${prescription.charges?.paid?.toFixed(2) || "0.00"}
+        Due: ${prescription.charges?.due?.toFixed(2) || (prescription.charges?.totalAmount || total).toFixed(2)}
+      
+      Processed by: ${user?.name}
+      =================
+      Thank you for your payment!
+    `;
+
+    const printWindow = window.open("", "_blank");
+    printWindow?.document.write(`
+      <html>
+        <head>
+          <title>Receipt - ${prescription.prescriptionId}</title>
+          <style>
+            body { font-family: monospace; padding: 20px; }
+            h1 { text-align: center; }
+            .receipt { max-width: 400px; margin: 0 auto; }
+            .total { font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <div class="receipt">
+            <pre>${receiptContent}</pre>
+          </div>
+          <script>
+            window.onload = function() {
+              window.print();
+              window.close();
+            }
+          </script>
+        </body>
+      </html>
+    `);
+  };
+
   // Calculate test total
   const calculateTestTotal = (test: LabTest) => {
     const base = test.discountedPrice || test.price || 0;
@@ -758,6 +870,14 @@ export default function AppointmentDetailPage() {
     const other = test.charges?.otherCharges || 0;
     const discount = test.charges?.discount || 0;
     return base + tax + other - discount;
+  };
+
+  // Calculate prescription total
+  const calculatePrescriptionTotal = (prescription: Prescription) => {
+    return prescription.medications.reduce(
+      (sum, med) => sum + (med.price || 0) * (med.quantity || 1),
+      0,
+    );
   };
 
   // Calculate billing totals
@@ -1338,7 +1458,7 @@ export default function AppointmentDetailPage() {
                 Prescriptions
               </CardTitle>
               <CardDescription className="flex items-center gap-2 dark:text-gray-400">
-                All prescriptions issued for this patient
+                Manage and process payments for prescriptions
                 {prescriptions.length > 0 && (
                   <Badge
                     variant="outline"
@@ -1362,87 +1482,165 @@ export default function AppointmentDetailPage() {
                   </p>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {prescriptions.map((prescription) => (
-                    <Card
-                      key={prescription._id}
-                      className="dark:bg-gray-800 dark:border-gray-700"
-                    >
-                      <CardContent className="pt-6">
-                        <div className="flex justify-between items-start mb-4">
-                          <div>
-                            <h3 className="font-semibold dark:text-gray-100">
-                              {prescription.prescriptionId}
-                            </h3>
-                            <p className="text-sm text-gray-500 dark:text-gray-400">
-                              {format(
-                                parseISO(prescription.prescribedDate),
-                                "MMM d, yyyy",
-                              )}
-                            </p>
-                            <p className="mt-1 dark:text-gray-300">
-                              Diagnosis: {prescription.diagnosis}
-                            </p>
-                          </div>
-                          <Badge className="dark:border-gray-600 dark:text-gray-300">
-                            {prescription.status}
-                          </Badge>
-                        </div>
-
-                        <div className="space-y-3">
-                          <h4 className="font-medium dark:text-gray-200">
-                            Medications:
-                          </h4>
-                          {prescription.medications.map((med, index) => (
-                            <div
-                              key={index}
-                              className="pl-4 border-l-2 dark:border-gray-600"
-                            >
-                              <div className="flex justify-between">
-                                <span className="font-medium dark:text-gray-200">
-                                  {med.name}
-                                </span>
-                                <span className="dark:text-gray-300">
-                                  ${(med.price || 0).toFixed(2)} ×{" "}
-                                  {med.quantity}
-                                </span>
-                              </div>
-                              <p className="text-sm text-gray-500 dark:text-gray-400">
-                                {med.dosage} • {med.frequency} • {med.duration}
-                              </p>
+                <div className="rounded-md border dark:border-gray-800">
+                  <Table>
+                    <TableHeader className="dark:bg-gray-800">
+                      <TableRow className="dark:border-gray-800">
+                        <TableHead className="dark:text-gray-300">
+                          Prescription ID
+                        </TableHead>
+                        <TableHead className="dark:text-gray-300">
+                          Doctor
+                        </TableHead>
+                        <TableHead className="dark:text-gray-300">
+                          Date
+                        </TableHead>
+                        <TableHead className="dark:text-gray-300">
+                          Medications
+                        </TableHead>
+                        <TableHead className="dark:text-gray-300">
+                          Total
+                        </TableHead>
+                        <TableHead className="dark:text-gray-300">
+                          Payment Status
+                        </TableHead>
+                        <TableHead className="dark:text-gray-300">
+                          Due
+                        </TableHead>
+                        <TableHead className="dark:text-gray-300">
+                          Status
+                        </TableHead>
+                        <TableHead className="dark:text-gray-300">
+                          Actions
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {prescriptions.map((prescription) => (
+                        <TableRow
+                          key={prescription._id}
+                          className={`dark:border-gray-800 ${
+                            isPaymentDisabled(prescription)
+                              ? "bg-green-50 dark:bg-green-900/10"
+                              : ""
+                          }`}
+                        >
+                          <TableCell className="font-medium dark:text-gray-200">
+                            {prescription.prescriptionId}
+                          </TableCell>
+                          <TableCell className="dark:text-gray-300">
+                            {prescription.doctor.name}
+                          </TableCell>
+                          <TableCell className="dark:text-gray-300">
+                            {format(
+                              parseISO(prescription.prescribedDate),
+                              "MMM d, yyyy",
+                            )}
+                          </TableCell>
+                          <TableCell className="dark:text-gray-300">
+                            <div className="max-w-xs truncate">
+                              {prescription.medications.map((med, idx) => (
+                                <div key={idx} className="text-sm">
+                                  {med.name} (×{med.quantity})
+                                </div>
+                              ))}
                             </div>
-                          ))}
-                        </div>
-
-                        <div className="mt-4 pt-4 border-t dark:border-gray-700 flex justify-between items-center">
-                          <div>
-                            <p className="text-sm text-gray-500 dark:text-gray-400">
-                              Total Medications Cost:
-                            </p>
-                            <p className="font-bold dark:text-gray-100">
-                              $
-                              {prescription.medications
-                                .reduce(
-                                  (sum, med) =>
-                                    sum +
-                                    (med.quantity || 1) * (med.price || 0),
-                                  0,
-                                )
-                                .toFixed(2)}
-                            </p>
-                          </div>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleCopyToDispensary(prescription)}
-                          >
-                            <Copy className="h-3 w-3 mr-1" />
-                            Copy to Dispensary
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
+                          </TableCell>
+                          <TableCell className="dark:text-gray-300">
+                            $
+                            {(
+                              prescription.charges?.totalAmount ||
+                              calculatePrescriptionTotal(prescription)
+                            ).toFixed(2)}
+                          </TableCell>
+                          <TableCell>
+                            {getPaymentStatusBadge(
+                              prescription.charges?.paymentStatus || "unpaid",
+                            )}
+                          </TableCell>
+                          <TableCell className="font-bold text-red-600 dark:text-red-400">
+                            $
+                            {(
+                              prescription.charges?.due ||
+                              prescription.charges?.totalAmount ||
+                              calculatePrescriptionTotal(prescription)
+                            ).toFixed(2)}
+                          </TableCell>
+                          <TableCell>
+                            {getLabStatusBadge(prescription.status)}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                variant={
+                                  isPaymentDisabled(prescription)
+                                    ? "secondary"
+                                    : "outline"
+                                }
+                                onClick={() => {
+                                  setSelectedPrescription(prescription);
+                                  setPaymentType("prescription");
+                                  setPaymentForm({
+                                    paymentMethod:
+                                      prescription.charges?.paymentMethod ||
+                                      "cash",
+                                    amount:
+                                      prescription.charges?.due ||
+                                      prescription.charges?.totalAmount ||
+                                      calculatePrescriptionTotal(prescription),
+                                    transactionId:
+                                      prescription.charges?.transactionId || "",
+                                    notes: "",
+                                    price: 0,
+                                  });
+                                  setPaymentDialogOpen(true);
+                                }}
+                                disabled={isPaymentDisabled(prescription)}
+                                className={
+                                  isPaymentDisabled(prescription)
+                                    ? "opacity-50 cursor-not-allowed"
+                                    : ""
+                                }
+                              >
+                                {isPaymentDisabled(prescription) ? (
+                                  <>
+                                    <CheckCircle className="h-3 w-3 mr-1" />
+                                    Paid
+                                  </>
+                                ) : (
+                                  <>
+                                    <CreditCard className="h-3 w-3 mr-1" />
+                                    Pay
+                                  </>
+                                )}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() =>
+                                  handlePrintPrescriptionReceipt(prescription)
+                                }
+                              >
+                                <Receipt className="h-3 w-3 mr-1" />
+                                Receipt
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() =>
+                                  handleCopyToDispensary(prescription)
+                                }
+                              >
+                                <Copy className="h-3 w-3 mr-1" />
+                                Copy
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
                 </div>
               )}
             </CardContent>
@@ -1812,15 +2010,17 @@ export default function AppointmentDetailPage() {
             <DialogDescription className="dark:text-gray-400">
               {paymentType === "lab"
                 ? `Process payment for ${selectedLabTest?.testName}`
-                : `Process payment for ${
-                    selectedImagingService?.serviceType === "x-ray"
-                      ? "X-Ray"
-                      : selectedImagingService?.serviceType === "ct-scan"
-                        ? "CT Scan"
-                        : selectedImagingService?.serviceType === "mri"
-                          ? "MRI"
-                          : "Ultrasound"
-                  }`}
+                : paymentType === "prescription"
+                  ? `Process payment for prescription ${selectedPrescription?.prescriptionId}`
+                  : `Process payment for ${
+                      selectedImagingService?.serviceType === "x-ray"
+                        ? "X-Ray"
+                        : selectedImagingService?.serviceType === "ct-scan"
+                          ? "CT Scan"
+                          : selectedImagingService?.serviceType === "mri"
+                            ? "MRI"
+                            : "Ultrasound"
+                    }`}
             </DialogDescription>
           </DialogHeader>
 
@@ -1968,6 +2168,108 @@ export default function AppointmentDetailPage() {
                     selectedImagingService.charges?.due ||
                     selectedImagingService.charges?.totalAmount ||
                     0
+                  ).toFixed(2)}
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <Label className="dark:text-gray-300">Payment Method</Label>
+                  <Select
+                    value={paymentForm.paymentMethod}
+                    onValueChange={(value) =>
+                      setPaymentForm((prev) => ({
+                        ...prev,
+                        paymentMethod: value,
+                      }))
+                    }
+                  >
+                    <SelectTrigger className="dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="dark:bg-gray-800 dark:border-gray-700">
+                      <SelectItem
+                        value="cash"
+                        className="dark:text-gray-300 dark:focus:bg-gray-700"
+                      >
+                        Cash
+                      </SelectItem>
+                      <SelectItem
+                        value="card"
+                        className="dark:text-gray-300 dark:focus:bg-gray-700"
+                      >
+                        Credit/Debit Card
+                      </SelectItem>
+                      <SelectItem
+                        value="upi"
+                        className="dark:text-gray-300 dark:focus:bg-gray-700"
+                      >
+                        UPI
+                      </SelectItem>
+                      <SelectItem
+                        value="insurance"
+                        className="dark:text-gray-300 dark:focus:bg-gray-700"
+                      >
+                        Insurance
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label className="dark:text-gray-300">Amount</Label>
+                  <Input
+                    type="number"
+                    value={paymentForm.amount}
+                    onChange={(e) =>
+                      setPaymentForm((prev) => ({
+                        ...prev,
+                        amount: parseFloat(e.target.value) || 0,
+                      }))
+                    }
+                    placeholder="Enter amount"
+                    className="dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                  />
+                </div>
+
+                <div>
+                  <Label className="dark:text-gray-300">
+                    Transaction/Reference ID
+                  </Label>
+                  <Input
+                    value={paymentForm.transactionId}
+                    onChange={(e) =>
+                      setPaymentForm((prev) => ({
+                        ...prev,
+                        transactionId: e.target.value,
+                      }))
+                    }
+                    placeholder="Optional"
+                    className="dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {paymentType === "prescription" && selectedPrescription && (
+            <div className="space-y-4">
+              <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800">
+                <p className="font-medium dark:text-gray-200">
+                  Prescription: {selectedPrescription.prescriptionId}
+                </p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Doctor: {selectedPrescription.doctor.name}
+                </p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Medications: {selectedPrescription.medications.length} item(s)
+                </p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Total Due: $
+                  {(
+                    selectedPrescription.charges?.due ||
+                    selectedPrescription.charges?.totalAmount ||
+                    calculatePrescriptionTotal(selectedPrescription)
                   ).toFixed(2)}
                 </p>
               </div>

@@ -54,29 +54,19 @@ import {
   Hash,
   CheckCircle,
   ChevronRight,
-  Sparkles,
   FileText,
   Shield,
   Brain,
-  HeartPulse,
-  Eye,
-  Thermometer,
   ChevronDown,
   ChevronUp,
   Maximize2,
   Minimize2,
   Save,
   Clock4,
-  Zap,
-  Star,
-  Bell,
-  Download,
   Printer,
-  Share2,
   Copy,
   CalendarDays,
   Users,
-  Target,
   BarChart3,
 } from "lucide-react";
 import { format, isValid, isToday, addMinutes, parseISO } from "date-fns";
@@ -165,10 +155,10 @@ interface NewPatientFormData {
 
 // Priority colors
 const priorityColors = {
-  low: "bg-green-100 text-green-800 border-green-200",
-  medium: "bg-yellow-100 text-yellow-800 border-yellow-200",
-  high: "bg-orange-100 text-orange-800 border-orange-200",
-  emergency: "bg-red-100 text-red-800 border-red-200",
+  low: "bg-green-500/10 text-green-700",
+  medium: "bg-yellow-500/10 text-yellow-700",
+  high: "bg-orange-500/10 text-orange-700",
+  emergency: "bg-red-500/10 text-red-700",
 };
 
 // Appointment type icons
@@ -197,7 +187,9 @@ export default function NewAppointmentPage() {
   const [searchResults, setSearchResults] = useState<Patient[]>([]);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
-  const [selectedDoctor, setSelectedDoctor] = useState<string>("");
+  const [selectedDoctor, setSelectedDoctor] = useState<string | undefined>(
+    undefined,
+  );
   const [appointmentDate, setAppointmentDate] = useState<string>(
     format(new Date(), "yyyy-MM-dd"),
   );
@@ -355,8 +347,10 @@ export default function NewAppointmentPage() {
       const data = await response.json();
 
       if (data.success) {
+        console.log("Doctors loaded:", data.data);
         setDoctors(data.data);
       } else {
+        console.error("Failed to load doctors:", data.error);
         toast.error("Failed to load doctors");
       }
     } catch (error) {
@@ -558,7 +552,7 @@ export default function NewAppointmentPage() {
       // Validate form
       const validationData = {
         patientId: selectedPatient?._id || "",
-        doctorId: selectedDoctor,
+        doctorId: selectedDoctor || "",
         appointmentDate,
         reason,
         appointmentType,
@@ -603,7 +597,7 @@ export default function NewAppointmentPage() {
 
       const appointmentData = {
         patientId: selectedPatient!._id,
-        doctorId: selectedDoctor,
+        doctorId: selectedDoctor || "",
         startTime: appointmentDateTime.toISOString(),
         endTime: endTime.toISOString(),
         duration,
@@ -669,6 +663,7 @@ export default function NewAppointmentPage() {
   };
 
   const handleDoctorSelect = (doctorId: string) => {
+    console.log("Doctor selected:", doctorId);
     setSelectedDoctor(doctorId);
   };
 
@@ -720,6 +715,14 @@ export default function NewAppointmentPage() {
   };
 
   const selectedDoctorInfo = doctors.find((d) => d._id === selectedDoctor);
+  console.log(
+    "Current state - selectedDoctor:",
+    selectedDoctor,
+    "doctors:",
+    doctors.length,
+    "selectedDoctorInfo:",
+    selectedDoctorInfo,
+  );
 
   // Quick action handlers
   const handleQuickAction = (action: string) => {
@@ -798,7 +801,7 @@ export default function NewAppointmentPage() {
     <div
       ref={mainContainerRef}
       className={cn(
-        "min-h-screen bg-linear-to-br from-background to-muted/30",
+        "min-h-screen bg-background",
         isFullScreen && "fixed inset-0 z-50 bg-background overflow-auto",
       )}
     >
@@ -810,7 +813,7 @@ export default function NewAppointmentPage() {
               <Button
                 variant="ghost"
                 onClick={() => router.push("/reception/appointments")}
-                className="gap-2 hover:bg-accent"
+                className="gap-2"
                 size="lg"
               >
                 <ArrowLeft className="h-5 w-5" />
@@ -818,14 +821,14 @@ export default function NewAppointmentPage() {
               </Button>
 
               <div className="hidden md:flex items-center gap-4">
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-primary/10 rounded-full">
-                  <CalendarDays className="h-4 w-4 text-primary" />
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-muted rounded-full">
+                  <CalendarDays className="h-4 w-4 text-muted-foreground" />
                   <span className="text-sm font-medium">
                     {format(new Date(), "EEEE, MMMM d")}
                   </span>
                 </div>
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-500/10 rounded-full">
-                  <Clock4 className="h-4 w-4 text-blue-500" />
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-muted rounded-full">
+                  <Clock4 className="h-4 w-4 text-muted-foreground" />
                   <span className="text-sm font-medium">
                     {format(new Date(), "h:mm a")}
                   </span>
@@ -892,14 +895,14 @@ export default function NewAppointmentPage() {
           <div className="flex items-start justify-between gap-6 mb-8">
             <div className="space-y-3 flex-1">
               <div className="flex items-center gap-3">
-                <div className="p-3 bg-linear-to-br from-primary to-primary/80 rounded-2xl shadow-lg">
-                  <Calendar className="h-8 w-8 text-white" />
+                <div className="p-3 bg-primary rounded-lg">
+                  <Calendar className="h-8 w-8 text-primary-foreground" />
                 </div>
                 <div>
-                  <h1 className="text-3xl lg:text-4xl font-bold tracking-tight bg-linear-to-r from-primary to-blue-600 bg-clip-text text-transparent">
+                  <h1 className="text-2xl lg:text-3xl font-bold tracking-tight">
                     Schedule New Appointment
                   </h1>
-                  <p className="text-lg text-muted-foreground mt-2">
+                  <p className="text-muted-foreground mt-2">
                     Complete the form below to schedule an appointment
                   </p>
                 </div>
@@ -909,9 +912,9 @@ export default function NewAppointmentPage() {
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-6">
                 <div
                   className={cn(
-                    "p-4 rounded-xl border-2 transition-all duration-300",
+                    "p-4 rounded-lg border transition-all duration-300",
                     activeSection === "patient"
-                      ? "border-primary bg-primary/5 shadow-md"
+                      ? "border-primary bg-primary/5"
                       : "border-border",
                   )}
                 >
@@ -920,7 +923,7 @@ export default function NewAppointmentPage() {
                       className={cn(
                         "flex items-center justify-center w-8 h-8 rounded-full",
                         selectedPatient
-                          ? "bg-green-500 text-white"
+                          ? "bg-primary text-primary-foreground"
                           : "bg-muted",
                       )}
                     >
@@ -943,9 +946,9 @@ export default function NewAppointmentPage() {
 
                 <div
                   className={cn(
-                    "p-4 rounded-xl border-2 transition-all duration-300",
+                    "p-4 rounded-lg border transition-all duration-300",
                     activeSection === "doctor"
-                      ? "border-blue-500 bg-blue-500/5 shadow-md"
+                      ? "border-primary bg-primary/5"
                       : "border-border",
                   )}
                 >
@@ -954,9 +957,9 @@ export default function NewAppointmentPage() {
                       className={cn(
                         "flex items-center justify-center w-8 h-8 rounded-full",
                         selectedDoctor
-                          ? "bg-green-500 text-white"
+                          ? "bg-primary text-primary-foreground"
                           : selectedPatient
-                            ? "bg-blue-500 text-white"
+                            ? "bg-primary text-primary-foreground"
                             : "bg-muted",
                       )}
                     >
@@ -979,9 +982,9 @@ export default function NewAppointmentPage() {
 
                 <div
                   className={cn(
-                    "p-4 rounded-xl border-2 transition-all duration-300",
+                    "p-4 rounded-lg border transition-all duration-300",
                     activeSection === "details"
-                      ? "border-purple-500 bg-purple-500/5 shadow-md"
+                      ? "border-primary bg-primary/5"
                       : "border-border",
                   )}
                 >
@@ -990,9 +993,9 @@ export default function NewAppointmentPage() {
                       className={cn(
                         "flex items-center justify-center w-8 h-8 rounded-full",
                         isFormValid()
-                          ? "bg-green-500 text-white"
+                          ? "bg-primary text-primary-foreground"
                           : selectedDoctor
-                            ? "bg-purple-500 text-white"
+                            ? "bg-primary text-primary-foreground"
                             : "bg-muted",
                       )}
                     >
@@ -1013,7 +1016,7 @@ export default function NewAppointmentPage() {
                   </div>
                 </div>
 
-                <div className="p-4 rounded-xl border-2 border-border">
+                <div className="p-4 rounded-lg border border-border">
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium">Completion</span>
@@ -1040,16 +1043,16 @@ export default function NewAppointmentPage() {
                 activeSection !== "patient" && "opacity-75",
               )}
             >
-              <Card className="border-2 border-primary/20 shadow-xl hover:shadow-2xl transition-all duration-300">
+              <Card>
                 <CardHeader className="pb-4">
                   <div className="flex items-center justify-between">
-                    <div className="space-y-2">
+                    <div className="space-y-1">
                       <div className="flex items-center gap-3">
-                        <div className="p-3 bg-linear-to-br from-primary to-primary/90 rounded-xl">
-                          <User className="h-6 w-6 text-white" />
+                        <div className="p-2 bg-primary rounded-lg">
+                          <User className="h-5 w-5 text-primary-foreground" />
                         </div>
                         <div>
-                          <CardTitle className="text-2xl">
+                          <CardTitle className="text-xl">
                             Step 1: Select Patient
                           </CardTitle>
                           <CardDescription>
@@ -1058,7 +1061,7 @@ export default function NewAppointmentPage() {
                         </div>
                       </div>
                     </div>
-                    <Badge variant="default" className="px-3 py-1 text-sm">
+                    <Badge variant="secondary" className="px-3 py-1 text-sm">
                       Required
                     </Badge>
                   </div>
@@ -1066,38 +1069,43 @@ export default function NewAppointmentPage() {
                 <CardContent className="space-y-6">
                   {selectedPatient ? (
                     <div className="space-y-4">
-                      <div className="relative overflow-hidden rounded-2xl bg-linear-to-r from-primary/5 to-primary/10 p-6 border border-primary/20">
-                        <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -translate-y-12 translate-x-12" />
+                      <div className="relative overflow-hidden rounded-lg bg-muted p-6 border">
                         <div className="relative flex items-start justify-between">
                           <div className="flex items-start gap-4">
-                            <div className="p-4 bg-background rounded-xl border shadow-lg">
-                              <User className="h-10 w-10 text-primary" />
+                            <div className="p-3 bg-background rounded-lg border">
+                              <User className="h-8 w-8 text-primary" />
                             </div>
-                            <div className="space-y-3">
+                            <div className="space-y-2">
                               <div className="flex items-center gap-3">
-                                <h3 className="text-xl font-bold">
+                                <h3 className="text-lg font-semibold">
                                   {selectedPatient.name}
                                 </h3>
-                                <Badge variant="default" className="gap-2">
+                                <Badge variant="secondary" className="gap-2">
                                   <CheckCircle className="h-3 w-3" />
                                   Selected
                                 </Badge>
                               </div>
-                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                 <div className="flex items-center gap-2">
                                   <Phone className="h-4 w-4 text-muted-foreground" />
-                                  <span>{selectedPatient.phone}</span>
+                                  <span className="text-sm">
+                                    {selectedPatient.phone}
+                                  </span>
                                 </div>
                                 {selectedPatient.email && (
                                   <div className="flex items-center gap-2">
                                     <Mail className="h-4 w-4 text-muted-foreground" />
-                                    <span>{selectedPatient.email}</span>
+                                    <span className="text-sm">
+                                      {selectedPatient.email}
+                                    </span>
                                   </div>
                                 )}
                                 {selectedPatient.patientId && (
                                   <div className="flex items-center gap-2">
                                     <Hash className="h-4 w-4 text-muted-foreground" />
-                                    <span>ID: {selectedPatient.patientId}</span>
+                                    <span className="text-sm">
+                                      ID: {selectedPatient.patientId}
+                                    </span>
                                   </div>
                                 )}
                               </div>
@@ -1119,11 +1127,11 @@ export default function NewAppointmentPage() {
                     </div>
                   ) : (
                     <div className="space-y-6">
-                      <div className="space-y-3">
+                      <div className="space-y-2">
                         <div className="flex items-center justify-between">
                           <Label
                             htmlFor="patientSearch"
-                            className="text-lg font-semibold"
+                            className="font-semibold"
                           >
                             Search Patient Database
                           </Label>
@@ -1131,9 +1139,9 @@ export default function NewAppointmentPage() {
                             Type at least 2 characters to search
                           </span>
                         </div>
-                        <div className="flex gap-3">
+                        <div className="flex gap-2">
                           <div className="relative flex-1">
-                            <Search className="absolute left-4 top-3.5 h-5 w-5 text-muted-foreground" />
+                            <Search className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
                             <Input
                               ref={searchInputRef}
                               id="patientSearch"
@@ -1143,13 +1151,13 @@ export default function NewAppointmentPage() {
                                 handleSearchChange(e.target.value)
                               }
                               onKeyDown={handleSearchKeyDown}
-                              className="pl-12 h-12 text-lg rounded-xl"
+                              className="pl-10"
                             />
                             {patientSearch && (
                               <button
                                 type="button"
                                 onClick={clearSearch}
-                                className="absolute right-4 top-3.5 text-muted-foreground hover:text-foreground"
+                                className="absolute right-3 top-3 text-muted-foreground hover:text-foreground"
                               >
                                 <X className="h-5 w-5" />
                               </button>
@@ -1160,7 +1168,7 @@ export default function NewAppointmentPage() {
                             variant="secondary"
                             onClick={() => searchPatients()}
                             disabled={searching || !patientSearch.trim()}
-                            className="h-12 px-6 gap-2 rounded-xl"
+                            className="gap-2"
                           >
                             {searching ? (
                               <Loader2 className="h-5 w-5 animate-spin" />
@@ -1174,18 +1182,15 @@ export default function NewAppointmentPage() {
                             onOpenChange={setShowNewPatientDialog}
                           >
                             <DialogTrigger asChild>
-                              <Button
-                                type="button"
-                                className="h-12 bg-linear-to-r from-primary to-primary/90 hover:from-primary hover:to-primary gap-3 rounded-xl"
-                              >
+                              <Button type="button" className="gap-2">
                                 <UserPlus className="h-5 w-5" />
                                 New Patient
                               </Button>
                             </DialogTrigger>
                             <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
                               <DialogHeader>
-                                <DialogTitle className="text-2xl flex items-center gap-2">
-                                  <UserPlus className="h-6 w-6" />
+                                <DialogTitle className="flex items-center gap-2">
+                                  <UserPlus className="h-5 w-5" />
                                   Create New Patient
                                 </DialogTitle>
                                 <DialogDescription>
@@ -1195,7 +1200,7 @@ export default function NewAppointmentPage() {
                               </DialogHeader>
 
                               <Tabs defaultValue="basic" className="w-full">
-                                <TabsList className="grid w-full grid-cols-2 mb-6">
+                                <TabsList className="grid w-full grid-cols-2 mb-4">
                                   <TabsTrigger value="basic" className="gap-2">
                                     <User className="h-4 w-4" />
                                     Basic Information
@@ -1211,16 +1216,11 @@ export default function NewAppointmentPage() {
 
                                 <TabsContent
                                   value="basic"
-                                  className="space-y-6"
+                                  className="space-y-4"
                                 >
-                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div className="space-y-2">
-                                      <Label
-                                        htmlFor="name"
-                                        className="font-medium"
-                                      >
-                                        Full Name *
-                                      </Label>
+                                      <Label htmlFor="name">Full Name *</Label>
                                       <Input
                                         id="name"
                                         placeholder="John Doe"
@@ -1234,22 +1234,19 @@ export default function NewAppointmentPage() {
                                         required
                                         className={
                                           formErrors.name
-                                            ? "border-red-500"
+                                            ? "border-destructive"
                                             : ""
                                         }
                                       />
                                       {formErrors.name && (
-                                        <p className="text-sm text-red-500">
+                                        <p className="text-sm text-destructive">
                                           {formErrors.name}
                                         </p>
                                       )}
                                     </div>
 
                                     <div className="space-y-2">
-                                      <Label
-                                        htmlFor="phone"
-                                        className="font-medium"
-                                      >
+                                      <Label htmlFor="phone">
                                         Phone Number *
                                       </Label>
                                       <Input
@@ -1265,12 +1262,12 @@ export default function NewAppointmentPage() {
                                         required
                                         className={
                                           formErrors.phone
-                                            ? "border-red-500"
+                                            ? "border-destructive"
                                             : ""
                                         }
                                       />
                                       {formErrors.phone && (
-                                        <p className="text-sm text-red-500">
+                                        <p className="text-sm text-destructive">
                                           {formErrors.phone}
                                         </p>
                                       )}
@@ -1293,22 +1290,19 @@ export default function NewAppointmentPage() {
                                         }
                                         className={
                                           formErrors.email
-                                            ? "border-red-500"
+                                            ? "border-destructive"
                                             : ""
                                         }
                                       />
                                       {formErrors.email && (
-                                        <p className="text-sm text-red-500">
+                                        <p className="text-sm text-destructive">
                                           {formErrors.email}
                                         </p>
                                       )}
                                     </div>
 
                                     <div className="space-y-2">
-                                      <Label
-                                        htmlFor="dateOfBirth"
-                                        className="font-medium"
-                                      >
+                                      <Label htmlFor="dateOfBirth">
                                         Date of Birth *
                                       </Label>
                                       <Input
@@ -1324,24 +1318,19 @@ export default function NewAppointmentPage() {
                                         required
                                         className={
                                           formErrors.dateOfBirth
-                                            ? "border-red-500"
+                                            ? "border-destructive"
                                             : ""
                                         }
                                       />
                                       {formErrors.dateOfBirth && (
-                                        <p className="text-sm text-red-500">
+                                        <p className="text-sm text-destructive">
                                           {formErrors.dateOfBirth}
                                         </p>
                                       )}
                                     </div>
 
                                     <div className="space-y-2">
-                                      <Label
-                                        htmlFor="gender"
-                                        className="font-medium"
-                                      >
-                                        Gender *
-                                      </Label>
+                                      <Label htmlFor="gender">Gender *</Label>
                                       <Select
                                         value={newPatientForm.gender}
                                         onValueChange={(
@@ -1353,7 +1342,7 @@ export default function NewAppointmentPage() {
                                           }))
                                         }
                                       >
-                                        <SelectTrigger className="h-11">
+                                        <SelectTrigger>
                                           <SelectValue placeholder="Select gender" />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -1369,7 +1358,7 @@ export default function NewAppointmentPage() {
                                         </SelectContent>
                                       </Select>
                                       {formErrors.gender && (
-                                        <p className="text-sm text-red-500">
+                                        <p className="text-sm text-destructive">
                                           {formErrors.gender}
                                         </p>
                                       )}
@@ -1388,7 +1377,7 @@ export default function NewAppointmentPage() {
                                           }))
                                         }
                                       >
-                                        <SelectTrigger className="h-11">
+                                        <SelectTrigger>
                                           <SelectValue placeholder="Select blood group" />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -1455,14 +1444,13 @@ export default function NewAppointmentPage() {
                                           emergencyContact: e.target.value,
                                         }))
                                       }
-                                      className="h-11"
                                     />
                                   </div>
                                 </TabsContent>
 
                                 <TabsContent
                                   value="medical"
-                                  className="space-y-6"
+                                  className="space-y-4"
                                 >
                                   <div className="space-y-2">
                                     <Label
@@ -1523,7 +1511,6 @@ export default function NewAppointmentPage() {
                                   variant="outline"
                                   onClick={() => setShowNewPatientDialog(false)}
                                   disabled={creatingPatient}
-                                  className="flex-1"
                                 >
                                   Cancel
                                 </Button>
@@ -1535,7 +1522,7 @@ export default function NewAppointmentPage() {
                                     !newPatientForm.name.trim() ||
                                     !newPatientForm.phone.trim()
                                   }
-                                  className="flex-1 bg-linear-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 gap-2"
+                                  className="gap-2"
                                 >
                                   {creatingPatient ? (
                                     <>
@@ -1557,9 +1544,9 @@ export default function NewAppointmentPage() {
 
                       {/* Search Results */}
                       {searching ? (
-                        <div className="py-12 text-center border-2 border-dashed rounded-xl">
-                          <div className="inline-block p-4 bg-primary/10 rounded-full mb-4">
-                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                        <div className="py-8 text-center border-2 border-dashed rounded-lg">
+                          <div className="inline-block p-3 bg-muted rounded-full mb-3">
+                            <Loader2 className="h-6 w-6 animate-spin text-primary" />
                           </div>
                           <p className="font-medium">Searching patients...</p>
                           <p className="text-sm text-muted-foreground mt-1">
@@ -1567,8 +1554,8 @@ export default function NewAppointmentPage() {
                           </p>
                         </div>
                       ) : searchResults.length > 0 ? (
-                        <div className="border rounded-xl overflow-hidden shadow-sm">
-                          <div className="bg-linear-to-r from-primary/5 to-primary/10 px-6 py-4 border-b">
+                        <div className="border rounded-lg overflow-hidden">
+                          <div className="bg-muted px-4 py-3 border-b">
                             <div className="flex items-center justify-between">
                               <div>
                                 <h3 className="font-semibold">
@@ -1588,23 +1575,23 @@ export default function NewAppointmentPage() {
                               </Button>
                             </div>
                           </div>
-                          <div className="max-h-96 overflow-y-auto divide-y">
+                          <div className="max-h-80 overflow-y-auto divide-y">
                             {searchResults.map((patient) => (
                               <div
                                 key={patient._id}
-                                className="p-4 hover:bg-accent/50 transition-colors cursor-pointer group"
+                                className="p-4 hover:bg-accent transition-colors cursor-pointer"
                                 onClick={() => handleSelectPatient(patient)}
                               >
                                 <div className="flex items-center justify-between">
                                   <div className="flex items-center gap-3">
-                                    <div className="p-2 bg-background border rounded-lg group-hover:bg-primary/10 transition-colors">
-                                      <User className="h-5 w-5" />
+                                    <div className="p-2 bg-background border rounded-md">
+                                      <User className="h-4 w-4" />
                                     </div>
                                     <div>
-                                      <h4 className="font-semibold group-hover:text-primary">
+                                      <h4 className="font-semibold">
                                         {patient.name}
                                       </h4>
-                                      <div className="flex flex-wrap gap-3 mt-1">
+                                      <div className="flex flex-wrap gap-2 mt-1">
                                         <span className="text-sm text-muted-foreground flex items-center gap-1">
                                           <Phone className="h-3 w-3" />
                                           {patient.phone}
@@ -1616,7 +1603,7 @@ export default function NewAppointmentPage() {
                                           </span>
                                         )}
                                         {patient.patientId && (
-                                          <span className="text-sm font-medium text-primary">
+                                          <span className="text-sm font-medium">
                                             ID: {patient.patientId}
                                           </span>
                                         )}
@@ -1627,7 +1614,6 @@ export default function NewAppointmentPage() {
                                     type="button"
                                     variant="ghost"
                                     size="sm"
-                                    className="opacity-0 group-hover:opacity-100 transition-opacity"
                                   >
                                     Select
                                     <ChevronRight className="h-4 w-4 ml-1" />
@@ -1638,22 +1624,21 @@ export default function NewAppointmentPage() {
                           </div>
                         </div>
                       ) : showNoResults ? (
-                        <div className="border-2 border-dashed rounded-xl p-8 text-center">
-                          <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
-                            <User className="h-8 w-8 text-muted-foreground" />
+                        <div className="border-2 border-dashed rounded-lg p-6 text-center">
+                          <div className="w-12 h-12 bg-muted rounded-full flex items-center justify-center mx-auto mb-3">
+                            <User className="h-6 w-6 text-muted-foreground" />
                           </div>
-                          <h3 className="text-lg font-semibold mb-2">
+                          <h3 className="font-semibold mb-2">
                             No Patients Found
                           </h3>
-                          <p className="text-muted-foreground mb-6 max-w-md mx-auto">
+                          <p className="text-muted-foreground mb-4 max-w-md mx-auto">
                             No patients found matching "
                             <span className="font-medium">{patientSearch}</span>
                             "
                           </p>
-                          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                          <div className="flex flex-col sm:flex-row gap-2 justify-center">
                             <Button
                               type="button"
-                              variant="default"
                               onClick={() => {
                                 setNewPatientForm((prev) => ({
                                   ...prev,
@@ -1692,16 +1677,16 @@ export default function NewAppointmentPage() {
                   activeSection !== "doctor" && "opacity-75",
                 )}
               >
-                <Card className="border-2 border-blue-500/20 shadow-xl hover:shadow-2xl transition-all duration-300">
+                <Card>
                   <CardHeader className="pb-4">
                     <div className="flex items-center justify-between">
-                      <div className="space-y-2">
+                      <div className="space-y-1">
                         <div className="flex items-center gap-3">
-                          <div className="p-3 bg-linear-to-br from-blue-500 to-blue-600 rounded-xl">
-                            <Stethoscope className="h-6 w-6 text-white" />
+                          <div className="p-2 bg-primary rounded-lg">
+                            <Stethoscope className="h-5 w-5 text-primary-foreground" />
                           </div>
                           <div>
-                            <CardTitle className="text-2xl">
+                            <CardTitle className="text-xl">
                               Step 2: Select Doctor & Date
                             </CardTitle>
                             <CardDescription>
@@ -1710,7 +1695,7 @@ export default function NewAppointmentPage() {
                           </div>
                         </div>
                       </div>
-                      <Badge variant="default" className="px-3 py-1 text-sm">
+                      <Badge variant="secondary" className="px-3 py-1 text-sm">
                         Required
                       </Badge>
                     </div>
@@ -1719,22 +1704,24 @@ export default function NewAppointmentPage() {
                     {/* Emergency Toggle */}
                     <div
                       className={cn(
-                        "p-4 rounded-xl border transition-all duration-300",
+                        "p-4 rounded-lg border transition-all duration-300",
                         isEmergency
-                          ? "bg-red-500/10 border-red-500/30"
-                          : "bg-linear-to-r from-blue-500/5 to-blue-500/10 border-blue-500/20",
+                          ? "bg-destructive/10 border-destructive/20"
+                          : "bg-muted",
                       )}
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
                           <AlertCircle
                             className={cn(
-                              "h-6 w-6",
-                              isEmergency ? "text-red-500" : "text-blue-500",
+                              "h-5 w-5",
+                              isEmergency
+                                ? "text-destructive"
+                                : "text-muted-foreground",
                             )}
                           />
                           <div>
-                            <h4 className="font-bold text-lg">
+                            <h4 className="font-semibold">
                               Emergency Appointment
                             </h4>
                             <p className="text-sm text-muted-foreground">
@@ -1753,7 +1740,6 @@ export default function NewAppointmentPage() {
                               setPriority("medium");
                             }
                           }}
-                          className="data-[state=checked]:bg-red-500 h-6 w-11"
                         />
                       </div>
                     </div>
@@ -1761,10 +1747,7 @@ export default function NewAppointmentPage() {
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                       {/* Doctor Selection */}
                       <div className="space-y-3">
-                        <Label
-                          htmlFor="doctor"
-                          className="text-lg font-semibold"
-                        >
+                        <Label htmlFor="doctor" className="font-semibold">
                           Select Doctor *
                         </Label>
                         <div className="flex items-center justify-between mb-2">
@@ -1787,18 +1770,18 @@ export default function NewAppointmentPage() {
                           </Button>
                         </div>
                         <Select
-                          value={selectedDoctor}
+                          value={selectedDoctor || ""}
                           onValueChange={handleDoctorSelect}
                           required
                           disabled={loadingDoctors}
                         >
-                          <SelectTrigger className="h-14 text-lg rounded-xl">
+                          <SelectTrigger>
                             <SelectValue placeholder="Choose a doctor..." />
                           </SelectTrigger>
-                          <SelectContent className="max-h-80">
+                          <SelectContent className="max-h-60">
                             {loadingDoctors ? (
-                              <div className="p-8 text-center">
-                                <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
+                              <div className="p-6 text-center">
+                                <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
                                 <p className="text-sm text-muted-foreground">
                                   Loading doctors...
                                 </p>
@@ -1808,11 +1791,11 @@ export default function NewAppointmentPage() {
                                 <SelectItem
                                   key={doctor._id}
                                   value={doctor._id}
-                                  className="py-3"
+                                  className="py-2"
                                 >
                                   <div className="flex items-center gap-3">
-                                    <div className="p-2 bg-blue-500/10 rounded-lg">
-                                      <Stethoscope className="h-4 w-4 text-blue-500" />
+                                    <div className="p-2 bg-muted rounded-md">
+                                      <Stethoscope className="h-4 w-4" />
                                     </div>
                                     <div className="flex-1">
                                       <span className="font-semibold">
@@ -1830,10 +1813,10 @@ export default function NewAppointmentPage() {
                           </SelectContent>
                         </Select>
                         {selectedDoctorInfo && (
-                          <div className="mt-4 p-4 bg-linear-to-r from-blue-500/5 to-blue-500/10 rounded-xl">
+                          <div className="mt-3 p-3 bg-muted rounded-lg">
                             <div className="flex items-center gap-3">
-                              <div className="p-2 bg-white rounded-lg shadow-sm">
-                                <Stethoscope className="h-5 w-5 text-blue-500" />
+                              <div className="p-2 bg-background rounded-md">
+                                <Stethoscope className="h-4 w-4" />
                               </div>
                               <div>
                                 <h5 className="font-semibold">
@@ -1851,25 +1834,25 @@ export default function NewAppointmentPage() {
 
                       {/* Date Selection */}
                       <div className="space-y-3">
-                        <Label htmlFor="date" className="text-lg font-semibold">
+                        <Label htmlFor="date" className="font-semibold">
                           Appointment Date *
                         </Label>
-                        <div className="space-y-4">
+                        <div className="space-y-3">
                           <div className="relative">
-                            <Calendar className="absolute left-4 top-4 h-5 w-5 text-muted-foreground" />
+                            <Calendar className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
                             <Input
                               id="date"
                               type="date"
                               value={appointmentDate}
                               onChange={(e) => handleDateChange(e.target.value)}
                               required
-                              className="h-14 pl-12 text-lg rounded-xl"
+                              className="pl-10"
                               min={format(new Date(), "yyyy-MM-dd")}
                             />
                           </div>
-                          <div className="p-4 bg-linear-to-r from-primary/5 to-primary/10 rounded-xl">
+                          <div className="p-3 bg-muted rounded-lg">
                             <div className="flex items-center gap-2">
-                              <CalendarDays className="h-5 w-5 text-primary" />
+                              <CalendarDays className="h-4 w-4 text-muted-foreground" />
                               <span className="font-semibold">
                                 {formatDisplayDate(appointmentDate)}
                               </span>
@@ -1881,12 +1864,12 @@ export default function NewAppointmentPage() {
 
                     {/* Appointment Number */}
                     <div className="space-y-3">
-                      <Label className="text-lg font-semibold">
+                      <Label className="font-semibold">
                         Appointment Number
                       </Label>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="p-6 bg-linear-to-br from-primary/5 to-primary/10 rounded-2xl border border-primary/20">
-                          <div className="flex items-center justify-between mb-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="p-4 bg-muted rounded-lg border">
+                          <div className="flex items-center justify-between mb-3">
                             <h4 className="font-semibold">
                               Today's Appointments
                             </h4>
@@ -1894,22 +1877,22 @@ export default function NewAppointmentPage() {
                               {todaysAppointmentsCount}
                             </Badge>
                           </div>
-                          <div className="text-3xl font-bold text-primary">
+                          <div className="text-2xl font-bold text-primary">
                             #{autoNumber || "001"}
                           </div>
-                          <p className="text-sm text-muted-foreground mt-2">
+                          <p className="text-sm text-muted-foreground mt-1">
                             Next available number
                           </p>
                         </div>
-                        <div className="p-6 bg-linear-to-br from-blue-500/5 to-blue-500/10 rounded-2xl border border-blue-500/20">
-                          <div className="flex items-center justify-between mb-4">
+                        <div className="p-4 bg-muted rounded-lg border">
+                          <div className="flex items-center justify-between mb-3">
                             <h4 className="font-semibold">Estimated Time</h4>
-                            <Clock className="h-5 w-5 text-blue-500" />
+                            <Clock className="h-5 w-5 text-muted-foreground" />
                           </div>
-                          <div className="text-3xl font-bold text-blue-500">
+                          <div className="text-2xl font-bold">
                             {estimatedTime || "TBD"}
                           </div>
-                          <p className="text-sm text-muted-foreground mt-2">
+                          <p className="text-sm text-muted-foreground mt-1">
                             Based on daily sequence
                           </p>
                         </div>
@@ -1928,16 +1911,16 @@ export default function NewAppointmentPage() {
                   activeSection !== "details" && "opacity-75",
                 )}
               >
-                <Card className="border-2 border-purple-500/20 shadow-xl hover:shadow-2xl transition-all duration-300">
+                <Card>
                   <CardHeader className="pb-4">
                     <div className="flex items-center justify-between">
-                      <div className="space-y-2">
+                      <div className="space-y-1">
                         <div className="flex items-center gap-3">
-                          <div className="p-3 bg-linear-to-br from-purple-500 to-purple-600 rounded-xl">
-                            <FileText className="h-6 w-6 text-white" />
+                          <div className="p-2 bg-primary rounded-lg">
+                            <FileText className="h-5 w-5 text-primary-foreground" />
                           </div>
                           <div>
-                            <CardTitle className="text-2xl">
+                            <CardTitle className="text-xl">
                               Step 3: Appointment Details
                             </CardTitle>
                             <CardDescription>
@@ -1947,7 +1930,7 @@ export default function NewAppointmentPage() {
                           </div>
                         </div>
                       </div>
-                      <Badge variant="default" className="px-3 py-1 text-sm">
+                      <Badge variant="secondary" className="px-3 py-1 text-sm">
                         Required
                       </Badge>
                     </div>
@@ -1955,9 +1938,7 @@ export default function NewAppointmentPage() {
                   <CardContent className="space-y-6">
                     {/* Quick Templates */}
                     <div className="space-y-3">
-                      <Label className="text-lg font-semibold">
-                        Quick Templates
-                      </Label>
+                      <Label className="font-semibold">Quick Templates</Label>
                       <div className="flex flex-wrap gap-2">
                         <Button
                           type="button"
@@ -1989,7 +1970,7 @@ export default function NewAppointmentPage() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {/* Appointment Type */}
                       <div className="space-y-3">
                         <Label
@@ -2004,7 +1985,7 @@ export default function NewAppointmentPage() {
                           required
                           disabled={isEmergency}
                         >
-                          <SelectTrigger className="h-12 rounded-xl">
+                          <SelectTrigger>
                             <SelectValue placeholder="Select type" />
                           </SelectTrigger>
                           <SelectContent>
@@ -2013,24 +1994,13 @@ export default function NewAppointmentPage() {
                                 <SelectItem
                                   key={value}
                                   value={value}
-                                  className="py-3"
+                                  className="py-2"
                                 >
                                   <div className="flex items-center gap-3">
-                                    <span className="text-xl">{icon}</span>
-                                    <div>
-                                      <span className="capitalize">
-                                        {value.replace("-", " ")}
-                                      </span>
-                                      <p className="text-xs text-muted-foreground">
-                                        {value === "emergency"
-                                          ? "High priority"
-                                          : value === "consultation"
-                                            ? "General visit"
-                                            : value === "followup"
-                                              ? "Follow-up"
-                                              : "Other"}
-                                      </p>
-                                    </div>
+                                    <span className="text-lg">{icon}</span>
+                                    <span className="capitalize">
+                                      {value.replace("-", " ")}
+                                    </span>
                                   </div>
                                 </SelectItem>
                               ),
@@ -2057,7 +2027,7 @@ export default function NewAppointmentPage() {
                           required
                           disabled={isEmergency}
                         >
-                          <SelectTrigger className="h-12 rounded-xl">
+                          <SelectTrigger>
                             <SelectValue placeholder="Select priority" />
                           </SelectTrigger>
                           <SelectContent>
@@ -2066,26 +2036,13 @@ export default function NewAppointmentPage() {
                                 <SelectItem
                                   key={value}
                                   value={value}
-                                  className="py-3"
+                                  className="py-2"
                                 >
                                   <div className="flex items-center gap-3">
                                     <div
-                                      className={`w-3 h-3 rounded-full ${className.split(" ")[0]}`}
+                                      className={`w-2 h-2 rounded-full ${className.split(" ")[0]}`}
                                     ></div>
-                                    <div>
-                                      <span className="capitalize">
-                                        {value}
-                                      </span>
-                                      <p className="text-xs text-muted-foreground">
-                                        {value === "emergency"
-                                          ? "Immediate attention"
-                                          : value === "high"
-                                            ? "Urgent"
-                                            : value === "medium"
-                                              ? "Standard"
-                                              : "Low priority"}
-                                      </p>
-                                    </div>
+                                    <span className="capitalize">{value}</span>
                                   </div>
                                 </SelectItem>
                               ),
@@ -2106,14 +2063,16 @@ export default function NewAppointmentPage() {
                         value={reason}
                         onChange={(e) => setReason(e.target.value)}
                         required
-                        rows={4}
-                        className="min-h-32 resize-y text-lg rounded-xl"
+                        rows={3}
+                        className="min-h-25 resize-y"
                       />
                       <div className="flex items-center justify-between text-sm text-muted-foreground">
                         <span>Detailed description helps doctor prepare</span>
                         <span
                           className={
-                            reason.length < 10 ? "text-red-500 font-medium" : ""
+                            reason.length < 10
+                              ? "text-destructive font-medium"
+                              : ""
                           }
                         >
                           {reason.length}/500 characters
@@ -2127,7 +2086,7 @@ export default function NewAppointmentPage() {
                         <Brain className="h-5 w-5" />
                         Symptoms
                       </Label>
-                      <div className="flex flex-wrap gap-2 mb-3">
+                      <div className="flex flex-wrap gap-2 mb-2">
                         {commonSymptoms.map((symptom) => {
                           const isSelected = symptoms
                             .split(",")
@@ -2138,7 +2097,7 @@ export default function NewAppointmentPage() {
                               key={symptom}
                               variant={isSelected ? "default" : "outline"}
                               className={cn(
-                                "cursor-pointer hover:scale-105 transition-all",
+                                "cursor-pointer",
                                 isSelected && "bg-primary hover:bg-primary/90",
                               )}
                               onClick={() => handleSymptomClick(symptom)}
@@ -2152,8 +2111,8 @@ export default function NewAppointmentPage() {
                         placeholder="List any symptoms the patient is experiencing..."
                         value={symptoms}
                         onChange={(e) => setSymptoms(e.target.value)}
-                        rows={3}
-                        className="min-h-24 resize-y rounded-xl"
+                        rows={2}
+                        className="min-h-20 resize-y"
                       />
                     </div>
 
@@ -2171,8 +2130,8 @@ export default function NewAppointmentPage() {
                         placeholder="Any special instructions, preferences, or notes..."
                         value={notes}
                         onChange={(e) => setNotes(e.target.value)}
-                        rows={3}
-                        className="min-h-24 resize-y rounded-xl"
+                        rows={2}
+                        className="min-h-20 resize-y"
                       />
                     </div>
                   </CardContent>
@@ -2182,16 +2141,16 @@ export default function NewAppointmentPage() {
           </div>
 
           {/* Right Column - Summary & Actions */}
-          <div className="space-y-8">
+          <div className="space-y-6">
             {/* Action Card */}
-            <Card className=" sticky top-24  border-2 border-green-500/20 shadow-2xl">
+            <Card className="sticky top-24">
               <CardContent className="p-6">
                 <div className="space-y-6">
                   <div className="text-center">
-                    <h3 className="text-xl font-bold mb-2">
+                    <h3 className="text-lg font-semibold mb-2">
                       Schedule Appointment
                     </h3>
-                    <p className="text-muted-foreground">
+                    <p className="text-muted-foreground text-sm">
                       Review all information before scheduling
                     </p>
                   </div>
@@ -2201,7 +2160,7 @@ export default function NewAppointmentPage() {
                       type="submit"
                       onClick={handleSubmit}
                       disabled={loading || !isFormValid()}
-                      className="w-full h-14 text-lg font-bold bg-linear-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 shadow-lg hover:shadow-xl transition-all rounded-xl"
+                      className="w-full h-12 font-semibold"
                       size="lg"
                     >
                       {loading ? (
@@ -2222,7 +2181,7 @@ export default function NewAppointmentPage() {
                         type="button"
                         variant="outline"
                         onClick={() => router.push("/reception/appointments")}
-                        className="h-11"
+                        className="h-10"
                         disabled={loading}
                       >
                         Cancel
@@ -2232,14 +2191,14 @@ export default function NewAppointmentPage() {
                         variant="secondary"
                         onClick={() => {
                           setSelectedPatient(null);
-                          setSelectedDoctor("");
+                          setSelectedDoctor(undefined);
                           setAppointmentDate(format(new Date(), "yyyy-MM-dd"));
                           setReason("");
                           setSymptoms("");
                           setNotes("");
                           setAutoNumber("");
                         }}
-                        className="h-11 gap-2"
+                        className="h-10 gap-2"
                         disabled={loading}
                       >
                         <RefreshCw className="h-4 w-4" />
@@ -2249,26 +2208,26 @@ export default function NewAppointmentPage() {
                   </div>
 
                   {!isFormValid() && (
-                    <div className="p-4 bg-linear-to-r from-amber-500/5 to-amber-500/10 border border-amber-500/20 rounded-xl">
-                      <div className="flex items-center gap-2 mb-3">
-                        <AlertCircle className="h-5 w-5 text-amber-600" />
-                        <span className="font-semibold text-amber-700">
+                    <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+                      <div className="flex items-center gap-2 mb-2">
+                        <AlertCircle className="h-4 w-4 text-destructive" />
+                        <span className="font-semibold text-destructive text-sm">
                           Incomplete Information
                         </span>
                       </div>
-                      <ul className="space-y-1.5 text-sm text-amber-600">
+                      <ul className="space-y-1 text-sm text-destructive">
                         {!selectedPatient && (
-                          <li className="flex items-center gap-2">
+                          <li className="flex items-center gap-1">
                             • Select or create a patient
                           </li>
                         )}
                         {!selectedDoctor && (
-                          <li className="flex items-center gap-2">
+                          <li className="flex items-center gap-1">
                             • Choose a doctor
                           </li>
                         )}
                         {reason.length < 10 && (
-                          <li className="flex items-center gap-2">
+                          <li className="flex items-center gap-1">
                             • Provide detailed reason ({reason.length}/10)
                           </li>
                         )}
@@ -2277,21 +2236,21 @@ export default function NewAppointmentPage() {
                   )}
 
                   <div className="pt-4 border-t">
-                    <div className="flex items-center gap-2 mb-3">
-                      <Shield className="h-5 w-5 text-primary" />
-                      <h4 className="font-semibold">Information</h4>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Shield className="h-4 w-4 text-muted-foreground" />
+                      <h4 className="font-semibold text-sm">Information</h4>
                     </div>
-                    <div className="space-y-2 text-sm text-muted-foreground">
-                      <div className="flex items-start gap-2">
-                        <div className="w-1.5 h-1.5 bg-primary rounded-full mt-1.5"></div>
+                    <div className="space-y-1 text-xs text-muted-foreground">
+                      <div className="flex items-start gap-1">
+                        <div className="w-1 h-1 bg-muted-foreground rounded-full mt-1.5"></div>
                         <p>Appointments scheduled by date only</p>
                       </div>
-                      <div className="flex items-start gap-2">
-                        <div className="w-1.5 h-1.5 bg-primary rounded-full mt-1.5"></div>
+                      <div className="flex items-start gap-1">
+                        <div className="w-1 h-1 bg-muted-foreground rounded-full mt-1.5"></div>
                         <p>Auto-number starts from 001 daily</p>
                       </div>
-                      <div className="flex items-start gap-2">
-                        <div className="w-1.5 h-1.5 bg-primary rounded-full mt-1.5"></div>
+                      <div className="flex items-start gap-1">
+                        <div className="w-1 h-1 bg-muted-foreground rounded-full mt-1.5"></div>
                         <p>Emergency appointments take priority</p>
                       </div>
                     </div>
@@ -2301,27 +2260,7 @@ export default function NewAppointmentPage() {
             </Card>
           </div>
         </div>
-
-        {/* Bottom Navigation */}
       </div>
     </div>
   );
 }
-
-// Helper component for left chevron
-const ChevronLeft = ({ className }: { className?: string }) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width="24"
-    height="24"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-  >
-    <path d="m15 18-6-6 6-6" />
-  </svg>
-);

@@ -6,11 +6,16 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/useAuthStore";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -144,17 +149,19 @@ export default function DoctorLabTestsPage() {
   const [filteredTests, setFilteredTests] = useState<LabTest[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [selectedPatient, setSelectedPatient] = useState<string | null>(null);
-  const [selectedAppointment, setSelectedAppointment] = useState<string | null>(null);
+  const [selectedAppointment, setSelectedAppointment] = useState<string | null>(
+    null,
+  );
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [priorityFilter, setPriorityFilter] = useState("all");
   const [dateRange, setDateRange] = useState("month");
-  
+
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const itemsPerPage = 10;
-  
+
   // New test form state
   const [isOrderDialogOpen, setIsOrderDialogOpen] = useState(false);
   const [newTest, setNewTest] = useState({
@@ -186,52 +193,64 @@ export default function DoctorLabTestsPage() {
   // Filter tests when filters change
   useEffect(() => {
     let filtered = labTests;
-    
+
     // Apply search filter
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(test =>
-        test.testName.toLowerCase().includes(query) ||
-        test.testId.toLowerCase().includes(query) ||
-        test.patient.name.toLowerCase().includes(query) ||
-        test.patient.patientId.toLowerCase().includes(query)
+      filtered = filtered.filter(
+        (test) =>
+          test.testName.toLowerCase().includes(query) ||
+          test.testId.toLowerCase().includes(query) ||
+          test.patient.name.toLowerCase().includes(query) ||
+          test.patient.patientId.toLowerCase().includes(query),
       );
     }
-    
+
     // Apply status filter
     if (statusFilter !== "all") {
-      filtered = filtered.filter(test => test.status === statusFilter);
+      filtered = filtered.filter((test) => test.status === statusFilter);
     }
-    
+
     // Apply priority filter
     if (priorityFilter !== "all") {
-      filtered = filtered.filter(test => test.priority === priorityFilter);
+      filtered = filtered.filter((test) => test.priority === priorityFilter);
     }
-    
+
     // Apply patient filter
     if (selectedPatient) {
-      filtered = filtered.filter(test => test.patient._id === selectedPatient);
+      filtered = filtered.filter(
+        (test) => test.patient._id === selectedPatient,
+      );
     }
-    
+
     // Apply appointment filter
     if (selectedAppointment) {
-      filtered = filtered.filter(test => test.appointment?._id === selectedAppointment);
+      filtered = filtered.filter(
+        (test) => test.appointment?._id === selectedAppointment,
+      );
     }
-    
+
     setFilteredTests(filtered);
-  }, [labTests, searchQuery, statusFilter, priorityFilter, selectedPatient, selectedAppointment]);
+  }, [
+    labTests,
+    searchQuery,
+    statusFilter,
+    priorityFilter,
+    selectedPatient,
+    selectedAppointment,
+  ]);
 
   const fetchLabTests = async () => {
     try {
       setLoading(true);
       setError(null);
-      
+
       let url = `/api/doctor/lab-tests?page=${currentPage}&limit=${itemsPerPage}`;
-      
+
       // Add date range filter
       const today = new Date();
       let startDate = new Date();
-      
+
       switch (dateRange) {
         case "today":
           startDate.setHours(0, 0, 0, 0);
@@ -246,20 +265,20 @@ export default function DoctorLabTestsPage() {
           startDate.setMonth(today.getMonth() - 3);
           break;
       }
-      
+
       if (dateRange !== "all") {
         url += `&dateFrom=${startDate.toISOString()}`;
       }
-      
+
       const response = await fetch(url, {
         headers: {
           "Content-Type": "application/json",
           ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         },
       });
-      
+
       const data = await response.json();
-      
+
       if (data.success) {
         setLabTests(data.data);
         setTotalPages(data.pagination?.pages || 1);
@@ -283,9 +302,9 @@ export default function DoctorLabTestsPage() {
           ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         },
       });
-      
+
       const data = await response.json();
-      
+
       if (data.success) {
         setAppointments(data.data);
       }
@@ -298,12 +317,12 @@ export default function DoctorLabTestsPage() {
     try {
       setSubmitting(true);
       setError(null);
-      
+
       if (!newTest.appointmentId || !newTest.testName || !newTest.price) {
         setError("Please fill in all required fields");
         return;
       }
-      
+
       const response = await fetch("/api/doctor/lab-tests", {
         method: "POST",
         headers: {
@@ -312,9 +331,9 @@ export default function DoctorLabTestsPage() {
         },
         body: JSON.stringify(newTest),
       });
-      
+
       const data = await response.json();
-      
+
       if (data.success) {
         // Reset form and close dialog
         setNewTest({
@@ -328,10 +347,10 @@ export default function DoctorLabTestsPage() {
           specimenType: "blood",
         });
         setIsOrderDialogOpen(false);
-        
+
         // Refresh data
         fetchLabTests();
-        
+
         // Show success message
         alert("Lab test ordered successfully!");
       } else {
@@ -348,17 +367,59 @@ export default function DoctorLabTestsPage() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "ordered":
-        return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">Ordered</Badge>;
+        return (
+          <Badge
+            variant="outline"
+            className="bg-blue-50 text-blue-700 border-blue-200"
+          >
+            Ordered
+          </Badge>
+        );
       case "collected":
-        return <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">Collected</Badge>;
+        return (
+          <Badge
+            variant="outline"
+            className="bg-purple-50 text-purple-700 border-purple-200"
+          >
+            Collected
+          </Badge>
+        );
       case "processing":
-        return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">Processing</Badge>;
+        return (
+          <Badge
+            variant="outline"
+            className="bg-yellow-50 text-yellow-700 border-yellow-200"
+          >
+            Processing
+          </Badge>
+        );
       case "completed":
-        return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Completed</Badge>;
+        return (
+          <Badge
+            variant="outline"
+            className="bg-green-50 text-green-700 border-green-200"
+          >
+            Completed
+          </Badge>
+        );
       case "reported":
-        return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Reported</Badge>;
+        return (
+          <Badge
+            variant="outline"
+            className="bg-green-50 text-green-700 border-green-200"
+          >
+            Reported
+          </Badge>
+        );
       case "cancelled":
-        return <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">Cancelled</Badge>;
+        return (
+          <Badge
+            variant="outline"
+            className="bg-red-50 text-red-700 border-red-200"
+          >
+            Cancelled
+          </Badge>
+        );
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
@@ -369,7 +430,9 @@ export default function DoctorLabTestsPage() {
       case "emergency":
         return <Badge variant="destructive">Emergency</Badge>;
       case "urgent":
-        return <Badge className="bg-orange-500 hover:bg-orange-600">Urgent</Badge>;
+        return (
+          <Badge className="bg-orange-500 hover:bg-orange-600">Urgent</Badge>
+        );
       case "routine":
         return <Badge variant="secondary">Routine</Badge>;
       default:
@@ -380,13 +443,41 @@ export default function DoctorLabTestsPage() {
   const getCollectionStatusBadge = (status: string) => {
     switch (status) {
       case "pending":
-        return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">Pending</Badge>;
+        return (
+          <Badge
+            variant="outline"
+            className="bg-yellow-50 text-yellow-700 border-yellow-200"
+          >
+            Pending
+          </Badge>
+        );
       case "scheduled":
-        return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">Scheduled</Badge>;
+        return (
+          <Badge
+            variant="outline"
+            className="bg-blue-50 text-blue-700 border-blue-200"
+          >
+            Scheduled
+          </Badge>
+        );
       case "collected":
-        return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Collected</Badge>;
+        return (
+          <Badge
+            variant="outline"
+            className="bg-green-50 text-green-700 border-green-200"
+          >
+            Collected
+          </Badge>
+        );
       case "rejected":
-        return <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">Rejected</Badge>;
+        return (
+          <Badge
+            variant="outline"
+            className="bg-red-50 text-red-700 border-red-200"
+          >
+            Rejected
+          </Badge>
+        );
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
@@ -400,8 +491,8 @@ export default function DoctorLabTestsPage() {
     }
   };
 
-  const selectCommonTest = (test: typeof COMMON_TESTS[0]) => {
-    setNewTest(prev => ({
+  const selectCommonTest = (test: (typeof COMMON_TESTS)[0]) => {
+    setNewTest((prev) => ({
       ...prev,
       testName: test.name,
       category: test.category,
@@ -421,7 +512,9 @@ export default function DoctorLabTestsPage() {
         <div className="text-center">
           <AlertTriangle className="h-12 w-12 text-red-500 mx-auto mb-4" />
           <h2 className="text-xl font-semibold mb-2">Unauthorized Access</h2>
-          <p className="text-gray-600">You don't have permission to access this page.</p>
+          <p className="text-gray-600">
+            You don't have permission to access this page.
+          </p>
         </div>
       </div>
     );
@@ -432,7 +525,9 @@ export default function DoctorLabTestsPage() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold">Lab Tests Management</h1>
+          <h1 className="text-2xl md:text-3xl font-bold">
+            Lab Tests Management
+          </h1>
           <p className="text-gray-500 mt-1">
             Order and manage laboratory tests for your patients
           </p>
@@ -459,7 +554,7 @@ export default function DoctorLabTestsPage() {
                   Order a new laboratory test for your patient
                 </DialogDescription>
               </DialogHeader>
-              
+
               {error && (
                 <Alert variant="destructive">
                   <AlertTriangle className="h-4 w-4" />
@@ -467,23 +562,31 @@ export default function DoctorLabTestsPage() {
                   <AlertDescription>{error}</AlertDescription>
                 </Alert>
               )}
-              
+
               <div className="space-y-4">
                 {/* Appointment Selection */}
                 <div className="space-y-2">
                   <Label htmlFor="appointment">Select Appointment *</Label>
                   <Select
                     value={newTest.appointmentId}
-                    onValueChange={(value) => setNewTest(prev => ({ ...prev, appointmentId: value }))}
+                    onValueChange={(value) =>
+                      setNewTest((prev) => ({ ...prev, appointmentId: value }))
+                    }
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select an appointment" />
                     </SelectTrigger>
                     <SelectContent>
                       {appointments.map((appointment) => (
-                        <SelectItem key={appointment._id} value={appointment._id}>
+                        <SelectItem
+                          key={appointment._id}
+                          value={appointment._id}
+                        >
                           <div className="flex items-center justify-between">
-                            <span>{appointment.patient.name} ({appointment.patient.patientId})</span>
+                            <span>
+                              {appointment.patient.name} (
+                              {appointment.patient.patientId})
+                            </span>
                             <span className="text-sm text-gray-500 ml-2">
                               {format(new Date(appointment.date), "MMM d")}
                             </span>
@@ -523,36 +626,48 @@ export default function DoctorLabTestsPage() {
                     <Input
                       id="testName"
                       value={newTest.testName}
-                      onChange={(e) => setNewTest(prev => ({ ...prev, testName: e.target.value }))}
+                      onChange={(e) =>
+                        setNewTest((prev) => ({
+                          ...prev,
+                          testName: e.target.value,
+                        }))
+                      }
                       placeholder="Enter test name"
                       required
                     />
                   </div>
-                  
+
                   <div className="space-y-2">
                     <Label htmlFor="category">Category *</Label>
                     <Select
                       value={newTest.category}
-                      onValueChange={(value) => setNewTest(prev => ({ ...prev, category: value }))}
+                      onValueChange={(value) =>
+                        setNewTest((prev) => ({ ...prev, category: value }))
+                      }
                     >
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         {TEST_CATEGORIES.map((category) => (
-                          <SelectItem key={category.value} value={category.value}>
+                          <SelectItem
+                            key={category.value}
+                            value={category.value}
+                          >
                             {category.label}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
-                  
+
                   <div className="space-y-2">
                     <Label htmlFor="specimenType">Specimen Type</Label>
                     <Select
                       value={newTest.specimenType}
-                      onValueChange={(value) => setNewTest(prev => ({ ...prev, specimenType: value }))}
+                      onValueChange={(value) =>
+                        setNewTest((prev) => ({ ...prev, specimenType: value }))
+                      }
                     >
                       <SelectTrigger>
                         <SelectValue />
@@ -566,7 +681,7 @@ export default function DoctorLabTestsPage() {
                       </SelectContent>
                     </Select>
                   </div>
-                  
+
                   <div className="space-y-2">
                     <Label htmlFor="price">Price ($) *</Label>
                     <Input
@@ -574,17 +689,24 @@ export default function DoctorLabTestsPage() {
                       type="number"
                       step="0.01"
                       value={newTest.price}
-                      onChange={(e) => setNewTest(prev => ({ ...prev, price: e.target.value }))}
+                      onChange={(e) =>
+                        setNewTest((prev) => ({
+                          ...prev,
+                          price: e.target.value,
+                        }))
+                      }
                       placeholder="0.00"
                       required
                     />
                   </div>
-                  
+
                   <div className="space-y-2">
                     <Label htmlFor="priority">Priority</Label>
                     <Select
                       value={newTest.priority}
-                      onValueChange={(value) => setNewTest(prev => ({ ...prev, priority: value }))}
+                      onValueChange={(value) =>
+                        setNewTest((prev) => ({ ...prev, priority: value }))
+                      }
                     >
                       <SelectTrigger>
                         <SelectValue />
@@ -604,26 +726,37 @@ export default function DoctorLabTestsPage() {
                   <Textarea
                     id="description"
                     value={newTest.description}
-                    onChange={(e) => setNewTest(prev => ({ ...prev, description: e.target.value }))}
+                    onChange={(e) =>
+                      setNewTest((prev) => ({
+                        ...prev,
+                        description: e.target.value,
+                      }))
+                    }
                     placeholder="Test description..."
                     rows={2}
                   />
                 </div>
-                
+
                 <div className="space-y-2">
                   <Label htmlFor="notes">Notes</Label>
                   <Textarea
                     id="notes"
                     value={newTest.notes}
-                    onChange={(e) => setNewTest(prev => ({ ...prev, notes: e.target.value }))}
+                    onChange={(e) =>
+                      setNewTest((prev) => ({ ...prev, notes: e.target.value }))
+                    }
                     placeholder="Additional notes for the lab..."
                     rows={2}
                   />
                 </div>
               </div>
-              
+
               <DialogFooter>
-                <Button variant="outline" onClick={() => setIsOrderDialogOpen(false)} disabled={submitting}>
+                <Button
+                  variant="outline"
+                  onClick={() => setIsOrderDialogOpen(false)}
+                  disabled={submitting}
+                >
                   Cancel
                 </Button>
                 <Button onClick={handleOrderTest} disabled={submitting}>
@@ -669,14 +802,21 @@ export default function DoctorLabTestsPage() {
             </div>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Pending Results</p>
+                <p className="text-sm font-medium text-gray-600">
+                  Pending Results
+                </p>
                 <p className="text-2xl font-bold mt-1">
-                  {labTests.filter(t => t.status === "ordered" || t.status === "processing").length}
+                  {
+                    labTests.filter(
+                      (t) =>
+                        t.status === "ordered" || t.status === "processing",
+                    ).length
+                  }
                 </p>
               </div>
               <div className="h-10 w-10 rounded-full bg-yellow-100 flex items-center justify-center">
@@ -685,14 +825,19 @@ export default function DoctorLabTestsPage() {
             </div>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Completed</p>
                 <p className="text-2xl font-bold mt-1">
-                  {labTests.filter(t => t.status === "completed" || t.status === "reported").length}
+                  {
+                    labTests.filter(
+                      (t) =>
+                        t.status === "completed" || t.status === "reported",
+                    ).length
+                  }
                 </p>
               </div>
               <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center">
@@ -701,14 +846,21 @@ export default function DoctorLabTestsPage() {
             </div>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Urgent Tests</p>
+                <p className="text-sm font-medium text-gray-600">
+                  Urgent Tests
+                </p>
                 <p className="text-2xl font-bold mt-1">
-                  {labTests.filter(t => t.priority === "urgent" || t.priority === "emergency").length}
+                  {
+                    labTests.filter(
+                      (t) =>
+                        t.priority === "urgent" || t.priority === "emergency",
+                    ).length
+                  }
                 </p>
               </div>
               <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center">
@@ -734,7 +886,7 @@ export default function DoctorLabTestsPage() {
                 />
               </div>
             </div>
-            
+
             <div className="flex flex-wrap gap-2">
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger className="w-32">
@@ -750,7 +902,7 @@ export default function DoctorLabTestsPage() {
                   <SelectItem value="cancelled">Cancelled</SelectItem>
                 </SelectContent>
               </Select>
-              
+
               <Select value={priorityFilter} onValueChange={setPriorityFilter}>
                 <SelectTrigger className="w-32">
                   <SelectValue placeholder="Priority" />
@@ -762,7 +914,7 @@ export default function DoctorLabTestsPage() {
                   <SelectItem value="emergency">Emergency</SelectItem>
                 </SelectContent>
               </Select>
-              
+
               <Select value={dateRange} onValueChange={setDateRange}>
                 <SelectTrigger className="w-32">
                   <SelectValue placeholder="Date Range" />
@@ -775,15 +927,24 @@ export default function DoctorLabTestsPage() {
                   <SelectItem value="all">All Time</SelectItem>
                 </SelectContent>
               </Select>
-              
-              <Select value={selectedPatient || "all"} onValueChange={(value) => setSelectedPatient(value === "all" ? null : value)}>
+
+              <Select
+                value={selectedPatient || "all"}
+                onValueChange={(value) =>
+                  setSelectedPatient(value === "all" ? null : value)
+                }
+              >
                 <SelectTrigger className="w-40">
                   <SelectValue placeholder="Patient" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Patients</SelectItem>
-                  {Array.from(new Set(labTests.map(test => test.patient._id))).map(patientId => {
-                    const patient = labTests.find(t => t.patient._id === patientId)?.patient;
+                  {Array.from(
+                    new Set(labTests.map((test) => test.patient._id)),
+                  ).map((patientId) => {
+                    const patient = labTests.find(
+                      (t) => t.patient._id === patientId,
+                    )?.patient;
                     return patient ? (
                       <SelectItem key={patientId} value={patientId}>
                         {patient.name} ({patient.patientId})
@@ -815,7 +976,9 @@ export default function DoctorLabTestsPage() {
               <TestTube className="h-12 w-12 text-gray-400 mx-auto mb-4" />
               <h3 className="text-lg font-semibold mb-2">No Lab Tests Found</h3>
               <p className="text-gray-500 mb-4">
-                {searchQuery ? "No tests match your search criteria" : "You haven't ordered any lab tests yet"}
+                {searchQuery
+                  ? "No tests match your search criteria"
+                  : "You haven't ordered any lab tests yet"}
               </p>
               <Button onClick={() => setIsOrderDialogOpen(true)}>
                 <Plus className="h-4 w-4 mr-2" />
@@ -841,42 +1004,63 @@ export default function DoctorLabTestsPage() {
                   </TableHeader>
                   <TableBody>
                     {filteredTests.map((test) => (
-                      <TableRow key={test._id} className={cn(
-                        test.priority === "emergency" && "bg-red-50 hover:bg-red-100",
-                        test.priority === "urgent" && "bg-orange-50 hover:bg-orange-100"
-                      )}>
-                        <TableCell className="font-medium">{test.testId}</TableCell>
+                      <TableRow
+                        key={test._id}
+                        className={cn(
+                          test.priority === "emergency" &&
+                            "bg-red-50 hover:bg-red-100",
+                          test.priority === "urgent" &&
+                            "bg-orange-50 hover:bg-orange-100",
+                        )}
+                      >
+                        <TableCell className="font-medium">
+                          {test.testId}
+                        </TableCell>
                         <TableCell>
                           <div>
                             <p className="font-medium">{test.testName}</p>
-                            <p className="text-sm text-gray-500 capitalize">{test.category.replace('_', ' ')}</p>
+                            <p className="text-sm text-gray-500 capitalize">
+                              {test.category.replace("_", " ")}
+                            </p>
                           </div>
                         </TableCell>
                         <TableCell>
                           <div>
                             <p className="font-medium">{test.patient.name}</p>
-                            <p className="text-sm text-gray-500">{test.patient.patientId}</p>
+                            <p className="text-sm text-gray-500">
+                              {test.patient.patientId}
+                            </p>
                           </div>
                         </TableCell>
                         <TableCell>
                           <div className="text-sm">
                             <p>{formatDate(test.orderedAt)}</p>
                             {test.appointment && (
-                              <p className="text-gray-500">Appt: {test.appointment.appointmentId}</p>
+                              <p className="text-gray-500">
+                                Appt: {test.appointment.appointmentId}
+                              </p>
                             )}
                           </div>
                         </TableCell>
                         <TableCell>{getPriorityBadge(test.priority)}</TableCell>
                         <TableCell>{getStatusBadge(test.status)}</TableCell>
-                        <TableCell>{getCollectionStatusBadge(test.collectionStatus)}</TableCell>
+                        <TableCell>
+                          {getCollectionStatusBadge(test.collectionStatus)}
+                        </TableCell>
                         <TableCell>
                           {test.paymentVerified ? (
-                            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                            <Badge
+                              variant="outline"
+                              className="bg-green-50 text-green-700 border-green-200"
+                            >
                               <CheckCircle className="h-3 w-3 mr-1" />
                               Verified
                             </Badge>
                           ) : (
-                            <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
+                            <Badge
+                              variant="outline"
+                              className="bg-yellow-50 text-yellow-700 border-yellow-200"
+                            >
                               Pending
                             </Badge>
                           )}
@@ -886,7 +1070,9 @@ export default function DoctorLabTestsPage() {
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => router.push(`/laboratory/tests/${test._id}`)}
+                              onClick={() =>
+                                router.push(`/laboratory/tests/${test._id}`)
+                              }
                             >
                               <Eye className="h-4 w-4" />
                             </Button>
@@ -895,14 +1081,20 @@ export default function DoctorLabTestsPage() {
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  onClick={() => router.push(`/laboratory/tests/${test._id}/report`)}
+                                  onClick={() =>
+                                    router.push(
+                                      `/laboratory/tests/${test._id}/report`,
+                                    )
+                                  }
                                 >
                                   <FileText className="h-4 w-4" />
                                 </Button>
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  onClick={() => {/* Print report */}}
+                                  onClick={() => {
+                                    /* Print report */
+                                  }}
                                 >
                                   <Printer className="h-4 w-4" />
                                 </Button>
@@ -943,11 +1135,13 @@ export default function DoctorLabTestsPage() {
                       } else {
                         pageNum = currentPage - 2 + i;
                       }
-                      
+
                       return (
                         <Button
                           key={pageNum}
-                          variant={currentPage === pageNum ? "default" : "outline"}
+                          variant={
+                            currentPage === pageNum ? "default" : "outline"
+                          }
                           size="sm"
                           onClick={() => handlePageChange(pageNum)}
                         >

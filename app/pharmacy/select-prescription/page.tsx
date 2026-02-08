@@ -46,6 +46,7 @@ interface PrescriptionItem {
   dosage: string;
   frequency: string;
   duration: string;
+  price?: number;
 }
 
 interface Prescription {
@@ -69,6 +70,13 @@ interface Prescription {
   dispensingStatus: "pending" | "partial" | "full" | "cancelled";
   notes?: string;
   instructions?: string;
+  pricingFinalized?: boolean;
+  charges?: {
+    totalAmount?: number;
+    paid?: number;
+    due?: number;
+    paymentStatus?: string;
+  };
 }
 
 export default function SelectPrescriptionPage() {
@@ -145,6 +153,12 @@ export default function SelectPrescriptionPage() {
     router.push(`/pharmacy/dispense?prescriptionId=${prescriptionId}`);
   };
 
+  const handleEditPrices = (prescriptionId: string) => {
+    router.push(
+      `/pharmacy/dispense?prescriptionId=${prescriptionId}&editPrices=true`,
+    );
+  };
+
   const getDispensingStatusBadge = (status: string) => {
     const variants = {
       pending: "bg-yellow-100 text-yellow-800 hover:bg-yellow-100",
@@ -184,6 +198,14 @@ export default function SelectPrescriptionPage() {
     return medications.reduce((total, med) => total + (med.quantity || 0), 0);
   };
 
+  // Calculate total amount from medications
+  const calculateTotalAmount = (medications: PrescriptionItem[]) => {
+    return medications.reduce(
+      (total, med) => total + (med.price || 0) * (med.quantity || 0),
+      0,
+    );
+  };
+
   // Get medicine names (first 2)
   const getMedicineNames = (medications: PrescriptionItem[]) => {
     const names = medications.slice(0, 2).map((m) => m.name);
@@ -191,6 +213,22 @@ export default function SelectPrescriptionPage() {
       return `${names.join(", ")} +${medications.length - 2} more`;
     }
     return names.join(", ");
+  };
+
+  // Get pricing status badge
+  const getPricingStatusBadge = (pricingFinalized?: boolean) => {
+    if (pricingFinalized) {
+      return (
+        <Badge className="bg-green-100 text-green-800 hover:bg-green-100">
+          Finalized
+        </Badge>
+      );
+    }
+    return (
+      <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">
+        Not Finalized
+      </Badge>
+    );
   };
 
   // Check if prescription is expired
@@ -312,7 +350,8 @@ export default function SelectPrescriptionPage() {
                       <TableHead>Patient</TableHead>
                       <TableHead>Doctor</TableHead>
                       <TableHead>Medicines</TableHead>
-                      <TableHead className="w-30">Date</TableHead>
+                      <TableHead className="w-25">Amount</TableHead>
+                      <TableHead className="w-25">Pricing</TableHead>
                       <TableHead className="w-25">Status</TableHead>
                       <TableHead className="w-30 text-right">Action</TableHead>
                     </TableRow>
@@ -326,7 +365,7 @@ export default function SelectPrescriptionPage() {
                       return (
                         <TableRow
                           key={prescription._id}
-                          className={`hover: bg-dark:background ${isPrescriptionExpired ? "opacity-70" : ""}`}
+                          className={`hover:bg-gray-50 ${isPrescriptionExpired ? "opacity-70" : ""}`}
                         >
                           <TableCell>
                             <div className="flex flex-col">
@@ -378,7 +417,7 @@ export default function SelectPrescriptionPage() {
                                   (
                                   {calculateTotalMedicines(
                                     prescription.medications || [],
-                                  )}{" "}
+                                  )}
                                   total)
                                 </span>
                               </Badge>
@@ -397,25 +436,25 @@ export default function SelectPrescriptionPage() {
                           </TableCell>
                           <TableCell>
                             <div className="flex flex-col">
-                              <div className="flex items-center gap-2">
-                                <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
-                                <span className="text-sm">
-                                  {format(
-                                    new Date(prescription.prescribedDate),
-                                    "MMM d, yyyy",
-                                  )}
-                                </span>
-                              </div>
-                              {prescription.expiryDate && (
-                                <span className="text-xs text-muted-foreground mt-1">
-                                  Expires:{" "}
-                                  {format(
-                                    new Date(prescription.expiryDate),
-                                    "MMM d",
-                                  )}
+                              <span className="font-medium">
+                                $
+                                {calculateTotalAmount(
+                                  prescription.medications || [],
+                                ).toFixed(2)}
+                              </span>
+                              {prescription.charges?.paymentStatus && (
+                                <span className="text-xs text-muted-foreground">
+                                  {prescription.charges.paymentStatus === "paid"
+                                    ? "Paid"
+                                    : "Unpaid"}
                                 </span>
                               )}
                             </div>
+                          </TableCell>
+                          <TableCell>
+                            {getPricingStatusBadge(
+                              prescription.pricingFinalized,
+                            )}
                           </TableCell>
                           <TableCell>
                             <div className="flex flex-col gap-1">
@@ -426,25 +465,43 @@ export default function SelectPrescriptionPage() {
                             </div>
                           </TableCell>
                           <TableCell className="text-right">
-                            <Button
-                              size="sm"
-                              onClick={() =>
-                                handleSelectPrescription(prescription._id)
-                              }
-                              disabled={
-                                isPrescriptionExpired ||
-                                prescription.status === "cancelled"
-                              }
-                              title={
-                                isPrescriptionExpired
-                                  ? "Prescription expired"
-                                  : prescription.status === "cancelled"
-                                    ? "Prescription cancelled"
-                                    : "Dispense medicines"
-                              }
-                            >
-                              {isPrescriptionExpired ? "Expired" : "Dispense"}
-                            </Button>
+                            <div className="flex justify-end gap-2">
+                              {!prescription.pricingFinalized && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() =>
+                                    handleEditPrices(prescription._id)
+                                  }
+                                  title="Edit medication prices"
+                                >
+                                  Edit Prices
+                                </Button>
+                              )}
+                              <Button
+                                size="sm"
+                                onClick={() =>
+                                  handleSelectPrescription(prescription._id)
+                                }
+                                disabled={
+                                  isPrescriptionExpired ||
+                                  prescription.status === "cancelled"
+                                }
+                                title={
+                                  isPrescriptionExpired
+                                    ? "Prescription expired"
+                                    : prescription.status === "cancelled"
+                                      ? "Prescription cancelled"
+                                      : "Dispense medicines"
+                                }
+                              >
+                                {isPrescriptionExpired
+                                  ? "Expired"
+                                  : prescription.pricingFinalized
+                                    ? "Dispense"
+                                    : "Dispense"}
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       );

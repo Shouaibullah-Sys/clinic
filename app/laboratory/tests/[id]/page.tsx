@@ -118,9 +118,6 @@ export default function TestDetailPage() {
         throw new Error(data.error || "Failed to fetch test");
       }
 
-      console.log("DEBUG - Test data received:", data.data);
-      console.log("DEBUG - Doctor field:", data.data?.doctor);
-
       setTest(data.data);
     } catch (error: any) {
       console.error("Error fetching test:", error);
@@ -224,7 +221,7 @@ export default function TestDetailPage() {
           </AlertDescription>
         </Alert>
       ) : canCollectSample ? (
-        <Alert className="bg-blue-50 border-blue-200 mb-6">
+        <Alert className=" border-blue-200 mb-6">
           <Clock className="h-4 w-4 text-blue-600" />
           <AlertTitle>Ready for Sample Collection</AlertTitle>
           <AlertDescription>Ready to collect the sample.</AlertDescription>
@@ -239,196 +236,249 @@ export default function TestDetailPage() {
         </Alert>
       ) : null}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Patient Info */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <User className="h-5 w-5" />
-              Patient Information
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <p className="text-sm text-muted-foreground">Name</p>
-              <p className="font-medium">{patientInfo.name}</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Patient ID</p>
-              <p className="font-medium">{patientInfo.patientId}</p>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm text-muted-foreground">Phone</p>
-                <p className="font-medium">{patientInfo.phone}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Age / Gender</p>
-                <p className="font-medium">
-                  {patientInfo.age ? `${patientInfo.age}y` : "N/A"} /{" "}
-                  {patientInfo.gender || "N/A"}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Combined Information Table */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Test Information</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b-2">
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700">
+                    Information Type
+                  </th>
+                  <th className="text-left py-3 px-4 font-semibold text-gray-700">
+                    Details
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {/* Patient Information Row */}
+                <tr className="border-b">
+                  <td className="py-4 px-4 align-top">
+                    <div className="flex items-center gap-2">
+                      <User className="h-4 w-4" />
+                      <span className="font-medium">Patient Information</span>
+                    </div>
+                  </td>
+                  <td className="py-4 px-4">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div>
+                        <p className="text-sm text-muted-foreground">Name</p>
+                        <p className="font-medium">{patientInfo.name}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">
+                          Patient ID
+                        </p>
+                        <p className="font-medium">{patientInfo.patientId}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">Phone</p>
+                        <p className="font-medium">{patientInfo.phone}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">
+                          Age / Gender
+                        </p>
+                        <p className="font-medium">
+                          {patientInfo.age ? `${patientInfo.age}y` : "N/A"} /{" "}
+                          {patientInfo.gender || "N/A"}
+                        </p>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
 
-        {/* Doctor Info */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Stethoscope className="h-5 w-5" />
-              Doctor Information
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <p className="text-sm text-muted-foreground">Doctor</p>
-              <p className="font-medium">Dr. {doctorInfo.name}</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Specialization</p>
-              <p className="font-medium">{doctorInfo.specialization}</p>
-            </div>
-            <Separator />
-            <div>
-              <p className="text-sm text-muted-foreground">Priority</p>
-              <Badge
-                className={
-                  test.priority === "emergency"
-                    ? "bg-red-100 text-red-800"
-                    : test.priority === "urgent"
-                      ? "bg-orange-100 text-orange-800"
-                      : "bg-blue-100 text-blue-800"
-                }
-              >
-                {test.priority}
-              </Badge>
-            </div>
-          </CardContent>
-        </Card>
+                {/* Doctor Information Row */}
+                <tr className="border-b ">
+                  <td className="py-4 px-4 align-top">
+                    <div className="flex items-center gap-2">
+                      <Stethoscope className="h-4 w-4" />
+                      <span className="font-medium">Doctor Information</span>
+                    </div>
+                  </td>
+                  <td className="py-4 px-4">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                      <div>
+                        <p className="text-sm text-muted-foreground">Doctor</p>
+                        <p className="font-medium">Dr. {doctorInfo.name}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">
+                          Specialization
+                        </p>
+                        <p className="font-medium">
+                          {doctorInfo.specialization}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">
+                          Priority
+                        </p>
+                        <Badge
+                          className={
+                            test.priority === "emergency"
+                              ? "bg-red-100 text-red-800"
+                              : test.priority === "urgent"
+                                ? "bg-orange-100 text-orange-800"
+                                : "bg-blue-100 text-blue-800"
+                          }
+                        >
+                          {test.priority}
+                        </Badge>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
 
-        {/* Test Details */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <TestTube className="h-5 w-5" />
-              Test Details
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <p className="text-sm text-muted-foreground">Test Name</p>
-              <p className="font-medium">{test.testName}</p>
-            </div>
-            {test.category && (
-              <div>
-                <p className="text-sm text-muted-foreground">Category</p>
-                <p className="font-medium">
-                  {test.category.replace(/_/g, " ")}
-                </p>
-              </div>
-            )}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm text-muted-foreground">
-                  Collection Status
-                </p>
-                <Badge
-                  className={
-                    test.collectionStatus === "collected"
-                      ? "bg-green-100 text-green-800"
-                      : "bg-yellow-100 text-yellow-800"
-                  }
-                >
-                  {test.collectionStatus === "collected"
-                    ? "Collected"
-                    : "Pending"}
-                </Badge>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">
-                  Processing Status
-                </p>
-                <Badge
-                  className={
-                    test.processingStatus === "completed"
-                      ? "bg-green-100 text-green-800"
-                      : test.processingStatus === "processing"
-                        ? "bg-blue-100 text-blue-800"
-                        : "bg-yellow-100 text-yellow-800"
-                  }
-                >
-                  {test.processingStatus === "completed"
-                    ? "Completed"
-                    : test.processingStatus === "processing"
-                      ? "Processing"
-                      : "Pending"}
-                </Badge>
-              </div>
-            </div>
-            {test.specimen?.type && (
-              <div>
-                <p className="text-sm text-muted-foreground">Specimen</p>
-                <p className="font-medium">{test.specimen.type}</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                {/* Test Details Row */}
+                <tr className="border-b ">
+                  <td className="py-4 px-4 align-top">
+                    <div className="flex items-center gap-2">
+                      <TestTube className="h-4 w-4" />
+                      <span className="font-medium">Test Details</span>
+                    </div>
+                  </td>
+                  <td className="py-4 px-4">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                      <div>
+                        <p className="text-sm text-muted-foreground">
+                          Test Name
+                        </p>
+                        <p className="font-medium">{test.testName}</p>
+                      </div>
+                      {test.category && (
+                        <div>
+                          <p className="text-sm text-muted-foreground">
+                            Category
+                          </p>
+                          <p className="font-medium">
+                            {test.category.replace(/_/g, " ")}
+                          </p>
+                        </div>
+                      )}
+                      {test.specimen?.type && (
+                        <div>
+                          <p className="text-sm text-muted-foreground">
+                            Specimen
+                          </p>
+                          <p className="font-medium">{test.specimen.type}</p>
+                        </div>
+                      )}
+                      <div className="col-span-2 md:col-span-3 mt-2">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <p className="text-sm text-muted-foreground">
+                              Collection Status
+                            </p>
+                            <Badge
+                              className={
+                                test.collectionStatus === "collected"
+                                  ? "bg-green-100 text-green-800"
+                                  : "bg-yellow-100 text-yellow-800"
+                              }
+                            >
+                              {test.collectionStatus === "collected"
+                                ? "Collected"
+                                : "Pending"}
+                            </Badge>
+                          </div>
+                          <div>
+                            <p className="text-sm text-muted-foreground">
+                              Processing Status
+                            </p>
+                            <Badge
+                              className={
+                                test.processingStatus === "completed"
+                                  ? "bg-green-100 text-green-800"
+                                  : test.processingStatus === "processing"
+                                    ? "bg-blue-100 text-blue-800"
+                                    : "bg-yellow-100 text-yellow-800"
+                              }
+                            >
+                              {test.processingStatus === "completed"
+                                ? "Completed"
+                                : test.processingStatus === "processing"
+                                  ? "Processing"
+                                  : "Pending"}
+                            </Badge>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
 
-        {/* Payment Info */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <DollarSign className="h-5 w-5" />
-              Payment Information
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <p className="text-sm text-muted-foreground">Payment Status</p>
-              <div className="flex items-center gap-2">
-                <Badge
-                  className={
-                    test.paymentVerified
-                      ? "bg-green-100 text-green-800"
-                      : chargesInfo.paymentStatus === "paid"
-                        ? "bg-green-100 text-green-800"
-                        : "bg-red-100 text-red-800"
-                  }
-                >
-                  {test.paymentVerified
-                    ? "Verified"
-                    : chargesInfo.paymentStatus}
-                </Badge>
-                {test.paymentVerified && (
-                  <CheckCircle className="h-4 w-4 text-green-500" />
-                )}
-              </div>
-            </div>
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <span className="text-sm">Total Amount:</span>
-                <span className="font-medium">₹{chargesInfo.totalAmount}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-sm">Paid Amount:</span>
-                <span className="font-medium text-green-600">
-                  ₹{chargesInfo.paid}
-                </span>
-              </div>
-              {chargesInfo.due > 0 && (
-                <div className="flex justify-between">
-                  <span className="text-sm">Due Amount:</span>
-                  <span className="font-medium text-red-600">
-                    ₹{chargesInfo.due}
-                  </span>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+                {/* Payment Information Row */}
+                <tr className="">
+                  <td className="py-4 px-4 align-top">
+                    <div className="flex items-center gap-2">
+                      <DollarSign className="h-4 w-4" />
+                      <span className="font-medium">Payment Information</span>
+                    </div>
+                  </td>
+                  <td className="py-4 px-4">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                      <div>
+                        <p className="text-sm text-muted-foreground">
+                          Payment Status
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <Badge
+                            className={
+                              test.paymentVerified
+                                ? "bg-green-100 text-green-800"
+                                : chargesInfo.paymentStatus === "paid"
+                                  ? "bg-green-100 text-green-800"
+                                  : "bg-red-100 text-red-800"
+                            }
+                          >
+                            {test.paymentVerified
+                              ? "Verified"
+                              : chargesInfo.paymentStatus}
+                          </Badge>
+                          {test.paymentVerified && (
+                            <CheckCircle className="h-4 w-4 text-green-500" />
+                          )}
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">
+                          Total Amount
+                        </p>
+                        <p className="font-medium">
+                          ₹{chargesInfo.totalAmount}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">
+                          Paid Amount
+                        </p>
+                        <p className="font-medium text-green-600">
+                          ₹{chargesInfo.paid}
+                        </p>
+                      </div>
+                      {chargesInfo.due > 0 && (
+                        <div className="md:col-span-3">
+                          <p className="text-sm text-muted-foreground">
+                            Due Amount
+                          </p>
+                          <p className="font-medium text-red-600">
+                            ₹{chargesInfo.due}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Quick Actions */}
       <Card className="mt-6">

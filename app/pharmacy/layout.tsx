@@ -25,7 +25,7 @@ const navLinks = [
   { href: "/pharmacy", label: "Dashboard", icon: LayoutDashboard },
   { href: "/pharmacy/stock", label: "Stock Management", icon: Package },
   { href: "/pharmacy/issue", label: "Issue Medicine", icon: Pill },
-  { href: "/pharmacy/dispense", label: "Dispense Medicine", icon: HandCoins },
+  { href: "/pharmacy", label: "Dispense Medicine", icon: HandCoins },
   { href: "/pharmacy/inventory", label: "Inventory", icon: CheckCheck },
 ];
 
@@ -93,7 +93,7 @@ export default function PharmacyLayout({
                       "flex items-center gap-3 rounded-lg px-3 py-2 transition-all",
                       pathname === link.href
                         ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:bg-accent"
+                        : "text-muted-foreground hover:bg-accent",
                     )}
                   >
                     <link.icon className="h-4 w-4" />
@@ -168,7 +168,7 @@ export default function PharmacyLayout({
                         "flex items-center gap-4 px-2.5",
                         pathname === link.href
                           ? "text-foreground"
-                          : "text-muted-foreground hover:text-foreground"
+                          : "text-muted-foreground hover:text-foreground",
                       )}
                     >
                       <link.icon className="h-5 w-5" />

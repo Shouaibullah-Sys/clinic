@@ -2,12 +2,13 @@
 
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import Link from "next/link";
 import { useAuthStore } from "@/store/useAuthStore";
 import {
@@ -20,11 +21,12 @@ import {
   RefreshCw,
   Printer,
   Loader2,
+  CreditCard,
+  BarChart3,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { toast } from "sonner";
-import { jsPDF } from "jspdf";
-import autoTable from "jspdf-autotable";
+import DirectTestPDFGenerator from "@/components/laboratory/DirectTestPDFGenerator";
 
 interface DirectLabTest {
   _id: string;
@@ -95,8 +97,13 @@ interface DirectLabTest {
     reportedBy?: {
       _id: string;
       name: string;
-    };
+    } | null;
     reportedAt?: string;
+    verifiedBy?: {
+      _id: string;
+      name: string;
+    } | null;
+    verifiedAt?: string;
   };
   notes?: string;
 }
@@ -199,264 +206,38 @@ export default function DirectTestDetailPage() {
         },
       });
 
-      // Generate PDF
-      const doc = new jsPDF();
-      const pageWidth = doc.internal.pageSize.getWidth();
-      const pageHeight = doc.internal.pageSize.getHeight();
-      const margin = 14;
-      let yPos = margin;
-
-      const addText = (
-        text: string,
-        x: number,
-        y: number,
-        fontSize: number = 10,
-        fontStyle: string = "normal",
-        align: "left" | "center" | "right" = "left",
-      ) => {
-        doc.setFontSize(fontSize);
-        doc.setFont("helvetica", fontStyle);
-        doc.text(text, x, y, { align });
-        return y + fontSize * 0.4;
-      };
-
-      const isAbnormal = (param: {
-        name: string;
-        value: string | number;
-        unit?: string;
-        normalRange: string;
-        flag?: "normal" | "low" | "high" | "critical";
-        remarks?: string;
-      }): boolean => {
-        if (!param.normalRange || !param.remarks) return false;
-        const remarks = param.remarks.toLowerCase();
-        return (
-          remarks.includes("abnormal") ||
-          remarks.includes("high") ||
-          remarks.includes("low") ||
-          remarks.includes("critical")
-        );
-      };
-
-      // Header
-      yPos = addText(
-        "LABORATORY TEST REPORT",
-        pageWidth / 2,
-        yPos,
-        18,
-        "bold",
-        "center",
-      );
-      yPos += 2;
-      yPos = addText(
-        "Sajad Barekzai Hospital",
-        pageWidth / 2,
-        yPos,
-        12,
-        "bold",
-        "center",
-      );
-      yPos = addText(
-        "Comprehensive Diagnostic Services",
-        pageWidth / 2,
-        yPos,
-        9,
-        "normal",
-        "center",
-      );
-      yPos += 4;
-
-      doc.setDrawColor(59, 130, 246);
-      doc.setLineWidth(0.5);
-      doc.line(margin, yPos, pageWidth - margin, yPos);
-      yPos += 6;
-
-      // Test Info
-      yPos = addText(`Test ID: ${test.testId}`, margin, yPos, 10, "bold");
-      yPos = addText(
-        `Lab Reference: ${test.testId}`,
-        pageWidth - margin,
-        yPos,
-        10,
-        "normal",
-        "right",
-      );
-      yPos += 2;
-      yPos = addText(`Test: ${test.testName}`, margin, yPos, 12, "bold");
-      yPos = addText(
-        `Category: ${test.category.replace(/_/g, " ")}`,
-        margin,
-        yPos,
-        9,
-      );
-      yPos += 2;
-
-      // Patient Info
-      yPos += 2;
-      yPos = addText("PATIENT INFORMATION", margin, yPos, 11, "bold");
-      yPos += 2;
-
-      const patientInfo = [
-        ["Name:", test.patient.name || "N/A"],
-        ["Patient ID:", test.patient.patientId || "N/A"],
-        ["Gender:", test.patient.gender || "N/A"],
-        ["Phone:", test.patient.phone || "N/A"],
-      ];
-
-      autoTable(doc, {
-        startY: yPos,
-        head: [],
-        body: patientInfo,
-        theme: "plain",
-        styles: { fontSize: 9, cellPadding: 1 },
-        columnStyles: {
-          0: { fontStyle: "bold", cellWidth: 40 },
-          1: { cellWidth: 60 },
+      // Generate and print PDF using the centralized component
+      DirectTestPDFGenerator({
+        test: {
+          _id: test._id,
+          testId: test.testId,
+          testName: test.testName,
+          category: test.category,
+          patient: test.patient,
+          status: test.status,
+          collectionStatus: test.collectionStatus,
+          processingStatus: test.processingStatus,
+          createdAtDirect: test.createdAtDirect,
+          createdBy: test.createdBy,
+          paymentVerified: test.paymentVerified,
+          finalized: test.finalized,
+          readyForPrint: test.readyForPrint,
+          printedAt: test.printedAt,
+          charges: test.charges,
+          specimen: test.specimen,
+          results: test.results
+            ? {
+                parameters: test.results.parameters,
+                interpretation: test.results.interpretation,
+                reportedBy: test.results.reportedBy,
+                reportedAt: test.results.reportedAt,
+                verifiedBy: test.results.verifiedBy,
+                verifiedAt: test.results.verifiedAt,
+              }
+            : undefined,
+          priority: test.priority,
         },
       });
-
-      yPos = (doc as any).lastAutoTable.finalY + 4;
-
-      // Test Details
-      yPos = addText("TEST DETAILS", margin, yPos, 11, "bold");
-      yPos += 2;
-
-      const formatDate = (dateString?: string) => {
-        if (!dateString) return "N/A";
-        return new Date(dateString).toLocaleDateString("en-US", {
-          year: "numeric",
-          month: "short",
-          day: "numeric",
-          hour: "2-digit",
-          minute: "2-digit",
-        });
-      };
-
-      const testDetails = [
-        ["Ordered Date:", formatDate(test.createdAtDirect)],
-        ["Completed Date:", formatDate(test.finalizedAt)],
-        ["Specimen Type:", test.specimen?.type || "N/A"],
-        ["Collection Status:", test.collectionStatus?.toUpperCase() || "N/A"],
-        ["Processing Status:", test.processingStatus?.toUpperCase() || "N/A"],
-      ];
-
-      autoTable(doc, {
-        startY: yPos,
-        head: [],
-        body: testDetails,
-        theme: "plain",
-        styles: { fontSize: 9, cellPadding: 1 },
-        columnStyles: {
-          0: { fontStyle: "bold", cellWidth: 50 },
-          1: { cellWidth: 50 },
-        },
-      });
-
-      yPos = (doc as any).lastAutoTable.finalY + 4;
-
-      // Test Results
-      if (test.results?.parameters && test.results.parameters.length > 0) {
-        yPos = addText("TEST RESULTS", margin, yPos, 11, "bold");
-        yPos += 2;
-
-        const resultsTableData = test.results.parameters.map((param) => {
-          const abnormal = isAbnormal(param);
-          return [
-            param.name,
-            `${param.value} ${param.unit || ""}`,
-            param.normalRange || "-",
-            param.remarks || "-",
-          ];
-        });
-
-        autoTable(doc, {
-          startY: yPos,
-          head: [["Parameter", "Result", "Reference Range", "Remarks"]],
-          body: resultsTableData,
-          styles: { fontSize: 9 },
-          headStyles: {
-            fillColor: [59, 130, 246],
-            fontStyle: "bold",
-            halign: "center",
-          },
-          columnStyles: {
-            0: { cellWidth: 50, fontStyle: "bold" },
-            1: { cellWidth: 35, halign: "center" },
-            2: { cellWidth: 45 },
-            3: { cellWidth: 40 },
-          },
-          didParseCell: (data) => {
-            const rowIndex = data.row.index;
-            const param = test.results?.parameters?.[rowIndex];
-            if (param && isAbnormal(param)) {
-              data.cell.styles.textColor = [220, 38, 38];
-              data.cell.styles.fontStyle = "bold";
-            }
-          },
-        });
-
-        yPos = (doc as any).lastAutoTable.finalY + 4;
-
-        if (test.results.reportedBy) {
-          yPos = addText(
-            `Reported By: ${test.results.reportedBy.name}`,
-            margin,
-            yPos,
-            9,
-          );
-        }
-        if (test.results.reportedAt) {
-          yPos = addText(
-            `Reported At: ${formatDate(test.results.reportedAt)}`,
-            margin,
-            yPos,
-            9,
-          );
-        }
-        yPos += 4;
-      } else {
-        yPos = addText(
-          "No results available for this test.",
-          margin,
-          yPos,
-          10,
-          "italic",
-        );
-        yPos += 4;
-      }
-
-      // Footer
-      if (yPos > pageHeight - 40) {
-        doc.addPage();
-        yPos = margin;
-      }
-
-      yPos = pageHeight - 30;
-      doc.setDrawColor(200, 200, 200);
-      doc.setLineWidth(0.3);
-      doc.line(margin, yPos, pageWidth - margin, yPos);
-      yPos += 5;
-
-      yPos = addText(
-        "This is a computer-generated report.",
-        pageWidth / 2,
-        yPos,
-        8,
-        "normal",
-        "center",
-      );
-      yPos = addText(
-        `Report generated on: ${new Date().toLocaleString()}`,
-        pageWidth / 2,
-        yPos,
-        8,
-        "normal",
-        "center",
-      );
-
-      // Print
-      doc.autoPrint();
-      window.open(doc.output("bloburl"), "_blank");
 
       // Refresh test details to update printed status
       fetchTestDetails();
@@ -594,96 +375,104 @@ export default function DirectTestDetailPage() {
         </Alert>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Patient Info */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Patient Information Table */}
         <div className="border rounded-lg overflow-hidden">
-          <div className="bg-muted/50 px-4 py-3 border-b">
+          <div className="bg-muted/50 px-6 py-4 border-b">
             <h3 className="font-semibold flex items-center gap-2">
               <User className="h-5 w-5" />
               Patient Information
             </h3>
           </div>
-          <table className="w-full">
-            <tbody>
-              <tr className="border-b">
-                <td className="p-3 text-sm text-muted-foreground w-1/3">
+          <Table>
+            <TableBody>
+              <TableRow>
+                <TableCell className="w-1/3 font-medium text-muted-foreground">
                   Name
-                </td>
-                <td className="p-3 font-medium">{test.patient.name}</td>
-              </tr>
-              <tr className="border-b">
-                <td className="p-3 text-sm text-muted-foreground">
+                </TableCell>
+                <TableCell className="font-medium">
+                  {test.patient.name}
+                </TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell className="font-medium text-muted-foreground">
                   Patient ID
-                </td>
-                <td className="p-3 font-medium">{test.patient.patientId}</td>
-              </tr>
-              <tr className="border-b">
-                <td className="p-3 text-sm text-muted-foreground">Phone</td>
-                <td className="p-3 font-medium">
-                  {test.patient.phone || "N/A"}
-                </td>
-              </tr>
-              <tr className="border-b">
-                <td className="p-3 text-sm text-muted-foreground">Email</td>
-                <td className="p-3 font-medium">
-                  {test.patient.email || "N/A"}
-                </td>
-              </tr>
-              <tr className="border-b">
-                <td className="p-3 text-sm text-muted-foreground">Gender</td>
-                <td className="p-3 font-medium">
-                  {test.patient.gender || "N/A"}
-                </td>
-              </tr>
-              <tr>
-                <td className="p-3 text-sm text-muted-foreground">
+                </TableCell>
+                <TableCell className="font-mono">
+                  <Badge variant="outline">{test.patient.patientId}</Badge>
+                </TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell className="font-medium text-muted-foreground">
+                  Phone
+                </TableCell>
+                <TableCell>{test.patient.phone || "N/A"}</TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell className="font-medium text-muted-foreground">
+                  Email
+                </TableCell>
+                <TableCell>{test.patient.email || "N/A"}</TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell className="font-medium text-muted-foreground">
+                  Gender
+                </TableCell>
+                <TableCell>{test.patient.gender || "N/A"}</TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell className="font-medium text-muted-foreground">
                   Date of Birth
-                </td>
-                <td className="p-3 font-medium">
+                </TableCell>
+                <TableCell>
                   {test.patient.dateOfBirth
                     ? format(parseISO(test.patient.dateOfBirth), "MMM dd, yyyy")
                     : "N/A"}
-                </td>
-              </tr>
-            </tbody>
-          </table>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
         </div>
 
-        {/* Test Details */}
+        {/* Test Details Table */}
         <div className="border rounded-lg overflow-hidden">
-          <div className="bg-muted/50 px-4 py-3 border-b">
+          <div className="bg-muted/50 px-6 py-4 border-b">
             <h3 className="font-semibold flex items-center gap-2">
               <TestTube className="h-5 w-5" />
               Test Details
             </h3>
           </div>
-          <table className="w-full">
-            <tbody>
-              <tr className="border-b">
-                <td className="p-3 text-sm text-muted-foreground w-1/3">
+          <Table>
+            <TableBody>
+              <TableRow>
+                <TableCell className="w-1/3 font-medium text-muted-foreground">
                   Test Name
-                </td>
-                <td className="p-3 font-medium">{test.testName}</td>
-              </tr>
+                </TableCell>
+                <TableCell className="font-medium">{test.testName}</TableCell>
+              </TableRow>
               {test.description && (
-                <tr className="border-b">
-                  <td className="p-3 text-sm text-muted-foreground">
+                <TableRow>
+                  <TableCell className="font-medium text-muted-foreground">
                     Description
-                  </td>
-                  <td className="p-3 text-sm">{test.description}</td>
-                </tr>
+                  </TableCell>
+                  <TableCell className="text-sm">{test.description}</TableCell>
+                </TableRow>
               )}
-              <tr className="border-b">
-                <td className="p-3 text-sm text-muted-foreground">Category</td>
-                <td className="p-3">
+              <TableRow>
+                <TableCell className="font-medium text-muted-foreground">
+                  Category
+                </TableCell>
+                <TableCell>
                   <Badge variant="outline">
                     {test.category.replace(/_/g, " ")}
                   </Badge>
-                </td>
-              </tr>
-              <tr className="border-b">
-                <td className="p-3 text-sm text-muted-foreground">Priority</td>
-                <td className="p-3">
+                </TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell className="font-medium text-muted-foreground">
+                  Priority
+                </TableCell>
+                <TableCell>
                   <Badge
                     className={
                       test.priority === "emergency"
@@ -695,90 +484,91 @@ export default function DirectTestDetailPage() {
                   >
                     {test.priority}
                   </Badge>
-                </td>
-              </tr>
-              <tr className="border-b">
-                <td className="p-3 text-sm text-muted-foreground">Specimen</td>
-                <td className="p-3 font-medium">
-                  {test.specimen?.type || "N/A"}
-                </td>
-              </tr>
-              <tr className="border-b">
-                <td className="p-3 text-sm text-muted-foreground">Created</td>
-                <td className="p-3 font-medium">
+                </TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell className="font-medium text-muted-foreground">
+                  Specimen
+                </TableCell>
+                <TableCell>{test.specimen?.type || "N/A"}</TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell className="font-medium text-muted-foreground">
+                  Created
+                </TableCell>
+                <TableCell>
                   {format(
                     parseISO(test.createdAtDirect),
                     "MMM dd, yyyy 'at' HH:mm",
                   )}
-                </td>
-              </tr>
-              {test.createdBy && (
-                <tr className="border-b">
-                  <td className="p-3 text-sm text-muted-foreground">
-                    Created By
-                  </td>
-                  <td className="p-3 font-medium">{test.createdBy.name}</td>
-                </tr>
-              )}
+                  {test.createdBy && (
+                    <span className="block text-sm text-muted-foreground">
+                      by {test.createdBy.name}
+                    </span>
+                  )}
+                </TableCell>
+              </TableRow>
               {test.finalized && test.finalizedAt && (
-                <tr>
-                  <td className="p-3 text-sm text-muted-foreground">
+                <TableRow>
+                  <TableCell className="font-medium text-muted-foreground">
                     Finalized
-                  </td>
-                  <td className="p-3">
-                    <p className="font-medium">
-                      {format(
-                        parseISO(test.finalizedAt),
-                        "MMM dd, yyyy 'at' HH:mm",
-                      )}
-                    </p>
-                    {test.finalizedBy && (
-                      <p className="text-sm text-muted-foreground">
-                        by {test.finalizedBy.name}
-                      </p>
+                  </TableCell>
+                  <TableCell>
+                    {format(
+                      parseISO(test.finalizedAt),
+                      "MMM dd, yyyy 'at' HH:mm",
                     )}
-                  </td>
-                </tr>
+                    {test.finalizedBy && (
+                      <span className="block text-sm text-muted-foreground">
+                        by {test.finalizedBy.name}
+                      </span>
+                    )}
+                  </TableCell>
+                </TableRow>
               )}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
 
-        {/* Payment Details */}
+        {/* Payment Details Table */}
         <div className="border rounded-lg overflow-hidden">
-          <div className="bg-muted/50 px-4 py-3 border-b">
+          <div className="bg-muted/50 px-6 py-4 border-b">
             <h3 className="font-semibold flex items-center gap-2">
-              <FileText className="h-5 w-5" />
+              <CreditCard className="h-5 w-5" />
               Payment Details
             </h3>
           </div>
-          <table className="w-full">
-            <tbody>
-              <tr className="border-b">
-                <td className="p-3 text-sm text-muted-foreground w-1/3">
+          <Table>
+            <TableBody>
+              <TableRow>
+                <TableCell className="w-1/3 font-medium text-muted-foreground">
                   Total Amount
-                </td>
-                <td className="p-3 font-medium">
+                </TableCell>
+                <TableCell className="font-semibold">
                   {formatPrice(test.charges?.totalAmount || 0)}
-                </td>
-              </tr>
-              <tr className="border-b">
-                <td className="p-3 text-sm text-muted-foreground">Paid</td>
-                <td className="p-3 font-medium text-green-600">
+                </TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell className="font-medium text-muted-foreground">
+                  Paid
+                </TableCell>
+                <TableCell className="font-semibold text-green-600">
                   {formatPrice(test.charges?.paid || 0)}
-                </td>
-              </tr>
-              <tr className="border-b">
-                <td className="p-3 text-sm text-muted-foreground">Due</td>
-                <td className="p-3 font-medium text-red-600">
+                </TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell className="font-medium text-muted-foreground">
+                  Due
+                </TableCell>
+                <TableCell className="font-semibold text-red-600">
                   {formatPrice(test.charges?.due || 0)}
-                </td>
-              </tr>
-              <tr className="border-b">
-                <td className="p-3 text-sm text-muted-foreground">
+                </TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell className="font-medium text-muted-foreground">
                   Payment Status
-                </td>
-                <td className="p-3">
+                </TableCell>
+                <TableCell>
                   <Badge
                     className={
                       test.charges?.paymentStatus === "paid"
@@ -790,13 +580,13 @@ export default function DirectTestDetailPage() {
                   >
                     {test.charges?.paymentStatus || "N/A"}
                   </Badge>
-                </td>
-              </tr>
-              <tr className="border-b">
-                <td className="p-3 text-sm text-muted-foreground">
+                </TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell className="font-medium text-muted-foreground">
                   Payment Verified
-                </td>
-                <td className="p-3">
+                </TableCell>
+                <TableCell>
                   <Badge
                     className={
                       test.paymentVerified
@@ -804,39 +594,37 @@ export default function DirectTestDetailPage() {
                         : "bg-red-100 text-red-800"
                     }
                   >
-                    {test.paymentVerified ? "Yes" : "No"}
+                    {test.paymentVerified ? "Verified" : "Not Verified"}
                   </Badge>
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
               {test.paymentVerifiedBy && (
-                <tr>
-                  <td className="p-3 text-sm text-muted-foreground">
+                <TableRow>
+                  <TableCell className="font-medium text-muted-foreground">
                     Verified By
-                  </td>
-                  <td className="p-3 font-medium">
-                    {test.paymentVerifiedBy.name}
-                  </td>
-                </tr>
+                  </TableCell>
+                  <TableCell>{test.paymentVerifiedBy.name}</TableCell>
+                </TableRow>
               )}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
 
-        {/* Test Status */}
+        {/* Test Status Table */}
         <div className="border rounded-lg overflow-hidden">
-          <div className="bg-muted/50 px-4 py-3 border-b">
+          <div className="bg-muted/50 px-6 py-4 border-b">
             <h3 className="font-semibold flex items-center gap-2">
-              <FileText className="h-5 w-5" />
+              <BarChart3 className="h-5 w-5" />
               Test Status
             </h3>
           </div>
-          <table className="w-full">
-            <tbody>
-              <tr className="border-b">
-                <td className="p-3 text-sm text-muted-foreground w-1/3">
+          <Table>
+            <TableBody>
+              <TableRow>
+                <TableCell className="w-1/3 font-medium text-muted-foreground">
                   Status
-                </td>
-                <td className="p-3">
+                </TableCell>
+                <TableCell>
                   <Badge
                     className={
                       test.status === "completed" || test.status === "reported"
@@ -848,13 +636,13 @@ export default function DirectTestDetailPage() {
                   >
                     {test.status}
                   </Badge>
-                </td>
-              </tr>
-              <tr className="border-b">
-                <td className="p-3 text-sm text-muted-foreground">
+                </TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell className="font-medium text-muted-foreground">
                   Processing
-                </td>
-                <td className="p-3">
+                </TableCell>
+                <TableCell>
                   <Badge
                     className={
                       test.processingStatus === "completed"
@@ -866,13 +654,13 @@ export default function DirectTestDetailPage() {
                   >
                     {test.processingStatus}
                   </Badge>
-                </td>
-              </tr>
-              <tr className="border-b">
-                <td className="p-3 text-sm text-muted-foreground">
+                </TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell className="font-medium text-muted-foreground">
                   Verification
-                </td>
-                <td className="p-3">
+                </TableCell>
+                <TableCell>
                   <Badge
                     className={
                       test.verificationStatus === "verified"
@@ -882,11 +670,13 @@ export default function DirectTestDetailPage() {
                   >
                     {test.verificationStatus}
                   </Badge>
-                </td>
-              </tr>
-              <tr className="border-b">
-                <td className="p-3 text-sm text-muted-foreground">Finalized</td>
-                <td className="p-3">
+                </TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell className="font-medium text-muted-foreground">
+                  Finalized
+                </TableCell>
+                <TableCell>
                   <Badge
                     className={
                       test.finalized
@@ -896,13 +686,13 @@ export default function DirectTestDetailPage() {
                   >
                     {test.finalized ? "Yes" : "No"}
                   </Badge>
-                </td>
-              </tr>
-              <tr>
-                <td className="p-3 text-sm text-muted-foreground">
+                </TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell className="font-medium text-muted-foreground">
                   Ready for Print
-                </td>
-                <td className="p-3">
+                </TableCell>
+                <TableCell>
                   <Badge
                     className={
                       test.readyForPrint
@@ -912,10 +702,10 @@ export default function DirectTestDetailPage() {
                   >
                     {test.readyForPrint ? "Yes" : "No"}
                   </Badge>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
         </div>
       </div>
 

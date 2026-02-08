@@ -1,4 +1,4 @@
-// app/laboratory/dashboard/page.tsx - UPDATED VERSION
+// app/laboratory/dashboard/page.tsx - UPDATED VERSION (No Financial Elements)
 "use client";
 
 import { useState, useEffect } from "react";
@@ -6,7 +6,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
@@ -29,31 +28,27 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Label } from "@/components/ui/label";
 import Link from "next/link";
-import { 
-  Search, 
-  Filter, 
-  MoreVertical, 
-  Eye, 
-  FileText, 
+import {
+  Search,
+  MoreVertical,
+  Eye,
   TestTube,
   AlertTriangle,
   CheckCircle,
   Clock,
-  Calendar,
   Download,
   Printer,
   Mail,
   Plus,
   RefreshCw,
-  TrendingUp,
-  Users,
   Activity,
-  CreditCard,
-  FileCheck
+  FileCheck,
+  Users,
+  Calendar,
+  TrendingUp,
 } from "lucide-react";
-import { format, subDays, startOfMonth, endOfMonth } from "date-fns";
+import { format } from "date-fns";
 import {
   BarChart,
   Bar,
@@ -67,7 +62,7 @@ import {
   Pie,
   Cell,
   LineChart,
-  Line
+  Line,
 } from "recharts";
 import { useAuthStore } from "@/store/useAuthStore";
 
@@ -90,14 +85,7 @@ interface LabTest {
   collectionStatus: string;
   processingStatus: string;
   verificationStatus: string;
-  paymentVerified: boolean;
   orderedAt: string;
-  charges: {
-    paymentStatus: string;
-    totalAmount: number;
-    paid: number;
-    due: number;
-  };
   results?: {
     reportedAt?: string;
   };
@@ -110,18 +98,14 @@ interface DashboardStats {
   pendingVerification: number;
   urgentTests: number;
   completedToday: number;
-  unpaidTests: number;
-  totalRevenue: number;
-  monthlyRevenue: number;
-  monthlyExpenses: number;
-  netProfit: number;
+  monthlyTests: number;
+  averageProcessingTime: number;
 }
 
-interface RevenueData {
-  month: string;
-  revenue: number;
-  expenses: number;
-  profit: number;
+interface TestVolumeData {
+  date: string;
+  tests: number;
+  completed: number;
 }
 
 export default function LaboratoryDashboard() {
@@ -132,11 +116,11 @@ export default function LaboratoryDashboard() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [priorityFilter, setPriorityFilter] = useState("all");
-  const [revenueData, setRevenueData] = useState<RevenueData[]>([]);
+  const [testVolumeData, setTestVolumeData] = useState<TestVolumeData[]>([]);
   const [testCategoryData, setTestCategoryData] = useState<any[]>([]);
   const [timeRange, setTimeRange] = useState("month");
 
-  const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
+  const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884D8"];
 
   useEffect(() => {
     fetchDashboardData();
@@ -147,92 +131,82 @@ export default function LaboratoryDashboard() {
   }, [searchQuery, statusFilter, priorityFilter, tests]);
 
   const fetchDashboardData = async () => {
-  try {
-    setLoading(true);
-    const { accessToken } = useAuthStore.getState();
-    
-    // Check if we have a token
-    if (!accessToken) {
-      console.error("No access token found");
-      return;
+    try {
+      setLoading(true);
+      const { accessToken } = useAuthStore.getState();
+
+      // Check if we have a token
+      if (!accessToken) {
+        console.error("No access token found");
+        return;
+      }
+
+      const headers = {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      };
+
+      // Fetch dashboard stats
+      const statsResponse = await fetch(
+        `/api/laboratory/dashboard?timeRange=${timeRange}`,
+        {
+          headers,
+        },
+      );
+
+      if (!statsResponse.ok) {
+        console.error("Failed to fetch dashboard data");
+        return;
+      }
+
+      const statsData = await statsResponse.json();
+
+      if (statsData.success) {
+        setStats(statsData.data?.statistics || {});
+      }
+
+      // Fetch recent tests
+      const testsResponse = await fetch(
+        "/api/laboratory/tests?limit=10&sort=orderedAt",
+        {
+          headers,
+        },
+      );
+
+      if (testsResponse.ok) {
+        const testsData = await testsResponse.json();
+        setTests(testsData.data || []);
+        setFilteredTests(testsData.data || []);
+      }
+
+      // Fetch test volume data
+      const volumeResponse = await fetch(
+        `/api/laboratory/tests/volume?timeRange=${timeRange}`,
+        {
+          headers,
+        },
+      );
+
+      if (volumeResponse.ok) {
+        const volumeData = await volumeResponse.json();
+        setTestVolumeData(volumeData.data || []);
+      }
+
+      // Fetch test category data
+      const categoryResponse = await fetch("/api/laboratory/tests/categories", {
+        headers,
+      });
+
+      if (categoryResponse.ok) {
+        const categoryData = await categoryResponse.json();
+        setTestCategoryData(categoryData.data?.categoryData || []);
+      }
+    } catch (error) {
+      console.error("Error fetching dashboard data:", error);
+    } finally {
+      setLoading(false);
     }
-    
-    console.log("Fetching dashboard data with token:", accessToken.substring(0, 20) + "...");
-    
-    const headers = {
-      'Authorization': `Bearer ${accessToken}`,
-      'Content-Type': 'application/json'
-    };
-    
-    // Fetch dashboard stats
-    const statsResponse = await fetch(`/api/laboratory/dashboard?timeRange=${timeRange}`, {
-      headers,
-    });
-    
-    console.log("Dashboard response status:", statsResponse.status);
-    
-    if (statsResponse.status === 401) {
-      console.error("Authentication failed - token might be invalid");
-      // Try to refresh token or redirect to login
-      return;
-    }
-    
-    if (statsResponse.status === 403) {
-      console.error("Permission denied - check user role");
-      return;
-    }
-    
-    if (!statsResponse.ok) {
-      console.error("Failed to fetch dashboard data");
-      return;
-    }
-    
-    const statsData = await statsResponse.json();
-    console.log("Dashboard data received:", statsData);
-    
-    if (statsData.success) {
-      setStats(statsData.data?.statistics || {});
-    } else {
-      console.error("Error in dashboard response:", statsData.error);
-    }
-    
-    // Fetch recent tests
-    const testsResponse = await fetch('/api/laboratory/tests?limit=10&sort=orderedAt', {
-      headers,
-    });
-    
-    if (testsResponse.ok) {
-      const testsData = await testsResponse.json();
-      setTests(testsData.data || []);
-      setFilteredTests(testsData.data || []);
-    }
-    
-    // Fetch revenue data
-    const revenueResponse = await fetch(`/api/laboratory/revenue?timeRange=${timeRange}`, {
-      headers,
-    });
-    
-    if (revenueResponse.ok) {
-      const revenueData = await revenueResponse.json();
-      setRevenueData(revenueData.data || []);
-    }
-    
-    // Fetch test category data
-    const categoryResponse = await fetch('/api/laboratory/tests/categories', {
-      headers,
-    });
-    
-    if (categoryResponse.ok) {
-      const categoryData = await categoryResponse.json();
-      setTestCategoryData(categoryData.data?.categoryData || []);
-    }
-    
-  } catch (error) {
-    console.error('Error fetching dashboard data:', error);
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   const filterTests = () => {
     let filtered = [...tests];
@@ -240,23 +214,24 @@ export default function LaboratoryDashboard() {
     // Apply search filter
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(test =>
-        test.testId.toLowerCase().includes(query) ||
-        test.testName.toLowerCase().includes(query) ||
-        test.patient.name.toLowerCase().includes(query) ||
-        test.patient.patientId.toLowerCase().includes(query) ||
-        (test.doctor?.name || '').toLowerCase().includes(query)
+      filtered = filtered.filter(
+        (test) =>
+          test.testId.toLowerCase().includes(query) ||
+          test.testName.toLowerCase().includes(query) ||
+          test.patient.name.toLowerCase().includes(query) ||
+          test.patient.patientId.toLowerCase().includes(query) ||
+          (test.doctor?.name || "").toLowerCase().includes(query),
       );
     }
 
     // Apply status filter
     if (statusFilter !== "all") {
-      filtered = filtered.filter(test => test.status === statusFilter);
+      filtered = filtered.filter((test) => test.status === statusFilter);
     }
 
     // Apply priority filter
     if (priorityFilter !== "all") {
-      filtered = filtered.filter(test => test.priority === priorityFilter);
+      filtered = filtered.filter((test) => test.priority === priorityFilter);
     }
 
     setFilteredTests(filtered);
@@ -264,31 +239,44 @@ export default function LaboratoryDashboard() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "ordered": return "bg-blue-100 text-blue-800";
-      case "collected": return "bg-yellow-100 text-yellow-800";
-      case "processing": return "bg-purple-100 text-purple-800";
-      case "completed": return "bg-green-100 text-green-800";
-      case "reported": return "bg-emerald-100 text-emerald-800";
-      case "cancelled": return "bg-red-100 text-red-800";
-      default: return "bg-gray-100 text-gray-800";
+      case "ordered":
+        return "bg-blue-100 text-blue-800";
+      case "collected":
+        return "bg-yellow-100 text-yellow-800";
+      case "processing":
+        return "bg-purple-100 text-purple-800";
+      case "completed":
+        return "bg-green-100 text-green-800";
+      case "reported":
+        return "bg-emerald-100 text-emerald-800";
+      case "cancelled":
+        return "bg-red-100 text-red-800";
+      default:
+        return "bg-gray-100 text-gray-800";
     }
   };
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
-      case "emergency": return "bg-red-100 text-red-800 border-red-300";
-      case "urgent": return "bg-orange-100 text-orange-800 border-orange-300";
-      default: return "bg-blue-100 text-blue-800 border-blue-300";
+      case "emergency":
+        return "bg-red-100 text-red-800 border-red-300";
+      case "urgent":
+        return "bg-orange-100 text-orange-800 border-orange-300";
+      default:
+        return "bg-blue-100 text-blue-800 border-blue-300";
     }
   };
 
-  const getPaymentStatusColor = (status: string, verified: boolean) => {
-    if (verified) return "bg-green-100 text-green-800";
+  const getProcessingStatusColor = (status: string) => {
     switch (status) {
-      case "paid": return "bg-green-100 text-green-800";
-      case "partial": return "bg-yellow-100 text-yellow-800";
-      case "pending": return "bg-red-100 text-red-800";
-      default: return "bg-gray-100 text-gray-800";
+      case "pending":
+        return "bg-yellow-100 text-yellow-800";
+      case "in_progress":
+        return "bg-blue-100 text-blue-800";
+      case "completed":
+        return "bg-green-100 text-green-800";
+      default:
+        return "bg-gray-100 text-gray-800";
     }
   };
 
@@ -321,9 +309,11 @@ export default function LaboratoryDashboard() {
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Laboratory Analytics Dashboard</h1>
+          <h1 className="text-3xl font-bold tracking-tight">
+            Laboratory Dashboard
+          </h1>
           <p className="text-muted-foreground">
-            Comprehensive overview of laboratory operations and finances
+            Overview of laboratory operations and test management
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -346,89 +336,101 @@ export default function LaboratoryDashboard() {
         </div>
       </div>
 
-      {/* Financial Metrics */}
+      {/* Key Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-            <TrendingUp className="h-4 w-4 text-green-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">₹{stats?.totalRevenue?.toLocaleString() || "0"}</div>
-            <p className="text-xs text-muted-foreground">
-              {timeRange === "today" ? "Today" : 
-               timeRange === "week" ? "This Week" :
-               timeRange === "month" ? "This Month" :
-               timeRange === "quarter" ? "This Quarter" : "This Year"}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Net Profit</CardTitle>
-            <CreditCard className="h-4 w-4 text-blue-500" />
-          </CardHeader>
-          <CardContent>
-            <div className={`text-2xl font-bold ${(stats?.netProfit || 0) >= 0 ? "text-green-600" : "text-red-600"}`}>
-              ₹{stats?.netProfit?.toLocaleString() || "0"}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {timeRange === "today" ? "Today" : 
-               timeRange === "week" ? "This Week" :
-               timeRange === "month" ? "This Month" :
-               timeRange === "quarter" ? "This Quarter" : "This Year"}
-            </p>
-          </CardContent>
-        </Card>
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Tests</CardTitle>
             <TestTube className="h-4 w-4 text-purple-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats?.totalTestsToday || 0}</div>
+            <div className="text-2xl font-bold">
+              {stats?.totalTestsToday || 0}
+            </div>
             <p className="text-xs text-muted-foreground">
-              {timeRange === "today" ? "Today" : 
-               timeRange === "week" ? "This Week" :
-               timeRange === "month" ? "This Month" :
-               timeRange === "quarter" ? "This Quarter" : "This Year"}
+              {timeRange === "today"
+                ? "Today"
+                : timeRange === "week"
+                  ? "This Week"
+                  : timeRange === "month"
+                    ? "This Month"
+                    : timeRange === "quarter"
+                      ? "This Quarter"
+                      : "This Year"}
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pending Payment</CardTitle>
-            <FileCheck className="h-4 w-4 text-orange-500" />
+            <CardTitle className="text-sm font-medium">
+              Completed Today
+            </CardTitle>
+            <CheckCircle className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats?.unpaidTests || 0}</div>
-            <p className="text-xs text-muted-foreground">
-              Tests requiring payment
-            </p>
+            <div className="text-2xl font-bold">
+              {stats?.completedToday || 0}
+            </div>
+            <p className="text-xs text-muted-foreground">Tests completed</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Monthly Tests</CardTitle>
+            <TrendingUp className="h-4 w-4 text-blue-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats?.monthlyTests || 0}</div>
+            <p className="text-xs text-muted-foreground">This month</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">
+              Avg. Processing
+            </CardTitle>
+            <Clock className="h-4 w-4 text-orange-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {stats?.averageProcessingTime || 0}h
+            </div>
+            <p className="text-xs text-muted-foreground">Average time</p>
           </CardContent>
         </Card>
       </div>
 
       {/* Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Revenue Chart */}
+        {/* Test Volume Chart */}
         <Card>
           <CardHeader>
-            <CardTitle>Revenue & Profit Trend</CardTitle>
+            <CardTitle>Test Volume Trend</CardTitle>
           </CardHeader>
           <CardContent className="h-80">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={revenueData}>
+              <LineChart data={testVolumeData}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
+                <XAxis dataKey="date" />
                 <YAxis />
                 <Tooltip />
                 <Legend />
-                <Line type="monotone" dataKey="revenue" stroke="#8884d8" activeDot={{ r: 8 }} />
-                <Line type="monotone" dataKey="profit" stroke="#82ca9d" />
+                <Line
+                  type="monotone"
+                  dataKey="tests"
+                  stroke="#8884d8"
+                  name="Total Tests"
+                  activeDot={{ r: 8 }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="completed"
+                  stroke="#82ca9d"
+                  name="Completed"
+                />
               </LineChart>
             </ResponsiveContainer>
           </CardContent>
@@ -447,13 +449,18 @@ export default function LaboratoryDashboard() {
                   cx="50%"
                   cy="50%"
                   labelLine={false}
-                  label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                  label={({ name, percent }) =>
+                    `${name}: ${(percent * 100).toFixed(0)}%`
+                  }
                   outerRadius={80}
                   fill="#8884d8"
                   dataKey="value"
                 >
                   {testCategoryData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    <Cell
+                      key={`cell-${index}`}
+                      fill={COLORS[index % COLORS.length]}
+                    />
                   ))}
                 </Pie>
                 <Tooltip />
@@ -467,14 +474,16 @@ export default function LaboratoryDashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pending Collection</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Pending Collection
+            </CardTitle>
             <Clock className="h-4 w-4 text-yellow-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats?.pendingCollection || 0}</div>
-            <p className="text-xs text-muted-foreground">
-              Waiting for samples
-            </p>
+            <div className="text-2xl font-bold">
+              {stats?.pendingCollection || 0}
+            </div>
+            <p className="text-xs text-muted-foreground">Waiting for samples</p>
           </CardContent>
         </Card>
 
@@ -484,7 +493,9 @@ export default function LaboratoryDashboard() {
             <Activity className="h-4 w-4 text-blue-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats?.pendingProcessing || 0}</div>
+            <div className="text-2xl font-bold">
+              {stats?.pendingProcessing || 0}
+            </div>
             <p className="text-xs text-muted-foreground">
               Currently being processed
             </p>
@@ -493,11 +504,15 @@ export default function LaboratoryDashboard() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pending Verification</CardTitle>
-            <CheckCircle className="h-4 w-4 text-purple-500" />
+            <CardTitle className="text-sm font-medium">
+              Pending Verification
+            </CardTitle>
+            <FileCheck className="h-4 w-4 text-purple-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats?.pendingVerification || 0}</div>
+            <div className="text-2xl font-bold">
+              {stats?.pendingVerification || 0}
+            </div>
             <p className="text-xs text-muted-foreground">
               Awaiting verification
             </p>
@@ -510,7 +525,9 @@ export default function LaboratoryDashboard() {
             <AlertTriangle className="h-4 w-4 text-red-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">{stats?.urgentTests || 0}</div>
+            <div className="text-2xl font-bold text-red-600">
+              {stats?.urgentTests || 0}
+            </div>
             <p className="text-xs text-muted-foreground">
               Require immediate attention
             </p>
@@ -546,9 +563,7 @@ export default function LaboratoryDashboard() {
                 </SelectContent>
               </Select>
               <Button asChild variant="outline" size="sm">
-                <Link href="/laboratory/tests">
-                  View All
-                </Link>
+                <Link href="/laboratory/tests">View All</Link>
               </Button>
             </div>
           </div>
@@ -563,7 +578,7 @@ export default function LaboratoryDashboard() {
                   <TableHead>Test Name</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Priority</TableHead>
-                  <TableHead>Payment</TableHead>
+                  <TableHead>Processing</TableHead>
                   <TableHead>Ordered</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -571,7 +586,10 @@ export default function LaboratoryDashboard() {
               <TableBody>
                 {filteredTests.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                    <TableCell
+                      colSpan={8}
+                      className="text-center py-8 text-muted-foreground"
+                    >
                       No tests found
                     </TableCell>
                   </TableRow>
@@ -579,7 +597,7 @@ export default function LaboratoryDashboard() {
                   filteredTests.map((test) => (
                     <TableRow key={test._id}>
                       <TableCell className="font-medium">
-                        <Link 
+                        <Link
                           href={`/laboratory/tests/${test._id}`}
                           className="hover:text-primary hover:underline"
                         >
@@ -589,34 +607,34 @@ export default function LaboratoryDashboard() {
                       <TableCell>
                         <div>
                           <div className="font-medium">{test.patient.name}</div>
-                          <div className="text-sm text-muted-foreground">{test.patient.patientId}</div>
+                          <div className="text-sm text-muted-foreground">
+                            {test.patient.patientId}
+                          </div>
                         </div>
                       </TableCell>
                       <TableCell>{test.testName}</TableCell>
                       <TableCell>
                         <Badge className={getStatusColor(test.status)}>
-                          {test.status.charAt(0).toUpperCase() + test.status.slice(1)}
+                          {test.status.charAt(0).toUpperCase() +
+                            test.status.slice(1)}
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <Badge 
-                          variant="outline" 
+                        <Badge
+                          variant="outline"
                           className={getPriorityColor(test.priority)}
                         >
                           {test.priority}
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <div className="flex flex-col gap-1">
-                          <Badge className={getPaymentStatusColor(test.charges.paymentStatus, test.paymentVerified)}>
-                            {test.paymentVerified ? "Verified" : test.charges.paymentStatus}
-                          </Badge>
-                          {!test.paymentVerified && test.charges.due > 0 && (
-                            <div className="text-xs text-red-600">
-                              Due: ₹{test.charges.due}
-                            </div>
+                        <Badge
+                          className={getProcessingStatusColor(
+                            test.processingStatus,
                           )}
-                        </div>
+                        >
+                          {test.processingStatus.replace("_", " ")}
+                        </Badge>
                       </TableCell>
                       <TableCell>
                         {format(new Date(test.orderedAt), "MMM dd, HH:mm")}
@@ -631,30 +649,29 @@ export default function LaboratoryDashboard() {
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem asChild>
                               <Link href={`/laboratory/tests/${test._id}`}>
+                                <Eye className="h-4 w-4 mr-2" />
                                 View Details
                               </Link>
                             </DropdownMenuItem>
                             {test.collectionStatus === "pending" && (
                               <DropdownMenuItem asChild>
-                                <Link href={`/laboratory/tests/${test._id}/collect`}>
+                                <Link
+                                  href={`/laboratory/tests/${test._id}/collect`}
+                                >
                                   Collect Sample
                                 </Link>
                               </DropdownMenuItem>
                             )}
-                            {test.collectionStatus === "collected" && test.processingStatus === "pending" && (
-                              <DropdownMenuItem asChild>
-                                <Link href={`/laboratory/tests/${test._id}/process`}>
-                                  Process Test
-                                </Link>
-                              </DropdownMenuItem>
-                            )}
-                            {!test.paymentVerified && (
-                              <DropdownMenuItem asChild>
-                                <Link href={`/laboratory/tests/${test._id}/verify-payment`}>
-                                  Verify Payment
-                                </Link>
-                              </DropdownMenuItem>
-                            )}
+                            {test.collectionStatus === "collected" &&
+                              test.processingStatus === "pending" && (
+                                <DropdownMenuItem asChild>
+                                  <Link
+                                    href={`/laboratory/tests/${test._id}/process`}
+                                  >
+                                    Process Test
+                                  </Link>
+                                </DropdownMenuItem>
+                              )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
@@ -664,15 +681,13 @@ export default function LaboratoryDashboard() {
               </TableBody>
             </Table>
           </div>
-          
+
           <div className="flex items-center justify-between mt-4">
             <div className="text-sm text-muted-foreground">
               Showing {filteredTests.length} of {tests.length} recent tests
             </div>
             <Button asChild variant="outline" size="sm">
-              <Link href="/laboratory/tests">
-                View All Tests
-              </Link>
+              <Link href="/laboratory/tests">View All Tests</Link>
             </Button>
           </div>
         </CardContent>
@@ -686,41 +701,56 @@ export default function LaboratoryDashboard() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex justify-between items-center">
-              <span className="text-sm text-muted-foreground">Tests Ordered</span>
+              <span className="text-sm text-muted-foreground">
+                Tests Ordered
+              </span>
               <span className="font-medium">{stats?.totalTestsToday || 0}</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-sm text-muted-foreground">Tests Completed</span>
+              <span className="text-sm text-muted-foreground">
+                Tests Completed
+              </span>
               <span className="font-medium">{stats?.completedToday || 0}</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-sm text-muted-foreground">Revenue</span>
-              <span className="font-medium text-green-600">₹{stats?.totalRevenue || 0}</span>
+              <span className="text-sm text-muted-foreground">
+                Avg. Processing Time
+              </span>
+              <span className="font-medium">
+                {stats?.averageProcessingTime || 0} hours
+              </span>
             </div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm">Payment Status</CardTitle>
+            <CardTitle className="text-sm">Test Status</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex justify-between items-center">
-              <span className="text-sm text-muted-foreground">Paid Tests</span>
+              <span className="text-sm text-muted-foreground">Collected</span>
               <span className="font-medium text-green-600">
-                {tests.filter(t => t.charges.paymentStatus === "paid").length}
+                {tests.filter((t) => t.collectionStatus === "collected").length}
               </span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-sm text-muted-foreground">Pending Payment</span>
+              <span className="text-sm text-muted-foreground">
+                In Processing
+              </span>
+              <span className="font-medium text-blue-600">
+                {
+                  tests.filter((t) => t.processingStatus === "in_progress")
+                    .length
+                }
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-muted-foreground">
+                Pending Verification
+              </span>
               <span className="font-medium text-yellow-600">
-                {tests.filter(t => t.charges.paymentStatus === "pending").length}
-              </span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-muted-foreground">Payment Verified</span>
-              <span className="font-medium text-green-600">
-                {tests.filter(t => t.paymentVerified).length}
+                {tests.filter((t) => t.verificationStatus === "pending").length}
               </span>
             </div>
           </CardContent>

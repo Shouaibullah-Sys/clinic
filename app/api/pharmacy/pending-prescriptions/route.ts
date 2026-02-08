@@ -10,7 +10,10 @@ export async function GET(req: NextRequest) {
   await dbConnect();
   const payload = await getTokenPayload(req);
 
-  if (!payload || !(payload.role === "pharmacist" || payload.role === "admin")) {
+  if (
+    !payload ||
+    !(payload.role === "pharmacist" || payload.role === "admin")
+  ) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -23,9 +26,10 @@ export async function GET(req: NextRequest) {
     const skip = (page - 1) * limit;
 
     // Build query for pending prescriptions
-    let query: any = { 
+    let query: any = {
       status: { $in: ["active", "pending"] }, // Include both active and pending statuses
-      dispensingStatus: status // pending, partial, etc.
+      dispensingStatus: status, // pending, partial, etc.
+      paymentVerified: true, // Only return prescriptions with verified payment
     };
 
     // Optional search with multiple fields
@@ -42,31 +46,35 @@ export async function GET(req: NextRequest) {
       .populate({
         path: "patient",
         select: "name patientId phone",
-        match: search ? {
-          $or: [
-            { name: { $regex: search, $options: "i" } },
-            { patientId: { $regex: search, $options: "i" } },
-          ]
-        } : {}
+        match: search
+          ? {
+              $or: [
+                { name: { $regex: search, $options: "i" } },
+                { patientId: { $regex: search, $options: "i" } },
+              ],
+            }
+          : {},
       })
       .populate({
         path: "doctor",
         select: "name specialization",
-        match: search ? { name: { $regex: search, $options: "i" } } : {}
+        match: search ? { name: { $regex: search, $options: "i" } } : {},
       })
       .populate({
         path: "medications.medicine",
         select: "name batchNumber currentQuantity sellingPrice unitPrice",
-        model: "MedicineStock"
+        model: "MedicineStock",
       })
-      .select("prescriptionId patient doctor medications diagnosis notes instructions prescribedDate expiryDate status dispensingStatus")
+      .select(
+        "prescriptionId patient doctor medications diagnosis notes instructions prescribedDate expiryDate status dispensingStatus",
+      )
       .sort({ prescribedDate: -1 })
       .skip(skip)
       .limit(limit);
 
     // Filter out prescriptions where patient wasn't found (if searching)
-    const filteredPrescriptions = search 
-      ? prescriptions.filter(p => p.patient && p.doctor)
+    const filteredPrescriptions = search
+      ? prescriptions.filter((p) => p.patient && p.doctor)
       : prescriptions;
 
     const total = await Prescription.countDocuments(query);
@@ -85,10 +93,13 @@ export async function GET(req: NextRequest) {
     });
   } catch (error: any) {
     console.error("Error fetching pending prescriptions:", error);
-    return NextResponse.json({
-      success: false,
-      error: error.message || "Failed to fetch pending prescriptions",
-      data: []
-    }, { status: 500 });
+    return NextResponse.json(
+      {
+        success: false,
+        error: error.message || "Failed to fetch pending prescriptions",
+        data: [],
+      },
+      { status: 500 },
+    );
   }
 }

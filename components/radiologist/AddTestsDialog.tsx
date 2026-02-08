@@ -135,7 +135,11 @@ export function AddTestsDialog({
     setParameters(parameters.filter((_, i) => i !== index));
   };
 
-  const updateParameter = (index: number, field: keyof Parameter, value: any) => {
+  const updateParameter = (
+    index: number,
+    field: keyof Parameter,
+    value: any,
+  ) => {
     const updatedParameters = [...parameters] as Parameter[];
     (updatedParameters[index] as any)[field] = value;
     setParameters(updatedParameters);
@@ -151,14 +155,17 @@ export function AddTestsDialog({
         notes: data.notes,
       };
 
-      const response = await fetch(`/api/radiologist/requests/${request._id}/tests`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
+      const response = await fetch(
+        `/api/radiologist/requests/${request._id}/tests`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify(requestData),
         },
-        body: JSON.stringify(requestData),
-      });
+      );
 
       const result = await response.json();
 
@@ -175,7 +182,8 @@ export function AddTestsDialog({
     } catch (error: any) {
       console.error("Error adding tests/parameters:", error);
       toast.error("Failed to Add Tests/Parameters", {
-        description: error.message || "An error occurred while adding tests/parameters",
+        description:
+          error.message || "An error occurred while adding tests/parameters",
       });
     } finally {
       setLoading(false);
@@ -193,14 +201,18 @@ export function AddTestsDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-[90vw] lg:max-w-[800px] max-h-[90vh] overflow-y-auto p-6">
+      <DialogContent className="max-w-[90vw] lg:max-w-200 max-h-[90vh] overflow-y-auto p-6">
         <DialogHeader className="pb-4">
-          <DialogTitle className="text-xl">Add Tests and Parameters</DialogTitle>
+          <DialogTitle className="text-xl">
+            Add Tests and Parameters
+          </DialogTitle>
           <DialogDescription>
-            Add tests and parameters for <span className="font-medium">{request.serviceId}</span>
+            Add tests and parameters for{" "}
+            <span className="font-medium">{request.serviceId}</span>
             <br />
             <span className="text-sm text-muted-foreground">
-              {request.patient.name} - {request.serviceType.toUpperCase()} - {request.bodyPart}
+              {request.patient.name} - {request.serviceType.toUpperCase()} -{" "}
+              {request.bodyPart}
             </span>
           </DialogDescription>
         </DialogHeader>
@@ -210,7 +222,12 @@ export function AddTestsDialog({
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <Label className="text-sm font-medium">Tests</Label>
-              <Button type="button" variant="outline" size="sm" onClick={addTest}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={addTest}
+              >
                 <Plus className="h-4 w-4 mr-2" />
                 Add Test
               </Button>
@@ -218,8 +235,16 @@ export function AddTestsDialog({
 
             {tests.length === 0 ? (
               <div className="text-center py-8 border-2 border-dashed rounded-lg">
-                <p className="text-sm text-muted-foreground">No tests added yet</p>
-                <Button type="button" variant="ghost" size="sm" onClick={addTest} className="mt-2">
+                <p className="text-sm text-muted-foreground">
+                  No tests added yet
+                </p>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={addTest}
+                  className="mt-2"
+                >
                   <Plus className="h-4 w-4 mr-2" />
                   Add First Test
                 </Button>
@@ -229,7 +254,9 @@ export function AddTestsDialog({
                 {tests.map((test, index) => (
                   <div key={index} className="border rounded-lg p-4 space-y-3">
                     <div className="flex items-center justify-between">
-                      <Label className="text-sm font-medium">Test {index + 1}</Label>
+                      <Label className="text-sm font-medium">
+                        Test {index + 1}
+                      </Label>
                       <Button
                         type="button"
                         variant="ghost"
@@ -242,49 +269,69 @@ export function AddTestsDialog({
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       <div className="space-y-2">
-                        <Label htmlFor={`test-name-${index}`} className="text-xs">
+                        <Label
+                          htmlFor={`test-name-${index}`}
+                          className="text-xs"
+                        >
                           Test Name *
                         </Label>
                         <Input
                           id={`test-name-${index}`}
                           value={test.name}
-                          onChange={(e) => updateTest(index, "name", e.target.value)}
+                          onChange={(e) =>
+                            updateTest(index, "name", e.target.value)
+                          }
                           placeholder="Enter test name"
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor={`test-performed-${index}`} className="text-xs">
+                        <Label
+                          htmlFor={`test-performed-${index}`}
+                          className="text-xs"
+                        >
                           Performed
                         </Label>
                         <Input
                           id={`test-performed-${index}`}
                           type="datetime-local"
                           value={test.performedAt || ""}
-                          onChange={(e) => updateTest(index, "performedAt", e.target.value)}
+                          onChange={(e) =>
+                            updateTest(index, "performedAt", e.target.value)
+                          }
                         />
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor={`test-description-${index}`} className="text-xs">
+                      <Label
+                        htmlFor={`test-description-${index}`}
+                        className="text-xs"
+                      >
                         Description
                       </Label>
                       <Textarea
                         id={`test-description-${index}`}
                         value={test.description}
-                        onChange={(e) => updateTest(index, "description", e.target.value)}
+                        onChange={(e) =>
+                          updateTest(index, "description", e.target.value)
+                        }
                         placeholder="Enter test description"
                         rows={2}
                         className="resize-none"
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor={`test-notes-${index}`} className="text-xs">
+                      <Label
+                        htmlFor={`test-notes-${index}`}
+                        className="text-xs"
+                      >
                         Notes
                       </Label>
                       <Textarea
                         id={`test-notes-${index}`}
                         value={test.notes}
-                        onChange={(e) => updateTest(index, "notes", e.target.value)}
+                        onChange={(e) =>
+                          updateTest(index, "notes", e.target.value)
+                        }
                         placeholder="Enter test notes"
                         rows={2}
                         className="resize-none"
@@ -300,7 +347,12 @@ export function AddTestsDialog({
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <Label className="text-sm font-medium">Parameters</Label>
-              <Button type="button" variant="outline" size="sm" onClick={addParameter}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={addParameter}
+              >
                 <Plus className="h-4 w-4 mr-2" />
                 Add Parameter
               </Button>
@@ -308,8 +360,16 @@ export function AddTestsDialog({
 
             {parameters.length === 0 ? (
               <div className="text-center py-8 border-2 border-dashed rounded-lg">
-                <p className="text-sm text-muted-foreground">No parameters added yet</p>
-                <Button type="button" variant="ghost" size="sm" onClick={addParameter} className="mt-2">
+                <p className="text-sm text-muted-foreground">
+                  No parameters added yet
+                </p>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={addParameter}
+                  className="mt-2"
+                >
                   <Plus className="h-4 w-4 mr-2" />
                   Add First Parameter
                 </Button>
@@ -319,7 +379,9 @@ export function AddTestsDialog({
                 {parameters.map((param, index) => (
                   <div key={index} className="border rounded-lg p-4 space-y-3">
                     <div className="flex items-center justify-between">
-                      <Label className="text-sm font-medium">Parameter {index + 1}</Label>
+                      <Label className="text-sm font-medium">
+                        Parameter {index + 1}
+                      </Label>
                       <Button
                         type="button"
                         variant="ghost"
@@ -332,60 +394,89 @@ export function AddTestsDialog({
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       <div className="space-y-2">
-                        <Label htmlFor={`param-name-${index}`} className="text-xs">
+                        <Label
+                          htmlFor={`param-name-${index}`}
+                          className="text-xs"
+                        >
                           Parameter Name *
                         </Label>
                         <Input
                           id={`param-name-${index}`}
                           value={param.name}
-                          onChange={(e) => updateParameter(index, "name", e.target.value)}
+                          onChange={(e) =>
+                            updateParameter(index, "name", e.target.value)
+                          }
                           placeholder="Enter parameter name"
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor={`param-value-${index}`} className="text-xs">
+                        <Label
+                          htmlFor={`param-value-${index}`}
+                          className="text-xs"
+                        >
                           Value *
                         </Label>
                         <Input
                           id={`param-value-${index}`}
                           value={param.value}
-                          onChange={(e) => updateParameter(index, "value", e.target.value)}
+                          onChange={(e) =>
+                            updateParameter(index, "value", e.target.value)
+                          }
                           placeholder="Enter value"
                         />
                       </div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       <div className="space-y-2">
-                        <Label htmlFor={`param-unit-${index}`} className="text-xs">
+                        <Label
+                          htmlFor={`param-unit-${index}`}
+                          className="text-xs"
+                        >
                           Unit
                         </Label>
                         <Input
                           id={`param-unit-${index}`}
                           value={param.unit}
-                          onChange={(e) => updateParameter(index, "unit", e.target.value)}
+                          onChange={(e) =>
+                            updateParameter(index, "unit", e.target.value)
+                          }
                           placeholder="Enter unit"
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor={`param-normal-${index}`} className="text-xs">
+                        <Label
+                          htmlFor={`param-normal-${index}`}
+                          className="text-xs"
+                        >
                           Normal Range
                         </Label>
                         <Input
                           id={`param-normal-${index}`}
                           value={param.normalRange}
-                          onChange={(e) => updateParameter(index, "normalRange", e.target.value)}
+                          onChange={(e) =>
+                            updateParameter(
+                              index,
+                              "normalRange",
+                              e.target.value,
+                            )
+                          }
                           placeholder="Enter normal range"
                         />
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor={`param-remarks-${index}`} className="text-xs">
+                      <Label
+                        htmlFor={`param-remarks-${index}`}
+                        className="text-xs"
+                      >
                         Remarks
                       </Label>
                       <Textarea
                         id={`param-remarks-${index}`}
                         value={param.remarks}
-                        onChange={(e) => updateParameter(index, "remarks", e.target.value)}
+                        onChange={(e) =>
+                          updateParameter(index, "remarks", e.target.value)
+                        }
                         placeholder="Enter remarks"
                         rows={2}
                         className="resize-none"

@@ -1,13 +1,13 @@
-// components/laboratory/LabTestPDFGenerator.tsx
+// components/laboratory/DirectTestPDFGenerator.tsx
 "use client";
 
 import { Button } from "@/components/ui/button";
 import { PrinterIcon, DownloadIcon } from "lucide-react";
-import { generateLabTestPDF } from "@/lib/pdf-generator";
-import { LabTest } from "@/lib/pdf-generator";
+import { generateDirectTestPDF } from "@/lib/pdf-generator";
+import { DirectLabTest } from "@/lib/pdf-generator";
 
-interface LabTestPDFGeneratorProps {
-  test: LabTest;
+interface DirectTestPDFGeneratorProps {
+  test: DirectLabTest;
   mode?: "print" | "download";
   buttonLabel?: string;
   buttonVariant?: "default" | "outline" | "ghost" | "destructive" | "secondary";
@@ -15,29 +15,29 @@ interface LabTestPDFGeneratorProps {
 }
 
 /**
- * LabTestPDFGenerator - A professional component to generate laboratory test result PDFs
+ * DirectTestPDFGenerator - A professional component to generate direct laboratory test result PDFs
  *
- * This component creates professional-looking PDF reports for completed laboratory tests,
+ * This component creates professional-looking PDF reports for completed direct laboratory tests,
  * including patient information, test details, results with reference ranges, and laboratory header.
  *
- * @param test - The lab test object containing all test data
+ * @param test - The direct lab test object containing all test data
  * @param mode - Either "print" to open print dialog or "download" to save PDF file
  * @param buttonLabel - Custom label for the button (default: "Print Report")
  * @param buttonVariant - Button style variant (default: "default")
  * @param buttonSize - Button size (default: "default")
  */
-const LabTestPDFGenerator = ({
+const DirectTestPDFGenerator = ({
   test,
   mode = "print",
   buttonLabel,
   buttonVariant = "default",
   buttonSize = "default",
-}: LabTestPDFGeneratorProps) => {
+}: DirectTestPDFGeneratorProps) => {
   /**
    * Generates the PDF document with test results
    */
   const handleGeneratePDF = () => {
-    generateLabTestPDF(test, mode);
+    generateDirectTestPDF(test, mode);
   };
 
   const icon =
@@ -61,4 +61,4 @@ const LabTestPDFGenerator = ({
   );
 };
 
-export default LabTestPDFGenerator;
+export default DirectTestPDFGenerator;

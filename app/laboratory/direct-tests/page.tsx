@@ -1,10 +1,7 @@
 // app/laboratory/direct-tests/page.tsx
-
 "use client";
 
 import { useState, useEffect } from "react";
-import { jsPDF } from "jspdf";
-import autoTable from "jspdf-autotable";
 import {
   Card,
   CardContent,
@@ -50,6 +47,7 @@ import { useAuthStore } from "@/store/useAuthStore";
 import { format, parseISO } from "date-fns";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { generateDirectTestPDF } from "@/lib/pdf-generator";
 
 interface DirectLabTest {
   _id: string;
@@ -83,6 +81,18 @@ interface DirectLabTest {
   };
   specimen?: {
     type: string;
+  };
+  // Update this to match the TestParameter interface
+  results?: {
+    parameters: Array<{
+      name: string;
+      value: string | number;
+      unit?: string;
+      normalRange?: string;
+      remarks?: string;
+      flag?: "normal" | "low" | "high" | "critical";
+    }>;
+    interpretation?: string;
   };
 }
 
@@ -321,6 +331,31 @@ export default function DirectTestsPage() {
     setPrintingId(test._id);
 
     try {
+      // Fetch the complete test data from the API for PDF generation
+      const response = await fetch(
+        `/api/laboratory/direct-tests/${test._id}/print`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+        },
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(
+          errorData.error || "Failed to fetch test data for printing",
+        );
+      }
+
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.error || "Failed to fetch test data for printing");
+      }
+
       // Mark the test as printed
       await fetch(`/api/laboratory/direct-tests/${test._id}/print`, {
         method: "POST",
@@ -330,175 +365,14 @@ export default function DirectTestsPage() {
         },
       });
 
-      // Generate PDF
-      const doc = new jsPDF();
-      const pageWidth = doc.internal.pageSize.getWidth();
-      const pageHeight = doc.internal.pageSize.getHeight();
-      const margin = 14;
-      let yPos = margin;
-
-      const addText = (
-        text: string,
-        x: number,
-        y: number,
-        fontSize: number = 10,
-        fontStyle: string = "normal",
-        align: "left" | "center" | "right" = "left",
-      ) => {
-        doc.setFontSize(fontSize);
-        doc.setFont("helvetica", fontStyle);
-        doc.text(text, x, y, { align });
-        return y + fontSize * 0.4;
-      };
-
-      // Header
-      yPos = addText(
-        "LABORATORY TEST REPORT",
-        pageWidth / 2,
-        yPos,
-        18,
-        "bold",
-        "center",
-      );
-      yPos += 2;
-      yPos = addText(
-        "Sajad Barekzai Hospital",
-        pageWidth / 2,
-        yPos,
-        12,
-        "bold",
-        "center",
-      );
-      yPos = addText(
-        "Comprehensive Diagnostic Services",
-        pageWidth / 2,
-        yPos,
-        9,
-        "normal",
-        "center",
-      );
-      yPos += 4;
-
-      doc.setDrawColor(59, 130, 246);
-      doc.setLineWidth(0.5);
-      doc.line(margin, yPos, pageWidth - margin, yPos);
-      yPos += 6;
-
-      // Test Info
-      yPos = addText(`Test ID: ${test.testId}`, margin, yPos, 10, "bold");
-      yPos = addText(
-        `Lab Reference: ${test.testId}`,
-        pageWidth - margin,
-        yPos,
-        10,
-        "normal",
-        "right",
-      );
-      yPos += 2;
-      yPos = addText(`Test: ${test.testName}`, margin, yPos, 12, "bold");
-      yPos = addText(
-        `Category: ${test.category.replace(/_/g, " ")}`,
-        margin,
-        yPos,
-        9,
-      );
-      yPos += 2;
-
-      // Patient Info
-      yPos += 2;
-      yPos = addText("PATIENT INFORMATION", margin, yPos, 11, "bold");
-      yPos += 2;
-
-      const patientInfo = [
-        ["Name:", test.patient.name || "N/A"],
-        ["Patient ID:", test.patient.patientId || "N/A"],
-        ["Gender:", "N/A"],
-        ["Phone:", test.patient.phone || "N/A"],
-      ];
-
-      autoTable(doc, {
-        startY: yPos,
-        head: [],
-        body: patientInfo,
-        theme: "plain",
-        styles: { fontSize: 9, cellPadding: 1 },
-        columnStyles: {
-          0: { fontStyle: "bold", cellWidth: 40 },
-          1: { cellWidth: 60 },
-        },
-      });
-
-      yPos = (doc as any).lastAutoTable.finalY + 4;
-
-      // Test Details
-      yPos = addText("TEST DETAILS", margin, yPos, 11, "bold");
-      yPos += 2;
-
-      const formatDate = (dateString?: string) => {
-        if (!dateString) return "N/A";
-        return new Date(dateString).toLocaleDateString("en-US", {
-          year: "numeric",
-          month: "short",
-          day: "numeric",
-          hour: "2-digit",
-          minute: "2-digit",
-        });
-      };
-
-      const testDetails = [
-        ["Ordered Date:", formatDate(test.createdAtDirect)],
-        ["Specimen Type:", test.specimen?.type || "N/A"],
-        ["Collection Status:", test.collectionStatus?.toUpperCase() || "N/A"],
-        ["Status:", test.status?.toUpperCase() || "N/A"],
-      ];
-
-      autoTable(doc, {
-        startY: yPos,
-        head: [],
-        body: testDetails,
-        theme: "plain",
-        styles: { fontSize: 9, cellPadding: 1 },
-        columnStyles: {
-          0: { fontStyle: "bold", cellWidth: 50 },
-          1: { cellWidth: 50 },
-        },
-      });
-
-      yPos = (doc as any).lastAutoTable.finalY + 4;
-
-      // Footer
-      yPos = pageHeight - 30;
-      doc.setDrawColor(200, 200, 200);
-      doc.setLineWidth(0.3);
-      doc.line(margin, yPos, pageWidth - margin, yPos);
-      yPos += 5;
-
-      yPos = addText(
-        "This is a computer-generated report.",
-        pageWidth / 2,
-        yPos,
-        8,
-        "normal",
-        "center",
-      );
-      yPos = addText(
-        `Report generated on: ${new Date().toLocaleString()}`,
-        pageWidth / 2,
-        yPos,
-        8,
-        "normal",
-        "center",
-      );
-
-      // Print
-      doc.autoPrint();
-      window.open(doc.output("bloburl"), "_blank");
+      // Generate and print PDF using the fetched test data
+      generateDirectTestPDF(data.data);
 
       // Refresh tests to update printed status
       fetchTests();
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error printing PDF:", err);
-      toast.error("Failed to generate print job");
+      toast.error(err.message || "Failed to generate print job");
     } finally {
       setPrintingId(null);
     }
@@ -811,23 +685,6 @@ export default function DirectTestsPage() {
                               View
                             </Link>
                           </Button>
-
-                          {test.paymentVerified &&
-                            test.collectionStatus !== "collected" && (
-                              <Button
-                                size="sm"
-                                asChild
-                                className="h-8 px-3 bg-blue-600 hover:bg-blue-700"
-                              >
-                                <Link
-                                  href={`/laboratory/direct-tests/${test._id}`}
-                                >
-                                  <TestTube className="h-3 w-3 mr-1" />
-                                  Collect
-                                </Link>
-                              </Button>
-                            )}
-
                           {test.readyForPrint && !test.printedAt && (
                             <Button
                               size="sm"

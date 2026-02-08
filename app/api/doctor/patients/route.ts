@@ -1,4 +1,4 @@
-// app/api/doctor/patients/route.ts - FIXED WITH TYPES
+// app/api/doctor/patients/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";

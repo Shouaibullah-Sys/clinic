@@ -16,14 +16,12 @@ import {
   Users,
   Calendar,
   Clock,
-  CheckCircle2,
   Plus,
   DollarSign,
   AlertCircle,
   Wallet,
   RefreshCw,
   ArrowRight,
-  TrendingUp,
   FileText,
   UserCheck,
   Activity,
@@ -31,7 +29,6 @@ import {
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { format, parseISO, isToday } from "date-fns";
 import {
   Tooltip,
@@ -551,9 +548,7 @@ export default function ReceptionDashboardPage() {
                       </div>
                       <div className="text-left">
                         <p className="font-medium text-sm">New Appointment</p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">
-                          Schedule
-                        </p>
+                        <p className="text-xs">Schedule</p>
                       </div>
                     </div>
                   </Button>
@@ -885,7 +880,7 @@ export default function ReceptionDashboardPage() {
                 </div>
 
                 {/* Summary */}
-                <div className="p-4 bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 rounded-lg border-2 border-emerald-200 dark:border-emerald-800">
+                <div className="p-4 bg-linear-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 rounded-lg border-2 border-emerald-200 dark:border-emerald-800">
                   <h3 className="text-lg font-bold text-emerald-800 dark:text-emerald-200 mb-4">
                     Collection Summary
                   </h3>

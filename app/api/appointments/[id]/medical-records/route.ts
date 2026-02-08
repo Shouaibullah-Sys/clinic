@@ -136,7 +136,7 @@ export async function GET(
       appointment: appointmentId,
     })
       .select(
-        "_id prescriptionId prescribedDate medications diagnosis instructions notes status expiryDate",
+        "_id prescriptionId prescribedDate medications diagnosis instructions notes status expiryDate charges paymentStatus paymentVerified",
       )
       .populate("patient", "_id name patientId")
       .populate("doctor", "_id name specialization")
@@ -158,7 +158,7 @@ export async function GET(
         expiryDate: { $gt: new Date() },
       })
         .select(
-          "_id prescriptionId prescribedDate medications diagnosis instructions notes status expiryDate",
+          "_id prescriptionId prescribedDate medications diagnosis instructions notes status expiryDate charges paymentStatus paymentVerified",
         )
         .populate("patient", "_id name patientId")
         .populate("doctor", "_id name specialization")
@@ -181,7 +181,7 @@ export async function GET(
         expiryDate: { $gt: new Date() },
       })
         .select(
-          "_id prescriptionId prescribedDate medications diagnosis instructions notes status expiryDate",
+          "_id prescriptionId prescribedDate medications diagnosis instructions notes status expiryDate charges paymentStatus paymentVerified",
         )
         .populate("patient", "_id name patientId")
         .populate("doctor", "_id name specialization")
