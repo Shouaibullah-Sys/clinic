@@ -67,13 +67,26 @@ const labTestTemplateSchema = new Schema<ILabTestTemplate>(
       type: String,
       trim: true,
     },
-    specimenType: [{
-      type: String,
-      enum: ["blood", "urine", "stool", "csf", "sputum", "tissue", "swab", "other"],
-    }],
-    containerType: [{
-      type: String,
-    }],
+    specimenType: [
+      {
+        type: String,
+        enum: [
+          "blood",
+          "urine",
+          "stool",
+          "csf",
+          "sputum",
+          "tissue",
+          "swab",
+          "other",
+        ],
+      },
+    ],
+    containerType: [
+      {
+        type: String,
+      },
+    ],
     sampleVolume: {
       type: String,
     },
@@ -100,43 +113,45 @@ const labTestTemplateSchema = new Schema<ILabTestTemplate>(
       type: Boolean,
       default: true,
     },
-    parameters: [{
-      parameterCode: {
-        type: String,
-        required: true,
-        trim: true,
+    parameters: [
+      {
+        parameterCode: {
+          type: String,
+          required: true,
+          trim: true,
+        },
+        parameterName: {
+          type: String,
+          required: true,
+          trim: true,
+        },
+        unit: {
+          type: String,
+        },
+        normalRange: {
+          type: String,
+          required: true,
+        },
+        criticalLow: {
+          type: Number,
+        },
+        criticalHigh: {
+          type: Number,
+        },
+        maleRange: {
+          type: String,
+        },
+        femaleRange: {
+          type: String,
+        },
+        childRange: {
+          type: String,
+        },
+        methodology: {
+          type: String,
+        },
       },
-      parameterName: {
-        type: String,
-        required: true,
-        trim: true,
-      },
-      unit: {
-        type: String,
-      },
-      normalRange: {
-        type: String,
-        required: true,
-      },
-      criticalLow: {
-        type: Number,
-      },
-      criticalHigh: {
-        type: Number,
-      },
-      maleRange: {
-        type: String,
-      },
-      femaleRange: {
-        type: String,
-      },
-      childRange: {
-        type: String,
-      },
-      methodology: {
-        type: String,
-      },
-    }],
+    ],
     createdBy: {
       type: Schema.Types.ObjectId,
       ref: "User",
@@ -145,15 +160,16 @@ const labTestTemplateSchema = new Schema<ILabTestTemplate>(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 // Indexes
-labTestTemplateSchema.index({ testCode: 1 }, { unique: true });
 labTestTemplateSchema.index({ testName: 1 });
 labTestTemplateSchema.index({ category: 1 });
 labTestTemplateSchema.index({ active: 1 });
 labTestTemplateSchema.index({ basePrice: 1 });
 labTestTemplateSchema.index({ createdAt: -1 });
 
-export const LabTestTemplate = models.LabTestTemplate || model<ILabTestTemplate>("LabTestTemplate", labTestTemplateSchema);
+export const LabTestTemplate =
+  models.LabTestTemplate ||
+  model<ILabTestTemplate>("LabTestTemplate", labTestTemplateSchema);

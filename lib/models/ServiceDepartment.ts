@@ -3,7 +3,22 @@ import mongoose, { Schema, model, models, Document } from "mongoose";
 
 export interface IServiceDepartment extends Document {
   departmentId: string;
-  name: "x-ray" | "ct-scan" | "mri" | "ultrasound" | "emergency" | "opd" | "laboratory" | "ot" | "pharmacy" | "indo" | "lithotripsy" | "endoscopy" | "ambulance" | "dental" | "ecg";
+  name:
+    | "x-ray"
+    | "ct-scan"
+    | "mri"
+    | "ultrasound"
+    | "emergency"
+    | "opd"
+    | "laboratory"
+    | "ot"
+    | "pharmacy"
+    | "indo"
+    | "lithotripsy"
+    | "endoscopy"
+    | "ambulance"
+    | "dental"
+    | "ecg";
   displayName: string;
   description?: string;
   location: string;
@@ -64,7 +79,23 @@ const ServiceDepartmentSchema = new Schema<IServiceDepartment>(
     },
     name: {
       type: String,
-      enum: ["x-ray", "ct-scan", "mri", "ultrasound", "emergency", "opd", "laboratory", "ot", "pharmacy", "indo", "lithotripsy", "endoscopy", "ambulance", "dental", "ecg"],
+      enum: [
+        "x-ray",
+        "ct-scan",
+        "mri",
+        "ultrasound",
+        "emergency",
+        "opd",
+        "laboratory",
+        "ot",
+        "pharmacy",
+        "indo",
+        "lithotripsy",
+        "endoscopy",
+        "ambulance",
+        "dental",
+        "ecg",
+      ],
       required: true,
     },
     displayName: {
@@ -143,32 +174,41 @@ const ServiceDepartmentSchema = new Schema<IServiceDepartment>(
         is24Hours: { type: Boolean, default: false },
       },
     },
-    services: [{
-      serviceId: { type: String, required: true },
-      name: { type: String, required: true, trim: true },
-      description: { type: String, trim: true },
-      duration: { type: Number, default: 30, min: 5 },
-      preparationInstructions: { type: String },
-      contraindications: [{ type: String }],
-      cost: { type: Number, required: true, min: 0 },
-      isActive: { type: Boolean, default: true },
-    }],
-    equipment: [{
-      equipmentId: { type: String, required: true },
-      name: { type: String, required: true, trim: true },
-      model: { type: String, required: true, trim: true },
-      manufacturer: { type: String, required: true, trim: true },
-      serialNumber: { type: String, required: true, unique: true, trim: true },
-      purchaseDate: { type: Date, required: true },
-      warrantyUntil: { type: Date },
-      status: {
-        type: String,
-        enum: ["operational", "maintenance", "out_of_service"],
-        default: "operational",
+    services: [
+      {
+        serviceId: { type: String, required: true },
+        name: { type: String, required: true, trim: true },
+        description: { type: String, trim: true },
+        duration: { type: Number, default: 30, min: 5 },
+        preparationInstructions: { type: String },
+        contraindications: [{ type: String }],
+        cost: { type: Number, required: true, min: 0 },
+        isActive: { type: Boolean, default: true },
       },
-      lastMaintenance: { type: Date },
-      nextMaintenance: { type: Date },
-    }],
+    ],
+    equipment: [
+      {
+        equipmentId: { type: String, required: true },
+        name: { type: String, required: true, trim: true },
+        model: { type: String, required: true, trim: true },
+        manufacturer: { type: String, required: true, trim: true },
+        serialNumber: {
+          type: String,
+          required: true,
+          unique: true,
+          trim: true,
+        },
+        purchaseDate: { type: Date, required: true },
+        warrantyUntil: { type: Date },
+        status: {
+          type: String,
+          enum: ["operational", "maintenance", "out_of_service"],
+          default: "operational",
+        },
+        lastMaintenance: { type: Date },
+        nextMaintenance: { type: Date },
+      },
+    ],
     capacity: {
       dailyAppointments: { type: Number, default: 50, min: 1 },
       concurrentPatients: { type: Number, default: 5, min: 1 },
@@ -186,11 +226,10 @@ const ServiceDepartmentSchema = new Schema<IServiceDepartment>(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
-// Indexes
-ServiceDepartmentSchema.index({ departmentId: 1 });
+// Indexes (departmentId has unique: true which already creates an index)
 ServiceDepartmentSchema.index({ name: 1 });
 ServiceDepartmentSchema.index({ status: 1 });
 ServiceDepartmentSchema.index({ location: 1 });
@@ -202,52 +241,54 @@ ServiceDepartmentSchema.pre("save", function (next) {
     const prefixMap = {
       "x-ray": "XR",
       "ct-scan": "CT",
-      "mri": "MRI",
-      "ultrasound": "US",
-      "emergency": "ER",
-      "opd": "OPD",
-      "laboratory": "LAB",
-      "ot": "OT",
-      "pharmacy": "PH",
-      "indo": "INDO",
-      "lithotripsy": "LITH",
-      "endoscopy": "ENDO",
-      "ambulance": "AMB",
-      "dental": "DENT",
-      "ecg": "ECG",
+      mri: "MRI",
+      ultrasound: "US",
+      emergency: "ER",
+      opd: "OPD",
+      laboratory: "LAB",
+      ot: "OT",
+      pharmacy: "PH",
+      indo: "INDO",
+      lithotripsy: "LITH",
+      endoscopy: "ENDO",
+      ambulance: "AMB",
+      dental: "DENT",
+      ecg: "ECG",
     };
     const prefix = prefixMap[this.name] || "DEP";
     const random = Math.floor(1000 + Math.random() * 9000);
     this.departmentId = `${prefix}${random}`;
   }
-  
+
   // Generate service IDs if not provided
   this.services.forEach((service, index) => {
     if (!service.serviceId) {
       const prefixMap = {
         "x-ray": "XRAY",
         "ct-scan": "CTSCAN",
-        "mri": "MRI",
-        "ultrasound": "US",
-        "emergency": "ER",
-        "opd": "OPD",
-        "laboratory": "LAB",
-        "ot": "OT",
-        "pharmacy": "PH",
-        "indo": "INDO",
-        "lithotripsy": "LITH",
-        "endoscopy": "ENDO",
-        "ambulance": "AMB",
-        "dental": "DENT",
-        "ecg": "ECG",
+        mri: "MRI",
+        ultrasound: "US",
+        emergency: "ER",
+        opd: "OPD",
+        laboratory: "LAB",
+        ot: "OT",
+        pharmacy: "PH",
+        indo: "INDO",
+        lithotripsy: "LITH",
+        endoscopy: "ENDO",
+        ambulance: "AMB",
+        dental: "DENT",
+        ecg: "ECG",
       };
       const prefix = prefixMap[this.name] || "SRV";
-      const serviceNum = (index + 1).toString().padStart(3, '0');
+      const serviceNum = (index + 1).toString().padStart(3, "0");
       service.serviceId = `${prefix}${serviceNum}`;
     }
   });
-  
+
   next();
 });
 
-export const ServiceDepartment = models.ServiceDepartment || model<IServiceDepartment>("ServiceDepartment", ServiceDepartmentSchema);
+export const ServiceDepartment =
+  models.ServiceDepartment ||
+  model<IServiceDepartment>("ServiceDepartment", ServiceDepartmentSchema);

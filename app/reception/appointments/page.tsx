@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/useAuthStore";
 import { Button } from "@/components/ui/button";
@@ -144,6 +144,7 @@ export default function AppointmentsPage() {
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [activeSearch, setActiveSearch] = useState("");
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(
     new Date(),
   );
@@ -183,12 +184,12 @@ export default function AppointmentsPage() {
   useEffect(() => {
     fetchAppointments();
     fetchDoctors();
-  }, [page, timeRange, selectedStatus, selectedDoctor, searchQuery]);
+  }, [page, timeRange, selectedStatus, selectedDoctor, activeSearch]);
 
   // Reset page to 1 when filters change (except page itself)
   useEffect(() => {
     setPage(1);
-  }, [timeRange, selectedStatus, selectedDoctor, searchQuery]);
+  }, [timeRange, selectedStatus, selectedDoctor, activeSearch]);
 
   const updateTimeRange = (range: string) => {
     const today = new Date();
@@ -302,9 +303,9 @@ export default function AppointmentsPage() {
         params.set("doctorId", selectedDoctor);
       }
 
-      // Add search query if provided
-      if (searchQuery.trim()) {
-        params.set("search", searchQuery.trim());
+      // Add active search query if provided
+      if (activeSearch.trim()) {
+        params.set("search", activeSearch.trim());
       }
 
       const response = await fetch(`/api/appointments?${params.toString()}`, {
@@ -747,14 +748,30 @@ export default function AppointmentsPage() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="space-y-2">
               <Label>Search</Label>
-              <div className="relative">
+              <div className="relative flex gap-2">
                 <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                 <Input
                   placeholder="Search patients, doctors..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      setActiveSearch(searchQuery);
+                      setPage(1);
+                    }
+                  }}
                   className="pl-9"
                 />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setActiveSearch(searchQuery);
+                    setPage(1);
+                  }}
+                >
+                  Search
+                </Button>
               </div>
             </div>
 
@@ -874,6 +891,7 @@ export default function AppointmentsPage() {
                           onClick={() => {
                             updateTimeRange("all");
                             setSearchQuery("");
+                            setActiveSearch("");
                             setSelectedStatus("all");
                             setSelectedDoctor("all");
                             setPage(1);

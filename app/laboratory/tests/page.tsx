@@ -175,16 +175,12 @@ export default function LaboratoryTestsPage() {
           test.collectionStatus === "scheduled"
         );
       }
-      if (activeTab === "completed") {
-        // Show tests that are completed (collected with results)
-        return test.status === "completed";
+      if (activeTab === "collected") {
+        // Show tests that are collected
+        return test.collectionStatus === "collected";
       }
-      if (activeTab === "reported") {
-        // Show tests that are reported
-        return test.status === "reported";
-      }
-      // "all" tab - show all except cancelled
-      return test.status !== "cancelled";
+      // "all" tab - show all tests
+      return true;
     })
     .filter((test) => {
       if (statusFilter === "all") return true;
@@ -285,10 +281,11 @@ export default function LaboratoryTestsPage() {
       (t) =>
         t.collectionStatus === "pending" || t.collectionStatus === "scheduled",
     ).length;
-    const completed = tests.filter((t) => t.status === "completed").length;
-    const reported = tests.filter((t) => t.status === "reported").length;
+    const collected = tests.filter(
+      (t) => t.collectionStatus === "collected",
+    ).length;
 
-    return { pending, completed, reported };
+    return { pending, collected };
   };
 
   const counts = getTestCounts();
@@ -336,7 +333,7 @@ export default function LaboratoryTestsPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-2 gap-4 mb-6">
         <Card>
           <CardContent className="pt-6">
             <div className="text-center">
@@ -351,19 +348,9 @@ export default function LaboratoryTestsPage() {
           <CardContent className="pt-6">
             <div className="text-center">
               <div className="text-2xl font-bold text-emerald-600">
-                {counts.completed}
+                {counts.collected}
               </div>
-              <div className="text-sm text-gray-500">Completed</div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-center">
-              <div className="text-2xl font-bold text-gray-600">
-                {counts.reported}
-              </div>
-              <div className="text-sm text-gray-500">Reported</div>
+              <div className="text-sm text-gray-500">Collected</div>
             </div>
           </CardContent>
         </Card>
@@ -371,11 +358,10 @@ export default function LaboratoryTestsPage() {
 
       {/* Tabs for different test categories */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
-        <TabsList className="grid grid-cols-4">
-          <TabsTrigger value="all">All Tests</TabsTrigger>
-          <TabsTrigger value="pending">Pending Collection</TabsTrigger>
-          <TabsTrigger value="completed">Completed</TabsTrigger>
-          <TabsTrigger value="reported">Reported</TabsTrigger>
+        <TabsList className="grid grid-cols-3">
+          <TabsTrigger value="all">All</TabsTrigger>
+          <TabsTrigger value="pending">Pending</TabsTrigger>
+          <TabsTrigger value="collected">Collected</TabsTrigger>
         </TabsList>
       </Tabs>
 
@@ -394,7 +380,10 @@ export default function LaboratoryTestsPage() {
             </div>
 
             <div>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <Select
+                value={collectionStatusFilter}
+                onValueChange={setCollectionStatusFilter}
+              >
                 <SelectTrigger>
                   <div className="flex items-center gap-2">
                     <Filter className="h-4 w-4" />
@@ -402,32 +391,9 @@ export default function LaboratoryTestsPage() {
                   </div>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Statuses</SelectItem>
-                  <SelectItem value="pending">Pending/Ordered</SelectItem>
-                  <SelectItem value="processing">Processing</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
-                  <SelectItem value="cancelled">Cancelled</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Select
-                value={collectionStatusFilter}
-                onValueChange={setCollectionStatusFilter}
-              >
-                <SelectTrigger>
-                  <div className="flex items-center gap-2">
-                    <FlaskConical className="h-4 w-4" />
-                    <SelectValue placeholder="Filter by collection" />
-                  </div>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Collection Status</SelectItem>
+                  <SelectItem value="all">All</SelectItem>
                   <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="scheduled">Scheduled</SelectItem>
                   <SelectItem value="collected">Collected</SelectItem>
-                  <SelectItem value="rejected">Rejected</SelectItem>
                 </SelectContent>
               </Select>
             </div>

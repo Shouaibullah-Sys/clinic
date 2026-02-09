@@ -150,7 +150,6 @@ const radiologyTemplateSchema = new Schema<IRadiologyTemplate>(
 );
 
 // Indexes
-radiologyTemplateSchema.index({ templateCode: 1 }, { unique: true });
 radiologyTemplateSchema.index({ examName: 1 });
 radiologyTemplateSchema.index({ serviceType: 1 });
 radiologyTemplateSchema.index({ category: 1 });

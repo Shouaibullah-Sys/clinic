@@ -90,7 +90,7 @@ const DailyExpenseSchema = new Schema<IDailyExpense>(
 );
 
 // Indexes for efficient querying
-DailyExpenseSchema.index({ expenseId: 1 });
+// Note: expenseId already has a unique index from the schema field definition (unique: true)
 DailyExpenseSchema.index({ staff: 1 });
 DailyExpenseSchema.index({ date: -1 });
 DailyExpenseSchema.index({ category: 1 });
