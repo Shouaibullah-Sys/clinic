@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   Card,
@@ -44,8 +44,10 @@ import {
   Loader2,
   Plus,
   Trash2,
+  FileText,
 } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
+import { useRadiologyTemplates } from "@/lib/hooks/use-services";
 import { toast } from "sonner";
 
 interface Patient {
@@ -64,186 +66,53 @@ interface ExamFinding {
   remarks: string;
 }
 
-// Modality types with their common body parts and views
-const modalities = [
-  {
-    type: "xray",
-    name: "X-Ray",
-    bodyParts: [
-      "Chest (PA)",
-      "Chest (AP)",
-      "Abdomen (AP)",
-      "Spine (Cervical)",
-      "Spine (Thoracic)",
-      "Spine (Lumbar)",
-      "Skull (AP/Lateral)",
-      "Pelvis (AP)",
-      "Hip (Unilateral)",
-      "Knee (AP/Lateral)",
-      "Shoulder (AP)",
-      "Hand (PA)",
-      "Wrist (PA)",
-      "Foot (AP)",
-      "Ankle (AP/Lateral)",
-      "Other",
-    ],
-    views: ["AP", "PA", "Lateral", "Oblique", "AP/Lateral", "Other"],
-  },
-  {
-    type: "ct",
-    name: "CT Scan",
-    bodyParts: [
-      "Brain/Head",
-      "Neck",
-      "Chest (Thorax)",
-      "Abdomen",
-      "Pelvis",
-      "Chest + Abdomen + Pelvis",
-      "Spine (Cervical)",
-      "Spine (Thoracic)",
-      "Spine (Lumbar)",
-      "Angiography (CTA)",
-      "Sinus",
-      "Orbits",
-      "Temporal Bones",
-      "Other",
-    ],
-    views: [
-      "Axial",
-      "Coronal",
-      "Sagittal",
-      "3D Reconstruction",
-      "With Contrast",
-      "Without Contrast",
-      "Other",
-    ],
-  },
-  {
-    type: "mri",
-    name: "MRI",
-    bodyParts: [
-      "Brain",
-      "Brain (with Contrast)",
-      "Spine (Cervical)",
-      "Spine (Thoracic)",
-      "Spine (Lumbar)",
-      "Knee",
-      "Shoulder",
-      "Hip",
-      "Ankle",
-      "Wrist",
-      "Elbow",
-      "Pelvis (Female)",
-      "Pelvis (Male)",
-      "Abdomen",
-      "Chest",
-      "Neck",
-      "Other",
-    ],
-    views: [
-      "T1 Weighted",
-      "T2 Weighted",
-      "FLAIR",
-      "DWI",
-      "STIR",
-      "With Contrast",
-      "Without Contrast",
-      "Other",
-    ],
-  },
-  {
-    type: "ultrasound",
-    name: "Ultrasound",
-    bodyParts: [
-      "Whole Abdomen",
-      "Upper Abdomen",
-      "Lower Abdomen",
-      "Pelvis (Female)",
-      "Pelvis (Male - Prostate)",
-      "KUB (Kidneys, Ureters, Bladder)",
-      "Thyroid",
-      "Neck",
-      "Breast (Unilateral)",
-      "Breast (Bilateral)",
-      "Scrotum",
-      "Upper Limb",
-      "Lower Limb",
-      "Carpal Tunnel",
-      "Soft Tissue Mass",
-      "Other",
-    ],
-    views: [
-      "Grayscale (B-mode)",
-      "Doppler",
-      "Color Doppler",
-      "Power Doppler",
-      "Other",
-    ],
-  },
-  {
-    type: "mammography",
-    name: "Mammography",
-    bodyParts: [
-      "Right Breast",
-      "Left Breast",
-      "Bilateral Breasts",
-      "Breast (Targeted)",
-      "Other",
-    ],
-    views: [
-      "CC (Craniocaudal)",
-      "MLO (Mediolateral Oblique)",
-      "Spot Compression",
-      "Magnification",
-      "Other",
-    ],
-  },
-  {
-    type: "fluoroscopy",
-    name: "Fluoroscopy",
-    bodyParts: [
-      "Barium Swallow (Esophagram)",
-      "Barium Meal (Upper GI)",
-      "Barium Follow Through",
-      "Barium Enema",
-      "IVP (Intravenous Pyelogram)",
-      "MCU (Micturating Cystourethrogram)",
-      "Hysterosalpingogram (HSG)",
-      "Fistulogram",
-      "Other",
-    ],
-    views: ["Real-time Imaging", "Spot Images", "Video Recording", "Other"],
-  },
-  {
-    type: "nuclear_medicine",
-    name: "Nuclear Medicine",
-    bodyParts: [
-      "Bone Scan (Whole Body)",
-      "Bone Scan (Regional)",
-      "Thyroid Scan",
-      "Renal Scan (DMSA)",
-      "Renal Scan (DTPA)",
-      "Renal Scan (MAG3)",
-      "Cardiac Perfusion Scan",
-      "Lung Perfusion/Ventilation Scan",
-      "PET Scan (FDG)",
-      "Gallium Scan",
-      "WBC Scan",
-      "Other",
-    ],
-    views: ["Planar", "SPECT", "PET", "SPECT/CT", "PET/CT", "Other"],
-  },
-  {
-    type: "other",
-    name: "Other",
-    bodyParts: ["Other"],
-    views: ["Standard", "Specialized", "Other"],
-  },
-];
+interface RadiologyTemplate {
+  _id: string;
+  templateCode: string;
+  examName: string;
+  serviceType: string;
+  category: string;
+  bodyPart?: string;
+  views?: string[];
+  description?: string;
+  contrastRequired: boolean;
+  contrastType?: string;
+  preparationInstructions?: string;
+  duration: number;
+  basePrice: number;
+  active: boolean;
+  parameters?: Array<{
+    parameterCode: string;
+    parameterName: string;
+    description?: string;
+    normalFindings?: string;
+    unit?: string;
+  }>;
+}
+
+// Service type mapping for display
+const serviceTypeLabels: Record<string, string> = {
+  "x-ray": "X-Ray",
+  "ct-scan": "CT Scan",
+  mri: "MRI",
+  ultrasound: "Ultrasound",
+  mammography: "Mammography",
+  fluoroscopy: "Fluoroscopy",
+  "pet-scan": "PET Scan",
+  "bone-density": "Bone Density",
+  other: "Other",
+};
 
 export default function CreateDirectExamPage() {
   const router = useRouter();
   const { accessToken, user } = useAuthStore();
+
+  // Fetch radiology templates
+  const {
+    data: templatesData,
+    isLoading: loadingTemplates,
+    error: templatesError,
+  } = useRadiologyTemplates({});
 
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -251,6 +120,8 @@ export default function CreateDirectExamPage() {
 
   // Form state
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
+  const [selectedTemplate, setSelectedTemplate] =
+    useState<RadiologyTemplate | null>(null);
   const [selectedModalityType, setSelectedModalityType] = useState<string>("");
   const [selectedBodyPart, setSelectedBodyPart] = useState<string>("");
   const [selectedView, setSelectedView] = useState<string>("");
@@ -260,6 +131,13 @@ export default function CreateDirectExamPage() {
     "routine",
   );
   const [notes, setNotes] = useState("");
+
+  // Template-specific fields
+  const [contrastRequired, setContrastRequired] = useState<boolean>(false);
+  const [contrastType, setContrastType] = useState<string>("");
+  const [preparationInstructions, setPreparationInstructions] =
+    useState<string>("");
+  const [duration, setDuration] = useState<string>("");
 
   // Exam findings/results
   const [examFindings, setExamFindings] = useState<ExamFinding[]>([
@@ -286,10 +164,52 @@ export default function CreateDirectExamPage() {
     address: "",
   });
 
-  // Get selected modality details
-  const selectedModality = modalities.find(
-    (m) => m.type === selectedModalityType,
-  );
+  // Get unique service types from templates
+  const serviceTypes = useMemo(() => {
+    if (!templatesData?.data) return [];
+    const types = new Set(
+      templatesData.data.map((t: RadiologyTemplate) => t.serviceType),
+    );
+    return Array.from(types).sort();
+  }, [templatesData?.data]);
+
+  // Get templates for selected service type
+  const templatesForServiceType = useMemo(() => {
+    if (!templatesData?.data || !selectedModalityType) return [];
+    return templatesData.data.filter(
+      (t: RadiologyTemplate) =>
+        t.serviceType === selectedModalityType && t.active,
+    );
+  }, [templatesData?.data, selectedModalityType]);
+
+  // Get unique body parts for selected service type
+  const bodyPartsForServiceType = useMemo(() => {
+    if (!templatesForServiceType.length) return [];
+    const bodyParts = new Set(
+      templatesForServiceType
+        .filter((t: RadiologyTemplate) => t.bodyPart)
+        .map((t: RadiologyTemplate) => t.bodyPart as string),
+    );
+    return Array.from(bodyParts).sort();
+  }, [templatesForServiceType]);
+
+  // Get unique views for selected service type and body part
+  const viewsForServiceType = useMemo(() => {
+    if (!templatesForServiceType.length) return [];
+    let filtered = templatesForServiceType;
+    if (selectedBodyPart) {
+      filtered = filtered.filter(
+        (t: RadiologyTemplate) => t.bodyPart === selectedBodyPart,
+      );
+    }
+    const views = new Set<string>();
+    filtered.forEach((t: RadiologyTemplate) => {
+      if (t.views && t.views.length > 0) {
+        t.views.forEach((v) => views.add(v));
+      }
+    });
+    return Array.from(views).sort();
+  }, [templatesForServiceType, selectedBodyPart]);
 
   // Search patients with debounce
   useEffect(() => {
@@ -305,13 +225,66 @@ export default function CreateDirectExamPage() {
     return () => clearTimeout(timer);
   }, [patientSearchQuery, accessToken]);
 
-  // Update exam name when modality and body part are selected
+  // Handle template selection
+  const handleSelectTemplate = (templateId: string) => {
+    const template = templatesData?.data.find(
+      (t: RadiologyTemplate) => t._id === templateId,
+    );
+    if (template) {
+      setSelectedTemplate(template);
+      setSelectedModalityType(template.serviceType);
+      setSelectedBodyPart(template.bodyPart || "");
+      setSelectedView(template.views?.[0] || "");
+      setExamName(template.examName);
+      setPrice(template.basePrice.toString());
+      setContrastRequired(template.contrastRequired);
+      setContrastType(template.contrastType || "");
+      setPreparationInstructions(template.preparationInstructions || "");
+      setDuration(template.duration.toString());
+
+      // Auto-populate findings from template parameters
+      if (template.parameters && template.parameters.length > 0) {
+        setExamFindings(
+          template.parameters.map((param: any, index: number) => ({
+            id: (index + 1).toString(),
+            name: param.parameterName,
+            value: "",
+            unit: param.unit || "",
+            remarks: param.normalFindings || "",
+          })),
+        );
+      } else {
+        setExamFindings([
+          { id: "1", name: "", value: "", unit: "", remarks: "" },
+        ]);
+      }
+    }
+  };
+
+  // Handle clear template (custom exam)
+  const handleClearTemplate = () => {
+    setSelectedTemplate(null);
+    setSelectedModalityType("");
+    setSelectedBodyPart("");
+    setSelectedView("");
+    setExamName("");
+    setPrice("");
+    setContrastRequired(false);
+    setContrastType("");
+    setPreparationInstructions("");
+    setDuration("");
+    setExamFindings([{ id: "1", name: "", value: "", unit: "", remarks: "" }]);
+  };
+
+  // Update exam name when modality and body part are selected (custom mode)
   useEffect(() => {
-    if (selectedModality && selectedBodyPart) {
-      const fullExamName = `${selectedModality.name} - ${selectedBodyPart}`;
+    if (!selectedTemplate && selectedModalityType && selectedBodyPart) {
+      const modalityName =
+        serviceTypeLabels[selectedModalityType] || selectedModalityType;
+      const fullExamName = `${modalityName} - ${selectedBodyPart}`;
       setExamName(fullExamName);
     }
-  }, [selectedModality, selectedBodyPart]);
+  }, [selectedTemplate, selectedModalityType, selectedBodyPart]);
 
   const searchPatients = async () => {
     try {
@@ -474,13 +447,16 @@ export default function CreateDirectExamPage() {
 
       const payload = {
         patientId: selectedPatient._id,
-        examName: examName || `${selectedModality?.name} - ${selectedBodyPart}`,
+        examName:
+          examName ||
+          `${serviceTypeLabels[selectedModalityType] || selectedModalityType} - ${selectedBodyPart}`,
         category: selectedModalityType,
         price: parseFloat(price),
         priority,
         notes: notes || undefined,
+        templateId: selectedTemplate?._id,
         modality: {
-          type: selectedModality?.name || selectedModalityType,
+          type: serviceTypeLabels[selectedModalityType] || selectedModalityType,
           bodyPart: selectedBodyPart,
           view: selectedView,
           findings: validExamFindings.map((f) => ({
@@ -489,6 +465,10 @@ export default function CreateDirectExamPage() {
             unit: f.unit,
             remarks: f.remarks,
           })),
+          contrastRequired,
+          contrastType: contrastType || undefined,
+          preparationInstructions: preparationInstructions || undefined,
+          duration: duration ? parseInt(duration) : undefined,
         },
       };
 
@@ -534,7 +514,7 @@ export default function CreateDirectExamPage() {
     }
   };
 
-  if (loading) {
+  if (loadingTemplates) {
     return (
       <div className="container mx-auto p-6">
         <Skeleton className="h-8 w-64 mb-6" />
@@ -569,6 +549,18 @@ export default function CreateDirectExamPage() {
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>Error</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      {/* Template Loading Error */}
+      {templatesError && (
+        <Alert variant="destructive" className="mb-6">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Template Loading Error</AlertTitle>
+          <AlertDescription>
+            Failed to load templates. You can still create a custom exam without
+            a template.
+          </AlertDescription>
         </Alert>
       )}
 
@@ -686,6 +678,134 @@ export default function CreateDirectExamPage() {
               </CardContent>
             </Card>
 
+            {/* Template Selection */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Select Template (Optional)
+                </CardTitle>
+                <CardDescription>
+                  Choose a pre-defined template or create a custom exam
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex gap-3">
+                  <div className="flex-1 space-y-2">
+                    <Label htmlFor="template">Template</Label>
+                    <Select
+                      value={selectedTemplate?._id || ""}
+                      onValueChange={(value) => {
+                        if (value === "custom") {
+                          handleClearTemplate();
+                        } else {
+                          handleSelectTemplate(value);
+                        }
+                      }}
+                    >
+                      <SelectTrigger id="template">
+                        <SelectValue placeholder="Select a template or create custom" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="custom">
+                          <div className="flex items-center gap-2">
+                            <Plus className="h-4 w-4" />
+                            Custom Exam (No Template)
+                          </div>
+                        </SelectItem>
+                        {serviceTypes.map((type: string) => (
+                          <SelectItem key={type} value={type} disabled>
+                            <span className="font-medium">
+                              {serviceTypeLabels[type] || type}
+                            </span>
+                          </SelectItem>
+                        ))}
+                        {templatesData?.data
+                          ?.filter((t: RadiologyTemplate) => t.active)
+                          .map((template: RadiologyTemplate) => (
+                            <SelectItem key={template._id} value={template._id}>
+                              <div className="flex flex-col">
+                                <span>{template.examName}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  {serviceTypeLabels[template.serviceType] ||
+                                    template.serviceType}
+                                  {template.bodyPart &&
+                                    ` • ${template.bodyPart}`}
+                                </span>
+                              </div>
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {selectedTemplate && (
+                    <div className="pt-8">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleClearTemplate}
+                      >
+                        Clear
+                      </Button>
+                    </div>
+                  )}
+                </div>
+
+                {selectedTemplate && (
+                  <div className="p-4 bg-blue-50 dark:bg-blue-950/20 rounded-md border border-blue-200 dark:border-blue-800">
+                    <div className="flex items-start gap-3">
+                      <FileText className="h-5 w-5 text-blue-600 mt-0.5" />
+                      <div>
+                        <div className="font-medium text-blue-700 dark:text-blue-300">
+                          {selectedTemplate.examName}
+                        </div>
+                        <div className="text-sm text-blue-600 dark:text-blue-400 mt-1">
+                          <span className="font-medium">Code:</span>{" "}
+                          {selectedTemplate.templateCode}
+                        </div>
+                        {selectedTemplate.description && (
+                          <div className="text-sm text-blue-600 dark:text-blue-400 mt-1">
+                            {selectedTemplate.description}
+                          </div>
+                        )}
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {selectedTemplate.contrastRequired && (
+                            <Badge
+                              variant="outline"
+                              className="border-blue-300 text-blue-700"
+                            >
+                              Contrast Required
+                            </Badge>
+                          )}
+                          {selectedTemplate.duration && (
+                            <Badge
+                              variant="outline"
+                              className="border-blue-300 text-blue-700"
+                            >
+                              <Clock className="h-3 w-3 mr-1" />
+                              {selectedTemplate.duration} min
+                            </Badge>
+                          )}
+                          {selectedTemplate.basePrice && (
+                            <Badge
+                              variant="outline"
+                              className="border-blue-300 text-blue-700"
+                            >
+                              {new Intl.NumberFormat("en-IN", {
+                                style: "currency",
+                                currency: "AFN",
+                              }).format(selectedTemplate.basePrice)}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
             {/* Modality Selection */}
             <Card>
               <CardHeader>
@@ -708,17 +828,44 @@ export default function CreateDirectExamPage() {
                         setSelectedModalityType(value);
                         setSelectedBodyPart("");
                         setSelectedView("");
+                        // Keep exam name if template is selected
+                        if (!selectedTemplate) {
+                          setExamName("");
+                        }
                       }}
                     >
                       <SelectTrigger id="modalityType">
                         <SelectValue placeholder="Select modality" />
                       </SelectTrigger>
                       <SelectContent>
-                        {modalities.map((modality) => (
-                          <SelectItem key={modality.type} value={modality.type}>
-                            {modality.name}
-                          </SelectItem>
-                        ))}
+                        {serviceTypes.length > 0 ? (
+                          serviceTypes.map((type: string) => (
+                            <SelectItem key={type} value={type}>
+                              {serviceTypeLabels[type] || type}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          // Fallback if no templates available
+                          <>
+                            <SelectItem value="x-ray">X-Ray</SelectItem>
+                            <SelectItem value="ct-scan">CT Scan</SelectItem>
+                            <SelectItem value="mri">MRI</SelectItem>
+                            <SelectItem value="ultrasound">
+                              Ultrasound
+                            </SelectItem>
+                            <SelectItem value="mammography">
+                              Mammography
+                            </SelectItem>
+                            <SelectItem value="fluoroscopy">
+                              Fluoroscopy
+                            </SelectItem>
+                            <SelectItem value="pet-scan">PET Scan</SelectItem>
+                            <SelectItem value="bone-density">
+                              Bone Density
+                            </SelectItem>
+                            <SelectItem value="other">Other</SelectItem>
+                          </>
+                        )}
                       </SelectContent>
                     </Select>
                   </div>
@@ -731,6 +878,10 @@ export default function CreateDirectExamPage() {
                       onValueChange={(value) => {
                         setSelectedBodyPart(value);
                         setSelectedView("");
+                        // Keep exam name if template is selected
+                        if (!selectedTemplate) {
+                          setExamName("");
+                        }
                       }}
                       disabled={!selectedModalityType}
                     >
@@ -738,11 +889,15 @@ export default function CreateDirectExamPage() {
                         <SelectValue placeholder="Select body part" />
                       </SelectTrigger>
                       <SelectContent>
-                        {selectedModality?.bodyParts.map((bodyPart) => (
-                          <SelectItem key={bodyPart} value={bodyPart}>
-                            {bodyPart}
-                          </SelectItem>
-                        ))}
+                        {bodyPartsForServiceType.length > 0 ? (
+                          bodyPartsForServiceType.map((bodyPart: string) => (
+                            <SelectItem key={bodyPart} value={bodyPart}>
+                              {bodyPart}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem value="other">Other</SelectItem>
+                        )}
                       </SelectContent>
                     </Select>
                   </div>
@@ -759,25 +914,35 @@ export default function CreateDirectExamPage() {
                         <SelectValue placeholder="Select view" />
                       </SelectTrigger>
                       <SelectContent>
-                        {selectedModality?.views.map((view) => (
-                          <SelectItem key={view} value={view}>
-                            {view}
-                          </SelectItem>
-                        ))}
+                        {viewsForServiceType.length > 0 ? (
+                          viewsForServiceType.map((view: string) => (
+                            <SelectItem key={view} value={view}>
+                              {view}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <>
+                            <SelectItem value="Standard">Standard</SelectItem>
+                            <SelectItem value="Specialized">
+                              Specialized
+                            </SelectItem>
+                            <SelectItem value="Other">Other</SelectItem>
+                          </>
+                        )}
                       </SelectContent>
                     </Select>
                   </div>
                 </div>
 
                 {/* Exam Name Preview */}
-                {selectedModality && selectedBodyPart && (
+                {selectedModalityType && selectedBodyPart && (
                   <div className="p-4 bg-blue-50 dark:bg-blue-950/20 rounded-md border border-blue-200 dark:border-blue-800">
                     <div className="text-sm text-blue-700 dark:text-blue-300 mb-1">
                       Exam Name Preview:
                     </div>
                     <div className="font-medium">
                       {examName ||
-                        `${selectedModality.name} - ${selectedBodyPart}`}
+                        `${serviceTypeLabels[selectedModalityType] || selectedModalityType} - ${selectedBodyPart}`}
                     </div>
                   </div>
                 )}
@@ -961,6 +1126,59 @@ export default function CreateDirectExamPage() {
                   </p>
                 </div>
 
+                {/* Contrast Options */}
+                <div className="space-y-3 pt-4 border-t">
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id="contrastRequired"
+                      checked={contrastRequired}
+                      onChange={(e) => setContrastRequired(e.target.checked)}
+                      className="rounded border-gray-300"
+                    />
+                    <Label htmlFor="contrastRequired">Contrast Required</Label>
+                  </div>
+
+                  {contrastRequired && (
+                    <div className="space-y-2">
+                      <Label htmlFor="contrastType">Contrast Type</Label>
+                      <Input
+                        id="contrastType"
+                        value={contrastType}
+                        onChange={(e) => setContrastType(e.target.value)}
+                        placeholder="e.g., Iodinated, Gadolinium"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Preparation Instructions */}
+                <div>
+                  <Label htmlFor="preparationInstructions">
+                    Preparation Instructions
+                  </Label>
+                  <Textarea
+                    id="preparationInstructions"
+                    placeholder="Enter preparation instructions..."
+                    value={preparationInstructions}
+                    onChange={(e) => setPreparationInstructions(e.target.value)}
+                    rows={3}
+                  />
+                </div>
+
+                {/* Duration */}
+                <div>
+                  <Label htmlFor="duration">Duration (minutes)</Label>
+                  <Input
+                    id="duration"
+                    type="number"
+                    value={duration}
+                    onChange={(e) => setDuration(e.target.value)}
+                    placeholder="Enter estimated duration"
+                    min="1"
+                  />
+                </div>
+
                 <div>
                   <Label htmlFor="notes">
                     Clinical Notes / Reason for Exam
@@ -996,7 +1214,9 @@ export default function CreateDirectExamPage() {
                       Modality
                     </span>
                     <span className="font-medium">
-                      {selectedModality?.name || "-"}
+                      {serviceTypeLabels[selectedModalityType] ||
+                        selectedModalityType ||
+                        "-"}
                     </span>
                   </div>
                   <div className="flex justify-between">

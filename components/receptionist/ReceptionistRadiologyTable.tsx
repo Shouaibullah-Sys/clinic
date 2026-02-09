@@ -21,7 +21,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, CreditCard, Eye, DollarSign, FileText } from "lucide-react";
+import { useRouter } from "next/navigation";
+import {
+  MoreHorizontal,
+  CreditCard,
+  Eye,
+  DollarSign,
+  FileText,
+} from "lucide-react";
 import { format } from "date-fns";
 
 interface RadiologyRequest {
@@ -79,6 +86,7 @@ export function ReceptionistRadiologyTable({
   onProcessPayment,
   onViewBilling,
 }: ReceptionistRadiologyTableProps) {
+  const router = useRouter();
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
   // Filter requests based on search query
@@ -95,33 +103,53 @@ export function ReceptionistRadiologyTable({
   });
 
   const getStatusBadge = (status: string) => {
-    const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
+    const statusConfig: Record<
+      string,
+      {
+        label: string;
+        variant: "default" | "secondary" | "destructive" | "outline";
+      }
+    > = {
       scheduled: { label: "Scheduled", variant: "secondary" },
       "in-progress": { label: "In Progress", variant: "default" },
       completed: { label: "Completed", variant: "outline" },
       cancelled: { label: "Cancelled", variant: "destructive" },
     };
-    const config = statusConfig[status] || { label: status, variant: "secondary" as const };
+    const config = statusConfig[status] || {
+      label: status,
+      variant: "secondary" as const,
+    };
     return <Badge variant={config.variant}>{config.label}</Badge>;
   };
 
   const getPriorityBadge = (priority: string) => {
-    const priorityConfig: Record<string, { label: string; className: string }> = {
-      routine: { label: "Routine", className: "bg-gray-100 text-gray-800" },
-      urgent: { label: "Urgent", className: "bg-orange-100 text-orange-800" },
-      emergency: { label: "Emergency", className: "bg-red-100 text-red-800" },
+    const priorityConfig: Record<string, { label: string; className: string }> =
+      {
+        routine: { label: "Routine", className: "bg-gray-100 text-gray-800" },
+        urgent: { label: "Urgent", className: "bg-orange-100 text-orange-800" },
+        emergency: { label: "Emergency", className: "bg-red-100 text-red-800" },
+      };
+    const config = priorityConfig[priority] || {
+      label: priority,
+      className: "bg-gray-100 text-gray-800",
     };
-    const config = priorityConfig[priority] || { label: priority, className: "bg-gray-100 text-gray-800" };
     return <Badge className={config.className}>{config.label}</Badge>;
   };
 
   const getBillingStatusBadge = (billingStatus: string) => {
-    const billingConfig: Record<string, { label: string; className: string }> = {
-      pending: { label: "Pending", className: "bg-yellow-100 text-yellow-800" },
-      billed: { label: "Billed", className: "bg-blue-100 text-blue-800" },
-      paid: { label: "Paid", className: "bg-green-100 text-green-800" },
+    const billingConfig: Record<string, { label: string; className: string }> =
+      {
+        pending: {
+          label: "Pending",
+          className: "bg-yellow-100 text-yellow-800",
+        },
+        billed: { label: "Billed", className: "bg-blue-100 text-blue-800" },
+        paid: { label: "Paid", className: "bg-green-100 text-green-800" },
+      };
+    const config = billingConfig[billingStatus] || {
+      label: billingStatus,
+      className: "bg-gray-100 text-gray-800",
     };
-    const config = billingConfig[billingStatus] || { label: billingStatus, className: "bg-gray-100 text-gray-800" };
     return <Badge className={config.className}>{config.label}</Badge>;
   };
 
@@ -137,7 +165,9 @@ export function ReceptionistRadiologyTable({
 
   const calculateTotalPrice = (request: RadiologyRequest) => {
     const basePrice = request.pricing?.basePrice || 0;
-    const contrastPrice = request.contrastUsed ? (request.pricing?.contrastPrice || 0) : 0;
+    const contrastPrice = request.contrastUsed
+      ? request.pricing?.contrastPrice || 0
+      : 0;
     return basePrice + contrastPrice;
   };
 
@@ -183,32 +213,53 @@ export function ReceptionistRadiologyTable({
         <TableBody>
           {filteredRequests.map((request) => (
             <>
-              <TableRow key={request._id} className="cursor-pointer hover:bg-muted/50">
-                <TableCell className="font-medium">{request.serviceId}</TableCell>
+              <TableRow
+                key={request._id}
+                className="cursor-pointer hover:bg-muted/50"
+                onClick={() => router.push(`/radiology/records/${request._id}`)}
+              >
+                <TableCell className="font-medium">
+                  {request.serviceId}
+                </TableCell>
                 <TableCell>
                   <div>
                     <div className="font-medium">{request.patient.name}</div>
-                    <div className="text-sm text-muted-foreground">{request.patient.patientId}</div>
+                    <div className="text-sm text-muted-foreground">
+                      {request.patient.patientId}
+                    </div>
                   </div>
                 </TableCell>
-                <TableCell>{getServiceTypeLabel(request.serviceType)}</TableCell>
+                <TableCell>
+                  {getServiceTypeLabel(request.serviceType)}
+                </TableCell>
                 <TableCell>
                   <div>
                     <div>{request.bodyPart}</div>
-                    <div className="text-sm text-muted-foreground">{request.view}</div>
+                    <div className="text-sm text-muted-foreground">
+                      {request.view}
+                    </div>
                   </div>
                 </TableCell>
                 <TableCell>{getPriorityBadge(request.priority)}</TableCell>
                 <TableCell>{getStatusBadge(request.status)}</TableCell>
-                <TableCell>{getBillingStatusBadge(request.billingStatus)}</TableCell>
                 <TableCell>
-                  <div className="font-medium">${calculateTotalPrice(request)}</div>
+                  {getBillingStatusBadge(request.billingStatus)}
+                </TableCell>
+                <TableCell>
+                  <div className="font-medium">
+                    ${calculateTotalPrice(request)}
+                  </div>
                   {request.contrastUsed && (
-                    <div className="text-xs text-muted-foreground">+ Contrast</div>
+                    <div className="text-xs text-muted-foreground">
+                      + Contrast
+                    </div>
                   )}
                 </TableCell>
                 <TableCell>
-                  {format(new Date(request.scheduledDate), "MMM dd, yyyy HH:mm")}
+                  {format(
+                    new Date(request.scheduledDate),
+                    "MMM dd, yyyy HH:mm",
+                  )}
                 </TableCell>
                 <TableCell className="text-right">
                   <DropdownMenu>
@@ -220,7 +271,13 @@ export function ReceptionistRadiologyTable({
                     <DropdownMenuContent align="end">
                       <DropdownMenuLabel>Actions</DropdownMenuLabel>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={() => setExpandedRow(expandedRow === request._id ? null : request._id)}>
+                      <DropdownMenuItem
+                        onClick={() =>
+                          setExpandedRow(
+                            expandedRow === request._id ? null : request._id,
+                          )
+                        }
+                      >
                         <Eye className="mr-2 h-4 w-4" />
                         View Details
                       </DropdownMenuItem>
@@ -229,7 +286,9 @@ export function ReceptionistRadiologyTable({
                         View Billing
                       </DropdownMenuItem>
                       {request.billingStatus !== "paid" && (
-                        <DropdownMenuItem onClick={() => onProcessPayment(request)}>
+                        <DropdownMenuItem
+                          onClick={() => onProcessPayment(request)}
+                        >
                           <CreditCard className="mr-2 h-4 w-4" />
                           Process Payment
                         </DropdownMenuItem>
@@ -244,44 +303,75 @@ export function ReceptionistRadiologyTable({
                     <div className="py-4 px-4 space-y-4">
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <div>
-                          <p className="text-sm font-medium text-muted-foreground">Referring Doctor</p>
-                          <p className="font-medium">{request.referringDoctor.name}</p>
-                          <p className="text-sm text-muted-foreground">{request.referringDoctor.specialization}</p>
+                          <p className="text-sm font-medium text-muted-foreground">
+                            Referring Doctor
+                          </p>
+                          <p className="font-medium">
+                            {request.referringDoctor.name}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            {request.referringDoctor.specialization}
+                          </p>
                         </div>
                         <div>
-                          <p className="text-sm font-medium text-muted-foreground">Radiologist</p>
-                          <p className="font-medium">{request.radiologist?.name || "Not assigned"}</p>
+                          <p className="text-sm font-medium text-muted-foreground">
+                            Radiologist
+                          </p>
+                          <p className="font-medium">
+                            {request.radiologist?.name || "Not assigned"}
+                          </p>
                         </div>
                         <div>
-                          <p className="text-sm font-medium text-muted-foreground">Request Date</p>
-                          <p className="font-medium">{format(new Date(request.requestDate), "MMM dd, yyyy HH:mm")}</p>
+                          <p className="text-sm font-medium text-muted-foreground">
+                            Request Date
+                          </p>
+                          <p className="font-medium">
+                            {format(
+                              new Date(request.requestDate),
+                              "MMM dd, yyyy HH:mm",
+                            )}
+                          </p>
                         </div>
                         <div>
-                          <p className="text-sm font-medium text-muted-foreground">Contrast Used</p>
-                          <p className="font-medium">{request.contrastUsed ? `Yes (${request.contrastType})` : "No"}</p>
+                          <p className="text-sm font-medium text-muted-foreground">
+                            Contrast Used
+                          </p>
+                          <p className="font-medium">
+                            {request.contrastUsed
+                              ? `Yes (${request.contrastType})`
+                              : "No"}
+                          </p>
                         </div>
                       </div>
                       {request.notes && (
                         <div>
-                          <p className="text-sm font-medium text-muted-foreground">Notes</p>
+                          <p className="text-sm font-medium text-muted-foreground">
+                            Notes
+                          </p>
                           <p className="text-sm">{request.notes}</p>
                         </div>
                       )}
                       {request.findings && (
                         <div>
-                          <p className="text-sm font-medium text-muted-foreground">Findings</p>
+                          <p className="text-sm font-medium text-muted-foreground">
+                            Findings
+                          </p>
                           <p className="text-sm">{request.findings}</p>
                         </div>
                       )}
                       {request.impression && (
                         <div>
-                          <p className="text-sm font-medium text-muted-foreground">Impression</p>
+                          <p className="text-sm font-medium text-muted-foreground">
+                            Impression
+                          </p>
                           <p className="text-sm">{request.impression}</p>
                         </div>
                       )}
                       {request.recommendations && (
                         <div>
-                          <p className="text-sm font-medium text-muted-foreground">Recommendations</p>
+                          <p className="text-sm font-medium text-muted-foreground">
+                            Recommendations
+                          </p>
                           <p className="text-sm">{request.recommendations}</p>
                         </div>
                       )}

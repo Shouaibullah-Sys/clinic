@@ -306,7 +306,7 @@ export default function ReceptionDashboardPage() {
             <Skeleton className="h-3 w-48" />
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
               {Array.from({ length: 7 }).map((_, i) => (
                 <Skeleton key={i} className="h-20 w-full" />
               ))}
@@ -680,31 +680,6 @@ export default function ReceptionDashboardPage() {
                 </TooltipTrigger>
                 <TooltipContent>
                   <p>View today's appointment schedule</p>
-                </TooltipContent>
-              </Tooltip>
-
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="justify-start h-auto py-3 px-4 w-full"
-                    onClick={() => router.push("/patients")}
-                  >
-                    <div className="flex items-center space-x-3">
-                      <div className="p-2 bg-gray-100 dark:bg-gray-800 rounded-lg">
-                        <Users className="h-4 w-4 text-gray-600 dark:text-gray-400" />
-                      </div>
-                      <div className="text-left">
-                        <p className="font-medium text-sm">Patients</p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">
-                          Manage
-                        </p>
-                      </div>
-                    </div>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Access patient directory</p>
                 </TooltipContent>
               </Tooltip>
             </div>

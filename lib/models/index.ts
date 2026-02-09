@@ -23,17 +23,19 @@ export * from "./MedicineStock";
 export * from "./Patient";
 export * from "./Payment";
 export * from "./Prescription";
+export * from "./RadiologyTemplate";
+export * from "./RadiologyService";
 export * from "./ServiceDepartment";
 export * from "./Session";
 export * from "./TestResult";
 export * from "./User";
 
 // Import specific models from files with multiple exports to avoid conflicts
-export { 
-  DentalService, 
-  ImagingService, 
-  EmergencyService, 
-  OpdService, 
-  LaboratoryService, 
-  OTService 
+export {
+  DentalService,
+  ImagingService,
+  EmergencyService,
+  OpdService,
+  LaboratoryService,
+  OTService,
 } from "./DentalService";

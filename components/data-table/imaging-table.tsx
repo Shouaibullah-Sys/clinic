@@ -1,4 +1,5 @@
 // components/data-table/imaging-table.tsx
+import { useRouter } from "next/navigation";
 import {
   ColumnDef,
   flexRender,
@@ -48,7 +49,9 @@ const columns: ColumnDef<ImagingRecord>[] = [
     accessorKey: "serviceId",
     header: "Service ID",
     cell: ({ row }) => {
-      return <span className="font-mono text-sm">{row.getValue("serviceId")}</span>;
+      return (
+        <span className="font-mono text-sm">{row.getValue("serviceId")}</span>
+      );
     },
   },
   {
@@ -78,11 +81,18 @@ const columns: ColumnDef<ImagingRecord>[] = [
     header: "Status",
     cell: ({ row }) => {
       const status = row.getValue("status") as string;
-      const variant = status === "completed" ? "default" :
-                     status === "in-progress" ? "secondary" :
-                     status === "scheduled" ? "outline" : "destructive";
-      const label = status === "in-progress" ? "In Progress" : 
-                   status.charAt(0).toUpperCase() + status.slice(1);
+      const variant =
+        status === "completed"
+          ? "default"
+          : status === "in-progress"
+            ? "secondary"
+            : status === "scheduled"
+              ? "outline"
+              : "destructive";
+      const label =
+        status === "in-progress"
+          ? "In Progress"
+          : status.charAt(0).toUpperCase() + status.slice(1);
       return <Badge variant={variant}>{label}</Badge>;
     },
   },
@@ -91,8 +101,12 @@ const columns: ColumnDef<ImagingRecord>[] = [
     header: "Priority",
     cell: ({ row }) => {
       const priority = row.getValue("priority") as string;
-      const variant = priority === "emergency" ? "destructive" :
-                     priority === "urgent" ? "secondary" : "outline";
+      const variant =
+        priority === "emergency"
+          ? "destructive"
+          : priority === "urgent"
+            ? "secondary"
+            : "outline";
       const label = priority.charAt(0).toUpperCase() + priority.slice(1);
       return <Badge variant={variant}>{label}</Badge>;
     },
@@ -102,11 +116,18 @@ const columns: ColumnDef<ImagingRecord>[] = [
     header: "Report",
     cell: ({ row }) => {
       const reportStatus = row.getValue("reportStatus") as string;
-      if (!reportStatus) return <span className="text-muted-foreground">-</span>;
-      const variant = reportStatus === "completed" ? "default" :
-                     reportStatus === "reviewed" ? "secondary" :
-                     reportStatus === "approved" ? "outline" : "destructive";
-      const label = reportStatus.charAt(0).toUpperCase() + reportStatus.slice(1);
+      if (!reportStatus)
+        return <span className="text-muted-foreground">-</span>;
+      const variant =
+        reportStatus === "completed"
+          ? "default"
+          : reportStatus === "reviewed"
+            ? "secondary"
+            : reportStatus === "approved"
+              ? "outline"
+              : "destructive";
+      const label =
+        reportStatus.charAt(0).toUpperCase() + reportStatus.slice(1);
       return <Badge variant={variant}>{label}</Badge>;
     },
   },
@@ -114,19 +135,29 @@ const columns: ColumnDef<ImagingRecord>[] = [
     accessorKey: "paymentStatus",
     header: "Payment",
     cell: ({ row }) => {
-      const paymentStatus = row.getValue("paymentStatus") as string || row.getValue("billingStatus") as string;
-      const paymentVerified = row.getValue("paymentVerified") as boolean;
-      if (!paymentStatus) return <span className="text-muted-foreground">-</span>;
-      
-      const variant = paymentStatus === "paid" ? "default" :
-                     paymentStatus === "partial" ? "secondary" : "outline";
-      const label = paymentStatus.charAt(0).toUpperCase() + paymentStatus.slice(1);
-      
+      const paymentStatus =
+        (row.getValue("paymentStatus") as string) ||
+        (row.original.billingStatus as string);
+      const paymentVerified = row.original.paymentVerified as boolean;
+      if (!paymentStatus)
+        return <span className="text-muted-foreground">-</span>;
+
+      const variant =
+        paymentStatus === "paid"
+          ? "default"
+          : paymentStatus === "partial"
+            ? "secondary"
+            : "outline";
+      const label =
+        paymentStatus.charAt(0).toUpperCase() + paymentStatus.slice(1);
+
       return (
         <div className="flex items-center gap-2">
           <Badge variant={variant}>{label}</Badge>
           {paymentVerified && (
-            <span className="text-xs text-green-600 font-medium">✓ Verified</span>
+            <span className="text-xs text-green-600 font-medium">
+              ✓ Verified
+            </span>
           )}
         </div>
       );
@@ -148,6 +179,7 @@ interface ImagingTableProps {
 }
 
 export function ImagingTable({ data }: ImagingTableProps) {
+  const router = useRouter();
   const table = useReactTable({
     data,
     columns,
@@ -169,7 +201,7 @@ export function ImagingTable({ data }: ImagingTableProps) {
                       ? null
                       : flexRender(
                           header.column.columnDef.header,
-                          header.getContext()
+                          header.getContext(),
                         )}
                   </TableHead>
                 ))}
@@ -182,12 +214,16 @@ export function ImagingTable({ data }: ImagingTableProps) {
                 <TableRow
                   key={row.id}
                   data-state={row.getIsSelected() && "selected"}
+                  className="cursor-pointer hover:bg-muted/50"
+                  onClick={() =>
+                    router.push(`/radiology/records/${row.original.id}`)
+                  }
                 >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id}>
                       {flexRender(
                         cell.column.columnDef.cell,
-                        cell.getContext()
+                        cell.getContext(),
                       )}
                     </TableCell>
                   ))}

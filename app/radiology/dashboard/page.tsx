@@ -1,24 +1,30 @@
-'use client';
+"use client";
 
 // app/radiology/dashboard/page.tsx
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { 
-  Activity, 
-  Clock, 
-  CheckCircle, 
-  DollarSign, 
-  RefreshCw, 
-  FileText, 
+import {
+  Activity,
+  Clock,
+  CheckCircle,
+  DollarSign,
+  RefreshCw,
+  FileText,
   TrendingUp,
   Calendar,
   Users,
   AlertCircle,
   ArrowRight,
   BarChart3,
-  PieChart
+  PieChart,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -91,11 +97,14 @@ export default function RadiologyDashboardPage() {
   const fetchRequests = async () => {
     try {
       setLoading(true);
-      
+
       // Fetch from radiologist endpoint only (radiologists and admins)
-      const response = await fetch(`/api/radiologist/requests?tab=all&limit=1000`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
+      const response = await fetch(
+        `/api/radiologist/requests?tab=all&limit=1000`,
+        {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        },
+      );
 
       const result = await response.json();
 
@@ -111,7 +120,8 @@ export default function RadiologyDashboardPage() {
     } catch (error: any) {
       console.error("Error fetching requests:", error);
       toast.error("Failed to Load Dashboard Data", {
-        description: error.message || "An error occurred while fetching dashboard data",
+        description:
+          error.message || "An error occurred while fetching dashboard data",
       });
     } finally {
       setLoading(false);
@@ -124,28 +134,48 @@ export default function RadiologyDashboardPage() {
 
   // Calculate Overview Stats
   const totalRequests = requests.length;
-  const pendingRequests = requests.filter(r => r.status === "scheduled").length;
-  const inProgressRequests = requests.filter(r => r.status === "in-progress").length;
-  const completedReports = requests.filter(r => r.reportStatus === "completed").length;
+  const pendingRequests = requests.filter(
+    (r) => r.status === "scheduled",
+  ).length;
+  const inProgressRequests = requests.filter(
+    (r) => r.status === "in-progress",
+  ).length;
+  const completedReports = requests.filter(
+    (r) => r.reportStatus === "completed",
+  ).length;
   const totalRevenue = requests
-    .filter(r => r.billingStatus === "paid")
-    .reduce((sum, r) => sum + (r.pricing?.basePrice || 0) + (r.contrastUsed ? (r.pricing?.contrastPrice || 0) : 0), 0);
+    .filter((r) => r.billingStatus === "paid")
+    .reduce(
+      (sum, r) =>
+        sum +
+        (r.pricing?.basePrice || 0) +
+        (r.contrastUsed ? r.pricing?.contrastPrice || 0 : 0),
+      0,
+    );
 
   // Calculate Average Completion Time
-  const completedWithDates = requests.filter(r => r.performedDate && r.requestDate);
-  const avgCompletionTime = completedWithDates.length > 0
-    ? completedWithDates.reduce((sum, r) => {
-        const requestDate = new Date(r.requestDate);
-        const performedDate = new Date(r.performedDate!);
-        return sum + (performedDate.getTime() - requestDate.getTime());
-      }, 0) / completedWithDates.length / (1000 * 60 * 60) // Convert to hours
-    : 0;
+  const completedWithDates = requests.filter(
+    (r) => r.performedDate && r.requestDate,
+  );
+  const avgCompletionTime =
+    completedWithDates.length > 0
+      ? completedWithDates.reduce((sum, r) => {
+          const requestDate = new Date(r.requestDate);
+          const performedDate = new Date(r.performedDate!);
+          return sum + (performedDate.getTime() - requestDate.getTime());
+        }, 0) /
+        completedWithDates.length /
+        (1000 * 60 * 60) // Convert to hours
+      : 0;
 
   // Calculate Service Type Distribution
-  const serviceTypeCounts = requests.reduce((acc, req) => {
-    acc[req.serviceType] = (acc[req.serviceType] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
+  const serviceTypeCounts = requests.reduce(
+    (acc, req) => {
+      acc[req.serviceType] = (acc[req.serviceType] || 0) + 1;
+      return acc;
+    },
+    {} as Record<string, number>,
+  );
 
   const serviceTypeStats: ServiceTypeStats[] = Object.entries(serviceTypeCounts)
     .map(([type, count]) => ({
@@ -156,37 +186,62 @@ export default function RadiologyDashboardPage() {
     .sort((a, b) => b.count - a.count);
 
   // Calculate Priority Distribution
-  const priorityCounts = requests.reduce((acc, req) => {
-    acc[req.priority] = (acc[req.priority] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
+  const priorityCounts = requests.reduce(
+    (acc, req) => {
+      acc[req.priority] = (acc[req.priority] || 0) + 1;
+      return acc;
+    },
+    {} as Record<string, number>,
+  );
 
   const priorityStats: PriorityStats[] = [
-    { priority: "routine", count: priorityCounts.routine || 0, color: "bg-blue-500" },
-    { priority: "urgent", count: priorityCounts.urgent || 0, color: "bg-orange-500" },
-    { priority: "emergency", count: priorityCounts.emergency || 0, color: "bg-red-500" },
+    {
+      priority: "routine",
+      count: priorityCounts.routine || 0,
+      color: "bg-blue-500",
+    },
+    {
+      priority: "urgent",
+      count: priorityCounts.urgent || 0,
+      color: "bg-orange-500",
+    },
+    {
+      priority: "emergency",
+      count: priorityCounts.emergency || 0,
+      color: "bg-red-500",
+    },
   ];
 
   // Calculate Performance Metrics
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const todayRequests = requests.filter(r => new Date(r.requestDate) >= today).length;
+  const todayRequests = requests.filter(
+    (r) => new Date(r.requestDate) >= today,
+  ).length;
 
   const weekAgo = new Date(today);
   weekAgo.setDate(weekAgo.getDate() - 7);
-  const weekRequests = requests.filter(r => new Date(r.requestDate) >= weekAgo).length;
+  const weekRequests = requests.filter(
+    (r) => new Date(r.requestDate) >= weekAgo,
+  ).length;
 
   const monthAgo = new Date(today);
   monthAgo.setMonth(monthAgo.getMonth() - 1);
-  const monthRequests = requests.filter(r => new Date(r.requestDate) >= monthAgo).length;
+  const monthRequests = requests.filter(
+    (r) => new Date(r.requestDate) >= monthAgo,
+  ).length;
 
-  const completionRate = totalRequests > 0 ? (completedReports / totalRequests) * 100 : 0;
+  const completionRate =
+    totalRequests > 0 ? (completedReports / totalRequests) * 100 : 0;
 
   // Calculate Top Body Parts
-  const bodyPartCounts = requests.reduce((acc, req) => {
-    acc[req.bodyPart] = (acc[req.bodyPart] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
+  const bodyPartCounts = requests.reduce(
+    (acc, req) => {
+      acc[req.bodyPart] = (acc[req.bodyPart] || 0) + 1;
+      return acc;
+    },
+    {} as Record<string, number>,
+  );
 
   const topBodyParts: BodyPartStats[] = Object.entries(bodyPartCounts)
     .map(([bodyPart, count]) => ({ bodyPart, count }))
@@ -195,32 +250,57 @@ export default function RadiologyDashboardPage() {
 
   // Recent Activity (last 10 requests)
   const recentActivity = [...requests]
-    .sort((a, b) => new Date(b.requestDate).getTime() - new Date(a.requestDate).getTime())
+    .sort(
+      (a, b) =>
+        new Date(b.requestDate).getTime() - new Date(a.requestDate).getTime(),
+    )
     .slice(0, 10);
 
   const getStatusBadge = (status: string) => {
-    const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
+    const statusConfig: Record<
+      string,
+      {
+        label: string;
+        variant: "default" | "secondary" | "destructive" | "outline";
+      }
+    > = {
       scheduled: { label: "Scheduled", variant: "secondary" },
       "in-progress": { label: "In Progress", variant: "default" },
       completed: { label: "Completed", variant: "outline" },
       cancelled: { label: "Cancelled", variant: "destructive" },
     };
-    const config = statusConfig[status] || { label: status, variant: "secondary" };
+    const config = statusConfig[status] || {
+      label: status,
+      variant: "secondary",
+    };
     return <Badge variant={config.variant}>{config.label}</Badge>;
   };
 
   const getPriorityBadge = (priority: string) => {
-    const priorityConfig: Record<string, { label: string; className: string }> = {
-      routine: { label: "Routine", className: "bg-blue-100 text-blue-800 hover:bg-blue-200" },
-      urgent: { label: "Urgent", className: "bg-orange-100 text-orange-800 hover:bg-orange-200" },
-      emergency: { label: "Emergency", className: "bg-red-100 text-red-800 hover:bg-red-200" },
+    const priorityConfig: Record<string, { label: string; className: string }> =
+      {
+        routine: {
+          label: "Routine",
+          className: "bg-blue-100 text-blue-800 hover:bg-blue-200",
+        },
+        urgent: {
+          label: "Urgent",
+          className: "bg-orange-100 text-orange-800 hover:bg-orange-200",
+        },
+        emergency: {
+          label: "Emergency",
+          className: "bg-red-100 text-red-800 hover:bg-red-200",
+        },
+      };
+    const config = priorityConfig[priority] || {
+      label: priority,
+      className: "bg-gray-100 text-gray-800",
     };
-    const config = priorityConfig[priority] || { label: priority, className: "bg-gray-100 text-gray-800" };
     return <Badge className={config.className}>{config.label}</Badge>;
   };
 
   const handleViewRequest = (requestId: string) => {
-    router.push(`/services/imaging/radiologist?request=${requestId}`);
+    router.push(`/radiology/records/${requestId}`);
   };
 
   return (
@@ -229,13 +309,17 @@ export default function RadiologyDashboardPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Radiology Dashboard</h1>
+            <h1 className="text-3xl font-bold tracking-tight">
+              Radiology Dashboard
+            </h1>
             <p className="text-muted-foreground">
               Comprehensive overview of the radiology department
             </p>
           </div>
           <Button onClick={fetchRequests} disabled={loading} variant="outline">
-            <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+            <RefreshCw
+              className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`}
+            />
             Refresh
           </Button>
         </div>
@@ -244,7 +328,9 @@ export default function RadiologyDashboardPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Requests</CardTitle>
+              <CardTitle className="text-sm font-medium">
+                Total Requests
+              </CardTitle>
               <FileText className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
@@ -260,7 +346,9 @@ export default function RadiologyDashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{pendingRequests}</div>
-              <p className="text-xs text-muted-foreground">Scheduled requests</p>
+              <p className="text-xs text-muted-foreground">
+                Scheduled requests
+              </p>
             </CardContent>
           </Card>
 
@@ -292,7 +380,9 @@ export default function RadiologyDashboardPage() {
               <DollarSign className="h-4 w-4 text-emerald-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">${totalRevenue.toLocaleString()}</div>
+              <div className="text-2xl font-bold">
+                ${totalRevenue.toLocaleString()}
+              </div>
               <p className="text-xs text-muted-foreground">Total paid</p>
             </CardContent>
           </Card>
@@ -303,7 +393,9 @@ export default function RadiologyDashboardPage() {
               <TrendingUp className="h-4 w-4 text-purple-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{avgCompletionTime.toFixed(1)}h</div>
+              <div className="text-2xl font-bold">
+                {avgCompletionTime.toFixed(1)}h
+              </div>
               <p className="text-xs text-muted-foreground">Completion time</p>
             </CardContent>
           </Card>
@@ -325,7 +417,9 @@ export default function RadiologyDashboardPage() {
                 {serviceTypeStats.map((stat) => (
                   <div key={stat.type} className="space-y-2">
                     <div className="flex items-center justify-between text-sm">
-                      <span className="font-medium capitalize">{stat.type}</span>
+                      <span className="font-medium capitalize">
+                        {stat.type}
+                      </span>
                       <span className="text-muted-foreground">
                         {stat.count} ({stat.percentage.toFixed(1)}%)
                       </span>
@@ -339,7 +433,9 @@ export default function RadiologyDashboardPage() {
                   </div>
                 ))}
                 {serviceTypeStats.length === 0 && (
-                  <p className="text-sm text-muted-foreground text-center py-4">No data available</p>
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    No data available
+                  </p>
                 )}
               </div>
             </CardContent>
@@ -357,16 +453,23 @@ export default function RadiologyDashboardPage() {
             <CardContent>
               <div className="space-y-4">
                 {priorityStats.map((stat) => (
-                  <div key={stat.priority} className="flex items-center justify-between">
+                  <div
+                    key={stat.priority}
+                    className="flex items-center justify-between"
+                  >
                     <div className="flex items-center gap-3">
                       <div className={`w-3 h-3 rounded-full ${stat.color}`} />
-                      <span className="font-medium capitalize">{stat.priority}</span>
+                      <span className="font-medium capitalize">
+                        {stat.priority}
+                      </span>
                     </div>
                     <Badge variant="secondary">{stat.count}</Badge>
                   </div>
                 ))}
-                {priorityStats.every(s => s.count === 0) && (
-                  <p className="text-sm text-muted-foreground text-center py-4">No data available</p>
+                {priorityStats.every((s) => s.count === 0) && (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    No data available
+                  </p>
                 )}
               </div>
             </CardContent>
@@ -385,23 +488,33 @@ export default function RadiologyDashboardPage() {
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
               <div className="space-y-2">
-                <p className="text-sm font-medium text-muted-foreground">Today</p>
+                <p className="text-sm font-medium text-muted-foreground">
+                  Today
+                </p>
                 <p className="text-3xl font-bold">{todayRequests}</p>
                 <p className="text-xs text-muted-foreground">requests</p>
               </div>
               <div className="space-y-2">
-                <p className="text-sm font-medium text-muted-foreground">This Week</p>
+                <p className="text-sm font-medium text-muted-foreground">
+                  This Week
+                </p>
                 <p className="text-3xl font-bold">{weekRequests}</p>
                 <p className="text-xs text-muted-foreground">requests</p>
               </div>
               <div className="space-y-2">
-                <p className="text-sm font-medium text-muted-foreground">This Month</p>
+                <p className="text-sm font-medium text-muted-foreground">
+                  This Month
+                </p>
                 <p className="text-3xl font-bold">{monthRequests}</p>
                 <p className="text-xs text-muted-foreground">requests</p>
               </div>
               <div className="space-y-2">
-                <p className="text-sm font-medium text-muted-foreground">Completion Rate</p>
-                <p className="text-3xl font-bold">{completionRate.toFixed(1)}%</p>
+                <p className="text-sm font-medium text-muted-foreground">
+                  Completion Rate
+                </p>
+                <p className="text-3xl font-bold">
+                  {completionRate.toFixed(1)}%
+                </p>
                 <p className="text-xs text-muted-foreground">
                   {completedReports} of {totalRequests}
                 </p>
@@ -419,23 +532,32 @@ export default function RadiologyDashboardPage() {
                 <Users className="h-5 w-5" />
                 Top Body Parts
               </CardTitle>
-              <CardDescription>Most frequently requested imaging areas</CardDescription>
+              <CardDescription>
+                Most frequently requested imaging areas
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
                 {topBodyParts.map((item, index) => (
-                  <div key={item.bodyPart} className="flex items-center justify-between">
+                  <div
+                    key={item.bodyPart}
+                    className="flex items-center justify-between"
+                  >
                     <div className="flex items-center gap-3">
                       <div className="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-bold">
                         {index + 1}
                       </div>
-                      <span className="font-medium capitalize">{item.bodyPart}</span>
+                      <span className="font-medium capitalize">
+                        {item.bodyPart}
+                      </span>
                     </div>
                     <Badge variant="outline">{item.count}</Badge>
                   </div>
                 ))}
                 {topBodyParts.length === 0 && (
-                  <p className="text-sm text-muted-foreground text-center py-4">No data available</p>
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    No data available
+                  </p>
                 )}
               </div>
             </CardContent>
@@ -517,7 +639,9 @@ export default function RadiologyDashboardPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      <p className="font-medium truncate">{request.patient.name}</p>
+                      <p className="font-medium truncate">
+                        {request.patient.name}
+                      </p>
                       {getPriorityBadge(request.priority)}
                     </div>
                     <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
@@ -525,12 +649,17 @@ export default function RadiologyDashboardPage() {
                       <span>•</span>
                       <span className="capitalize">{request.bodyPart}</span>
                       <span>•</span>
-                      <span>{new Date(request.requestDate).toLocaleDateString()}</span>
+                      <span>
+                        {new Date(request.requestDate).toLocaleDateString()}
+                      </span>
                     </div>
                     <div className="flex items-center gap-2">
                       {getStatusBadge(request.status)}
                       {request.reportStatus === "completed" && (
-                        <Badge variant="outline" className="text-green-600 border-green-600">
+                        <Badge
+                          variant="outline"
+                          className="text-green-600 border-green-600"
+                        >
                           Report Ready
                         </Badge>
                       )}

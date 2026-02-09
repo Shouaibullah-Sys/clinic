@@ -763,34 +763,6 @@ export default function AppointmentDetailPage() {
     `);
   };
 
-  // Copy prescription to clipboard
-  const handleCopyToDispensary = (prescription: Prescription) => {
-    const medsText = prescription.medications
-      .map(
-        (med) =>
-          `${med.name} - ${med.dosage} - ${med.frequency} - ${med.duration} - Qty: ${med.quantity}`,
-      )
-      .join("\n");
-
-    const fullText = `
-      Prescription #: ${prescription.prescriptionId}
-      Patient: ${prescription.patient.name} (${prescription.patient.patientId})
-      Doctor: Dr. ${prescription.doctor.name}
-      Date: ${format(parseISO(prescription.prescribedDate), "yyyy-MM-dd")}
-      Diagnosis: ${prescription.diagnosis}
-      
-      Medications:
-      ${medsText}
-      
-      Instructions: ${prescription.instructions}
-    `;
-
-    navigator.clipboard
-      .writeText(fullText)
-      .then(() => toast.success("Copied to clipboard for dispensary"))
-      .catch(() => toast.error("Failed to copy to clipboard"));
-  };
-
   // Print prescription receipt
   const handlePrintPrescriptionReceipt = (prescription: Prescription) => {
     const medsText = prescription.medications
@@ -1624,16 +1596,6 @@ export default function AppointmentDetailPage() {
                               >
                                 <Receipt className="h-3 w-3 mr-1" />
                                 Receipt
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() =>
-                                  handleCopyToDispensary(prescription)
-                                }
-                              >
-                                <Copy className="h-3 w-3 mr-1" />
-                                Copy
                               </Button>
                             </div>
                           </TableCell>

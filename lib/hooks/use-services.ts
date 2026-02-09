@@ -18,7 +18,12 @@ export const useServiceList = <T>(serviceType: string, filters = {}) => {
       const response = await apiRequest(`/services/${serviceType}`, {
         params: filters,
       });
-      return response.data as { records: T[]; total: number; page: number; totalPages: number };
+      return response.data as {
+        records: T[];
+        total: number;
+        page: number;
+        totalPages: number;
+      };
     },
   });
 };
@@ -36,7 +41,7 @@ export const useServiceDetail = <T>(serviceType: string, id: string) => {
 
 export const useCreateService = <T>(serviceType: string) => {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
     mutationFn: async (data: Partial<T>) => {
       const response = await apiRequest(`/services/${serviceType}`, {
@@ -53,7 +58,7 @@ export const useCreateService = <T>(serviceType: string) => {
 
 export const useUpdateService = <T>(serviceType: string) => {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<T> }) => {
       const response = await apiRequest(`/services/${serviceType}/${id}`, {
@@ -71,7 +76,7 @@ export const useUpdateService = <T>(serviceType: string) => {
 
 export const useDeleteService = (serviceType: string) => {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
     mutationFn: async (id: string) => {
       await apiRequest(`/services/${serviceType}/${id}`, {
@@ -85,19 +90,100 @@ export const useDeleteService = (serviceType: string) => {
 };
 
 // Service-specific hooks
-export const useImagingRecords = (filters = {}) => 
+export const useImagingRecords = (filters = {}) =>
   useServiceList<any>("imaging", filters);
 
-export const useEmergencyCases = (filters = {}) => 
+export const useEmergencyCases = (filters = {}) =>
   useServiceList<any>("emergency", filters);
 
-export const useLaboratoryTests = (filters = {}) => 
+export const useLaboratoryTests = (filters = {}) =>
   useServiceList<any>("laboratory", filters);
 
-export const usePrescriptions = (filters = {}) => 
+export const useRadiologyTemplates = (filters = {}) => {
+  return useQuery({
+    queryKey: ["radiology-templates", "list", filters],
+    queryFn: async () => {
+      const response = await apiRequest("/radiology/templates", {
+        params: filters,
+      });
+      return response.data as { data: any[]; count: number };
+    },
+  });
+};
+
+export const useRadiologyTemplate = (id: string) => {
+  return useQuery({
+    queryKey: ["radiology-templates", "detail", id],
+    queryFn: async () => {
+      const response = await apiRequest(`/radiology/templates/${id}`);
+      return response.data as any;
+    },
+    enabled: !!id,
+  });
+};
+
+export const useCreateRadiologyTemplate = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (data: Partial<any>) => {
+      const response = await apiRequest("/radiology/templates", {
+        method: "POST",
+        data,
+      });
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["radiology-templates", "list"],
+      });
+    },
+  });
+};
+
+export const useUpdateRadiologyTemplate = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Partial<any> }) => {
+      const response = await apiRequest(`/radiology/templates/${id}`, {
+        method: "PUT",
+        data,
+      });
+      return response.data;
+    },
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({
+        queryKey: ["radiology-templates", "list"],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["radiology-templates", "detail", id],
+      });
+    },
+  });
+};
+
+export const useDeleteRadiologyTemplate = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest(`/radiology/templates/${id}`, {
+        method: "DELETE",
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["radiology-templates", "list"],
+      });
+    },
+  });
+};
+
+export const usePrescriptions = (filters = {}) =>
   useServiceList<any>("pharmacy", filters);
 
-export const useDentalRecords = (filters = {}) => 
+export const useDentalRecords = (filters = {}) =>
   useServiceList<any>("dental", filters);
 
 export const useECGRecords = (filters = {}) =>

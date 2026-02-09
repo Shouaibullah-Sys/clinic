@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
   if (!process.env.JWT_SECRET) {
     return NextResponse.json(
       { error: "Server configuration error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 
@@ -81,6 +81,14 @@ export async function GET(req: NextRequest) {
       performedDate: record.performedDate?.toISOString(),
       reportStatus: record.reportStatus,
       billingStatus: record.billingStatus,
+      paymentStatus: record.charges?.paymentStatus || "pending",
+      paymentVerified: record.paymentVerified || false,
+      charges: {
+        totalAmount: record.charges?.totalAmount || 0,
+        paid: record.charges?.paid || 0,
+        due: record.charges?.due || 0,
+        paymentStatus: record.charges?.paymentStatus || "pending",
+      },
       referringDoctor: record.referringDoctor?.name,
       radiologist: record.radiologist?.name,
       technician: record.technician?.name,
@@ -103,7 +111,7 @@ export async function GET(req: NextRequest) {
     console.error("Error fetching imaging records:", error);
     return NextResponse.json(
       { error: "Internal server error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -112,7 +120,7 @@ export async function POST(req: NextRequest) {
   if (!process.env.JWT_SECRET) {
     return NextResponse.json(
       { error: "Server configuration error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 
@@ -139,30 +147,35 @@ export async function POST(req: NextRequest) {
     if (!body.patientId || !body.imagingType || !body.bodyPart) {
       return NextResponse.json(
         { error: "Missing required fields: patientId, imagingType, bodyPart" },
-        { status: 400 }
+        { status: 400 },
+      );
+    }
+
+    // Validate basePrice
+    if (!body.basePrice || isNaN(body.basePrice) || body.basePrice <= 0) {
+      return NextResponse.json(
+        { error: "Valid basePrice is required" },
+        { status: 400 },
       );
     }
 
     // Find patient
     const patient = await Patient.findById(body.patientId);
     if (!patient) {
-      return NextResponse.json(
-        { error: "Patient not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Patient not found" }, { status: 404 });
     }
 
     // Find referring doctor (current user)
     const referringDoctor = await User.findById(decoded.userId);
     if (!referringDoctor) {
-      return NextResponse.json(
-        { error: "User not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
     // Map imaging type to service type
-    const serviceTypeMap: Record<string, "x-ray" | "ct-scan" | "mri" | "ultrasound"> = {
+    const serviceTypeMap: Record<
+      string,
+      "x-ray" | "ct-scan" | "mri" | "ultrasound"
+    > = {
       xray: "x-ray",
       ct_scan: "ct-scan",
       mri: "mri",
@@ -187,6 +200,16 @@ export async function POST(req: NextRequest) {
       reportStatus: "pending",
       billingStatus: "pending",
       notes: body.clinicalIndication,
+      charges: {
+        basePrice: body.basePrice,
+        tax: 0,
+        discount: 0,
+        otherCharges: 0,
+        totalAmount: body.basePrice,
+        paid: 0,
+        due: body.basePrice,
+        paymentStatus: "pending",
+      },
     });
 
     await imagingRecord.save();
@@ -197,16 +220,19 @@ export async function POST(req: NextRequest) {
       { path: "referringDoctor", select: "name" },
     ]);
 
-    return NextResponse.json({
-      success: true,
-      data: imagingRecord,
-      message: "Imaging record created successfully",
-    }, { status: 201 });
+    return NextResponse.json(
+      {
+        success: true,
+        data: imagingRecord,
+        message: "Imaging record created successfully",
+      },
+      { status: 201 },
+    );
   } catch (error: any) {
     console.error("Error creating imaging record:", error);
     return NextResponse.json(
       { error: error.message || "Internal server error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
