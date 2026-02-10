@@ -45,6 +45,8 @@ import {
   Stethoscope,
   PersonStandingIcon,
   Activity,
+  FileTextIcon,
+  BriefcaseMedical,
 } from "lucide-react";
 import { format, parseISO, differenceInYears } from "date-fns";
 import { LabTestOrderDialog } from "@/components/doctor/LabTestOrderDialog";
@@ -52,6 +54,8 @@ import { MedicalRecordDialog } from "@/components/doctor/MedicalRecordDialog";
 import { PrescriptionDialog } from "@/components/doctor/PrescriptionDialog";
 import { ImagingOrderDialog } from "@/components/doctor/ImagingOrderDialog";
 import { ImagingResultsDialog } from "@/components/doctor/ImagingResultsDialog";
+import { DischargeCardDialog } from "@/components/doctor/DischargeCardDialog";
+import { DischargeCardPrintButton } from "@/components/doctor/DischargeCardPrintButton";
 
 interface Patient {
   _id: string;
@@ -155,6 +159,38 @@ interface ImagingStudy {
   };
 }
 
+interface DischargeCard {
+  _id: string;
+  dischargeId: string;
+  operationName: string;
+  operationCost: number;
+  operationDate: string;
+  operationType: string;
+  diagnosis: string;
+  admissionDate: string;
+  dischargeDate: string;
+  totalDays: number;
+  preOpMedicines: any[];
+  postOpMedicines: any[];
+  dischargeMedicines: any[];
+  otherRequirements: any[];
+  billing: {
+    subtotal: number;
+    totalAmount: number;
+    paidAmount: number;
+    balance: number;
+    paymentStatus: string;
+  };
+  status: string;
+  dischargeInstructions: string;
+  followUpDate?: string;
+  doctor: {
+    name: string;
+    specialization: string;
+  };
+  createdAt: string;
+}
+
 export default function DoctorPatientDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -166,6 +202,7 @@ export default function DoctorPatientDetailPage() {
   const [labTests, setLabTests] = useState<LabTest[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [imagingStudies, setImagingStudies] = useState<ImagingStudy[]>([]);
+  const [dischargeCards, setDischargeCards] = useState<DischargeCard[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
 
@@ -298,6 +335,24 @@ export default function DoctorPatientDetailPage() {
           setImagingStudies(imagingData.data);
         }
       }
+
+      // Fetch discharge cards
+      const dischargeRes = await fetch(
+        `/api/doctor/patients/${patientId}/discharge-cards`,
+        {
+          headers: {
+            "Content-Type": "application/json",
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
+        },
+      );
+
+      if (dischargeRes.ok) {
+        const dischargeData = await dischargeRes.json();
+        if (dischargeData.success) {
+          setDischargeCards(dischargeData.data);
+        }
+      }
     } catch (error) {
       console.error("Error fetching patient data:", error);
       setError("Failed to load patient information");
@@ -395,6 +450,29 @@ export default function DoctorPatientDetailPage() {
       }
     } catch (error) {
       console.error("Error refetching imaging studies:", error);
+    }
+  };
+
+  const handleDischargeCardCreated = async () => {
+    try {
+      const dischargeRes = await fetch(
+        `/api/doctor/patients/${patientId}/discharge-cards`,
+        {
+          headers: {
+            "Content-Type": "application/json",
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
+        },
+      );
+
+      if (dischargeRes.ok) {
+        const dischargeData = await dischargeRes.json();
+        if (dischargeData.success) {
+          setDischargeCards(dischargeData.data);
+        }
+      }
+    } catch (error) {
+      console.error("Error refetching discharge cards:", error);
     }
   };
 
@@ -629,12 +707,16 @@ export default function DoctorPatientDetailPage() {
         onValueChange={setActiveTab}
         className="space-y-6"
       >
-        <TabsList className="grid grid-cols-6 lg:grid-cols-6">
+        <TabsList className="grid grid-cols-7 lg:grid-cols-7">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="medical">Medical Records</TabsTrigger>
           <TabsTrigger value="prescriptions">Prescriptions</TabsTrigger>
           <TabsTrigger value="lab">Lab Tests</TabsTrigger>
           <TabsTrigger value="imaging">Imaging</TabsTrigger>
+          <TabsTrigger value="discharge">
+            <BriefcaseMedical className="h-4 w-4 mr-2" />
+            Discharge Card
+          </TabsTrigger>
           <TabsTrigger value="appointments">Appointments</TabsTrigger>
         </TabsList>
 
@@ -793,7 +875,7 @@ export default function DoctorPatientDetailPage() {
               <CardTitle>Quick Actions</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
                 <MedicalRecordDialog
                   patientId={patientId}
                   patientName={patient?.name || "Patient"}
@@ -847,6 +929,20 @@ export default function DoctorPatientDetailPage() {
                     >
                       <Activity className="h-5 w-5" />
                       <span>Imaging Order</span>
+                    </Button>
+                  }
+                />
+                <DischargeCardDialog
+                  patientId={patientId}
+                  patientName={patient?.name || "Patient"}
+                  onDischargeCardCreated={handleDischargeCardCreated}
+                  trigger={
+                    <Button
+                      variant="outline"
+                      className="h-auto py-4 flex flex-col items-center gap-2"
+                    >
+                      <BriefcaseMedical className="h-5 w-5" />
+                      <span>Discharge Card</span>
                     </Button>
                   }
                 />
@@ -1350,6 +1446,281 @@ export default function DoctorPatientDetailPage() {
                     ))}
                   </TableBody>
                 </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Discharge Card Tab */}
+        <TabsContent value="discharge" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <div className="flex justify-between items-center">
+                <div>
+                  <CardTitle>Discharge Cards</CardTitle>
+                  <CardDescription>
+                    Operation records and discharge summaries for this patient
+                  </CardDescription>
+                </div>
+                <DischargeCardDialog
+                  patientId={patientId}
+                  patientName={patient?.name || "Patient"}
+                  onDischargeCardCreated={handleDischargeCardCreated}
+                  trigger={
+                    <Button>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Create Discharge Card
+                    </Button>
+                  }
+                />
+              </div>
+            </CardHeader>
+            <CardContent>
+              {dischargeCards.length === 0 ? (
+                <div className="text-center py-12">
+                  <FileText className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                  <h3 className="text-lg font-semibold mb-2">
+                    No Discharge Cards
+                  </h3>
+                  <p className="text-gray-500 mb-4">
+                    Create a discharge card for this patient after operation
+                  </p>
+                  <DischargeCardDialog
+                    patientId={patientId}
+                    patientName={patient?.name || "Patient"}
+                    onDischargeCardCreated={handleDischargeCardCreated}
+                    trigger={
+                      <Button>
+                        <Plus className="h-4 w-4 mr-2" />
+                        Create First Discharge Card
+                      </Button>
+                    }
+                  />
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {dischargeCards.map((card) => (
+                    <Card key={card._id}>
+                      <CardContent className="pt-6">
+                        <div className="flex justify-between items-start mb-4">
+                          <div>
+                            <h3 className="font-semibold text-lg">
+                              {card.operationName}
+                            </h3>
+                            <p className="text-sm text-muted-foreground">
+                              {card.dischargeId} •{" "}
+                              {formatDate(card.operationDate)}
+                            </p>
+                          </div>
+                          <div className="flex gap-2">
+                            <Badge
+                              variant={
+                                card.status === "paid"
+                                  ? "default"
+                                  : card.status === "pending_billing"
+                                    ? "secondary"
+                                    : "outline"
+                              }
+                            >
+                              {card.status.replace("_", " ")}
+                            </Badge>
+                            <DischargeCardDialog
+                              patientId={patientId}
+                              patientName={patient?.name || "Patient"}
+                              cardId={card._id}
+                              onDischargeCardCreated={
+                                handleDischargeCardCreated
+                              }
+                              trigger={
+                                <Button variant="outline" size="sm">
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                              }
+                            />
+                            <DischargeCardPrintButton
+                              card={{
+                                ...card,
+                                patient: {
+                                  name: patient.name,
+                                  patientId: patient.patientId,
+                                  phone: patient.phone,
+                                  age: Number(
+                                    calculateAge(patient.dateOfBirth),
+                                  ),
+                                  gender: patient.gender,
+                                  dateOfBirth: patient.dateOfBirth,
+                                },
+                              }}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                          <div>
+                            <p className="text-sm text-muted-foreground">
+                              Diagnosis
+                            </p>
+                            <p className="font-medium">{card.diagnosis}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-muted-foreground">
+                              Admission Date
+                            </p>
+                            <p className="font-medium">
+                              {formatDate(card.admissionDate)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-muted-foreground">
+                              Discharge Date
+                            </p>
+                            <p className="font-medium">
+                              {formatDate(card.dischargeDate)}
+                            </p>
+                          </div>
+                        </div>
+
+                        <Separator className="my-4" />
+
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                          <div>
+                            <p className="text-sm text-muted-foreground">
+                              Operation Cost
+                            </p>
+                            <p className="font-medium text-lg">
+                              ${card.operationCost.toFixed(2)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-muted-foreground">
+                              Medicines Cost
+                            </p>
+                            <p className="font-medium text-lg">
+                              $
+                              {(
+                                card.preOpMedicines.reduce(
+                                  (sum, m) => sum + (m.totalPrice || 0),
+                                  0,
+                                ) +
+                                card.postOpMedicines.reduce(
+                                  (sum, m) => sum + (m.totalPrice || 0),
+                                  0,
+                                ) +
+                                card.dischargeMedicines.reduce(
+                                  (sum, m) => sum + (m.totalPrice || 0),
+                                  0,
+                                )
+                              ).toFixed(2)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-muted-foreground">
+                              Other Requirements
+                            </p>
+                            <p className="font-medium text-lg">
+                              $
+                              {card.otherRequirements
+                                .reduce(
+                                  (sum, r) => sum + (r.totalPrice || 0),
+                                  0,
+                                )
+                                .toFixed(2)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-muted-foreground">
+                              Total Amount
+                            </p>
+                            <p className="font-medium text-lg text-green-600">
+                              ${card.billing.totalAmount.toFixed(2)}
+                            </p>
+                          </div>
+                        </div>
+
+                        {(card.preOpMedicines.length > 0 ||
+                          card.postOpMedicines.length > 0 ||
+                          card.dischargeMedicines.length > 0) && (
+                          <>
+                            <Separator className="my-4" />
+                            <div className="space-y-3">
+                              {card.preOpMedicines.length > 0 && (
+                                <div>
+                                  <p className="text-sm font-medium mb-1">
+                                    Pre-Operation Medicines:
+                                  </p>
+                                  <div className="flex flex-wrap gap-1">
+                                    {card.preOpMedicines.map((med, idx) => (
+                                      <Badge key={idx} variant="outline">
+                                        {med.name} ({med.quantity}x)
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                              {card.postOpMedicines.length > 0 && (
+                                <div>
+                                  <p className="text-sm font-medium mb-1">
+                                    Post-Operation Medicines:
+                                  </p>
+                                  <div className="flex flex-wrap gap-1">
+                                    {card.postOpMedicines.map((med, idx) => (
+                                      <Badge key={idx} variant="outline">
+                                        {med.name} ({med.quantity}x)
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                              {card.dischargeMedicines.length > 0 && (
+                                <div>
+                                  <p className="text-sm font-medium mb-1">
+                                    Discharge Medicines:
+                                  </p>
+                                  <div className="flex flex-wrap gap-1">
+                                    {card.dischargeMedicines.map((med, idx) => (
+                                      <Badge key={idx} variant="outline">
+                                        {med.name} ({med.quantity}x)
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </>
+                        )}
+
+                        {card.dischargeInstructions && (
+                          <>
+                            <Separator className="my-4" />
+                            <div>
+                              <p className="text-sm font-medium mb-1">
+                                Discharge Instructions:
+                              </p>
+                              <p className="text-sm text-muted-foreground">
+                                {card.dischargeInstructions}
+                              </p>
+                            </div>
+                          </>
+                        )}
+
+                        <div className="mt-4 pt-4 border-t flex justify-between items-center">
+                          <div className="text-sm text-muted-foreground">
+                            Created by: {card.doctor.name} •{" "}
+                            {formatDateTime(card.createdAt)}
+                          </div>
+                          {card.billing.paymentStatus !== "paid" && (
+                            <Badge variant="warning">
+                              Awaiting Payment at Reception
+                            </Badge>
+                          )}
+                          {card.billing.paymentStatus === "paid" && (
+                            <Badge variant="default">Payment Completed</Badge>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
               )}
             </CardContent>
           </Card>

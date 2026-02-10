@@ -6,7 +6,13 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/useAuthStore";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -73,7 +79,7 @@ interface DiscountRequest {
 // Helper function to safely format category
 const formatCategory = (category: string | undefined): string => {
   if (!category) return "Unknown";
-  return category.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase());
+  return category.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
 };
 
 export default function AdminDiscountsPage() {
@@ -83,31 +89,34 @@ export default function AdminDiscountsPage() {
   const [updating, setUpdating] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("pending");
-  const [discountRequests, setDiscountRequests] = useState<DiscountRequest[]>([]);
-  const [selectedRequest, setSelectedRequest] = useState<DiscountRequest | null>(null);
+  const [discountRequests, setDiscountRequests] = useState<DiscountRequest[]>(
+    [],
+  );
+  const [selectedRequest, setSelectedRequest] =
+    useState<DiscountRequest | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  
+
   // Dialog states
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [approveDialogOpen, setApproveDialogOpen] = useState(false);
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [reviewNotes, setReviewNotes] = useState("");
   const [approvedAmount, setApprovedAmount] = useState("");
-  
+
   // Check if user is admin
   useEffect(() => {
     if (user && user.role !== "admin") {
       router.push("/unauthorized");
     }
   }, [user, router]);
-  
+
   // Fetch discount requests
   const fetchDiscountRequests = async () => {
     try {
       setLoading(true);
       setError(null);
-      
+
       const response = await fetch(
         `/api/dashboard/reception/discounts?status=${statusFilter}&limit=50`,
         {
@@ -115,19 +124,24 @@ export default function AdminDiscountsPage() {
             "Content-Type": "application/json",
             ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
           },
-        }
+        },
       );
-      
+
       const data = await response.json();
-      
+
       if (data.success && data.data) {
         // Validate and transform the data
         const validatedRequests = data.data.map((request: any) => ({
           id: request.id || request._id || "",
-          discountId: request.discountId || `DIS-${Math.random().toString(36).substr(2, 9)}`,
+          discountId:
+            request.discountId ||
+            `DIS-${Math.random().toString(36).substr(2, 9)}`,
           patientName: request.patientName || "Unknown Patient",
           patientId: request.patientId || request.patient?._id || "N/A",
-          requestedAmount: typeof request.requestedAmount === 'number' ? request.requestedAmount : 0,
+          requestedAmount:
+            typeof request.requestedAmount === "number"
+              ? request.requestedAmount
+              : 0,
           originalAmount: request.originalAmount,
           discountPercentage: request.discountPercentage,
           reason: request.reason || "No reason provided",
@@ -141,7 +155,7 @@ export default function AdminDiscountsPage() {
           approvedBy: request.approvedBy,
           approvedAt: request.approvedAt,
         }));
-        
+
         setDiscountRequests(validatedRequests);
       } else {
         setError(data.error || "Failed to fetch discount requests");
@@ -149,42 +163,47 @@ export default function AdminDiscountsPage() {
       }
     } catch (error) {
       console.error("Error fetching discount requests:", error);
-      setError("Failed to fetch discount requests. Please check your connection.");
+      setError(
+        "Failed to fetch discount requests. Please check your connection.",
+      );
       setDiscountRequests([]);
     } finally {
       setLoading(false);
     }
   };
-  
+
   useEffect(() => {
     if (user?.role === "admin" && accessToken) {
       fetchDiscountRequests();
     }
   }, [user, accessToken, statusFilter]);
-  
+
   // Handle approve action
   const handleApprove = async () => {
     if (!selectedRequest) return;
-    
+
     try {
       setUpdating(selectedRequest.id);
       setError(null);
-      
-      const response = await fetch(`/api/dashboard/admin/discounts/${selectedRequest.id}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+
+      const response = await fetch(
+        `/api/dashboard/admin/discounts/${selectedRequest.id}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
+          body: JSON.stringify({
+            action: "approve",
+            approvedAmount: approvedAmount || selectedRequest.requestedAmount,
+            notes: reviewNotes,
+          }),
         },
-        body: JSON.stringify({
-          action: "approve",
-          approvedAmount: approvedAmount || selectedRequest.requestedAmount,
-          notes: reviewNotes,
-        }),
-      });
-      
+      );
+
       const data = await response.json();
-      
+
       if (data.success) {
         setSuccess("Discount request approved successfully!");
         fetchDiscountRequests();
@@ -202,29 +221,32 @@ export default function AdminDiscountsPage() {
       setUpdating(null);
     }
   };
-  
+
   // Handle reject action
   const handleReject = async () => {
     if (!selectedRequest) return;
-    
+
     try {
       setUpdating(selectedRequest.id);
       setError(null);
-      
-      const response = await fetch(`/api/dashboard/admin/discounts/${selectedRequest.id}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+
+      const response = await fetch(
+        `/api/dashboard/admin/discounts/${selectedRequest.id}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
+          body: JSON.stringify({
+            action: "reject",
+            notes: reviewNotes,
+          }),
         },
-        body: JSON.stringify({
-          action: "reject",
-          notes: reviewNotes,
-        }),
-      });
-      
+      );
+
       const data = await response.json();
-      
+
       if (data.success) {
         setSuccess("Discount request rejected successfully!");
         fetchDiscountRequests();
@@ -241,11 +263,11 @@ export default function AdminDiscountsPage() {
       setUpdating(null);
     }
   };
-  
+
   // Filter requests based on search
-  const filteredRequests = discountRequests.filter(request => {
+  const filteredRequests = discountRequests.filter((request) => {
     if (!searchQuery) return true;
-    
+
     const searchLower = searchQuery.toLowerCase();
     return (
       request.patientName.toLowerCase().includes(searchLower) ||
@@ -254,25 +276,60 @@ export default function AdminDiscountsPage() {
       request.requestedBy.toLowerCase().includes(searchLower)
     );
   });
-  
+
   // Get status badge color
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "pending":
-        return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">Pending</Badge>;
+        return (
+          <Badge
+            variant="outline"
+            className="bg-yellow-50 text-yellow-700 border-yellow-200"
+          >
+            Pending
+          </Badge>
+        );
       case "approved":
-        return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Approved</Badge>;
+        return (
+          <Badge
+            variant="outline"
+            className="bg-green-50 text-green-700 border-green-200"
+          >
+            Approved
+          </Badge>
+        );
       case "rejected":
-        return <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">Rejected</Badge>;
+        return (
+          <Badge
+            variant="outline"
+            className="bg-red-50 text-red-700 border-red-200"
+          >
+            Rejected
+          </Badge>
+        );
       case "cancelled":
-        return <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-200">Cancelled</Badge>;
+        return (
+          <Badge
+            variant="outline"
+            className="bg-gray-50 text-gray-700 border-gray-200"
+          >
+            Cancelled
+          </Badge>
+        );
       case "expired":
-        return <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">Expired</Badge>;
+        return (
+          <Badge
+            variant="outline"
+            className="bg-orange-50 text-orange-700 border-orange-200"
+          >
+            Expired
+          </Badge>
+        );
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
   };
-  
+
   // Format date
   const formatDate = (dateString: string) => {
     try {
@@ -287,10 +344,10 @@ export default function AdminDiscountsPage() {
       return "Invalid date";
     }
   };
-  
+
   // Format currency
   const formatCurrency = (amount: number | undefined) => {
-    if (typeof amount !== 'number' || isNaN(amount)) {
+    if (typeof amount !== "number" || isNaN(amount)) {
       return "$0.00";
     }
     return new Intl.NumberFormat("en-US", {
@@ -298,40 +355,36 @@ export default function AdminDiscountsPage() {
       currency: "USD",
     }).format(amount);
   };
-  
+
   // Debug: Log the current requests
   useEffect(() => {
     if (discountRequests.length > 0) {
       console.log("Current discount requests:", discountRequests);
     }
   }, [discountRequests]);
-  
+
   if (!user || user.role !== "admin") {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">
           <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
           <h2 className="text-xl font-semibold mb-2">Unauthorized Access</h2>
-          <p className="text-gray-600">You don't have permission to access this page.</p>
+          <p className="text-gray-600">
+            You don't have permission to access this page.
+          </p>
         </div>
       </div>
     );
   }
-  
+
   return (
     <div className="container mx-auto p-4 md:p-6">
       <div className="mb-6">
-        <Button
-          variant="ghost"
-          onClick={() => router.push("/admin/dashboard")}
-          className="mb-4"
-        >
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to Dashboard
-        </Button>
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold">Discount Requests Management</h1>
+            <h1 className="text-2xl md:text-3xl font-bold">
+              Discount Requests Management
+            </h1>
             <p className="text-gray-500 mt-2">
               Review and approve/reject discount requests from patients
             </p>
@@ -341,12 +394,14 @@ export default function AdminDiscountsPage() {
             variant="outline"
             disabled={loading}
           >
-            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+            <RefreshCw
+              className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`}
+            />
             Refresh
           </Button>
         </div>
       </div>
-      
+
       {/* Alerts */}
       {error && (
         <Alert variant="destructive" className="mb-6">
@@ -354,14 +409,14 @@ export default function AdminDiscountsPage() {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      
+
       {success && (
         <Alert className="mb-6 bg-green-50 text-green-800 border-green-200">
           <CheckCircle className="h-4 w-4 text-green-600" />
           <AlertDescription>{success}</AlertDescription>
         </Alert>
       )}
-      
+
       {/* Filters */}
       <Card className="mb-6">
         <CardContent className="pt-6">
@@ -379,7 +434,7 @@ export default function AdminDiscountsPage() {
                 />
               </div>
             </div>
-            
+
             <div className="space-y-2">
               <Label htmlFor="status">Status Filter</Label>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -396,7 +451,7 @@ export default function AdminDiscountsPage() {
                 </SelectContent>
               </Select>
             </div>
-            
+
             <div className="space-y-2">
               <Label>Total Requests</Label>
               <div className="text-2xl font-bold text-gray-900">
@@ -406,13 +461,14 @@ export default function AdminDiscountsPage() {
           </div>
         </CardContent>
       </Card>
-      
+
       {/* Discount Requests Table */}
       <Card>
         <CardHeader>
           <CardTitle>Discount Requests</CardTitle>
           <CardDescription>
-            List of all discount requests. Click on a request to view details and take action.
+            List of all discount requests. Click on a request to view details
+            and take action.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -423,10 +479,12 @@ export default function AdminDiscountsPage() {
           ) : filteredRequests.length === 0 ? (
             <div className="text-center py-12">
               <AlertCircle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold mb-2">No discount requests found</h3>
+              <h3 className="text-lg font-semibold mb-2">
+                No discount requests found
+              </h3>
               <p className="text-gray-500">
-                {searchQuery || statusFilter !== "all" 
-                  ? "Try adjusting your filters or search terms" 
+                {searchQuery || statusFilter !== "all"
+                  ? "Try adjusting your filters or search terms"
                   : "No discount requests have been submitted yet."}
               </p>
             </div>
@@ -454,7 +512,11 @@ export default function AdminDiscountsPage() {
                       <TableCell>
                         <div className="font-medium">{request.patientName}</div>
                         <div className="text-sm text-gray-500">
-                          ID: {typeof request.patientId === 'string' ? request.patientId.slice(0, 8) : "N/A"}...
+                          ID:{" "}
+                          {typeof request.patientId === "string"
+                            ? request.patientId.slice(0, 8)
+                            : "N/A"}
+                          ...
                         </div>
                       </TableCell>
                       <TableCell>
@@ -482,12 +544,17 @@ export default function AdminDiscountsPage() {
                       <TableCell>{getStatusBadge(request.status)}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
-                          <Dialog open={viewDialogOpen && selectedRequest?.id === request.id} 
-                                  onOpenChange={(open) => {
-                                    setViewDialogOpen(open);
-                                    if (open) setSelectedRequest(request);
-                                    else setSelectedRequest(null);
-                                  }}>
+                          <Dialog
+                            open={
+                              viewDialogOpen &&
+                              selectedRequest?.id === request.id
+                            }
+                            onOpenChange={(open) => {
+                              setViewDialogOpen(open);
+                              if (open) setSelectedRequest(request);
+                              else setSelectedRequest(null);
+                            }}
+                          >
                             <DialogTrigger asChild>
                               <Button
                                 size="sm"
@@ -499,9 +566,12 @@ export default function AdminDiscountsPage() {
                             </DialogTrigger>
                             <DialogContent className="max-w-4xl">
                               <DialogHeader>
-                                <DialogTitle>Discount Request Details</DialogTitle>
+                                <DialogTitle>
+                                  Discount Request Details
+                                </DialogTitle>
                                 <DialogDescription>
-                                  Complete details of discount request {request.discountId}
+                                  Complete details of discount request{" "}
+                                  {request.discountId}
                                 </DialogDescription>
                               </DialogHeader>
                               {selectedRequest && (
@@ -516,16 +586,24 @@ export default function AdminDiscountsPage() {
                                     </CardHeader>
                                     <CardContent className="space-y-3">
                                       <div>
-                                        <Label className="text-sm text-gray-500">Patient Name</Label>
-                                        <p className="font-medium">{selectedRequest.patientName}</p>
+                                        <Label className="text-sm text-gray-500">
+                                          Patient Name
+                                        </Label>
+                                        <p className="font-medium">
+                                          {selectedRequest.patientName}
+                                        </p>
                                       </div>
                                       <div>
-                                        <Label className="text-sm text-gray-500">Patient ID</Label>
-                                        <p className="font-mono text-sm">{selectedRequest.patientId}</p>
+                                        <Label className="text-sm text-gray-500">
+                                          Patient ID
+                                        </Label>
+                                        <p className="font-mono text-sm">
+                                          {selectedRequest.patientId}
+                                        </p>
                                       </div>
                                     </CardContent>
                                   </Card>
-                                  
+
                                   {/* Request Details */}
                                   <Card>
                                     <CardHeader>
@@ -536,34 +614,62 @@ export default function AdminDiscountsPage() {
                                     </CardHeader>
                                     <CardContent className="space-y-3">
                                       <div>
-                                        <Label className="text-sm text-gray-500">Requested Amount</Label>
-                                        <p className="font-medium">{formatCurrency(selectedRequest.requestedAmount)}</p>
+                                        <Label className="text-sm text-gray-500">
+                                          Requested Amount
+                                        </Label>
+                                        <p className="font-medium">
+                                          {formatCurrency(
+                                            selectedRequest.requestedAmount,
+                                          )}
+                                        </p>
                                       </div>
                                       {selectedRequest.originalAmount && (
                                         <div>
-                                          <Label className="text-sm text-gray-500">Original Amount</Label>
-                                          <p className="font-medium">{formatCurrency(selectedRequest.originalAmount)}</p>
+                                          <Label className="text-sm text-gray-500">
+                                            Original Amount
+                                          </Label>
+                                          <p className="font-medium">
+                                            {formatCurrency(
+                                              selectedRequest.originalAmount,
+                                            )}
+                                          </p>
                                         </div>
                                       )}
                                       {selectedRequest.discountPercentage && (
                                         <div>
-                                          <Label className="text-sm text-gray-500">Discount Percentage</Label>
-                                          <p className="font-medium">{selectedRequest.discountPercentage.toFixed(2)}%</p>
+                                          <Label className="text-sm text-gray-500">
+                                            Discount Percentage
+                                          </Label>
+                                          <p className="font-medium">
+                                            {selectedRequest.discountPercentage.toFixed(
+                                              2,
+                                            )}
+                                            %
+                                          </p>
                                         </div>
                                       )}
                                       <div>
-                                        <Label className="text-sm text-gray-500">Category</Label>
-                                        <Badge variant="secondary" className="capitalize">
-                                          {formatCategory(selectedRequest.requestCategory)}
+                                        <Label className="text-sm text-gray-500">
+                                          Category
+                                        </Label>
+                                        <Badge
+                                          variant="secondary"
+                                          className="capitalize"
+                                        >
+                                          {formatCategory(
+                                            selectedRequest.requestCategory,
+                                          )}
                                         </Badge>
                                       </div>
                                     </CardContent>
                                   </Card>
-                                  
+
                                   {/* Reason */}
                                   <Card className="md:col-span-2">
                                     <CardHeader>
-                                      <CardTitle className="text-lg">Reason for Discount</CardTitle>
+                                      <CardTitle className="text-lg">
+                                        Reason for Discount
+                                      </CardTitle>
                                     </CardHeader>
                                     <CardContent>
                                       <p className="whitespace-pre-wrap bg-gray-50 p-4 rounded-lg">
@@ -571,12 +677,14 @@ export default function AdminDiscountsPage() {
                                       </p>
                                     </CardContent>
                                   </Card>
-                                  
+
                                   {/* Review Notes (if any) */}
                                   {selectedRequest.reviewNotes && (
                                     <Card className="md:col-span-2">
                                       <CardHeader>
-                                        <CardTitle className="text-lg">Review Notes</CardTitle>
+                                        <CardTitle className="text-lg">
+                                          Review Notes
+                                        </CardTitle>
                                       </CardHeader>
                                       <CardContent>
                                         <p className="whitespace-pre-wrap bg-blue-50 p-4 rounded-lg">
@@ -589,21 +697,28 @@ export default function AdminDiscountsPage() {
                               )}
                             </DialogContent>
                           </Dialog>
-                          
+
                           {/* Approve Button - Only show for pending requests */}
                           {request.status === "pending" && (
-                            <Dialog open={approveDialogOpen && selectedRequest?.id === request.id} 
-                                    onOpenChange={(open) => {
-                                      setApproveDialogOpen(open);
-                                      if (open) {
-                                        setSelectedRequest(request);
-                                        setApprovedAmount(request.requestedAmount.toString());
-                                      } else {
-                                        setSelectedRequest(null);
-                                        setReviewNotes("");
-                                        setApprovedAmount("");
-                                      }
-                                    }}>
+                            <Dialog
+                              open={
+                                approveDialogOpen &&
+                                selectedRequest?.id === request.id
+                              }
+                              onOpenChange={(open) => {
+                                setApproveDialogOpen(open);
+                                if (open) {
+                                  setSelectedRequest(request);
+                                  setApprovedAmount(
+                                    request.requestedAmount.toString(),
+                                  );
+                                } else {
+                                  setSelectedRequest(null);
+                                  setReviewNotes("");
+                                  setApprovedAmount("");
+                                }
+                              }}
+                            >
                               <DialogTrigger asChild>
                                 <Button
                                   size="sm"
@@ -617,42 +732,61 @@ export default function AdminDiscountsPage() {
                               </DialogTrigger>
                               <DialogContent>
                                 <DialogHeader>
-                                  <DialogTitle>Approve Discount Request</DialogTitle>
+                                  <DialogTitle>
+                                    Approve Discount Request
+                                  </DialogTitle>
                                   <DialogDescription>
-                                    Approve discount request {request.discountId} for {request.patientName}
+                                    Approve discount request{" "}
+                                    {request.discountId} for{" "}
+                                    {request.patientName}
                                   </DialogDescription>
                                 </DialogHeader>
-                                
+
                                 <div className="space-y-4">
                                   <div className="space-y-2">
-                                    <Label htmlFor="approvedAmount">Approved Amount ($)</Label>
+                                    <Label htmlFor="approvedAmount">
+                                      Approved Amount ($)
+                                    </Label>
                                     <Input
                                       id="approvedAmount"
                                       type="number"
                                       step="0.01"
                                       min="0"
-                                      max={request.originalAmount || request.requestedAmount}
+                                      max={
+                                        request.originalAmount ||
+                                        request.requestedAmount
+                                      }
                                       value={approvedAmount}
-                                      onChange={(e) => setApprovedAmount(e.target.value)}
+                                      onChange={(e) =>
+                                        setApprovedAmount(e.target.value)
+                                      }
                                       placeholder="Enter approved amount"
                                     />
                                     <p className="text-sm text-gray-500">
-                                      Original amount: {formatCurrency(request.originalAmount || request.requestedAmount)}
+                                      Original amount:{" "}
+                                      {formatCurrency(
+                                        request.originalAmount ||
+                                          request.requestedAmount,
+                                      )}
                                     </p>
                                   </div>
-                                  
+
                                   <div className="space-y-2">
-                                    <Label htmlFor="approveNotes">Approval Notes (Optional)</Label>
+                                    <Label htmlFor="approveNotes">
+                                      Approval Notes (Optional)
+                                    </Label>
                                     <Textarea
                                       id="approveNotes"
                                       value={reviewNotes}
-                                      onChange={(e) => setReviewNotes(e.target.value)}
+                                      onChange={(e) =>
+                                        setReviewNotes(e.target.value)
+                                      }
                                       placeholder="Add any notes for this approval..."
                                       rows={3}
                                     />
                                   </div>
                                 </div>
-                                
+
                                 <DialogFooter>
                                   <Button
                                     variant="outline"
@@ -682,18 +816,23 @@ export default function AdminDiscountsPage() {
                               </DialogContent>
                             </Dialog>
                           )}
-                          
+
                           {/* Reject Button - Only show for pending requests */}
                           {request.status === "pending" && (
-                            <Dialog open={rejectDialogOpen && selectedRequest?.id === request.id} 
-                                    onOpenChange={(open) => {
-                                      setRejectDialogOpen(open);
-                                      if (open) setSelectedRequest(request);
-                                      else {
-                                        setSelectedRequest(null);
-                                        setReviewNotes("");
-                                      }
-                                    }}>
+                            <Dialog
+                              open={
+                                rejectDialogOpen &&
+                                selectedRequest?.id === request.id
+                              }
+                              onOpenChange={(open) => {
+                                setRejectDialogOpen(open);
+                                if (open) setSelectedRequest(request);
+                                else {
+                                  setSelectedRequest(null);
+                                  setReviewNotes("");
+                                }
+                              }}
+                            >
                               <DialogTrigger asChild>
                                 <Button
                                   size="sm"
@@ -706,32 +845,40 @@ export default function AdminDiscountsPage() {
                               </DialogTrigger>
                               <DialogContent>
                                 <DialogHeader>
-                                  <DialogTitle>Reject Discount Request</DialogTitle>
+                                  <DialogTitle>
+                                    Reject Discount Request
+                                  </DialogTitle>
                                   <DialogDescription>
-                                    Are you sure you want to reject discount request {request.discountId}?
+                                    Are you sure you want to reject discount
+                                    request {request.discountId}?
                                   </DialogDescription>
                                 </DialogHeader>
-                                
+
                                 <div className="space-y-4">
                                   <Alert variant="destructive">
                                     <AlertCircle className="h-4 w-4" />
                                     <AlertDescription>
-                                      This action cannot be undone. The request will be permanently rejected.
+                                      This action cannot be undone. The request
+                                      will be permanently rejected.
                                     </AlertDescription>
                                   </Alert>
-                                  
+
                                   <div className="space-y-2">
-                                    <Label htmlFor="rejectNotes">Rejection Reason (Optional)</Label>
+                                    <Label htmlFor="rejectNotes">
+                                      Rejection Reason (Optional)
+                                    </Label>
                                     <Textarea
                                       id="rejectNotes"
                                       value={reviewNotes}
-                                      onChange={(e) => setReviewNotes(e.target.value)}
+                                      onChange={(e) =>
+                                        setReviewNotes(e.target.value)
+                                      }
                                       placeholder="Please provide a reason for rejection..."
                                       rows={3}
                                     />
                                   </div>
                                 </div>
-                                
+
                                 <DialogFooter>
                                   <Button
                                     variant="outline"
@@ -771,7 +918,7 @@ export default function AdminDiscountsPage() {
           )}
         </CardContent>
       </Card>
-      
+
       {/* Stats Summary */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
         <Card>
@@ -780,7 +927,10 @@ export default function AdminDiscountsPage() {
               <div>
                 <p className="text-sm font-medium text-gray-600">Pending</p>
                 <p className="text-2xl font-bold mt-1">
-                  {discountRequests.filter(r => r.status === "pending").length}
+                  {
+                    discountRequests.filter((r) => r.status === "pending")
+                      .length
+                  }
                 </p>
               </div>
               <div className="h-10 w-10 rounded-full bg-yellow-100 flex items-center justify-center">
@@ -789,14 +939,17 @@ export default function AdminDiscountsPage() {
             </div>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Approved</p>
                 <p className="text-2xl font-bold mt-1">
-                  {discountRequests.filter(r => r.status === "approved").length}
+                  {
+                    discountRequests.filter((r) => r.status === "approved")
+                      .length
+                  }
                 </p>
               </div>
               <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center">
@@ -805,14 +958,17 @@ export default function AdminDiscountsPage() {
             </div>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Rejected</p>
                 <p className="text-2xl font-bold mt-1">
-                  {discountRequests.filter(r => r.status === "rejected").length}
+                  {
+                    discountRequests.filter((r) => r.status === "rejected")
+                      .length
+                  }
                 </p>
               </div>
               <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center">
@@ -821,14 +977,21 @@ export default function AdminDiscountsPage() {
             </div>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Total Amount</p>
+                <p className="text-sm font-medium text-gray-600">
+                  Total Amount
+                </p>
                 <p className="text-2xl font-bold mt-1">
-                  {formatCurrency(discountRequests.reduce((sum, req) => sum + (req.requestedAmount || 0), 0))}
+                  {formatCurrency(
+                    discountRequests.reduce(
+                      (sum, req) => sum + (req.requestedAmount || 0),
+                      0,
+                    ),
+                  )}
                 </p>
               </div>
               <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">

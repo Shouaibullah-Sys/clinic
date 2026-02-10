@@ -8,6 +8,7 @@ import { DiscountRequest } from "@/lib/models/DiscountRequest";
 import { DailyExpense } from "@/lib/models/DailyExpense";
 import { LabTest } from "@/lib/models/LabTest";
 import { RadiologyExam } from "@/lib/models/RadiologyExam";
+import { DischargeCard } from "@/lib/models/DischargeCard";
 
 export async function GET(request: NextRequest) {
   try {
@@ -195,6 +196,25 @@ export async function GET(request: NextRequest) {
     const totalRadiologyPaymentsToday =
       todayRadiologyPayments[0]?.totalAmount || 0;
 
+    // Get today's discharge card payments (paid cards)
+    const todayDischargePayments = await DischargeCard.aggregate([
+      {
+        $match: {
+          "billing.paymentDate": { $gte: today, $lt: tomorrow },
+          "billing.paymentStatus": "paid",
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalAmount: { $sum: "$billing.paidAmount" },
+        },
+      },
+    ]);
+
+    const totalDischargePaymentsToday =
+      todayDischargePayments[0]?.totalAmount || 0;
+
     // Get pending discounts
     const pendingDiscounts = await DiscountRequest.countDocuments({
       status: "pending",
@@ -237,6 +257,7 @@ export async function GET(request: NextRequest) {
       totalApprovedDiscountsToday,
       totalLabPaymentsToday,
       totalRadiologyPaymentsToday,
+      totalDischargePaymentsToday,
     };
 
     return NextResponse.json({

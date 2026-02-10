@@ -108,6 +108,7 @@ export default function CashPage() {
     totalApprovedDiscountsToday: 0,
     totalLabPaymentsToday: 0,
     totalRadiologyPaymentsToday: 0,
+    totalDischargePaymentsToday: 0,
   });
 
   const [denominations, setDenominations] = useState<Denominations>({
@@ -166,14 +167,16 @@ export default function CashPage() {
   const expectedFromAppointments = dailyStats.totalAppointmentsToday;
   const expectedFromLab = dailyStats.totalLabPaymentsToday;
   const expectedFromRadiology = dailyStats.totalRadiologyPaymentsToday;
+  const expectedFromDischarge = dailyStats.totalDischargePaymentsToday;
   const approvedDiscounts = dailyStats.totalApprovedDiscountsToday;
   const todaysExpenses = dailyStats.totalExpensesToday;
 
-  // Total Expected Amount = (Appointments + Lab + Radiology) - Discounts
+  // Total Expected Amount = (Appointments + Lab + Radiology + Discharge) - Discounts
   const totalExpectedAmount =
     expectedFromAppointments +
     expectedFromLab +
-    expectedFromRadiology -
+    expectedFromRadiology +
+    expectedFromDischarge -
     approvedDiscounts;
 
   // Net Cash After Expenses = Total Expected - Today's Expenses
@@ -271,6 +274,8 @@ export default function CashPage() {
           totalLabPaymentsToday: data.data.totalLabPaymentsToday || 0,
           totalRadiologyPaymentsToday:
             data.data.totalRadiologyPaymentsToday || 0,
+          totalDischargePaymentsToday:
+            data.data.totalDischargePaymentsToday || 0,
         });
       }
     } catch (error) {
@@ -532,6 +537,12 @@ export default function CashPage() {
                         <span>Radiology Payments:</span>
                         <span className="font-medium">
                           {formatCurrency(expectedFromRadiology)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span>Discharge Card Payments:</span>
+                        <span className="font-medium">
+                          {formatCurrency(expectedFromDischarge)}
                         </span>
                       </div>
                       <div className="flex justify-between text-sm text-orange-600">
@@ -837,6 +848,23 @@ export default function CashPage() {
               {formatCurrency(dailyStats.totalRadiologyPaymentsToday)}
             </div>
             <p className="text-xs text-muted-foreground">Paid exams today</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">
+              Discharge Cards
+            </CardTitle>
+            <FileText className="h-4 w-4 text-indigo-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-indigo-600">
+              {formatCurrency(dailyStats.totalDischargePaymentsToday)}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Paid discharges today
+            </p>
           </CardContent>
         </Card>
       </div>
