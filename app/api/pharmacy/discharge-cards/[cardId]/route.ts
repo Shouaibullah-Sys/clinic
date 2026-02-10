@@ -30,15 +30,15 @@ export async function GET(
       .populate("doctor", "name specialization")
       .populate(
         "preOpMedicines.medicine",
-        "name batchNumber currentQuantity sellingPrice expiryDate",
+        "name form dosage frequency route currentQuantity sellingPrice expiryDate",
       )
       .populate(
         "postOpMedicines.medicine",
-        "name batchNumber currentQuantity sellingPrice expiryDate",
+        "name form dosage frequency route currentQuantity sellingPrice expiryDate",
       )
       .populate(
         "dischargeMedicines.medicine",
-        "name batchNumber currentQuantity sellingPrice expiryDate",
+        "name form dosage frequency route currentQuantity sellingPrice expiryDate",
       );
 
     if (!dischargeCard) {

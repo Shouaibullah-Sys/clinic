@@ -16,7 +16,7 @@ const PrescriptionSchema = z.object({
       quantity: z.number().min(1),
       discount: z.number().min(0).max(100).default(0),
       unitPrice: z.number().min(0),
-    })
+    }),
   ),
   totalAmount: z.number().min(0),
   amountPaid: z.number().min(0),
@@ -28,7 +28,10 @@ export async function GET(req: NextRequest) {
   await dbConnect();
   const payload = await getTokenPayload(req);
 
-  if (!payload || !(payload.role === "pharmacist" || payload.role === "admin")) {
+  if (
+    !payload ||
+    !(payload.role === "pharmacist" || payload.role === "admin")
+  ) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -55,8 +58,9 @@ export async function GET(req: NextRequest) {
     const prescriptions = await Prescription.find(query)
       .populate({
         path: "medications.medicine",
-        select: "name batchNumber currentQuantity sellingPrice unitPrice",
-        model: "MedicineStock" // Explicitly specify the model
+        select:
+          "name form dosage frequency route currentQuantity sellingPrice unitPrice",
+        model: "MedicineStock", // Explicitly specify the model
       })
       .populate("dispensedBy", "name")
       .sort({ createdAt: -1 })
@@ -77,13 +81,13 @@ export async function GET(req: NextRequest) {
           pages: Math.ceil(total / limit),
         },
       },
-      { status: 200 }
+      { status: 200 },
     );
   } catch (error) {
     console.error("Failed to fetch prescriptions:", error);
     return NextResponse.json(
       { error: "Failed to fetch prescriptions" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -92,7 +96,10 @@ export async function POST(req: NextRequest) {
   await dbConnect();
   const payload = await getTokenPayload(req);
 
-  if (!payload || !(payload.role === "pharmacist" || payload.role === "admin")) {
+  if (
+    !payload ||
+    !(payload.role === "pharmacist" || payload.role === "admin")
+  ) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -101,7 +108,13 @@ export async function POST(req: NextRequest) {
     const validation = PrescriptionSchema.safeParse(body);
 
     if (!validation.success) {
-      return NextResponse.json(validation.error, { status: 400 });
+      return NextResponse.json(
+        {
+          error: "Validation failed",
+          details: validation.error.flatten().fieldErrors,
+        },
+        { status: 400 },
+      );
     }
 
     // Process each medication and update stock
@@ -110,14 +123,14 @@ export async function POST(req: NextRequest) {
       if (!medicine) {
         return NextResponse.json(
           { error: `Medicine not found: ${item.medicine}` },
-          { status: 404 }
+          { status: 404 },
         );
       }
 
       if (medicine.currentQuantity < item.quantity) {
         return NextResponse.json(
           { error: `Insufficient stock for ${medicine.name}` },
-          { status: 400 }
+          { status: 400 },
         );
       }
 
@@ -136,7 +149,7 @@ export async function POST(req: NextRequest) {
     console.error("Failed to create prescription:", error);
     return NextResponse.json(
       { error: "Failed to create prescription" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

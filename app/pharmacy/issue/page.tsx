@@ -13,6 +13,10 @@ import {
   ChevronLeft,
   ChevronRight,
   MoreVerticalIcon,
+  CreditCard,
+  Printer,
+  Clock,
+  DollarSign,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,11 +49,19 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import MedicineSearch, { MedicineStock } from "@/components/MedicineSearch";
+import PharmacyPatientSearch, {
+  Patient,
+} from "@/components/PharmacyPatientSearch";
+import { generatePharmacyReceipt } from "@/utils/generatePharmacyReceipt";
 
 interface Medicine {
   _id: string;
   name: string;
-  batchNumber: string;
+  form: string;
+  dosage: string;
+  frequency: string;
+  route: string;
   currentQuantity: number;
   sellingPrice: number;
 }
@@ -57,7 +69,10 @@ interface Medicine {
 interface MedicineItem {
   medicine: string;
   name: string;
-  batchNumber: string;
+  form: string;
+  dosage: string;
+  frequency: string;
+  route: string;
   quantity: number;
   unitPrice: number;
   discount: number;
@@ -207,17 +222,24 @@ const MobilePrescriptionCard = ({
 export default function PharmacyPage() {
   const { user } = useAuthStore() as AuthStore;
   const [activeTab, setActiveTab] = useState<"issue" | "history">("issue");
-  const [patientName, setPatientName] = useState<string>("");
-  const [patientPhone, setPatientPhone] = useState<string>("");
+  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<string>("cash");
   const [items, setItems] = useState<MedicineItem[]>([]);
-  const [selectedMedicine, setSelectedMedicine] = useState<string>("");
+  const [selectedMedicine, setSelectedMedicine] =
+    useState<MedicineStock | null>(null);
   const [invoiceNumber, setInvoiceNumber] = useState<string>(
-    `INV-${Date.now()}`
+    `INV-${Date.now()}`,
   );
-  const [searchTerm, setSearchTerm] = useState<string>("");
   const [prescriptionSearchTerm, setPrescriptionSearchTerm] =
     useState<string>("");
+
+  // Payment workflow state
+  const [paymentStatus, setPaymentStatus] = useState<
+    "pending" | "processing" | "paid" | "completed"
+  >("pending");
+  const [currentPrescriptionId, setCurrentPrescriptionId] = useState<
+    string | null
+  >(null);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -307,38 +329,6 @@ export default function PharmacyPage() {
     return filteredPrescriptions.slice(startIndex, endIndex);
   }, [filteredPrescriptions, currentPage, rowsPerPage]);
 
-  const filteredMedicines = useMemo(() => {
-    if (!Array.isArray(medicinesData) || medicinesData.length === 0) {
-      return [];
-    }
-
-    return medicinesData
-      .filter((medicine) => {
-        if (
-          !medicine ||
-          typeof medicine.currentQuantity !== "number" ||
-          !medicine._id ||
-          !medicine.name ||
-          !medicine.batchNumber ||
-          typeof medicine.sellingPrice !== "number"
-        ) {
-          return false;
-        }
-        return medicine.currentQuantity > 0;
-      })
-      .filter((medicine) => {
-        if (!searchTerm || !searchTerm.trim()) {
-          return true;
-        }
-
-        const searchLower = searchTerm.toLowerCase();
-        const name = medicine.name?.toLowerCase() || "";
-        const batchNumber = medicine.batchNumber?.toLowerCase() || "";
-
-        return name.includes(searchLower) || batchNumber.includes(searchLower);
-      });
-  }, [medicinesData, searchTerm]);
-
   useEffect(() => {
     setInvoiceNumber(`INV-${Date.now()}`);
   }, [items]);
@@ -348,23 +338,19 @@ export default function PharmacyPage() {
     setCurrentPage(1);
   }, [prescriptionSearchTerm]);
 
-  const addItem = () => {
+  const addItem = (medicine: MedicineStock) => {
     try {
-      if (
-        !selectedMedicine ||
-        !Array.isArray(medicinesData) ||
-        medicinesData.length === 0
-      ) {
+      if (!medicine) {
+        toast.error("Please select a medicine");
         return;
       }
 
-      const medicine = medicinesData.find(
-        (m) => m && m._id === selectedMedicine
-      );
       if (
-        !medicine ||
         !medicine.name ||
-        !medicine.batchNumber ||
+        !medicine.form ||
+        !medicine.dosage ||
+        !medicine.frequency ||
+        !medicine.route ||
         typeof medicine.sellingPrice !== "number"
       ) {
         toast.error("Invalid medicine selected");
@@ -373,31 +359,31 @@ export default function PharmacyPage() {
 
       const currentItems = Array.isArray(items) ? items : [];
       const existingItem = currentItems.find(
-        (item) => item && item.medicine === selectedMedicine
+        (item) => item && item.medicine === medicine._id,
       );
 
       if (existingItem) {
         setItems(
           currentItems.map((item) =>
-            item && item.medicine === selectedMedicine
+            item && item.medicine === medicine._id
               ? {
                   ...item,
                   quantity: item.quantity + 1,
-                  total:
-                    (item.quantity + 1) *
-                    item.unitPrice *
-                    (1 - item.discount / 100),
+                  total: (item.quantity + 1) * item.unitPrice,
                 }
-              : item
-          )
+              : item,
+          ),
         );
       } else {
         setItems([
           ...currentItems,
           {
-            medicine: selectedMedicine,
+            medicine: medicine._id,
             name: medicine.name,
-            batchNumber: medicine.batchNumber,
+            form: medicine.form,
+            dosage: medicine.dosage,
+            frequency: medicine.frequency,
+            route: medicine.route,
             quantity: 1,
             unitPrice: medicine.sellingPrice,
             discount: 0,
@@ -405,19 +391,23 @@ export default function PharmacyPage() {
           },
         ]);
       }
-
-      setSelectedMedicine("");
-      setSearchTerm("");
     } catch (error) {
       console.error("Error adding item:", error);
       toast.error("Failed to add medicine");
     }
   };
 
+  const handleMedicineSelect = (medicine: MedicineStock | null) => {
+    if (medicine) {
+      addItem(medicine);
+    }
+    setSelectedMedicine(null);
+  };
+
   const updateItem = (
     medicineId: string,
     field: keyof MedicineItem,
-    value: number
+    value: number,
   ) => {
     try {
       if (
@@ -437,25 +427,14 @@ export default function PharmacyPage() {
 
           const updatedItem = { ...item, [field]: Math.max(0, value) };
 
-          if (
-            field === "quantity" ||
-            field === "unitPrice" ||
-            field === "discount"
-          ) {
+          if (field === "quantity" || field === "unitPrice") {
             const quantity = updatedItem.quantity || 0;
             const unitPrice = updatedItem.unitPrice || 0;
-            const discount = Math.min(
-              100,
-              Math.max(0, updatedItem.discount || 0)
-            );
-
-            updatedItem.discount = discount;
-            const discountedPrice = unitPrice * (1 - discount / 100);
-            updatedItem.total = quantity * discountedPrice;
+            updatedItem.total = quantity * unitPrice;
           }
 
           return updatedItem;
-        })
+        }),
       );
     } catch (error) {
       console.error("Error updating item:", error);
@@ -530,13 +509,12 @@ export default function PharmacyPage() {
             item.medicine?.name || "Unknown",
             item.quantity?.toString() || "0",
             `AFN ${(item.unitPrice || 0).toFixed(2)}`,
-            `${item.discount || 0}%`,
             `AFN ${(item.total || 0).toFixed(2)}`,
           ])
         : [];
 
     autoTable(doc, {
-      head: [["Medicine", "Qty", "Unit Price", "Discount", "Total"]],
+      head: [["Medicine", "Qty", "Unit Price", "Total"]],
       body: itemData,
       startY: 85,
       styles: { fontSize: 10 },
@@ -545,8 +523,7 @@ export default function PharmacyPage() {
         0: { cellWidth: 70 },
         1: { cellWidth: 20 },
         2: { cellWidth: 30 },
-        3: { cellWidth: 25 },
-        4: { cellWidth: 30 },
+        3: { cellWidth: 30 },
       },
     });
 
@@ -585,12 +562,13 @@ export default function PharmacyPage() {
 
   const handleSubmit = async () => {
     if (
-      !patientName?.trim() ||
-      !patientPhone?.trim() ||
+      !selectedPatient ||
+      !selectedPatient.name?.trim() ||
+      !selectedPatient.phone?.trim() ||
       !Array.isArray(items) ||
       items.length === 0
     ) {
-      toast.error("Please fill all required fields");
+      toast.error("Please select a patient and add medicines");
       return;
     }
 
@@ -599,8 +577,8 @@ export default function PharmacyPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          patientName,
-          patientPhone,
+          patientName: selectedPatient.name,
+          patientPhone: selectedPatient.phone,
           invoiceNumber,
           items: items.map((item) => ({
             medicine: item.medicine,
@@ -621,8 +599,7 @@ export default function PharmacyPage() {
       }
 
       toast.success("Prescription issued successfully");
-      setPatientName("");
-      setPatientPhone("");
+      setSelectedPatient(null);
       setItems([]);
       setPaymentMethod("cash");
       mutateStock();
@@ -630,9 +607,149 @@ export default function PharmacyPage() {
       setActiveTab("history");
     } catch (error: unknown) {
       toast.error(
-        error instanceof Error ? error.message : "Failed to issue prescription"
+        error instanceof Error ? error.message : "Failed to issue prescription",
       );
     }
+  };
+
+  // Process Payment - Step 1: Create prescription with pending payment
+  const handleProcessPayment = async () => {
+    if (
+      !selectedPatient ||
+      !selectedPatient.name?.trim() ||
+      !selectedPatient.phone?.trim() ||
+      !Array.isArray(items) ||
+      items.length === 0
+    ) {
+      toast.error("Please select a patient and add medicines");
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/pharmacy/prescriptions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          patientName: selectedPatient.name,
+          patientPhone: selectedPatient.phone,
+          invoiceNumber,
+          items: items.map((item) => ({
+            medicine: item.medicine,
+            quantity: item.quantity,
+            discount: item.discount,
+            unitPrice: item.unitPrice,
+          })),
+          totalAmount: calculateTotal,
+          amountPaid: 0,
+          paymentMethod,
+          status: "active",
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to process payment");
+      }
+
+      const data = await response.json();
+      setCurrentPrescriptionId(data._id);
+      setPaymentStatus("processing");
+      toast.success("Payment sent to receptionist for processing");
+      mutateStock();
+      mutatePrescriptions();
+    } catch (error: unknown) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to process payment",
+      );
+    }
+  };
+
+  // Finalize & Print Receipt - Step 2: Update prescription to completed and print
+  const handleFinalizeAndPrint = async () => {
+    if (!currentPrescriptionId) {
+      toast.error("No prescription to finalize");
+      return;
+    }
+
+    try {
+      // Update prescription status to completed
+      const response = await fetch(
+        `/api/pharmacy/prescriptions/${currentPrescriptionId}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            status: "completed",
+            paymentStatus: "paid",
+            amountPaid: calculateTotal,
+          }),
+        },
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to finalize prescription");
+      }
+
+      const data = await response.json();
+
+      // Generate and print receipt
+      const receiptData = {
+        patientName: selectedPatient?.name || "",
+        patientPhone: selectedPatient?.phone || "",
+        invoiceNumber,
+        items: items.map((item) => ({
+          medicine: {
+            name: item.name,
+            form: item.form,
+            dosage: item.dosage,
+            frequency: item.frequency,
+            route: item.route,
+          },
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          discount: item.discount,
+        })),
+        totalAmount: calculateTotal,
+        amountPaid: calculateTotal,
+        paymentMethod,
+        createdAt: new Date().toISOString(),
+        issuedBy: user ? { name: user.name } : undefined,
+      };
+
+      generatePharmacyReceipt(receiptData);
+
+      toast.success("Prescription finalized and receipt printed");
+      setPaymentStatus("completed");
+
+      // Reset form for next order
+      setTimeout(() => {
+        setSelectedPatient(null);
+        setItems([]);
+        setPaymentMethod("cash");
+        setInvoiceNumber(`INV-${Date.now()}`);
+        setCurrentPrescriptionId(null);
+        setPaymentStatus("pending");
+        mutatePrescriptions();
+        setActiveTab("history");
+      }, 1000);
+    } catch (error: unknown) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to finalize prescription",
+      );
+    }
+  };
+
+  // Reset the form
+  const handleReset = () => {
+    setSelectedPatient(null);
+    setItems([]);
+    setPaymentMethod("cash");
+    setInvoiceNumber(`INV-${Date.now()}`);
+    setCurrentPrescriptionId(null);
+    setPaymentStatus("pending");
   };
 
   return (
@@ -654,93 +771,71 @@ export default function PharmacyPage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
-                <span>Issue Medicine</span>
+                <div className="flex items-center gap-3">
+                  <span>Issue Medicine</span>
+                  {paymentStatus !== "pending" && (
+                    <Badge
+                      variant={
+                        paymentStatus === "processing"
+                          ? "secondary"
+                          : paymentStatus === "paid"
+                            ? "default"
+                            : "outline"
+                      }
+                      className="flex items-center gap-1"
+                    >
+                      {paymentStatus === "processing" && (
+                        <Clock className="h-3 w-3" />
+                      )}
+                      {paymentStatus === "paid" && (
+                        <DollarSign className="h-3 w-3" />
+                      )}
+                      {paymentStatus === "completed" && (
+                        <CheckCircle className="h-3 w-3" />
+                      )}
+                      {paymentStatus.charAt(0).toUpperCase() +
+                        paymentStatus.slice(1)}
+                    </Badge>
+                  )}
+                </div>
                 <div className="flex items-center gap-2">
                   <Label className="whitespace-nowrap">Invoice #:</Label>
                   <Input
                     value={invoiceNumber}
                     onChange={(e) => setInvoiceNumber(e.target.value)}
                     className="w-40"
+                    disabled={paymentStatus !== "pending"}
                   />
                 </div>
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                <div>
-                  <Label>Patient Name *</Label>
-                  <Input
-                    value={patientName}
-                    onChange={(e) => setPatientName(e.target.value)}
-                    placeholder="Enter patient name"
-                  />
-                </div>
-                <div>
-                  <Label>Patient Phone *</Label>
-                  <Input
-                    value={patientPhone}
-                    onChange={(e) => setPatientPhone(e.target.value)}
-                    placeholder="Enter patient phone"
-                  />
-                </div>
+              <div className="mb-6">
+                <Label>Patient *</Label>
+                <PharmacyPatientSearch
+                  onPatientSelect={setSelectedPatient}
+                  selectedPatient={selectedPatient}
+                  placeholder="Search patient by name, phone, or ID..."
+                />
               </div>
 
               <div className="mb-6">
                 <Label>Add Medicine</Label>
-                <div className="flex items-center relative mb-2">
-                  <Search className="absolute left-3 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search medicine by name or batch..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-9"
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <Select
-                    value={selectedMedicine}
-                    onValueChange={setSelectedMedicine}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Select medicine" />
-                    </SelectTrigger>
-                    <SelectContent className="max-h-60 overflow-auto">
-                      {filteredMedicines.length > 0 ? (
-                        filteredMedicines.map((medicine) => (
-                          <SelectItem key={medicine._id} value={medicine._id}>
-                            <div className="flex flex-col">
-                              <span>{medicine.name}</span>
-                              <span className="text-xs text-muted-foreground">
-                                Batch: {medicine.batchNumber} | Qty:{" "}
-                                {medicine.currentQuantity} | Price: AFN
-                                {medicine.sellingPrice.toFixed(2)}
-                              </span>
-                            </div>
-                          </SelectItem>
-                        ))
-                      ) : (
-                        <div className="p-2 text-sm text-muted-foreground text-center">
-                          {medicinesData.length === 0
-                            ? "Loading medicines..."
-                            : "No available medicines found"}
-                        </div>
-                      )}
-                    </SelectContent>
-                  </Select>
-                  <Button onClick={addItem} disabled={!selectedMedicine}>
-                    <PlusCircle className="mr-2 h-4 w-4" /> Add
-                  </Button>
-                </div>
+                <MedicineSearch
+                  onMedicineSelect={handleMedicineSelect}
+                  selectedMedicine={null}
+                  placeholder="Search medicine by name or supplier..."
+                  autoClear={true}
+                />
               </div>
 
               {items.length > 0 && (
                 <div className="border rounded-lg mb-6 overflow-hidden">
-                  <div className="grid grid-cols-12 gap-2 p-2 bg-gray-100 font-medium">
-                    <div className="col-span-5">Medicine</div>
+                  <div className="grid grid-cols-12 gap-2 p-2 font-medium">
+                    <div className="col-span-6">Medicine</div>
                     <div className="col-span-2">Price</div>
                     <div className="col-span-2">Qty</div>
-                    <div className="col-span-2">Discount %</div>
-                    <div className="col-span-1">Total</div>
+                    <div className="col-span-2">Total</div>
                   </div>
 
                   {items.map((item) => (
@@ -748,10 +843,11 @@ export default function PharmacyPage() {
                       key={item.medicine}
                       className="grid grid-cols-12 gap-2 p-2 border-t"
                     >
-                      <div className="col-span-5">
+                      <div className="col-span-6">
                         <div className="font-medium">{item.name}</div>
                         <div className="text-xs text-muted-foreground">
-                          Batch: {item.batchNumber}
+                          {item.form} | {item.dosage} | {item.frequency} |{" "}
+                          {item.route}
                         </div>
                       </div>
                       <div className="col-span-2">
@@ -762,12 +858,13 @@ export default function PharmacyPage() {
                             updateItem(
                               item.medicine,
                               "unitPrice",
-                              parseFloat(e.target.value)
+                              parseFloat(e.target.value),
                             )
                           }
                           min="0"
                           step="0.01"
                           readOnly
+                          disabled={paymentStatus !== "pending"}
                         />
                       </div>
                       <div className="col-span-2 flex items-center gap-1">
@@ -778,9 +875,10 @@ export default function PharmacyPage() {
                             updateItem(
                               item.medicine,
                               "quantity",
-                              Math.max(1, item.quantity - 1)
+                              Math.max(1, item.quantity - 1),
                             )
                           }
+                          disabled={paymentStatus !== "pending"}
                         >
                           <MinusCircle className="h-4 w-4" />
                         </Button>
@@ -791,10 +889,11 @@ export default function PharmacyPage() {
                             updateItem(
                               item.medicine,
                               "quantity",
-                              parseInt(e.target.value) || 1
+                              parseInt(e.target.value) || 1,
                             )
                           }
                           min="1"
+                          disabled={paymentStatus !== "pending"}
                         />
                         <Button
                           variant="outline"
@@ -803,35 +902,21 @@ export default function PharmacyPage() {
                             updateItem(
                               item.medicine,
                               "quantity",
-                              item.quantity + 1
+                              item.quantity + 1,
                             )
                           }
+                          disabled={paymentStatus !== "pending"}
                         >
                           <PlusCircle className="h-4 w-4" />
                         </Button>
                       </div>
-                      <div className="col-span-2">
-                        <Input
-                          type="number"
-                          value={item.discount}
-                          onChange={(e) =>
-                            updateItem(
-                              item.medicine,
-                              "discount",
-                              parseFloat(e.target.value)
-                            )
-                          }
-                          min="0"
-                          max="100"
-                          step="1"
-                        />
-                      </div>
-                      <div className="col-span-1 flex items-center justify-between">
+                      <div className="col-span-2 flex items-center justify-between">
                         <span>AFN {item.total.toFixed(2)}</span>
                         <Button
                           variant="ghost"
                           size="icon"
                           onClick={() => removeItem(item.medicine)}
+                          disabled={paymentStatus !== "pending"}
                         >
                           <Trash2 className="h-4 w-4 text-red-500" />
                         </Button>
@@ -847,6 +932,7 @@ export default function PharmacyPage() {
                   <Select
                     value={paymentMethod}
                     onValueChange={setPaymentMethod}
+                    disabled={paymentStatus !== "pending"}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select payment method" />
@@ -869,10 +955,59 @@ export default function PharmacyPage() {
                 </div>
               </div>
 
-              <div className="flex justify-end">
-                <Button onClick={handleSubmit} disabled={items.length === 0}>
-                  <CheckCircle className="mr-2 h-4 w-4" /> Issue Prescription
-                </Button>
+              {/* Payment Status Message */}
+              {paymentStatus === "processing" && (
+                <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-center gap-2 text-blue-800">
+                    <Clock className="h-5 w-5" />
+                    <span className="font-medium">
+                      Payment is being processed by receptionist
+                    </span>
+                  </div>
+                  <p className="text-sm text-blue-600 mt-1">
+                    Please wait for the receptionist to confirm payment before
+                    finalizing the order.
+                  </p>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex justify-end gap-3">
+                {paymentStatus === "pending" && (
+                  <Button
+                    onClick={handleProcessPayment}
+                    disabled={items.length === 0}
+                  >
+                    <CreditCard className="mr-2 h-4 w-4" /> Process Payment
+                  </Button>
+                )}
+
+                {paymentStatus === "processing" && (
+                  <Button
+                    onClick={() => setPaymentStatus("paid")}
+                    variant="default"
+                  >
+                    <DollarSign className="mr-2 h-4 w-4" /> Confirm Payment
+                    Received
+                  </Button>
+                )}
+
+                {paymentStatus === "paid" && (
+                  <Button onClick={handleFinalizeAndPrint} variant="default">
+                    <Printer className="mr-2 h-4 w-4" /> Finalize & Print
+                    Receipt
+                  </Button>
+                )}
+
+                {paymentStatus !== "pending" && (
+                  <Button
+                    onClick={handleReset}
+                    variant="outline"
+                    disabled={paymentStatus === "completed"}
+                  >
+                    Reset
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -985,7 +1120,7 @@ export default function PharmacyPage() {
                           </TableCell>
                           <TableCell>
                             {new Date(
-                              prescription.createdAt
+                              prescription.createdAt,
                             ).toLocaleDateString()}
                           </TableCell>
                           <TableCell>
@@ -1028,7 +1163,7 @@ export default function PharmacyPage() {
                     Showing {(currentPage - 1) * rowsPerPage + 1} to{" "}
                     {Math.min(
                       currentPage * rowsPerPage,
-                      filteredPrescriptions.length
+                      filteredPrescriptions.length,
                     )}{" "}
                     of {filteredPrescriptions.length} entries
                   </div>
@@ -1068,7 +1203,7 @@ export default function PharmacyPage() {
                               {pageNum}
                             </Button>
                           );
-                        }
+                        },
                       )}
                     </div>
 

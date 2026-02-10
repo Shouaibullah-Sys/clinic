@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState } from "react";
 import {
   ColumnDef,
   flexRender,
@@ -9,8 +9,8 @@ import {
   SortingState,
   ColumnFiltersState,
   getFilteredRowModel,
-} from '@tanstack/react-table';
-import { Progress } from '@/components/ui/progress';
+} from "@tanstack/react-table";
+import { Progress } from "@/components/ui/progress";
 import {
   Table,
   TableBody,
@@ -18,26 +18,34 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table';
-import { Button } from '@/components/ui/button';
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
-import { MoreVertical, ArrowUpDown } from 'lucide-react';
-import { useSWRConfig } from 'swr';
-import { toast } from 'sonner';
-import DeleteConfirmationDialog from '@/components/DeleteConfirmationDialog';
-import { useAuthStore } from '@/store/useAuthStore';
-import { Badge } from '@/components/ui/badge';
+} from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
+import { MoreVertical, ArrowUpDown } from "lucide-react";
+import { useSWRConfig } from "swr";
+import { toast } from "sonner";
+import DeleteConfirmationDialog from "@/components/DeleteConfirmationDialog";
+import { useAuthStore } from "@/store/useAuthStore";
+import { Badge } from "@/components/ui/badge";
 
 // Define the medicine stock type
 interface MedicineStock {
   _id: string;
   name: string;
-  batchNumber: string;
+  form: string;
+  dosage: string;
+  frequency: string;
+  route: string;
   currentQuantity: number;
   originalQuantity: number;
   remainingPercentage: number;
   expiryDate: string | Date;
-  expiryStatus: 'valid' | 'expiring-soon' | 'expired';
+  expiryStatus: "valid" | "expiring-soon" | "expired";
   unitPrice: number;
   sellingPrice: number;
   supplier: string;
@@ -57,40 +65,54 @@ interface MedicineStockTableProps {
   pagination?: Pagination;
 }
 
-export default function MedicineStockTable({ 
-  data, 
+export default function MedicineStockTable({
+  data,
   onEdit,
   onDeleteSuccess,
-  pagination
+  pagination,
 }: MedicineStockTableProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [selectedStock, setSelectedStock] = useState<MedicineStock | null>(null);
+  const [selectedStock, setSelectedStock] = useState<MedicineStock | null>(
+    null,
+  );
   const { mutate } = useSWRConfig();
   const { user } = useAuthStore();
 
   const columns: ColumnDef<MedicineStock>[] = [
     {
-      accessorKey: 'name',
-      header: 'Medicine Name',
+      accessorKey: "name",
+      header: "Medicine Name",
     },
     {
-      accessorKey: 'batchNumber',
-      header: 'Batch Number',
+      accessorKey: "form",
+      header: "Form",
     },
     {
-      accessorKey: 'currentQuantity',
-      header: 'Current Quantity',
+      accessorKey: "dosage",
+      header: "Dosage",
+    },
+    {
+      accessorKey: "frequency",
+      header: "Frequency",
+    },
+    {
+      accessorKey: "route",
+      header: "Route",
+    },
+    {
+      accessorKey: "currentQuantity",
+      header: "Current Quantity",
       cell: ({ row }) => {
         const stock = row.original;
         return (
           <div>
             <div className="font-medium">{stock.currentQuantity}</div>
             <div className="flex items-center gap-2 mt-1">
-              <Progress 
-                value={stock.remainingPercentage} 
-                className="h-2 w-24" 
+              <Progress
+                value={stock.remainingPercentage}
+                className="h-2 w-24"
               />
               <span className="text-xs text-muted-foreground">
                 {Math.round(stock.remainingPercentage)}%
@@ -101,55 +123,63 @@ export default function MedicineStockTable({
       },
     },
     {
-      accessorKey: 'originalQuantity',
-      header: 'Original Quantity',
+      accessorKey: "originalQuantity",
+      header: "Original Quantity",
     },
     {
-      accessorKey: 'expiryDate',
+      accessorKey: "expiryDate",
       header: ({ column }) => (
         <Button
           variant="ghost"
-          onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
         >
           Expiry Date
           <ArrowUpDown className="ml-2 h-4 w-4" />
         </Button>
       ),
       cell: ({ row }) => {
-        const date = new Date(row.getValue('expiryDate'));
+        const date = new Date(row.getValue("expiryDate"));
         return (
           <div className="flex flex-col">
             <span>{date.toLocaleDateString()}</span>
-            <Badge 
+            <Badge
               variant={
-                row.original.expiryStatus === 'expired' ? 'destructive' : 
-                row.original.expiryStatus === 'expiring-soon' ? 'warning' : 'default'
+                row.original.expiryStatus === "expired"
+                  ? "destructive"
+                  : row.original.expiryStatus === "expiring-soon"
+                    ? "warning"
+                    : "default"
               }
               className="mt-1 w-fit"
             >
-              {row.original.expiryStatus === 'expired' ? 'Expired' : 
-               row.original.expiryStatus === 'expiring-soon' ? 'Expiring Soon' : 'Valid'}
+              {row.original.expiryStatus === "expired"
+                ? "Expired"
+                : row.original.expiryStatus === "expiring-soon"
+                  ? "Expiring Soon"
+                  : "Valid"}
             </Badge>
           </div>
         );
       },
     },
     {
-      accessorKey: 'unitPrice',
-      header: 'Unit Price',
-      cell: ({ row }) => `AFN ${parseFloat(row.getValue('unitPrice')).toFixed(2)}`,
+      accessorKey: "unitPrice",
+      header: "Unit Price",
+      cell: ({ row }) =>
+        `AFN ${parseFloat(row.getValue("unitPrice")).toFixed(2)}`,
     },
     {
-      accessorKey: 'sellingPrice',
-      header: 'Selling Price',
-      cell: ({ row }) => `AFN ${parseFloat(row.getValue('sellingPrice')).toFixed(2)}`,
+      accessorKey: "sellingPrice",
+      header: "Selling Price",
+      cell: ({ row }) =>
+        `AFN ${parseFloat(row.getValue("sellingPrice")).toFixed(2)}`,
     },
     {
-      accessorKey: 'supplier',
-      header: 'Supplier',
+      accessorKey: "supplier",
+      header: "Supplier",
     },
     {
-      id: 'actions',
+      id: "actions",
       cell: ({ row }) => {
         const stock = row.original;
         return (
@@ -160,12 +190,12 @@ export default function MedicineStockTable({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              {(user?.role === 'pharmacy' || user?.role === 'admin') && (
+              {(user?.role === "pharmacy" || user?.role === "admin") && (
                 <DropdownMenuItem onClick={() => onEdit(stock)}>
                   Edit
                 </DropdownMenuItem>
               )}
-              {user?.role === 'admin' && (
+              {user?.role === "admin" && (
                 <DropdownMenuItem
                   onClick={() => {
                     setSelectedStock(stock);
@@ -199,23 +229,23 @@ export default function MedicineStockTable({
 
   const handleDelete = async () => {
     if (!selectedStock) return;
-    
+
     try {
       const response = await fetch(`/api/pharmacy/stock/${selectedStock._id}`, {
-        method: 'DELETE',
+        method: "DELETE",
       });
 
       if (response.ok) {
-        toast('Success', {
-          description: 'Medicine deleted successfully',
+        toast("Success", {
+          description: "Medicine deleted successfully",
         });
         onDeleteSuccess();
       } else {
-        throw new Error('Failed to delete medicine');
+        throw new Error("Failed to delete medicine");
       }
     } catch (error) {
-      toast('Error', {
-        description: 'Could not delete medicine',
+      toast("Error", {
+        description: "Could not delete medicine",
       });
     } finally {
       setDeleteDialogOpen(false);
@@ -236,7 +266,7 @@ export default function MedicineStockTable({
                       ? null
                       : flexRender(
                           header.column.columnDef.header,
-                          header.getContext()
+                          header.getContext(),
                         )}
                   </TableHead>
                 ))}
@@ -254,7 +284,7 @@ export default function MedicineStockTable({
                     <TableCell key={cell.id}>
                       {flexRender(
                         cell.column.columnDef.cell,
-                        cell.getContext()
+                        cell.getContext(),
                       )}
                     </TableCell>
                   ))}
@@ -278,12 +308,12 @@ export default function MedicineStockTable({
         <div className="text-sm text-muted-foreground">
           Page {pagination?.page} of {pagination?.totalPages}
         </div>
-        
+
         <div className="flex items-center space-x-2">
           <Button
             variant="outline"
             size="sm"
-            onClick={() => mutate('/api/pharmacy/stock')}
+            onClick={() => mutate("/api/pharmacy/stock")}
           >
             Refresh
           </Button>
@@ -311,7 +341,7 @@ export default function MedicineStockTable({
         onOpenChange={setDeleteDialogOpen}
         onConfirm={handleDelete}
         title="Delete Medicine"
-        description={`Are you sure you want to delete ${selectedStock?.name} (Batch: ${selectedStock?.batchNumber})?`}
+        description={`Are you sure you want to delete ${selectedStock?.name}?`}
       />
     </div>
   );

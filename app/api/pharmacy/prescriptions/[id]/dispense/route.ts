@@ -234,7 +234,10 @@ export async function POST(
       processedItems.push({
         medicine: medicine.name,
         quantity: item.dispensedQuantity,
-        batchNumber: item.batchNumber || medicine.batchNumber || "N/A",
+        form: medicine.form || "N/A",
+        dosage: medicine.dosage || "N/A",
+        frequency: medicine.frequency || "N/A",
+        route: medicine.route || "N/A",
         unitPrice: item.unitPrice,
         total: item.dispensedQuantity * item.unitPrice,
       });

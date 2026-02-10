@@ -67,7 +67,6 @@ export interface LowStockItem {
   current: number;
   threshold: number;
   unitPrice: number;
-  batchNumber: string;
   percentage: number;
 }
 

@@ -47,7 +47,10 @@ import { format } from "date-fns";
 interface Medicine {
   _id: string;
   name: string;
-  batchNumber: string;
+  form: string;
+  dosage: string;
+  frequency: string;
+  route: string;
   currentQuantity: number;
   originalQuantity: number;
   unitPrice: number;
@@ -105,9 +108,12 @@ interface Prescription {
 interface DispensingItem {
   medicineId: string;
   medicineName: string;
+  form: string;
+  dosage: string;
+  frequency: string;
+  route: string;
   prescribedQuantity: number;
   dispensedQuantity: number;
-  batchNumber: string;
   unitPrice: number;
   totalPrice: number;
   availableStock: number;
@@ -254,9 +260,12 @@ export default function DispensePage() {
           items.push({
             medicineId: medicineData._id,
             medicineName: med.name,
+            form: medicineData.form || "N/A",
+            dosage: medicineData.dosage || "N/A",
+            frequency: medicineData.frequency || "N/A",
+            route: medicineData.route || "N/A",
             prescribedQuantity: prescribedQty,
             dispensedQuantity: dispensedQty,
-            batchNumber: medicineData.batchNumber || "N/A",
             unitPrice: unitPrice,
             totalPrice: dispensedQty * unitPrice,
             availableStock: availableStock,
@@ -291,9 +300,12 @@ export default function DispensePage() {
           items.push({
             medicineId: med.name,
             medicineName: med.name,
+            form: "NOT IN STOCK",
+            dosage: "NOT IN STOCK",
+            frequency: "NOT IN STOCK",
+            route: "NOT IN STOCK",
             prescribedQuantity: med.quantity || 1,
             dispensedQuantity: 0,
-            batchNumber: "NOT IN STOCK",
             unitPrice: med.price || 0,
             totalPrice: 0,
             availableStock: 0,
@@ -381,7 +393,6 @@ export default function DispensePage() {
         .map((item) => ({
           medicine: item.medicineId,
           dispensedQuantity: item.dispensedQuantity,
-          batchNumber: item.batchNumber,
           unitPrice: item.unitPrice,
         }));
 
@@ -692,7 +703,10 @@ export default function DispensePage() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Medicine</TableHead>
-                        <TableHead>Batch</TableHead>
+                        <TableHead>Form</TableHead>
+                        <TableHead>Dosage</TableHead>
+                        <TableHead>Frequency</TableHead>
+                        <TableHead>Route</TableHead>
                         <TableHead>Supplier</TableHead>
                         <TableHead>Prescribed</TableHead>
                         <TableHead>In Stock</TableHead>
@@ -757,9 +771,16 @@ export default function DispensePage() {
                             </div>
                           </TableCell>
                           <TableCell>
-                            <Badge variant="outline" className="text-xs">
-                              {item.batchNumber}
-                            </Badge>
+                            <p className="text-sm">{item.form}</p>
+                          </TableCell>
+                          <TableCell>
+                            <p className="text-sm">{item.dosage}</p>
+                          </TableCell>
+                          <TableCell>
+                            <p className="text-sm">{item.frequency}</p>
+                          </TableCell>
+                          <TableCell>
+                            <p className="text-sm">{item.route}</p>
                           </TableCell>
                           <TableCell>
                             <p className="text-sm">{item.supplier || "N/A"}</p>

@@ -12,7 +12,6 @@ export interface IPharmacyService extends Document {
     quantity: number;
     unitPrice: number;
     totalPrice: number;
-    batchNumber: string;
     expiryDate: Date;
     dosageInstructions: string;
     warnings?: string;
@@ -62,17 +61,22 @@ const PharmacyServiceSchema = new Schema<IPharmacyService>(
       ref: "User",
       required: true,
     },
-    items: [{
-      medicine: { type: Schema.Types.ObjectId, ref: "Medicine", required: true },
-      name: { type: String, required: true },
-      quantity: { type: Number, required: true, min: 1 },
-      unitPrice: { type: Number, required: true, min: 0 },
-      totalPrice: { type: Number, required: true, min: 0 },
-      batchNumber: { type: String, required: true },
-      expiryDate: { type: Date, required: true },
-      dosageInstructions: { type: String, required: true },
-      warnings: { type: String },
-    }],
+    items: [
+      {
+        medicine: {
+          type: Schema.Types.ObjectId,
+          ref: "Medicine",
+          required: true,
+        },
+        name: { type: String, required: true },
+        quantity: { type: Number, required: true, min: 1 },
+        unitPrice: { type: Number, required: true, min: 0 },
+        totalPrice: { type: Number, required: true, min: 0 },
+        expiryDate: { type: Date, required: true },
+        dosageInstructions: { type: String, required: true },
+        warnings: { type: String },
+      },
+    ],
     subtotal: {
       type: Number,
       required: true,
@@ -140,7 +144,7 @@ const PharmacyServiceSchema = new Schema<IPharmacyService>(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 // Indexes
@@ -156,18 +160,20 @@ PharmacyServiceSchema.pre("save", function (next) {
   if (!this.dispensingId) {
     const date = new Date();
     const year = date.getFullYear().toString().slice(-2);
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const month = (date.getMonth() + 1).toString().padStart(2, "0");
     const random = Math.floor(1000 + Math.random() * 9000);
     this.dispensingId = `DISP${year}${month}${random}`;
   }
-  
+
   // Calculate totals
   if (this.items && this.items.length > 0) {
     this.subtotal = this.items.reduce((sum, item) => sum + item.totalPrice, 0);
     this.totalAmount = this.subtotal - this.discount + this.tax;
   }
-  
+
   next();
 });
 
-export const PharmacyService = models.PharmacyService || model<IPharmacyService>("PharmacyService", PharmacyServiceSchema);
+export const PharmacyService =
+  models.PharmacyService ||
+  model<IPharmacyService>("PharmacyService", PharmacyServiceSchema);

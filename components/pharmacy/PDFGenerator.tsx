@@ -9,7 +9,10 @@ import autoTable from "jspdf-autotable";
 interface MedicineStock {
   _id: string;
   name: string;
-  batchNumber: string;
+  form: string;
+  dosage: string;
+  frequency: string;
+  route: string;
   currentQuantity: number;
   originalQuantity: number;
   expiryDate: string;
@@ -43,7 +46,10 @@ const PDFGenerator = ({ data, title }: PDFGeneratorProps) => {
     // Prepare data for table
     const tableData = data.map((item) => [
       item.name,
-      item.batchNumber,
+      item.form,
+      item.dosage,
+      item.frequency,
+      item.route,
       new Date(item.expiryDate).toLocaleDateString(),
       `${item.currentQuantity}/${item.originalQuantity}`,
       `AFN ${item.unitPrice.toFixed(2)}`,
@@ -56,7 +62,10 @@ const PDFGenerator = ({ data, title }: PDFGeneratorProps) => {
       head: [
         [
           "Medicine",
-          "Batch",
+          "Form",
+          "Dosage",
+          "Frequency",
+          "Route",
           "Expiry Date",
           "Stock",
           "Unit Price",

@@ -628,7 +628,7 @@ export function SmartMedicineSearch({
                             {medicine.name}
                           </span>
                           <span className="text-xs text-muted-foreground">
-                            ({medicine.batchNumber})
+                            ({medicine.form} - {medicine.dosage})
                           </span>
                           {searchResult &&
                             getMatchTypeBadge(searchResult.matchType)}

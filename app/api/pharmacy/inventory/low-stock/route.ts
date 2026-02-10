@@ -1,15 +1,18 @@
 // app/api/pharmacy/inventory/low-stock/route.ts
-import { NextRequest, NextResponse } from 'next/server';
-import { MedicineStock } from '@/lib/models/MedicineStock';
-import dbConnect from '@/lib/dbConnect';
-import { getTokenPayload } from '@/lib/auth/jwt';
+import { NextRequest, NextResponse } from "next/server";
+import { MedicineStock } from "@/lib/models/MedicineStock";
+import dbConnect from "@/lib/dbConnect";
+import { getTokenPayload } from "@/lib/auth/jwt";
 
 export async function GET(req: NextRequest) {
   await dbConnect();
   const payload = await getTokenPayload(req);
-  
-  if (!payload || !(payload.role === 'admin' || payload.role === 'pharmacist')) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  if (
+    !payload ||
+    !(payload.role === "admin" || payload.role === "pharmacist")
+  ) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
@@ -21,42 +24,48 @@ export async function GET(req: NextRequest) {
         {
           $expr: {
             $lt: [
-              { $divide: ['$currentQuantity', '$originalQuantity'] },
-              0.2 // 20% threshold
-            ]
-          }
-        }
-      ]
+              { $divide: ["$currentQuantity", "$originalQuantity"] },
+              0.2, // 20% threshold
+            ],
+          },
+        },
+      ],
     })
-    .select('name batchNumber currentQuantity originalQuantity')
-    .lean();
+      .select(
+        "name form dosage frequency route currentQuantity originalQuantity",
+      )
+      .lean();
 
     // Safely calculate remaining percentage
-    const result = lowStockItems.map(item => {
+    const result = lowStockItems.map((item) => {
       try {
         const percentage = (item.currentQuantity / item.originalQuantity) * 100;
         return {
           ...item,
-          remainingPercentage: parseFloat(percentage.toFixed(2))
+          remainingPercentage: parseFloat(percentage.toFixed(2)),
         };
       } catch (calcError) {
-        console.error('Error calculating percentage for item:', item, calcError);
+        console.error(
+          "Error calculating percentage for item:",
+          item,
+          calcError,
+        );
         return {
           ...item,
-          remainingPercentage: 0
+          remainingPercentage: 0,
         };
       }
     });
 
     return NextResponse.json(result);
   } catch (error) {
-    console.error('Detailed error in low-stock endpoint:', error);
+    console.error("Detailed error in low-stock endpoint:", error);
     return NextResponse.json(
-      { 
-        error: 'Failed to fetch low stock items',
-        details: error instanceof Error ? error.message : String(error)
+      {
+        error: "Failed to fetch low stock items",
+        details: error instanceof Error ? error.message : String(error),
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

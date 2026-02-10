@@ -86,7 +86,10 @@ type RecentPrescription = {
 type LowStockItem = {
   _id: string;
   name: string;
-  batchNumber: string;
+  form: string;
+  dosage: string;
+  frequency: string;
+  route: string;
   currentQuantity: number;
   originalQuantity: number;
   remainingPercentage: number;
@@ -308,8 +311,8 @@ function RecentPrescriptionsTable({ data }: { data: RecentPrescription[] }) {
                       prescription.status === "completed"
                         ? "default"
                         : prescription.status === "pending"
-                        ? "secondary"
-                        : "destructive"
+                          ? "secondary"
+                          : "destructive"
                     }
                     className="text-xs"
                   >
@@ -353,8 +356,14 @@ function LowStockItemsTable({ data }: { data: LowStockItem[] }) {
           <div key={item._id} className="flex items-center">
             <div className="space-y-1 w-full">
               <p className="text-xs sm:text-sm font-medium leading-none">
-                {item.name} - {item.batchNumber}
+                {item.name}
               </p>
+              <div className="text-xs text-muted-foreground space-y-0.5">
+                <p>Form: {item.form}</p>
+                <p>Dosage: {item.dosage}</p>
+                <p>Frequency: {item.frequency}</p>
+                <p>Route: {item.route}</p>
+              </div>
               <div className="flex items-center justify-between">
                 <span className="text-xs text-muted-foreground">
                   {item.currentQuantity} / {item.originalQuantity} remaining
@@ -372,8 +381,8 @@ function LowStockItemsTable({ data }: { data: LowStockItem[] }) {
                       item.remainingPercentage < 10
                         ? "#ef4444"
                         : item.remainingPercentage < 20
-                        ? "#eab308"
-                        : "#22c55e",
+                          ? "#eab308"
+                          : "#22c55e",
                   } as React.CSSProperties
                 }
               />
@@ -495,7 +504,7 @@ export default function PharmacyDashboard() {
   // Fetch all dashboard data
   const { data: stats, isLoading: statsLoading } = useSWR<DashboardStats>(
     "/api/pharmacy/dashboard/stats",
-    fetcher
+    fetcher,
   );
   const { data: recentPrescriptions, isLoading: prescriptionsLoading } = useSWR<
     RecentPrescription[]
@@ -515,7 +524,7 @@ export default function PharmacyDashboard() {
       startDate: labStartDate?.toISOString() || "",
       endDate: labEndDate?.toISOString() || "",
     })}`,
-    fetcher
+    fetcher,
   );
   const { data: labExpenses, isLoading: labExpensesLoading } = useSWR<
     LabExpense[]
@@ -524,7 +533,7 @@ export default function PharmacyDashboard() {
       startDate: labStartDate?.toISOString() || "",
       endDate: labEndDate?.toISOString() || "",
     })}`,
-    fetcher
+    fetcher,
   );
 
   // Calculate metrics
@@ -538,11 +547,11 @@ export default function PharmacyDashboard() {
 
     const totalRevenue = validLabRecords.reduce(
       (sum, record) => sum + (record?.amountPaid || 0),
-      0
+      0,
     );
     const totalExpenses = validLabExpenses.reduce(
       (sum, expense) => sum + (expense?.amount || 0),
-      0
+      0,
     );
     const netProfit = totalRevenue - totalExpenses;
 
@@ -555,7 +564,7 @@ export default function PharmacyDashboard() {
         }
         return acc;
       },
-      {}
+      {},
     );
 
     // Group by expense type
@@ -570,7 +579,7 @@ export default function PharmacyDashboard() {
         }
         return acc;
       },
-      {}
+      {},
     );
 
     return {

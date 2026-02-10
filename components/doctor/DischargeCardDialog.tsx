@@ -84,10 +84,13 @@ type MedicineSearchType = "preOp" | "postOp" | "discharge";
 interface MedicineSelection {
   _id: string;
   name: string;
+  form: string;
+  dosage: string;
+  frequency: string;
+  route: string;
   sellingPrice: number;
   currentQuantity: number;
   expiryDate: string;
-  batchNumber: string;
 }
 
 export function DischargeCardDialog({

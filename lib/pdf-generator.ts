@@ -1153,6 +1153,9 @@ export interface DischargeCardPDFData {
     unitPrice: number;
     totalPrice: number;
     dosage?: string;
+    form?: string;
+    frequency?: string;
+    route?: string;
   }>;
   postOpMedicines: Array<{
     name: string;
@@ -1162,6 +1165,8 @@ export interface DischargeCardPDFData {
     dosage?: string;
     frequency?: string;
     duration?: string;
+    form?: string;
+    route?: string;
   }>;
   dischargeMedicines: Array<{
     name: string;
@@ -1169,6 +1174,10 @@ export interface DischargeCardPDFData {
     unitPrice: number;
     totalPrice: number;
     instructions?: string;
+    dosage?: string;
+    form?: string;
+    frequency?: string;
+    route?: string;
   }>;
   otherRequirements: Array<{
     description: string;
@@ -1395,6 +1404,10 @@ export const generateDischargeCardPDF = (
     totalPrice: number;
     section: string;
     instructions?: string;
+    dosage?: string;
+    form?: string;
+    frequency?: string;
+    route?: string;
   };
 
   const allMedicines: MedicineWithSection[] = [
@@ -1425,8 +1438,12 @@ export const generateDischargeCardPDF = (
     doc.setFontSize(9);
     doc.text("Category", 65, y + 12);
     doc.text("Medicine Name", 140, y + 12);
-    doc.text("Qty", 280, y + 12);
-    doc.text("Price", 350, y + 12);
+    doc.text("Form", 220, y + 12);
+    doc.text("Dosage", 260, y + 12);
+    doc.text("Freq", 300, y + 12);
+    doc.text("Route", 340, y + 12);
+    doc.text("Qty", 380, y + 12);
+    doc.text("Price", 430, y + 12);
     doc.text("Total", pageWidth - 65, y + 12, { align: "right" });
 
     y += 20;
@@ -1461,8 +1478,12 @@ export const generateDischargeCardPDF = (
 
       doc.text("", 65, y + 10); // Empty category cell for non-header rows
       doc.text(med.name, 140, y + 10);
-      doc.text(med.quantity.toString(), 280, y + 10);
-      doc.text(`${med.unitPrice.toFixed(2)}`, 350, y + 10);
+      doc.text(med.form || "-", 220, y + 10);
+      doc.text(med.dosage || "-", 260, y + 10);
+      doc.text(med.frequency || "-", 300, y + 10);
+      doc.text(med.route || "-", 340, y + 10);
+      doc.text(med.quantity.toString(), 380, y + 10);
+      doc.text(`${med.unitPrice.toFixed(2)}`, 430, y + 10);
       doc.text(`${med.totalPrice.toFixed(2)}`, pageWidth - 65, y + 10, {
         align: "right",
       });
@@ -1482,6 +1503,22 @@ export const generateDischargeCardPDF = (
       if (y > pageHeight - 120) {
         doc.addPage();
         y = 50;
+        // Recreate table header on new page
+        doc.setFillColor(primary[0], primary[1], primary[2]);
+        doc.rect(55, y, pageWidth - 110, 20, "F");
+        doc.setTextColor(255, 255, 255);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(9);
+        doc.text("Category", 65, y + 12);
+        doc.text("Medicine Name", 140, y + 12);
+        doc.text("Form", 220, y + 12);
+        doc.text("Dosage", 260, y + 12);
+        doc.text("Freq", 300, y + 12);
+        doc.text("Route", 340, y + 12);
+        doc.text("Qty", 380, y + 12);
+        doc.text("Price", 430, y + 12);
+        doc.text("Total", pageWidth - 65, y + 12, { align: "right" });
+        y += 20;
       }
     });
 

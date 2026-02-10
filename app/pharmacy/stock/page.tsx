@@ -5,7 +5,13 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/useAuthStore";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -70,7 +76,10 @@ import { format } from "date-fns";
 interface MedicineStock {
   _id: string;
   name: string;
-  batchNumber: string;
+  form: string;
+  dosage: string;
+  frequency: string;
+  route: string;
   currentQuantity: number;
   originalQuantity: number;
   expiryDate: string;
@@ -90,20 +99,24 @@ export default function PharmacyStockPage() {
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [medicines, setMedicines] = useState<MedicineStock[]>([]);
-  const [selectedMedicine, setSelectedMedicine] = useState<MedicineStock | null>(null);
+  const [selectedMedicine, setSelectedMedicine] =
+    useState<MedicineStock | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  
+
   // Dialog states
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
-  
+
   // Form states
   const [medicineForm, setMedicineForm] = useState({
     name: "",
-    batchNumber: "",
+    form: "",
+    dosage: "",
+    frequency: "",
+    route: "",
     expiryDate: "",
     originalQuantity: "",
     currentQuantity: "",
@@ -125,7 +138,7 @@ export default function PharmacyStockPage() {
     try {
       setLoading(true);
       setError(null);
-      
+
       const response = await fetch(
         `/api/pharmacy/stock?search=${searchQuery}`,
         {
@@ -133,11 +146,11 @@ export default function PharmacyStockPage() {
             "Content-Type": "application/json",
             ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
           },
-        }
+        },
       );
-      
+
       const data = await response.json();
-      
+
       if (data.success) {
         setMedicines(data.data);
       } else {
@@ -160,19 +173,22 @@ export default function PharmacyStockPage() {
   }, [user, accessToken, searchQuery]);
 
   // Filter medicines based on status
-  const filteredMedicines = medicines.filter(medicine => {
+  const filteredMedicines = medicines.filter((medicine) => {
     // Calculate status
-    const stockPercentage = (medicine.currentQuantity / medicine.originalQuantity) * 100;
+    const stockPercentage =
+      (medicine.currentQuantity / medicine.originalQuantity) * 100;
     const expiryDate = new Date(medicine.expiryDate);
     const today = new Date();
-    const daysToExpiry = Math.ceil((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-    
+    const daysToExpiry = Math.ceil(
+      (expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
+    );
+
     let status = "normal";
     if (stockPercentage <= 20) status = "low_stock";
     if (stockPercentage === 0) status = "out_of_stock";
     if (daysToExpiry <= 30) status = "expiring_soon";
     if (daysToExpiry < 0) status = "expired";
-    
+
     if (statusFilter === "all") return true;
     return status === statusFilter;
   });
@@ -181,19 +197,25 @@ export default function PharmacyStockPage() {
   const calculateStats = () => {
     const stats = {
       totalItems: medicines.length,
-      totalValue: medicines.reduce((sum, med) => sum + (med.currentQuantity * med.sellingPrice), 0),
+      totalValue: medicines.reduce(
+        (sum, med) => sum + med.currentQuantity * med.sellingPrice,
+        0,
+      ),
       lowStock: 0,
       expiringSoon: 0,
       expired: 0,
       outOfStock: 0,
     };
 
-    medicines.forEach(medicine => {
-      const stockPercentage = (medicine.currentQuantity / medicine.originalQuantity) * 100;
+    medicines.forEach((medicine) => {
+      const stockPercentage =
+        (medicine.currentQuantity / medicine.originalQuantity) * 100;
       const expiryDate = new Date(medicine.expiryDate);
       const today = new Date();
-      const daysToExpiry = Math.ceil((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-      
+      const daysToExpiry = Math.ceil(
+        (expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
+      );
+
       if (stockPercentage <= 20) stats.lowStock++;
       if (stockPercentage === 0) stats.outOfStock++;
       if (daysToExpiry <= 30 && daysToExpiry > 0) stats.expiringSoon++;
@@ -212,11 +234,13 @@ export default function PharmacyStockPage() {
     setSuccess(null);
 
     const isEdit = !!selectedMedicine;
-    
+
     try {
       const method = isEdit ? "PUT" : "POST";
-      const url = isEdit ? `/api/pharmacy/stock/${selectedMedicine?._id}` : "/api/pharmacy/stock";
-      
+      const url = isEdit
+        ? `/api/pharmacy/stock/${selectedMedicine?._id}`
+        : "/api/pharmacy/stock";
+
       const response = await fetch(url, {
         method,
         headers: {
@@ -225,32 +249,43 @@ export default function PharmacyStockPage() {
         },
         body: JSON.stringify({
           name: medicineForm.name,
-          batchNumber: medicineForm.batchNumber,
+          form: medicineForm.form,
+          dosage: medicineForm.dosage,
+          frequency: medicineForm.frequency,
+          route: medicineForm.route,
           expiryDate: medicineForm.expiryDate,
           originalQuantity: parseInt(medicineForm.originalQuantity),
-          currentQuantity: parseInt(medicineForm.currentQuantity || medicineForm.originalQuantity),
+          currentQuantity: parseInt(
+            medicineForm.currentQuantity || medicineForm.originalQuantity,
+          ),
           unitPrice: parseFloat(medicineForm.unitPrice),
           sellingPrice: parseFloat(medicineForm.sellingPrice),
           supplier: medicineForm.supplier,
           description: medicineForm.description,
         }),
       });
-      
+
       const data = await response.json();
-      
+
       if (data.success) {
-        setSuccess(isEdit ? "Medicine updated successfully!" : "Medicine added successfully!");
+        setSuccess(
+          isEdit
+            ? "Medicine updated successfully!"
+            : "Medicine added successfully!",
+        );
         fetchMedicines();
-        
+
         if (isEdit) {
           setEditDialogOpen(false);
         } else {
           setAddDialogOpen(false);
         }
-        
+
         resetForm();
       } else {
-        setError(data.error || `Failed to ${isEdit ? 'update' : 'add'} medicine`);
+        setError(
+          data.error || `Failed to ${isEdit ? "update" : "add"} medicine`,
+        );
       }
     } catch (error) {
       console.error("Error saving medicine:", error);
@@ -261,18 +296,21 @@ export default function PharmacyStockPage() {
   // Handle delete
   const handleDelete = async () => {
     if (!selectedMedicine) return;
-    
+
     try {
-      const response = await fetch(`/api/pharmacy/stock/${selectedMedicine._id}`, {
-        method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      const response = await fetch(
+        `/api/pharmacy/stock/${selectedMedicine._id}`,
+        {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
         },
-      });
-      
+      );
+
       const data = await response.json();
-      
+
       if (data.success) {
         setSuccess("Medicine deleted successfully!");
         fetchMedicines();
@@ -291,7 +329,10 @@ export default function PharmacyStockPage() {
   const resetForm = () => {
     setMedicineForm({
       name: "",
-      batchNumber: "",
+      form: "",
+      dosage: "",
+      frequency: "",
+      route: "",
       expiryDate: "",
       originalQuantity: "",
       currentQuantity: "",
@@ -308,7 +349,10 @@ export default function PharmacyStockPage() {
     setSelectedMedicine(medicine);
     setMedicineForm({
       name: medicine.name,
-      batchNumber: medicine.batchNumber,
+      form: medicine.form,
+      dosage: medicine.dosage,
+      frequency: medicine.frequency,
+      route: medicine.route,
       expiryDate: format(new Date(medicine.expiryDate), "yyyy-MM-dd"),
       originalQuantity: medicine.originalQuantity.toString(),
       currentQuantity: medicine.currentQuantity.toString(),
@@ -334,21 +378,37 @@ export default function PharmacyStockPage() {
 
   // Get status badge
   const getStatusBadge = (medicine: MedicineStock) => {
-    const stockPercentage = (medicine.currentQuantity / medicine.originalQuantity) * 100;
+    const stockPercentage =
+      (medicine.currentQuantity / medicine.originalQuantity) * 100;
     const expiryDate = new Date(medicine.expiryDate);
     const today = new Date();
-    const daysToExpiry = Math.ceil((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-    
+    const daysToExpiry = Math.ceil(
+      (expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
+    );
+
     if (stockPercentage === 0) {
       return <Badge variant="destructive">Out of Stock</Badge>;
     } else if (stockPercentage <= 20) {
-      return <Badge className="bg-orange-500 hover:bg-orange-600">Low Stock</Badge>;
+      return (
+        <Badge className="bg-orange-500 hover:bg-orange-600">Low Stock</Badge>
+      );
     } else if (daysToExpiry < 0) {
       return <Badge variant="destructive">Expired</Badge>;
     } else if (daysToExpiry <= 30) {
-      return <Badge className="bg-yellow-500 hover:bg-yellow-600">Expiring Soon</Badge>;
+      return (
+        <Badge className="bg-yellow-500 hover:bg-yellow-600">
+          Expiring Soon
+        </Badge>
+      );
     } else {
-      return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">In Stock</Badge>;
+      return (
+        <Badge
+          variant="outline"
+          className="bg-green-50 text-green-700 border-green-200"
+        >
+          In Stock
+        </Badge>
+      );
     }
   };
 
@@ -366,7 +426,9 @@ export default function PharmacyStockPage() {
         <div className="text-center">
           <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
           <h2 className="text-xl font-semibold mb-2">Unauthorized Access</h2>
-          <p className="text-gray-600">You don't have permission to access this page.</p>
+          <p className="text-gray-600">
+            You don't have permission to access this page.
+          </p>
         </div>
       </div>
     );
@@ -377,8 +439,12 @@ export default function PharmacyStockPage() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold">Pharmacy Stock Management</h1>
-          <p className="text-gray-500 mt-1">Manage medicine inventory and stock levels</p>
+          <h1 className="text-2xl md:text-3xl font-bold">
+            Pharmacy Stock Management
+          </h1>
+          <p className="text-gray-500 mt-1">
+            Manage medicine inventory and stock levels
+          </p>
         </div>
         <div className="flex items-center gap-3">
           <Button variant="outline" size="sm" onClick={fetchMedicines}>
@@ -399,7 +465,7 @@ export default function PharmacyStockPage() {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      
+
       {success && (
         <Alert className="bg-green-50 text-green-800 border-green-200">
           <AlertCircle className="h-4 w-4 text-green-600" />
@@ -422,13 +488,15 @@ export default function PharmacyStockPage() {
             </div>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Total Value</p>
-                <p className="text-2xl font-bold mt-1">{formatCurrency(stats.totalValue)}</p>
+                <p className="text-2xl font-bold mt-1">
+                  {formatCurrency(stats.totalValue)}
+                </p>
               </div>
               <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center">
                 <DollarSign className="h-5 w-5 text-green-600" />
@@ -436,7 +504,7 @@ export default function PharmacyStockPage() {
             </div>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
@@ -450,12 +518,14 @@ export default function PharmacyStockPage() {
             </div>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Expiring Soon</p>
+                <p className="text-sm font-medium text-gray-600">
+                  Expiring Soon
+                </p>
                 <p className="text-2xl font-bold mt-1">{stats.expiringSoon}</p>
               </div>
               <div className="h-10 w-10 rounded-full bg-yellow-100 flex items-center justify-center">
@@ -482,7 +552,7 @@ export default function PharmacyStockPage() {
                 />
               </div>
             </div>
-            
+
             <div className="space-y-2">
               <Label>Status Filter</Label>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -499,14 +569,14 @@ export default function PharmacyStockPage() {
                 </SelectContent>
               </Select>
             </div>
-            
+
             <div className="space-y-2">
               <Label>Total Items</Label>
               <div className="text-2xl font-bold text-gray-900">
                 {filteredMedicines.length}
               </div>
             </div>
-            
+
             <div className="space-y-2">
               <Label>Quick Actions</Label>
               <div className="flex gap-2">
@@ -542,8 +612,8 @@ export default function PharmacyStockPage() {
               <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
               <h3 className="text-lg font-semibold mb-2">No medicines found</h3>
               <p className="text-gray-500">
-                {searchQuery || statusFilter !== "all" 
-                  ? "Try adjusting your filters or search terms" 
+                {searchQuery || statusFilter !== "all"
+                  ? "Try adjusting your filters or search terms"
                   : "No medicines have been added yet."}
               </p>
             </div>
@@ -553,7 +623,10 @@ export default function PharmacyStockPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Medicine Name</TableHead>
-                    <TableHead>Batch Number</TableHead>
+                    <TableHead>Form</TableHead>
+                    <TableHead>Dosage</TableHead>
+                    <TableHead>Frequency</TableHead>
+                    <TableHead>Route</TableHead>
                     <TableHead>Stock Level</TableHead>
                     <TableHead>Expiry Date</TableHead>
                     <TableHead>Price</TableHead>
@@ -563,29 +636,46 @@ export default function PharmacyStockPage() {
                 </TableHeader>
                 <TableBody>
                   {filteredMedicines.map((medicine) => {
-                    const stockPercentage = (medicine.currentQuantity / medicine.originalQuantity) * 100;
-                    
+                    const stockPercentage =
+                      (medicine.currentQuantity / medicine.originalQuantity) *
+                      100;
+
                     return (
                       <TableRow key={medicine._id}>
                         <TableCell>
                           <div className="font-medium">{medicine.name}</div>
-                          <div className="text-sm text-gray-500">{medicine.supplier}</div>
+                          <div className="text-sm text-gray-500">
+                            {medicine.supplier}
+                          </div>
                         </TableCell>
-                        <TableCell className="font-mono text-sm">
-                          {medicine.batchNumber}
+                        <TableCell className="text-sm">
+                          {medicine.form}
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {medicine.dosage}
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {medicine.frequency}
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {medicine.route}
                         </TableCell>
                         <TableCell>
                           <div className="space-y-2">
                             <Progress value={stockPercentage} className="h-2" />
                             <div className="text-sm text-gray-500">
-                              {medicine.currentQuantity} / {medicine.originalQuantity} units
+                              {medicine.currentQuantity} /{" "}
+                              {medicine.originalQuantity} units
                             </div>
                           </div>
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center">
                             <Calendar className="h-3 w-3 mr-2 text-gray-400" />
-                            {format(new Date(medicine.expiryDate), "MMM d, yyyy")}
+                            {format(
+                              new Date(medicine.expiryDate),
+                              "MMM d, yyyy",
+                            )}
                           </div>
                         </TableCell>
                         <TableCell>
@@ -596,9 +686,7 @@ export default function PharmacyStockPage() {
                             Cost: {formatCurrency(medicine.unitPrice)}
                           </div>
                         </TableCell>
-                        <TableCell>
-                          {getStatusBadge(medicine)}
-                        </TableCell>
+                        <TableCell>{getStatusBadge(medicine)}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
                             <Button
@@ -651,23 +739,78 @@ export default function PharmacyStockPage() {
                   <Input
                     id="name"
                     value={medicineForm.name}
-                    onChange={(e) => setMedicineForm({...medicineForm, name: e.target.value})}
+                    onChange={(e) =>
+                      setMedicineForm({ ...medicineForm, name: e.target.value })
+                    }
                     placeholder="e.g., Amoxicillin 500mg"
                     required
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="batchNumber">Batch Number *</Label>
+                  <Label htmlFor="form">Form *</Label>
                   <Input
-                    id="batchNumber"
-                    value={medicineForm.batchNumber}
-                    onChange={(e) => setMedicineForm({...medicineForm, batchNumber: e.target.value})}
-                    placeholder="e.g., BATCH-2024-001"
+                    id="form"
+                    value={medicineForm.form}
+                    onChange={(e) =>
+                      setMedicineForm({
+                        ...medicineForm,
+                        form: e.target.value,
+                      })
+                    }
+                    placeholder="e.g., Tablet, Capsule, Syrup"
                     required
                   />
                 </div>
               </div>
-              
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="dosage">Dosage *</Label>
+                  <Input
+                    id="dosage"
+                    value={medicineForm.dosage}
+                    onChange={(e) =>
+                      setMedicineForm({
+                        ...medicineForm,
+                        dosage: e.target.value,
+                      })
+                    }
+                    placeholder="e.g., 500mg"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="frequency">Frequency *</Label>
+                  <Input
+                    id="frequency"
+                    value={medicineForm.frequency}
+                    onChange={(e) =>
+                      setMedicineForm({
+                        ...medicineForm,
+                        frequency: e.target.value,
+                      })
+                    }
+                    placeholder="e.g., 3 times daily"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="route">Route *</Label>
+                  <Input
+                    id="route"
+                    value={medicineForm.route}
+                    onChange={(e) =>
+                      setMedicineForm({
+                        ...medicineForm,
+                        route: e.target.value,
+                      })
+                    }
+                    placeholder="e.g., Oral, IV, IM"
+                    required
+                  />
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="expiryDate">Expiry Date *</Label>
@@ -675,7 +818,12 @@ export default function PharmacyStockPage() {
                     id="expiryDate"
                     type="date"
                     value={medicineForm.expiryDate}
-                    onChange={(e) => setMedicineForm({...medicineForm, expiryDate: e.target.value})}
+                    onChange={(e) =>
+                      setMedicineForm({
+                        ...medicineForm,
+                        expiryDate: e.target.value,
+                      })
+                    }
                     required
                   />
                 </div>
@@ -684,13 +832,18 @@ export default function PharmacyStockPage() {
                   <Input
                     id="supplier"
                     value={medicineForm.supplier}
-                    onChange={(e) => setMedicineForm({...medicineForm, supplier: e.target.value})}
+                    onChange={(e) =>
+                      setMedicineForm({
+                        ...medicineForm,
+                        supplier: e.target.value,
+                      })
+                    }
                     placeholder="e.g., Pharma Corp"
                     required
                   />
                 </div>
               </div>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="originalQuantity">Total Quantity *</Label>
@@ -699,7 +852,12 @@ export default function PharmacyStockPage() {
                     type="number"
                     min="1"
                     value={medicineForm.originalQuantity}
-                    onChange={(e) => setMedicineForm({...medicineForm, originalQuantity: e.target.value})}
+                    onChange={(e) =>
+                      setMedicineForm({
+                        ...medicineForm,
+                        originalQuantity: e.target.value,
+                      })
+                    }
                     placeholder="e.g., 100"
                     required
                   />
@@ -711,7 +869,12 @@ export default function PharmacyStockPage() {
                     type="number"
                     min="0"
                     value={medicineForm.currentQuantity}
-                    onChange={(e) => setMedicineForm({...medicineForm, currentQuantity: e.target.value})}
+                    onChange={(e) =>
+                      setMedicineForm({
+                        ...medicineForm,
+                        currentQuantity: e.target.value,
+                      })
+                    }
                     placeholder="Same as total quantity"
                   />
                 </div>
@@ -723,13 +886,18 @@ export default function PharmacyStockPage() {
                     step="0.01"
                     min="0"
                     value={medicineForm.unitPrice}
-                    onChange={(e) => setMedicineForm({...medicineForm, unitPrice: e.target.value})}
+                    onChange={(e) =>
+                      setMedicineForm({
+                        ...medicineForm,
+                        unitPrice: e.target.value,
+                      })
+                    }
                     placeholder="0.00"
                     required
                   />
                 </div>
               </div>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="sellingPrice">Selling Price ($) *</Label>
@@ -739,31 +907,43 @@ export default function PharmacyStockPage() {
                     step="0.01"
                     min="0"
                     value={medicineForm.sellingPrice}
-                    onChange={(e) => setMedicineForm({...medicineForm, sellingPrice: e.target.value})}
+                    onChange={(e) =>
+                      setMedicineForm({
+                        ...medicineForm,
+                        sellingPrice: e.target.value,
+                      })
+                    }
                     placeholder="0.00"
                     required
                   />
                 </div>
               </div>
-              
+
               <div className="space-y-2">
                 <Label htmlFor="description">Description</Label>
                 <Textarea
                   id="description"
                   value={medicineForm.description}
-                  onChange={(e) => setMedicineForm({...medicineForm, description: e.target.value})}
+                  onChange={(e) =>
+                    setMedicineForm({
+                      ...medicineForm,
+                      description: e.target.value,
+                    })
+                  }
                   placeholder="Additional notes about this medicine..."
                   rows={3}
                 />
               </div>
             </div>
             <DialogFooter className="mt-6">
-              <Button type="button" variant="outline" onClick={() => setAddDialogOpen(false)}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setAddDialogOpen(false)}
+              >
                 Cancel
               </Button>
-              <Button type="submit">
-                Add Medicine
-              </Button>
+              <Button type="submit">Add Medicine</Button>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -774,9 +954,7 @@ export default function PharmacyStockPage() {
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Edit Medicine</DialogTitle>
-            <DialogDescription>
-              Update medicine details
-            </DialogDescription>
+            <DialogDescription>Update medicine details</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit}>
             <div className="space-y-4">
@@ -787,21 +965,73 @@ export default function PharmacyStockPage() {
                   <Input
                     id="edit-name"
                     value={medicineForm.name}
-                    onChange={(e) => setMedicineForm({...medicineForm, name: e.target.value})}
+                    onChange={(e) =>
+                      setMedicineForm({ ...medicineForm, name: e.target.value })
+                    }
                     required
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="edit-batchNumber">Batch Number *</Label>
+                  <Label htmlFor="edit-form">Form *</Label>
                   <Input
-                    id="edit-batchNumber"
-                    value={medicineForm.batchNumber}
-                    onChange={(e) => setMedicineForm({...medicineForm, batchNumber: e.target.value})}
+                    id="edit-form"
+                    value={medicineForm.form}
+                    onChange={(e) =>
+                      setMedicineForm({
+                        ...medicineForm,
+                        form: e.target.value,
+                      })
+                    }
                     required
                   />
                 </div>
               </div>
-              
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-dosage">Dosage *</Label>
+                  <Input
+                    id="edit-dosage"
+                    value={medicineForm.dosage}
+                    onChange={(e) =>
+                      setMedicineForm({
+                        ...medicineForm,
+                        dosage: e.target.value,
+                      })
+                    }
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-frequency">Frequency *</Label>
+                  <Input
+                    id="edit-frequency"
+                    value={medicineForm.frequency}
+                    onChange={(e) =>
+                      setMedicineForm({
+                        ...medicineForm,
+                        frequency: e.target.value,
+                      })
+                    }
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-route">Route *</Label>
+                  <Input
+                    id="edit-route"
+                    value={medicineForm.route}
+                    onChange={(e) =>
+                      setMedicineForm({
+                        ...medicineForm,
+                        route: e.target.value,
+                      })
+                    }
+                    required
+                  />
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="edit-expiryDate">Expiry Date *</Label>
@@ -809,7 +1039,12 @@ export default function PharmacyStockPage() {
                     id="edit-expiryDate"
                     type="date"
                     value={medicineForm.expiryDate}
-                    onChange={(e) => setMedicineForm({...medicineForm, expiryDate: e.target.value})}
+                    onChange={(e) =>
+                      setMedicineForm({
+                        ...medicineForm,
+                        expiryDate: e.target.value,
+                      })
+                    }
                     required
                   />
                 </div>
@@ -818,32 +1053,51 @@ export default function PharmacyStockPage() {
                   <Input
                     id="edit-supplier"
                     value={medicineForm.supplier}
-                    onChange={(e) => setMedicineForm({...medicineForm, supplier: e.target.value})}
+                    onChange={(e) =>
+                      setMedicineForm({
+                        ...medicineForm,
+                        supplier: e.target.value,
+                      })
+                    }
                     required
                   />
                 </div>
               </div>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="edit-originalQuantity">Total Quantity *</Label>
+                  <Label htmlFor="edit-originalQuantity">
+                    Total Quantity *
+                  </Label>
                   <Input
                     id="edit-originalQuantity"
                     type="number"
                     min="1"
                     value={medicineForm.originalQuantity}
-                    onChange={(e) => setMedicineForm({...medicineForm, originalQuantity: e.target.value})}
+                    onChange={(e) =>
+                      setMedicineForm({
+                        ...medicineForm,
+                        originalQuantity: e.target.value,
+                      })
+                    }
                     required
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="edit-currentQuantity">Current Quantity *</Label>
+                  <Label htmlFor="edit-currentQuantity">
+                    Current Quantity *
+                  </Label>
                   <Input
                     id="edit-currentQuantity"
                     type="number"
                     min="0"
                     value={medicineForm.currentQuantity}
-                    onChange={(e) => setMedicineForm({...medicineForm, currentQuantity: e.target.value})}
+                    onChange={(e) =>
+                      setMedicineForm({
+                        ...medicineForm,
+                        currentQuantity: e.target.value,
+                      })
+                    }
                     required
                   />
                 </div>
@@ -855,12 +1109,17 @@ export default function PharmacyStockPage() {
                     step="0.01"
                     min="0"
                     value={medicineForm.unitPrice}
-                    onChange={(e) => setMedicineForm({...medicineForm, unitPrice: e.target.value})}
+                    onChange={(e) =>
+                      setMedicineForm({
+                        ...medicineForm,
+                        unitPrice: e.target.value,
+                      })
+                    }
                     required
                   />
                 </div>
               </div>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="edit-sellingPrice">Selling Price ($) *</Label>
@@ -870,29 +1129,41 @@ export default function PharmacyStockPage() {
                     step="0.01"
                     min="0"
                     value={medicineForm.sellingPrice}
-                    onChange={(e) => setMedicineForm({...medicineForm, sellingPrice: e.target.value})}
+                    onChange={(e) =>
+                      setMedicineForm({
+                        ...medicineForm,
+                        sellingPrice: e.target.value,
+                      })
+                    }
                     required
                   />
                 </div>
               </div>
-              
+
               <div className="space-y-2">
                 <Label htmlFor="edit-description">Description</Label>
                 <Textarea
                   id="edit-description"
                   value={medicineForm.description}
-                  onChange={(e) => setMedicineForm({...medicineForm, description: e.target.value})}
+                  onChange={(e) =>
+                    setMedicineForm({
+                      ...medicineForm,
+                      description: e.target.value,
+                    })
+                  }
                   rows={3}
                 />
               </div>
             </div>
             <DialogFooter className="mt-6">
-              <Button type="button" variant="outline" onClick={() => setEditDialogOpen(false)}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setEditDialogOpen(false)}
+              >
                 Cancel
               </Button>
-              <Button type="submit">
-                Update Medicine
-              </Button>
+              <Button type="submit">Update Medicine</Button>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -916,12 +1187,26 @@ export default function PharmacyStockPage() {
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <div>
-                      <Label className="text-sm text-gray-500">Medicine Name</Label>
+                      <Label className="text-sm text-gray-500">
+                        Medicine Name
+                      </Label>
                       <p className="font-medium">{selectedMedicine.name}</p>
                     </div>
                     <div>
-                      <Label className="text-sm text-gray-500">Batch Number</Label>
-                      <p className="font-mono text-sm">{selectedMedicine.batchNumber}</p>
+                      <Label className="text-sm text-gray-500">Form</Label>
+                      <p className="text-sm">{selectedMedicine.form}</p>
+                    </div>
+                    <div>
+                      <Label className="text-sm text-gray-500">Dosage</Label>
+                      <p className="text-sm">{selectedMedicine.dosage}</p>
+                    </div>
+                    <div>
+                      <Label className="text-sm text-gray-500">Frequency</Label>
+                      <p className="text-sm">{selectedMedicine.frequency}</p>
+                    </div>
+                    <div>
+                      <Label className="text-sm text-gray-500">Route</Label>
+                      <p className="text-sm">{selectedMedicine.route}</p>
                     </div>
                     <div>
                       <Label className="text-sm text-gray-500">Supplier</Label>
@@ -929,38 +1214,52 @@ export default function PharmacyStockPage() {
                     </div>
                   </CardContent>
                 </Card>
-                
+
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-lg">Stock Information</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <div>
-                      <Label className="text-sm text-gray-500">Stock Level</Label>
+                      <Label className="text-sm text-gray-500">
+                        Stock Level
+                      </Label>
                       <div className="space-y-2">
-                        <Progress 
-                          value={(selectedMedicine.currentQuantity / selectedMedicine.originalQuantity) * 100} 
-                          className="h-2" 
+                        <Progress
+                          value={
+                            (selectedMedicine.currentQuantity /
+                              selectedMedicine.originalQuantity) *
+                            100
+                          }
+                          className="h-2"
                         />
                         <p className="text-sm">
-                          {selectedMedicine.currentQuantity} / {selectedMedicine.originalQuantity} units
+                          {selectedMedicine.currentQuantity} /{" "}
+                          {selectedMedicine.originalQuantity} units
                         </p>
                       </div>
                     </div>
                     <div>
-                      <Label className="text-sm text-gray-500">Expiry Date</Label>
+                      <Label className="text-sm text-gray-500">
+                        Expiry Date
+                      </Label>
                       <p className="font-medium">
-                        {format(new Date(selectedMedicine.expiryDate), "MMMM d, yyyy")}
+                        {format(
+                          new Date(selectedMedicine.expiryDate),
+                          "MMMM d, yyyy",
+                        )}
                       </p>
                     </div>
                     <div>
                       <Label className="text-sm text-gray-500">Status</Label>
-                      <div className="mt-1">{getStatusBadge(selectedMedicine)}</div>
+                      <div className="mt-1">
+                        {getStatusBadge(selectedMedicine)}
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
               </div>
-              
+
               <Card>
                 <CardHeader>
                   <CardTitle className="text-lg">Pricing Information</CardTitle>
@@ -969,29 +1268,42 @@ export default function PharmacyStockPage() {
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                       <Label className="text-sm text-gray-500">Unit Cost</Label>
-                      <p className="font-medium">{formatCurrency(selectedMedicine.unitPrice)}</p>
-                    </div>
-                    <div>
-                      <Label className="text-sm text-gray-500">Selling Price</Label>
-                      <p className="font-medium">{formatCurrency(selectedMedicine.sellingPrice)}</p>
-                    </div>
-                    <div>
-                      <Label className="text-sm text-gray-500">Total Value</Label>
                       <p className="font-medium">
-                        {formatCurrency(selectedMedicine.currentQuantity * selectedMedicine.sellingPrice)}
+                        {formatCurrency(selectedMedicine.unitPrice)}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-sm text-gray-500">
+                        Selling Price
+                      </Label>
+                      <p className="font-medium">
+                        {formatCurrency(selectedMedicine.sellingPrice)}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-sm text-gray-500">
+                        Total Value
+                      </Label>
+                      <p className="font-medium">
+                        {formatCurrency(
+                          selectedMedicine.currentQuantity *
+                            selectedMedicine.sellingPrice,
+                        )}
                       </p>
                     </div>
                   </div>
                 </CardContent>
               </Card>
-              
+
               {selectedMedicine.description && (
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-lg">Description</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <p className="whitespace-pre-wrap">{selectedMedicine.description}</p>
+                    <p className="whitespace-pre-wrap">
+                      {selectedMedicine.description}
+                    </p>
                   </CardContent>
                 </Card>
               )}
@@ -1006,7 +1318,8 @@ export default function PharmacyStockPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Medicine</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete this medicine? This action cannot be undone.
+              Are you sure you want to delete this medicine? This action cannot
+              be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           {selectedMedicine && (
@@ -1018,17 +1331,34 @@ export default function PharmacyStockPage() {
                   <p className="font-medium">{selectedMedicine.name}</p>
                 </div>
                 <div>
-                  <p className="text-gray-500">Batch Number</p>
-                  <p className="font-medium">{selectedMedicine.batchNumber}</p>
+                  <p className="text-gray-500">Form</p>
+                  <p className="font-medium">{selectedMedicine.form}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Dosage</p>
+                  <p className="font-medium">{selectedMedicine.dosage}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Frequency</p>
+                  <p className="font-medium">{selectedMedicine.frequency}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Route</p>
+                  <p className="font-medium">{selectedMedicine.route}</p>
                 </div>
                 <div>
                   <p className="text-gray-500">Current Stock</p>
-                  <p className="font-medium">{selectedMedicine.currentQuantity} units</p>
+                  <p className="font-medium">
+                    {selectedMedicine.currentQuantity} units
+                  </p>
                 </div>
                 <div>
                   <p className="text-gray-500">Expiry Date</p>
                   <p className="font-medium">
-                    {format(new Date(selectedMedicine.expiryDate), "MMM d, yyyy")}
+                    {format(
+                      new Date(selectedMedicine.expiryDate),
+                      "MMM d, yyyy",
+                    )}
                   </p>
                 </div>
               </div>

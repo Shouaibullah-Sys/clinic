@@ -8,7 +8,10 @@ import levenshtein from "fast-levenshtein";
 export interface Medicine {
   _id: string;
   name: string;
-  batchNumber: string;
+  form: string;
+  dosage: string;
+  frequency: string;
+  route: string;
   supplier: string;
   currentQuantity: number;
   originalQuantity: number;
@@ -218,8 +221,17 @@ export function buildVocabulary(medicines: Medicine[]): string[] {
       }
     }
 
-    // Add batch number
-    vocabulary.add(medicine.batchNumber.toLowerCase());
+    // Add form
+    vocabulary.add(medicine.form.toLowerCase());
+
+    // Add dosage
+    vocabulary.add(medicine.dosage.toLowerCase());
+
+    // Add frequency
+    vocabulary.add(medicine.frequency.toLowerCase());
+
+    // Add route
+    vocabulary.add(medicine.route.toLowerCase());
 
     // Add supplier name words
     const supplierWords = medicine.supplier.split(/\s+/);
@@ -481,10 +493,28 @@ export function fuzzySearch(
       medicine.name.toLowerCase(),
     );
 
-    // Check batch number similarity
-    const batchSimilarity = calculateSimilarity(
+    // Check form similarity
+    const formSimilarity = calculateSimilarity(
       normalizedQuery,
-      medicine.batchNumber.toLowerCase(),
+      medicine.form.toLowerCase(),
+    );
+
+    // Check dosage similarity
+    const dosageSimilarity = calculateSimilarity(
+      normalizedQuery,
+      medicine.dosage.toLowerCase(),
+    );
+
+    // Check frequency similarity
+    const frequencySimilarity = calculateSimilarity(
+      normalizedQuery,
+      medicine.frequency.toLowerCase(),
+    );
+
+    // Check route similarity
+    const routeSimilarity = calculateSimilarity(
+      normalizedQuery,
+      medicine.route.toLowerCase(),
     );
 
     // Check supplier similarity
@@ -496,7 +526,10 @@ export function fuzzySearch(
     // Take the maximum similarity
     const maxSimilarity = Math.max(
       nameSimilarity,
-      batchSimilarity,
+      formSimilarity,
+      dosageSimilarity,
+      frequencySimilarity,
+      routeSimilarity,
       supplierSimilarity,
     );
 
@@ -547,9 +580,12 @@ export async function hybridSearch(
   // Exact matches
   for (const medicine of medicines) {
     const nameMatch = medicine.name.toLowerCase() === normalizedQuery;
-    const batchMatch = medicine.batchNumber.toLowerCase() === normalizedQuery;
+    const formMatch = medicine.form.toLowerCase() === normalizedQuery;
+    const dosageMatch = medicine.dosage.toLowerCase() === normalizedQuery;
+    const frequencyMatch = medicine.frequency.toLowerCase() === normalizedQuery;
+    const routeMatch = medicine.route.toLowerCase() === normalizedQuery;
 
-    if (nameMatch || batchMatch) {
+    if (nameMatch || formMatch || dosageMatch || frequencyMatch || routeMatch) {
       const existing = combinedResults.get(medicine._id);
       const score = existing ? existing.score + exactWeight : exactWeight;
 

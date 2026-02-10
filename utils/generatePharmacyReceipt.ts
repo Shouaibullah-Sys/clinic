@@ -5,7 +5,10 @@ import autoTable from "jspdf-autotable";
 interface PrescriptionItem {
   medicine: {
     name: string;
-    batchNumber: string;
+    form: string;
+    dosage: string;
+    frequency: string;
+    route: string;
   };
   quantity: number;
   unitPrice: number;
@@ -46,7 +49,7 @@ export const generatePharmacyReceipt = (prescription: Prescription) => {
     "Rahim Complex, Shahrara Tower, next to Shahrara Hospital",
     105,
     26,
-    { align: "center" }
+    { align: "center" },
   );
   doc.text("Phone: (+93) 784-475-000 | Tax ID: 123456789", 105, 32, {
     align: "center",
@@ -78,37 +81,51 @@ export const generatePharmacyReceipt = (prescription: Prescription) => {
   // Items Table
   autoTable(doc, {
     startY: 106,
-    head: [["No.", "Medicine", "Batch", "Qty", "Unit Price", "Disc%", "Total"]],
+    head: [
+      [
+        "No.",
+        "Medicine",
+        "Form",
+        "Dosage",
+        "Freq",
+        "Route",
+        "Qty",
+        "Unit Price",
+        "Total",
+      ],
+    ],
     body: prescription.items.map((item, index) => [
       index + 1,
       item.medicine.name,
-      item.medicine.batchNumber,
+      item.medicine.form,
+      item.medicine.dosage,
+      item.medicine.frequency,
+      item.medicine.route,
       item.quantity,
       `$${item.unitPrice.toFixed(2)}`,
-      `${item.discount}%`,
-      `$${(item.quantity * item.unitPrice * (1 - item.discount / 100)).toFixed(
-        2
-      )}`,
+      `$${(item.quantity * item.unitPrice).toFixed(2)}`,
     ]),
     styles: {
-      fontSize: 9,
-      cellPadding: 3,
+      fontSize: 8,
+      cellPadding: 2,
       halign: "center",
     },
     columnStyles: {
-      0: { halign: "center", cellWidth: 10 },
-      1: { halign: "left", cellWidth: 50 },
-      2: { halign: "center", cellWidth: 25 },
+      0: { halign: "center", cellWidth: 8 },
+      1: { halign: "left", cellWidth: 35 },
+      2: { halign: "center", cellWidth: 15 },
       3: { halign: "center", cellWidth: 15 },
-      4: { halign: "right", cellWidth: 25 },
-      5: { halign: "center", cellWidth: 15 },
-      6: { halign: "right", cellWidth: 25 },
+      4: { halign: "center", cellWidth: 12 },
+      5: { halign: "center", cellWidth: 12 },
+      6: { halign: "center", cellWidth: 10 },
+      7: { halign: "right", cellWidth: 25 },
+      8: { halign: "right", cellWidth: 25 },
     },
     headStyles: {
       fillColor: [59, 130, 246],
       textColor: 255,
       fontStyle: "bold",
-      fontSize: 9,
+      fontSize: 8,
     },
     alternateRowStyles: { fillColor: [241, 245, 249] },
     margin: { left: 14, right: 14 },
@@ -128,13 +145,13 @@ export const generatePharmacyReceipt = (prescription: Prescription) => {
   doc.text(
     `Payment Method: ${prescription.paymentMethod.toUpperCase()}`,
     14,
-    finalY + 8
+    finalY + 8,
   );
   doc.text(
     `Amount Paid: $${prescription.amountPaid.toFixed(2)}`,
     150,
     finalY + 8,
-    { align: "right" }
+    { align: "right" },
   );
 
   // Footer

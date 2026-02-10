@@ -27,7 +27,10 @@ import {
 interface MedicineStock {
   _id: string;
   name: string;
-  batchNumber: string;
+  form: string;
+  dosage: string;
+  frequency: string;
+  route: string;
   currentQuantity: number;
   originalQuantity: number;
   expiryDate: string;
@@ -129,7 +132,7 @@ export default function MedicineStockReport({
     const expiry = new Date(expiryDate);
     const today = new Date();
     const daysToExpiry = Math.floor(
-      (expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+      (expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
     );
 
     if (expiry < today) {
@@ -163,7 +166,7 @@ export default function MedicineStockReport({
         >
           1
         </PaginationLink>
-      </PaginationItem>
+      </PaginationItem>,
     );
 
     // Add ellipsis if needed
@@ -171,7 +174,7 @@ export default function MedicineStockReport({
       items.push(
         <PaginationItem key="ellipsis-start">
           <PaginationEllipsis />
-        </PaginationItem>
+        </PaginationItem>,
       );
     }
 
@@ -190,7 +193,7 @@ export default function MedicineStockReport({
             >
               {i}
             </PaginationLink>
-          </PaginationItem>
+          </PaginationItem>,
         );
       }
     }
@@ -200,7 +203,7 @@ export default function MedicineStockReport({
       items.push(
         <PaginationItem key="ellipsis-end">
           <PaginationEllipsis />
-        </PaginationItem>
+        </PaginationItem>,
       );
     }
 
@@ -214,7 +217,7 @@ export default function MedicineStockReport({
           >
             {totalPages}
           </PaginationLink>
-        </PaginationItem>
+        </PaginationItem>,
       );
     }
 
@@ -282,7 +285,10 @@ export default function MedicineStockReport({
             <TableHeader>
               <TableRow>
                 <TableHead>Medicine</TableHead>
-                <TableHead>Batch</TableHead>
+                <TableHead>Form</TableHead>
+                <TableHead>Dosage</TableHead>
+                <TableHead>Frequency</TableHead>
+                <TableHead>Route</TableHead>
                 <TableHead>Stock Level</TableHead>
                 <TableHead>Expiry Date</TableHead>
                 <TableHead>Status</TableHead>
@@ -296,14 +302,17 @@ export default function MedicineStockReport({
                 paginationData.currentItems.map((item) => {
                   const stockPercentage = calculateStockPercentage(
                     item.currentQuantity,
-                    item.originalQuantity
+                    item.originalQuantity,
                   );
                   const expiryStatus = getExpiryStatus(item.expiryDate);
 
                   return (
                     <TableRow key={item._id}>
                       <TableCell className="font-medium">{item.name}</TableCell>
-                      <TableCell>{item.batchNumber}</TableCell>
+                      <TableCell>{item.form}</TableCell>
+                      <TableCell>{item.dosage}</TableCell>
+                      <TableCell>{item.frequency}</TableCell>
+                      <TableCell>{item.route}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-4">
                           <div className="min-w-[100px]">

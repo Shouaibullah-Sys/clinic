@@ -1,7 +1,7 @@
 // app/pharmacy/layout.tsx
 "use client";
 import { useState, useEffect } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   Pill,
@@ -9,7 +9,6 @@ import {
   Receipt,
   Home,
   Menu,
-  X,
   HandCoins,
   CheckCheck,
 } from "lucide-react";
@@ -19,14 +18,31 @@ import { useAuthStore } from "@/store/useAuthStore";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarRail,
+  SidebarTrigger,
+} from "@/components/ui/sidebar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import SessionChecker from "@/components/SessionChecker";
 
 const navLinks = [
   { href: "/pharmacy", label: "Dashboard", icon: LayoutDashboard },
   { href: "/pharmacy/stock", label: "Stock Management", icon: Package },
   { href: "/pharmacy/issue", label: "Issue Medicine", icon: Pill },
-  { href: "/pharmacy", label: "Dispense Medicine", icon: HandCoins },
+  { href: "/pharmacy/dispense", label: "Dispense Medicine", icon: HandCoins },
   { href: "/pharmacy/inventory", label: "Inventory", icon: CheckCheck },
+  { href: "/pharmacy/receipts", label: "Receipts", icon: Receipt },
 ];
 
 export default function PharmacyLayout({
@@ -35,16 +51,32 @@ export default function PharmacyLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const router = useRouter();
   const { user, logout, initialize, isLoading } = useAuthStore();
+  const [initialized, setInitialized] = useState(false);
 
-  // Initialize auth state in useEffect
   useEffect(() => {
     initialize();
   }, [initialize]);
 
+  useEffect(() => {
+    if (!isLoading && !initialized) {
+      if (!user) {
+        router.push("/login");
+      } else if (user?.role !== "pharmacist" && user?.role !== "admin") {
+        router.push("/unauthorized");
+      }
+      setInitialized(true);
+    }
+  }, [user, router, isLoading, initialized]);
+
+  const handleLogout = async () => {
+    await logout();
+    router.push("/login");
+  };
+
   // Show loading state while initializing
-  if (isLoading) {
+  if (isLoading || !initialized) {
     return (
       <ThemeProvider
         attribute="class"
@@ -62,6 +94,11 @@ export default function PharmacyLayout({
     );
   }
 
+  // Redirect non-pharmacy users
+  if (user && user.role !== "pharmacist" && user.role !== "admin") {
+    return null;
+  }
+
   return (
     <ThemeProvider
       attribute="class"
@@ -70,130 +107,142 @@ export default function PharmacyLayout({
       disableTransitionOnChange
     >
       <SessionChecker />
-      <div className="flex min-h-screen">
-        {/* Desktop Sidebar */}
-        <aside className="hidden md:block w-64 border-r bg-muted/40">
-          <div className="flex h-full flex-col gap-2">
-            <div className="flex h-14 items-center border-b px-4 lg:h-15">
-              <Link
-                href="/pharmacy"
-                className="flex items-center gap-2 font-semibold"
-              >
-                <span className="text-lg">Pharmacy Module</span>
-              </Link>
-            </div>
+      <SidebarProvider defaultOpen={true}>
+        <div className="flex min-h-screen w-full">
+          {/* Sidebar for Desktop */}
+          <Sidebar collapsible="icon" className="hidden md:block">
+            <SidebarHeader>
+              <div className="flex items-center gap-2 px-4 py-3">
+                <span className="text-lg font-semibold">Pharmacy Module</span>
+              </div>
+            </SidebarHeader>
 
-            <div className="flex-1 py-2">
-              <nav className="grid items-start px-2 text-sm font-medium">
-                {navLinks.map((link) => (
-                  <Link
-                    key={link.href}
-                    href={link.href}
-                    className={cn(
-                      "flex items-center gap-3 rounded-lg px-3 py-2 transition-all",
-                      pathname === link.href
-                        ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:bg-accent",
-                    )}
-                  >
-                    <link.icon className="h-4 w-4" />
-                    {link.label}
-                  </Link>
-                ))}
+            <SidebarContent>
+              <SidebarGroup>
+                <SidebarGroupLabel>Navigation</SidebarGroupLabel>
+                <SidebarMenu>
+                  {navLinks.map((link) => (
+                    <SidebarMenuItem key={link.href}>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={pathname === link.href}
+                        tooltip={link.label}
+                      >
+                        <Link href={link.href}>
+                          <link.icon className="h-4 w-4" />
+                          <span>{link.label}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroup>
 
-                {user?.role === "admin" && (
-                  <Link
-                    href="/dashboard"
-                    className="mt-4 flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground hover:bg-accent"
-                  >
-                    <Home className="h-4 w-4" />
-                    Admin Dashboard
-                  </Link>
-                )}
-              </nav>
-            </div>
+              {user?.role === "admin" && (
+                <SidebarGroup>
+                  <SidebarGroupLabel>Admin</SidebarGroupLabel>
+                  <SidebarMenu>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton asChild tooltip="Admin Dashboard">
+                        <Link href="/dashboard">
+                          <Home className="h-4 w-4" />
+                          <span>Admin Dashboard</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  </SidebarMenu>
+                </SidebarGroup>
+              )}
+            </SidebarContent>
 
-            <div className="mt-auto p-4 border-t">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-full bg-primary flex items-center justify-center text-primary-foreground">
-                  {user?.name?.charAt(0) || "U"}
-                </div>
-                <div>
-                  <p className="font-medium">{user?.name}</p>
-                  <p className="text-sm text-muted-foreground capitalize">
-                    {user?.role}
-                  </p>
+            <SidebarFooter>
+              <div className="flex flex-col gap-3 p-4">
+                <div className="flex items-center gap-3">
+                  <Avatar className="h-10 w-10">
+                    <AvatarFallback className="bg-primary text-primary-foreground">
+                      {user?.name?.charAt(0) || "U"}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex flex-col min-w-0">
+                    <p className="font-medium truncate">{user?.name}</p>
+                    <p className="text-sm text-muted-foreground capitalize truncate">
+                      {user?.role}
+                    </p>
+                  </div>
                 </div>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={logout}
-                  className="ml-auto"
+                  onClick={handleLogout}
+                  className="w-full"
                 >
                   Logout
                 </Button>
               </div>
-            </div>
-          </div>
-        </aside>
+            </SidebarFooter>
 
-        <div className="flex flex-col w-full">
-          {/* Mobile Header */}
-          <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-background sm:px-6 md:hidden">
-            <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
-              <SheetTrigger asChild>
-                <Button variant="outline" size="icon" className="sm:hidden">
-                  <Menu className="h-5 w-5" />
-                </Button>
-              </SheetTrigger>
-              <SheetContent side="left" className="sm:max-w-xs">
-                <nav className="grid gap-6 text-lg font-medium">
-                  <div className="flex items-center justify-between mb-4">
-                    <span className="font-semibold">Pharmacy</span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setSidebarOpen(false)}
-                    >
-                      <X className="h-5 w-5" />
-                    </Button>
-                  </div>
+            <SidebarRail />
+          </Sidebar>
 
-                  {navLinks.map((link) => (
-                    <Link
-                      key={link.href}
-                      href={link.href}
-                      onClick={() => setSidebarOpen(false)}
-                      className={cn(
-                        "flex items-center gap-4 px-2.5",
-                        pathname === link.href
-                          ? "text-foreground"
-                          : "text-muted-foreground hover:text-foreground",
-                      )}
-                    >
-                      <link.icon className="h-5 w-5" />
-                      {link.label}
-                    </Link>
-                  ))}
+          {/* Mobile Sidebar Sheet */}
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon"
+                className="fixed left-4 top-4 z-50 md:hidden"
+              >
+                <Menu className="h-5 w-5" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="left" className="w-64 p-0">
+              <div className="flex h-full flex-col">
+                <div className="flex h-14 items-center border-b px-4">
+                  <span className="font-semibold">Pharmacy Module</span>
+                </div>
 
-                  {user?.role === "admin" && (
-                    <Link
-                      href="/dashboard"
-                      onClick={() => setSidebarOpen(false)}
-                      className="flex items-center gap-4 px-2.5 text-muted-foreground hover:text-foreground"
-                    >
-                      <Home className="h-5 w-5" />
-                      Admin Dashboard
-                    </Link>
-                  )}
+                <div className="flex-1 overflow-auto py-2">
+                  <nav className="grid items-start gap-2 px-2">
+                    {navLinks.map((link) => (
+                      <Link
+                        key={link.href}
+                        href={link.href}
+                        className={cn(
+                          "flex items-center gap-3 rounded-lg px-3 py-2 transition-all",
+                          pathname === link.href
+                            ? "bg-primary text-primary-foreground"
+                            : "text-muted-foreground hover:bg-accent",
+                        )}
+                        onClick={() => document.body.click()}
+                      >
+                        <link.icon className="h-4 w-4" />
+                        {link.label}
+                      </Link>
+                    ))}
 
-                  <div className="mt-8 flex items-center gap-4 px-2.5">
-                    <div className="h-10 w-10 rounded-full bg-primary flex items-center justify-center text-primary-foreground">
-                      {user?.name?.charAt(0) || "U"}
-                    </div>
-                    <div>
-                      <p className="font-medium">{user?.name}</p>
-                      <p className="text-sm text-muted-foreground capitalize">
+                    {user?.role === "admin" && (
+                      <Link
+                        href="/dashboard"
+                        className="mt-4 flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground hover:bg-accent"
+                        onClick={() => document.body.click()}
+                      >
+                        <Home className="h-4 w-4" />
+                        Admin Dashboard
+                      </Link>
+                    )}
+                  </nav>
+                </div>
+
+                <div className="mt-auto border-t p-4">
+                  <div className="flex items-center gap-3">
+                    <Avatar className="h-10 w-10">
+                      <AvatarFallback className="bg-primary text-primary-foreground">
+                        {user?.name?.charAt(0) || "U"}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex flex-col min-w-0">
+                      <p className="font-medium truncate">{user?.name}</p>
+                      <p className="text-sm text-muted-foreground capitalize truncate">
                         {user?.role}
                       </p>
                     </div>
@@ -201,44 +250,84 @@ export default function PharmacyLayout({
                       variant="outline"
                       size="sm"
                       onClick={() => {
-                        logout();
-                        setSidebarOpen(false);
+                        handleLogout();
+                        document.body.click();
                       }}
                       className="ml-auto"
                     >
                       Logout
                     </Button>
                   </div>
-                </nav>
-              </SheetContent>
-            </Sheet>
-
-            <div className="flex items-center gap-4 ml-auto">
-              {user?.role === "admin" && (
-                <Link href="/dashboard">
-                  <Button variant="secondary" size="sm" className="gap-2">
-                    <Home className="h-4 w-4" />
-                    <span className="hidden sm:inline">Admin</span>
-                  </Button>
-                </Link>
-              )}
-              <div className="flex items-center gap-2">
-                <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground">
-                  {user?.name?.charAt(0) || "U"}
                 </div>
-                <Button variant="outline" size="sm" onClick={logout}>
-                  Logout
-                </Button>
               </div>
-            </div>
-          </header>
+            </SheetContent>
+          </Sheet>
 
-          {/* Main Content */}
-          <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-6">
-            {children}
-          </main>
+          {/* Main Content Area */}
+          <SidebarInset className="flex flex-col flex-1 w-full">
+            {/* Mobile Header - Only show on mobile */}
+            <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 md:hidden">
+              <div className="flex items-center gap-4 ml-auto">
+                {user?.role === "admin" && (
+                  <Link href="/dashboard">
+                    <Button variant="secondary" size="sm" className="gap-2">
+                      <Home className="h-4 w-4" />
+                      <span>Admin</span>
+                    </Button>
+                  </Link>
+                )}
+                <div className="flex items-center gap-2">
+                  <Avatar className="h-8 w-8">
+                    <AvatarFallback className="bg-primary text-primary-foreground">
+                      {user?.name?.charAt(0) || "U"}
+                    </AvatarFallback>
+                  </Avatar>
+                  <Button variant="outline" size="sm" onClick={handleLogout}>
+                    Logout
+                  </Button>
+                </div>
+              </div>
+            </header>
+
+            {/* Desktop Header - Shows trigger and user info */}
+            <header className="sticky top-0 z-30 hidden h-14 items-center gap-4 border-b bg-background px-6 md:flex">
+              <SidebarTrigger className="-ml-1" />
+              <div className="flex-1" /> {/* Spacer */}
+              <div className="flex items-center gap-4">
+                {user?.role === "admin" && (
+                  <Link href="/dashboard">
+                    <Button variant="secondary" size="sm" className="gap-2">
+                      <Home className="h-4 w-4" />
+                      <span>Admin Dashboard</span>
+                    </Button>
+                  </Link>
+                )}
+                <div className="flex items-center gap-2">
+                  <Avatar className="h-8 w-8">
+                    <AvatarFallback className="bg-primary text-primary-foreground">
+                      {user?.name?.charAt(0) || "U"}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="hidden md:block text-sm">
+                    <p className="font-medium">{user?.name}</p>
+                    <p className="text-xs text-muted-foreground capitalize">
+                      {user?.role}
+                    </p>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={handleLogout}>
+                    Logout
+                  </Button>
+                </div>
+              </div>
+            </header>
+
+            {/* Main Content - Now takes full width */}
+            <main className="flex-1 overflow-auto">
+              <div className="container mx-auto p-4 md:p-6">{children}</div>
+            </main>
+          </SidebarInset>
         </div>
-      </div>
+      </SidebarProvider>
     </ThemeProvider>
   );
 }

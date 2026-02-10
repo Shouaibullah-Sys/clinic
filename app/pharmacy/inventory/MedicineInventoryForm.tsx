@@ -1,17 +1,17 @@
 // components/pharmacy/MedicineInventoryForm.tsx
-'use client';
-import { useState, useEffect } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
-import { Button } from '@/components/ui/button';
+"use client";
+import { useState, useEffect } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogFooter,
-} from '@/components/ui/dialog';
+} from "@/components/ui/dialog";
 import {
   Form,
   FormControl,
@@ -19,21 +19,24 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-} from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { toast } from 'sonner';
-import { Medicine } from '@/types/medicine';
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { toast } from "sonner";
+import { Medicine } from "@/types/medicine";
 
 const formSchema = z.object({
-  name: z.string().min(1, 'Name is required'),
-  batchNumber: z.string().min(1, 'Batch number is required'),
-  expiryDate: z.string().min(1, 'Expiry date is required'),
-  currentQuantity: z.number().min(0, 'Quantity cannot be negative'),
-  originalQuantity: z.number().min(1, 'Original quantity must be at least 1'),
-  unitPrice: z.number().min(0, 'Price cannot be negative'),
-  sellingPrice: z.number().min(0, 'Price cannot be negative'),
-  supplier: z.string().min(1, 'Supplier is required'),
+  name: z.string().min(1, "Name is required"),
+  form: z.string().min(1, "Form is required"),
+  dosage: z.string().min(1, "Dosage is required"),
+  frequency: z.string().min(1, "Frequency is required"),
+  route: z.string().min(1, "Route is required"),
+  expiryDate: z.string().min(1, "Expiry date is required"),
+  currentQuantity: z.number().min(0, "Quantity cannot be negative"),
+  originalQuantity: z.number().min(1, "Original quantity must be at least 1"),
+  unitPrice: z.number().min(0, "Price cannot be negative"),
+  sellingPrice: z.number().min(0, "Price cannot be negative"),
+  supplier: z.string().min(1, "Supplier is required"),
   description: z.string().optional(),
 });
 
@@ -55,15 +58,18 @@ export function MedicineStockForm({
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      name: '',
-      batchNumber: '',
-      expiryDate: '',
+      name: "",
+      form: "",
+      dosage: "",
+      frequency: "",
+      route: "",
+      expiryDate: "",
       currentQuantity: 0,
       originalQuantity: 0,
       unitPrice: 0,
       sellingPrice: 0,
-      supplier: '',
-      description: '',
+      supplier: "",
+      description: "",
     },
   });
 
@@ -71,14 +77,17 @@ export function MedicineStockForm({
     if (initialData) {
       form.reset({
         name: initialData.name,
-        batchNumber: initialData.batchNumber,
+        form: initialData.form,
+        dosage: initialData.dosage,
+        frequency: initialData.frequency,
+        route: initialData.route,
         expiryDate: initialData.expiryDate,
         currentQuantity: initialData.currentQuantity,
         originalQuantity: initialData.originalQuantity,
         unitPrice: initialData.unitPrice,
         sellingPrice: initialData.sellingPrice,
         supplier: initialData.supplier,
-        description: initialData.description || '',
+        description: initialData.description || "",
       });
     } else {
       form.reset();
@@ -88,27 +97,29 @@ export function MedicineStockForm({
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     setIsSubmitting(true);
     try {
-      const url = initialData 
+      const url = initialData
         ? `/api/pharmacy/inventory/${initialData._id}`
-        : '/api/pharmacy/inventory';
-      const method = initialData ? 'PUT' : 'POST';
+        : "/api/pharmacy/inventory";
+      const method = initialData ? "PUT" : "POST";
 
       const response = await fetch(url, {
         method,
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify(values),
       });
 
       if (!response.ok) {
-        throw new Error('Failed to save medicine');
+        throw new Error("Failed to save medicine");
       }
 
-      toast.success(`Medicine ${initialData ? 'updated' : 'added'} successfully`);
+      toast.success(
+        `Medicine ${initialData ? "updated" : "added"} successfully`,
+      );
       onSuccess();
     } catch (error) {
-      toast.error('An error occurred while saving the medicine');
+      toast.error("An error occurred while saving the medicine");
     } finally {
       setIsSubmitting(false);
     }
@@ -119,7 +130,7 @@ export function MedicineStockForm({
       <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
           <DialogTitle>
-            {initialData ? 'Edit Medicine' : 'Add New Medicine'}
+            {initialData ? "Edit Medicine" : "Add New Medicine"}
           </DialogTitle>
         </DialogHeader>
         <Form {...form}>
@@ -140,12 +151,54 @@ export function MedicineStockForm({
               />
               <FormField
                 control={form.control}
-                name="batchNumber"
+                name="form"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Batch Number</FormLabel>
+                    <FormLabel>Form</FormLabel>
                     <FormControl>
-                      <Input placeholder="Enter batch number" {...field} />
+                      <Input
+                        placeholder="e.g., Tablet, Capsule, Syrup"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="dosage"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Dosage</FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g., 500mg" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="frequency"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Frequency</FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g., 3 times daily" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="route"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Route</FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g., Oral, IV, IM" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -188,7 +241,9 @@ export function MedicineStockForm({
                         type="number"
                         min="1"
                         {...field}
-                        onChange={(e) => field.onChange(parseInt(e.target.value))}
+                        onChange={(e) =>
+                          field.onChange(parseInt(e.target.value))
+                        }
                       />
                     </FormControl>
                     <FormMessage />
@@ -206,7 +261,9 @@ export function MedicineStockForm({
                         type="number"
                         min="0"
                         {...field}
-                        onChange={(e) => field.onChange(parseInt(e.target.value))}
+                        onChange={(e) =>
+                          field.onChange(parseInt(e.target.value))
+                        }
                       />
                     </FormControl>
                     <FormMessage />
@@ -225,7 +282,9 @@ export function MedicineStockForm({
                         step="0.01"
                         min="0"
                         {...field}
-                        onChange={(e) => field.onChange(parseFloat(e.target.value))}
+                        onChange={(e) =>
+                          field.onChange(parseFloat(e.target.value))
+                        }
                       />
                     </FormControl>
                     <FormMessage />
@@ -244,7 +303,9 @@ export function MedicineStockForm({
                         step="0.01"
                         min="0"
                         {...field}
-                        onChange={(e) => field.onChange(parseFloat(e.target.value))}
+                        onChange={(e) =>
+                          field.onChange(parseFloat(e.target.value))
+                        }
                       />
                     </FormControl>
                     <FormMessage />
@@ -279,7 +340,7 @@ export function MedicineStockForm({
                 Cancel
               </Button>
               <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? 'Saving...' : 'Save'}
+                {isSubmitting ? "Saving..." : "Save"}
               </Button>
             </DialogFooter>
           </form>

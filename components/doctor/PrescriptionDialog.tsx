@@ -80,7 +80,10 @@ type PrescriptionFormValues = z.infer<typeof prescriptionSchema>;
 interface Medicine {
   _id: string;
   name: string;
-  batchNumber: string;
+  form: string;
+  dosage: string;
+  frequency: string;
+  route: string;
   currentQuantity: number;
   originalQuantity: number;
   unitPrice: number;
@@ -649,7 +652,10 @@ export function PrescriptionDialog({
                             <TableHeader>
                               <TableRow>
                                 <TableHead>Medicine Name</TableHead>
-                                <TableHead>Batch</TableHead>
+                                <TableHead>Form</TableHead>
+                                <TableHead>Dosage</TableHead>
+                                <TableHead>Frequency</TableHead>
+                                <TableHead>Route</TableHead>
                                 <TableHead>Stock</TableHead>
                                 <TableHead className="w-25">Action</TableHead>
                               </TableRow>
@@ -670,9 +676,12 @@ export function PrescriptionDialog({
                                           {medicine.supplier}
                                         </div>
                                       </TableCell>
+                                      <TableCell>{medicine.form}</TableCell>
+                                      <TableCell>{medicine.dosage}</TableCell>
                                       <TableCell>
-                                        {medicine.batchNumber}
+                                        {medicine.frequency}
                                       </TableCell>
+                                      <TableCell>{medicine.route}</TableCell>
                                       <TableCell>
                                         <Badge
                                           variant={stockStatus.variant}

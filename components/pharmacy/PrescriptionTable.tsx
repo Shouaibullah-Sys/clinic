@@ -9,10 +9,10 @@
 //   onPrint: (prescription: Prescription) => void;
 // }
 
-// export const PrescriptionTable = ({ 
-//   prescriptions, 
-//   loading, 
-//   onPrint 
+// export const PrescriptionTable = ({
+//   prescriptions,
+//   loading,
+//   onPrint
 // }: PrescriptionTableProps) => {
 //   return (
 //     <div className="space-y-4">
@@ -36,22 +36,22 @@
 //                   <p className="text-sm capitalize">{prescription.paymentMethod}</p>
 //                 </div>
 //               </div>
-              
+
 //               <div className="mt-4">
 //                 <div className="grid grid-cols-6 gap-2 font-medium text-sm mb-2">
 //                   <div>#</div>
 //                   <div>Medicine</div>
-//                   <div>Batch</div>
+//                   <div>Form</div>
 //                   <div className="text-right">Qty</div>
 //                   <div className="text-right">Price</div>
 //                   <div className="text-right">Total</div>
 //                 </div>
-                
+
 //                 {prescription.items.map((item, index) => (
 //                   <div key={index} className="grid grid-cols-6 gap-2 text-sm py-1 border-t">
 //                     <div>{index + 1}</div>
 //                     <div>{item.medicine.name}</div>
-//                     <div>{item.medicine.batchNumber}</div>
+//                     <div>{item.medicine.form}</div>
 //                     <div className="text-right">{item.quantity}</div>
 //                     <div className="text-right">${item.unitPrice.toFixed(2)}</div>
 //                     <div className="text-right">
@@ -60,10 +60,10 @@
 //                   </div>
 //                 ))}
 //               </div>
-              
+
 //               <div className="mt-4 flex justify-end">
-//                 <Button 
-//                   size="sm" 
+//                 <Button
+//                   size="sm"
 //                   onClick={() => onPrint(prescription)}
 //                   disabled={loading}
 //                 >

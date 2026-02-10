@@ -78,7 +78,10 @@ interface DailyIssuedItem {
   _id: string;
   medicineId: string;
   name: string;
-  batchNumber: string;
+  form: string;
+  dosage: string;
+  frequency: string;
+  route: string;
   quantityIssued: number;
   currentStock: number;
   originalStock: number;
@@ -107,8 +110,20 @@ const MobileInventoryCard = ({ item }: { item: DailyIssuedItem }) => {
             </div>
             <div className="space-y-1 text-xs text-muted-foreground">
               <div className="flex justify-between">
-                <span>Batch:</span>
-                <span>{item.batchNumber}</span>
+                <span>Form:</span>
+                <span>{item.form}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Dosage:</span>
+                <span>{item.dosage}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Frequency:</span>
+                <span>{item.frequency}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Route:</span>
+                <span>{item.route}</span>
               </div>
               <div className="flex justify-between">
                 <span>Qty Issued:</span>
@@ -132,8 +147,8 @@ const MobileInventoryCard = ({ item }: { item: DailyIssuedItem }) => {
                           stockPercentage < 10
                             ? "#ef4444"
                             : stockPercentage < 20
-                            ? "#eab308"
-                            : "#22c55e",
+                              ? "#eab308"
+                              : "#22c55e",
                       } as React.CSSProperties
                     }
                   />
@@ -182,7 +197,7 @@ export default function DailyIssuedItemsPage() {
     mutate,
   } = useSWR<{ issuedItems: DailyIssuedItem[]; pagination: any }>(
     `/api/pharmacy/issued-items?date=${dateFilter?.toISOString()}`,
-    fetcher
+    fetcher,
   );
 
   const issuedItems = issuedItemsResponse?.issuedItems || [];
@@ -191,7 +206,7 @@ export default function DailyIssuedItemsPage() {
   const issuedToOptions = useMemo(() => {
     if (!Array.isArray(issuedItems)) return [];
     const uniqueValues = Array.from(
-      new Set(issuedItems.map((item) => item.issuedTo))
+      new Set(issuedItems.map((item) => item.issuedTo)),
     );
     return ["all", ...uniqueValues];
   }, [issuedItems]);
@@ -202,7 +217,10 @@ export default function DailyIssuedItemsPage() {
     return issuedItems.filter((item) => {
       const matchesSearch =
         item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.batchNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.form.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.dosage.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.frequency.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.route.toLowerCase().includes(searchTerm.toLowerCase()) ||
         item.issuedTo.toLowerCase().includes(searchTerm.toLowerCase());
 
       const matchesIssuedTo =
@@ -223,7 +241,7 @@ export default function DailyIssuedItemsPage() {
           <div className="font-medium">
             {item.name}
             <div className="text-xs text-muted-foreground">
-              Batch: {item.batchNumber}
+              {item.form} | {item.dosage} | {item.frequency} | {item.route}
             </div>
           </div>
         );
@@ -260,8 +278,8 @@ export default function DailyIssuedItemsPage() {
                     stockPercentage < 10
                       ? "#ef4444"
                       : stockPercentage < 20
-                      ? "#eab308"
-                      : "#22c55e",
+                        ? "#eab308"
+                        : "#22c55e",
                 } as React.CSSProperties
               }
             />
@@ -375,7 +393,10 @@ export default function DailyIssuedItemsPage() {
       head: [
         [
           "Medicine",
-          "Batch",
+          "Form",
+          "Dosage",
+          "Frequency",
+          "Route",
           "Qty Issued",
           "Qty on Hand",
           "Issued To",
@@ -386,7 +407,10 @@ export default function DailyIssuedItemsPage() {
       ],
       body: filteredItems.map((item) => [
         item.name,
-        item.batchNumber,
+        item.form,
+        item.dosage,
+        item.frequency,
+        item.route,
         item.quantityIssued.toString(),
         `${item.currentStock}/${item.originalStock}`,
         item.issuedTo,
@@ -402,11 +426,11 @@ export default function DailyIssuedItemsPage() {
     const totalItems = filteredItems.length;
     const totalValue = filteredItems.reduce(
       (sum, item) => sum + item.totalPrice,
-      0
+      0,
     );
     const totalQuantity = filteredItems.reduce(
       (sum, item) => sum + item.quantityIssued,
-      0
+      0,
     );
 
     doc.setFontSize(12);
@@ -432,11 +456,11 @@ export default function DailyIssuedItemsPage() {
 
     const totalValue = filteredItems.reduce(
       (sum, item) => sum + item.totalPrice,
-      0
+      0,
     );
     const totalQuantity = filteredItems.reduce(
       (sum, item) => sum + item.quantityIssued,
-      0
+      0,
     );
 
     return { totalValue, totalQuantity, totalItems: filteredItems.length };
@@ -566,7 +590,7 @@ export default function DailyIssuedItemsPage() {
                       <div className="text-2xl font-bold">
                         {filteredItems.reduce(
                           (sum, item) => sum + item.currentStock,
-                          0
+                          0,
                         )}
                       </div>
                       <div className="text-sm text-muted-foreground">
@@ -606,7 +630,7 @@ export default function DailyIssuedItemsPage() {
                               ? null
                               : flexRender(
                                   header.column.columnDef.header,
-                                  header.getContext()
+                                  header.getContext(),
                                 )}
                           </TableHead>
                         ))}
@@ -624,7 +648,7 @@ export default function DailyIssuedItemsPage() {
                             <TableCell key={cell.id}>
                               {flexRender(
                                 cell.column.columnDef.cell,
-                                cell.getContext()
+                                cell.getContext(),
                               )}
                             </TableCell>
                           ))}
@@ -692,7 +716,7 @@ export default function DailyIssuedItemsPage() {
                             </PaginationLink>
                           </PaginationItem>
                         );
-                      }
+                      },
                     )}
 
                     <PaginationItem>

@@ -11,7 +11,10 @@ export async function POST(req: NextRequest) {
     await dbConnect();
     const payload = await getTokenPayload(req);
 
-    if (!payload || !(payload.role === "admin" || payload.role === "pharmacist")) {
+    if (
+      !payload ||
+      !(payload.role === "admin" || payload.role === "pharmacist")
+    ) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -19,7 +22,10 @@ export async function POST(req: NextRequest) {
     const { prescriptionId, items } = body;
 
     if (!items || !Array.isArray(items)) {
-      return NextResponse.json({ error: "Items are required" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Items are required" },
+        { status: 400 },
+      );
     }
 
     // Create issue records
@@ -30,9 +36,9 @@ export async function POST(req: NextRequest) {
         issueDate: new Date(),
         issuedTo: item.issuedTo,
         issuedBy: item.issuedBy,
-        prescriptionId: prescriptionId
+        prescriptionId: prescriptionId,
       });
-      
+
       return await issue.save();
     });
 
@@ -41,13 +47,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       data: issues,
-      message: "Medicine issue records created"
+      message: "Medicine issue records created",
     });
   } catch (error: any) {
     console.error("Error creating medicine issues:", error);
     return NextResponse.json(
       { error: error.message || "Failed to create medicine issues" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -57,7 +63,10 @@ export async function GET(req: NextRequest) {
     await dbConnect();
     const payload = await getTokenPayload(req);
 
-    if (!payload || !(payload.role === "admin" || payload.role === "pharmacist")) {
+    if (
+      !payload ||
+      !(payload.role === "admin" || payload.role === "pharmacist")
+    ) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -67,7 +76,7 @@ export async function GET(req: NextRequest) {
     const skip = (page - 1) * limit;
 
     const issues = await MedicineIssue.find({})
-      .populate("medicineId", "name batchNumber")
+      .populate("medicineId", "name form dosage frequency route")
       .sort({ issueDate: -1 })
       .skip(skip)
       .limit(limit);
@@ -77,12 +86,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       success: true,
       data: issues,
-      pagination: { page, limit, total }
+      pagination: { page, limit, total },
     });
   } catch (error: any) {
     return NextResponse.json(
       { error: "Failed to fetch medicine issues" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

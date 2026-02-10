@@ -50,7 +50,10 @@ interface MedicineItem {
   medicine?: {
     _id: string;
     name: string;
-    batchNumber: string;
+    form: string;
+    dosage: string;
+    frequency: string;
+    route: string;
     currentQuantity: number;
     sellingPrice: number;
     expiryDate: string;
@@ -106,7 +109,10 @@ interface DispensingItem {
   type: "preOp" | "postOp" | "discharge";
   prescribedQuantity: number;
   dispensedQuantity: number;
-  batchNumber: string;
+  form: string;
+  dosage: string;
+  frequency: string;
+  route: string;
   unitPrice: number;
   totalPrice: number;
   availableStock: number;
@@ -274,7 +280,10 @@ export default function DispenseDischargePage() {
         type,
         prescribedQuantity: med.quantity,
         dispensedQuantity: 0,
-        batchNumber: med.medicine?.batchNumber || "N/A",
+        form: med.medicine?.form || "N/A",
+        dosage: med.medicine?.dosage || "N/A",
+        frequency: med.medicine?.frequency || "N/A",
+        route: med.medicine?.route || "N/A",
         unitPrice: med.unitPrice,
         totalPrice: 0,
         availableStock: med.medicine?.currentQuantity || 0,
@@ -328,7 +337,10 @@ export default function DispenseDischargePage() {
         type,
         prescribedQuantity: prescribedQty,
         dispensedQuantity: dispensedQty,
-        batchNumber: medicineData.batchNumber || "N/A",
+        form: medicineData.form || "N/A",
+        dosage: medicineData.dosage || "N/A",
+        frequency: medicineData.frequency || "N/A",
+        route: medicineData.route || "N/A",
         unitPrice: unitPrice,
         totalPrice: dispensedQty * unitPrice,
         availableStock: availableStock,
@@ -356,7 +368,10 @@ export default function DispenseDischargePage() {
         type,
         prescribedQuantity: med.quantity || 1,
         dispensedQuantity: 0,
-        batchNumber: "NOT IN STOCK",
+        form: "N/A",
+        dosage: "N/A",
+        frequency: "N/A",
+        route: "N/A",
         unitPrice: med.unitPrice || 0,
         totalPrice: 0,
         availableStock: 0,
@@ -832,9 +847,12 @@ export default function DispenseDischargePage() {
                                   </span>
                                 )}
                               </div>
-                              <p className="text-xs text-muted-foreground">
-                                Batch: {item.batchNumber}
-                              </p>
+                              <div className="text-xs text-muted-foreground space-y-1">
+                                <p>Form: {item.form}</p>
+                                <p>Dosage: {item.dosage}</p>
+                                <p>Frequency: {item.frequency}</p>
+                                <p>Route: {item.route}</p>
+                              </div>
                               {item.expiryDate && (
                                 <p className="text-xs text-muted-foreground">
                                   Expires:{" "}

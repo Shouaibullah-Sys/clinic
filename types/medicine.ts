@@ -1,7 +1,10 @@
 export interface Medicine {
   _id: string;
   name: string;
-  batchNumber: string;
+  form: string;
+  dosage: string;
+  frequency: string;
+  route: string;
   expiryDate: string;
   currentQuantity: number;
   originalQuantity: number;
@@ -9,10 +12,9 @@ export interface Medicine {
   sellingPrice: number;
   supplier: string;
   description?: string;
-
 }
 
 export interface MedicineStock extends Medicine {
-     remainingPercentage: number;
-  expiryStatus: 'valid' | 'expiring-soon' | 'expired';
+  remainingPercentage: number;
+  expiryStatus: "valid" | "expiring-soon" | "expired";
 }

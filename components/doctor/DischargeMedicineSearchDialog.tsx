@@ -36,7 +36,10 @@ import { cn } from "@/lib/utils";
 interface Medicine {
   _id: string;
   name: string;
-  batchNumber: string;
+  form: string;
+  dosage: string;
+  frequency: string;
+  route: string;
   expiryDate: string;
   currentQuantity: number;
   sellingPrice: number;
@@ -49,10 +52,13 @@ interface DischargeMedicineSearchDialogProps {
   onMedicineSelected: (medicine: {
     _id: string;
     name: string;
+    form: string;
+    dosage: string;
+    frequency: string;
+    route: string;
     sellingPrice: number;
     currentQuantity: number;
     expiryDate: string;
-    batchNumber: string;
   }) => void;
   accessToken: string;
 }
@@ -146,10 +152,13 @@ export function DischargeMedicineSearchDialog({
     onMedicineSelected({
       _id: medicine._id,
       name: medicine.name,
+      form: medicine.form,
+      dosage: medicine.dosage,
+      frequency: medicine.frequency,
+      route: medicine.route,
       sellingPrice: medicine.sellingPrice,
       currentQuantity: medicine.currentQuantity,
       expiryDate: medicine.expiryDate,
-      batchNumber: medicine.batchNumber,
     });
 
     // Close dialog
@@ -248,7 +257,10 @@ export function DischargeMedicineSearchDialog({
                   <TableHeader>
                     <TableRow>
                       <TableHead>Medicine Name</TableHead>
-                      <TableHead>Batch</TableHead>
+                      <TableHead>Form</TableHead>
+                      <TableHead>Dosage</TableHead>
+                      <TableHead>Frequency</TableHead>
+                      <TableHead>Route</TableHead>
                       <TableHead>Expiry</TableHead>
                       <TableHead>Stock</TableHead>
                       <TableHead>Price</TableHead>
@@ -283,9 +295,18 @@ export function DischargeMedicineSearchDialog({
                             )}
                           </TableCell>
                           <TableCell>
-                            <span className="text-sm font-mono">
-                              {medicine.batchNumber}
+                            <span className="text-sm">{medicine.form}</span>
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-sm">{medicine.dosage}</span>
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-sm">
+                              {medicine.frequency}
                             </span>
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-sm">{medicine.route}</span>
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">

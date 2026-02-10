@@ -32,7 +32,10 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 const formSchema = z
   .object({
     name: z.string().min(2, "Name must be at least 2 characters"),
-    batchNumber: z.string().min(1, "Batch number is required"),
+    form: z.string().min(1, "Form is required"),
+    dosage: z.string().min(1, "Dosage is required"),
+    frequency: z.string().min(1, "Frequency is required"),
+    route: z.string().min(1, "Route is required"),
     expiryDate: z
       .date({
         error: "Expiry date is required",
@@ -61,7 +64,10 @@ const formSchema = z
 interface Medicine {
   _id: string;
   name: string;
-  batchNumber: string;
+  form: string;
+  dosage: string;
+  frequency: string;
+  route: string;
   expiryDate: Date;
   originalQuantity: number;
   currentQuantity: number;
@@ -93,7 +99,10 @@ export default function MedicineStockForm({
     defaultValues: initialData
       ? {
           name: initialData.name,
-          batchNumber: initialData.batchNumber,
+          form: initialData.form,
+          dosage: initialData.dosage,
+          frequency: initialData.frequency,
+          route: initialData.route,
           expiryDate: new Date(initialData.expiryDate),
           originalQuantity: initialData.originalQuantity,
           currentQuantity: initialData.currentQuantity,
@@ -104,7 +113,10 @@ export default function MedicineStockForm({
         }
       : {
           name: "",
-          batchNumber: "",
+          form: "",
+          dosage: "",
+          frequency: "",
+          route: "",
           expiryDate: new Date(),
           originalQuantity: 0,
           unitPrice: 0,
@@ -171,7 +183,7 @@ export default function MedicineStockForm({
         toast.success(
           initialData
             ? "Medicine updated successfully"
-            : "Medicine added successfully"
+            : "Medicine added successfully",
         );
         onSuccess();
       } else {
@@ -179,7 +191,7 @@ export default function MedicineStockForm({
       }
     } catch (error: unknown) {
       toast.error(
-        error instanceof Error ? error.message : "Could not save medicine"
+        error instanceof Error ? error.message : "Could not save medicine",
       );
     } finally {
       setLoading(false);
@@ -217,15 +229,62 @@ export default function MedicineStockForm({
 
           <FormField
             control={form.control}
-            name="batchNumber"
+            name="form"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Batch Number *</FormLabel>
+                <FormLabel>Form *</FormLabel>
                 <FormControl>
                   <Input
-                    placeholder="Enter batch number"
+                    placeholder="e.g., Tablet, Capsule, Syrup"
                     {...field}
-                    disabled={isEditMode}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="dosage"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Dosage *</FormLabel>
+                <FormControl>
+                  <Input placeholder="e.g., 500mg, 10ml" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="frequency"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Frequency *</FormLabel>
+                <FormControl>
+                  <Input
+                    placeholder="e.g., Twice daily, Every 8 hours"
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="route"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Route *</FormLabel>
+                <FormControl>
+                  <Input
+                    placeholder="e.g., Oral, Injection, Topical"
+                    {...field}
                   />
                 </FormControl>
                 <FormMessage />
@@ -246,7 +305,7 @@ export default function MedicineStockForm({
                         variant="outline"
                         className={cn(
                           "pl-3 text-left font-normal",
-                          !field.value && "text-muted-foreground"
+                          !field.value && "text-muted-foreground",
                         )}
                       >
                         {field.value ? (
@@ -283,7 +342,7 @@ export default function MedicineStockForm({
                     {Math.round(
                       (initialData.currentQuantity /
                         initialData.originalQuantity) *
-                        100
+                        100,
                     )}
                     % remaining
                   </Badge>
@@ -502,8 +561,8 @@ export default function MedicineStockForm({
             {loading
               ? "Saving..."
               : initialData
-              ? "Update Medicine"
-              : "Add Medicine"}
+                ? "Update Medicine"
+                : "Add Medicine"}
           </Button>
         </div>
       </form>

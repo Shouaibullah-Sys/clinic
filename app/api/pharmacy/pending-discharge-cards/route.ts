@@ -66,17 +66,17 @@ export async function GET(req: NextRequest) {
       })
       .populate({
         path: "preOpMedicines.medicine",
-        select: "name batchNumber currentQuantity sellingPrice",
+        select: "name form dosage frequency route currentQuantity sellingPrice",
         model: "MedicineStock",
       })
       .populate({
         path: "postOpMedicines.medicine",
-        select: "name batchNumber currentQuantity sellingPrice",
+        select: "name form dosage frequency route currentQuantity sellingPrice",
         model: "MedicineStock",
       })
       .populate({
         path: "dischargeMedicines.medicine",
-        select: "name batchNumber currentQuantity sellingPrice",
+        select: "name form dosage frequency route currentQuantity sellingPrice",
         model: "MedicineStock",
       })
       .select(

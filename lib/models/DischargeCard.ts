@@ -6,6 +6,10 @@ import mongoose, { Schema, model, models, Document } from "mongoose";
 export interface IDischargeCardPreOpMedicine {
   medicine?: mongoose.Types.ObjectId;
   name: string;
+  form: string;
+  dosage: string;
+  frequency: string;
+  route: string;
   quantity: number;
   unitPrice: number;
   totalPrice: number;
@@ -20,6 +24,9 @@ export interface IDischargeCardPreOpMedicine {
 export interface IDischargeCardPostOpMedicine {
   medicine?: mongoose.Types.ObjectId;
   name: string;
+  form: string;
+  dosage: string;
+  route: string;
   quantity: number;
   unitPrice: number;
   totalPrice: number;
@@ -36,6 +43,10 @@ export interface IDischargeCardPostOpMedicine {
 export interface IDischargeCardDischargeMedicine {
   medicine?: mongoose.Types.ObjectId;
   name: string;
+  form: string;
+  dosage: string;
+  frequency: string;
+  route: string;
   quantity: number;
   unitPrice: number;
   totalPrice: number;
@@ -165,6 +176,10 @@ const dischargeCardPreOpMedicineSchema =
   new Schema<IDischargeCardPreOpMedicine>({
     medicine: { type: Schema.Types.ObjectId, ref: "MedicineStock" },
     name: { type: String, required: true },
+    form: { type: String, required: true },
+    dosage: { type: String, required: true },
+    frequency: { type: String, required: true },
+    route: { type: String, required: true },
     quantity: { type: Number, required: true, min: 1 },
     unitPrice: { type: Number, required: true, min: 0 },
     totalPrice: { type: Number, required: true, min: 0 },
@@ -179,6 +194,9 @@ const dischargeCardPostOpMedicineSchema =
   new Schema<IDischargeCardPostOpMedicine>({
     medicine: { type: Schema.Types.ObjectId, ref: "MedicineStock" },
     name: { type: String, required: true },
+    form: { type: String, required: true },
+    dosage: { type: String, required: true },
+    route: { type: String, required: true },
     quantity: { type: Number, required: true, min: 1 },
     unitPrice: { type: Number, required: true, min: 0 },
     totalPrice: { type: Number, required: true, min: 0 },
@@ -195,6 +213,10 @@ const dischargeCardDischargeMedicineSchema =
   new Schema<IDischargeCardDischargeMedicine>({
     medicine: { type: Schema.Types.ObjectId, ref: "MedicineStock" },
     name: { type: String, required: true },
+    form: { type: String, required: true },
+    dosage: { type: String, required: true },
+    frequency: { type: String, required: true },
+    route: { type: String, required: true },
     quantity: { type: Number, required: true, min: 1 },
     unitPrice: { type: Number, required: true, min: 0 },
     totalPrice: { type: Number, required: true, min: 0 },

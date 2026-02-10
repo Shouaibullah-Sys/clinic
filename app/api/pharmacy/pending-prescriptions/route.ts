@@ -62,7 +62,8 @@ export async function GET(req: NextRequest) {
       })
       .populate({
         path: "medications.medicine",
-        select: "name batchNumber currentQuantity sellingPrice unitPrice",
+        select:
+          "name form dosage frequency route currentQuantity sellingPrice unitPrice",
         model: "MedicineStock",
       })
       .select(

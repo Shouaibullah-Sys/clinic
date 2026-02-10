@@ -1,10 +1,13 @@
 // components/pharmacy/PrescriptionHistory.tsx
-import { Button } from '@/components/ui/button';
-import { Printer, RefreshCw } from 'lucide-react';
-import { generatePharmacyReceipt } from '@/utils/generatePharmacyReceipt';
-import { IPrescription, PrescriptionItem } from '@/lib/models/Prescription';
-import { Types } from 'mongoose';
-import { IMedicineStock } from '@/lib/models/MedicineStock';
+import { Button } from "@/components/ui/button";
+import { Printer, RefreshCw } from "lucide-react";
+import { generatePharmacyReceipt } from "@/utils/generatePharmacyReceipt";
+import {
+  IPrescription,
+  IPrescriptionMedication,
+} from "@/lib/models/Prescription";
+import { Types } from "mongoose";
+import { IMedicineStock } from "@/lib/models/MedicineStock";
 
 interface User {
   _id: Types.ObjectId;
@@ -13,7 +16,10 @@ interface User {
 
 interface MedicineInfo {
   name: string;
-  batchNumber: string;
+  form: string;
+  dosage: string;
+  frequency: string;
+  route: string;
 }
 
 interface PrescriptionItemForReceipt {
@@ -45,55 +51,88 @@ interface PrescriptionHistoryProps {
 }
 
 // Type guard to check if medicine is populated
-function isMedicinePopulated(medicine: Types.ObjectId | IMedicineStock): medicine is IMedicineStock {
+function isMedicinePopulated(
+  medicine: Types.ObjectId | IMedicineStock,
+): medicine is IMedicineStock {
   return (medicine as IMedicineStock).name !== undefined;
 }
 
-export const PrescriptionHistory = ({ 
-  prescriptions, 
-  loading, 
+export const PrescriptionHistory = ({
+  prescriptions,
+  loading,
   user,
-  onRefresh
+  onRefresh,
 }: PrescriptionHistoryProps) => {
   const handlePrint = (prescription: IPrescription) => {
     // Transform the prescription data to match the expected format
     const receiptData: PrescriptionForReceipt = {
-      ...prescription,
-      createdAt: prescription.createdAt.toISOString(),
-      items: prescription.items.map(item => {
-        let medicineName = 'Unknown Medicine';
-        let batchNumber = 'N/A';
+      patientName: (prescription as any).patient?.name || "Unknown Patient",
+      patientPhone: (prescription as any).patient?.phone || "N/A",
+      invoiceNumber: prescription.prescriptionId,
+      items: prescription.medications.map((item) => {
+        let medicineName = item.name;
+        let form = item.form;
+        let dosage = item.dosage;
+        let frequency = item.frequency;
+        let route = item.route;
 
-        if (isMedicinePopulated(item.medicine)) {
+        // If medicine is populated, use its data
+        if (item.medicine && isMedicinePopulated(item.medicine)) {
           medicineName = item.medicine.name;
-          batchNumber = item.medicine.batchNumber;
+          form = item.medicine.form;
+          dosage = item.medicine.dosage;
+          frequency = item.medicine.frequency;
+          route = item.medicine.route;
         }
 
         return {
-          ...item,
           medicine: {
             name: medicineName,
-            batchNumber: batchNumber
-          }
+            form: form,
+            dosage: dosage,
+            frequency: frequency,
+            route: route,
+          },
+          quantity: item.quantity,
+          unitPrice: item.price,
+          discount: 0,
         };
       }),
+      totalAmount: prescription.charges.totalAmount,
+      amountPaid: prescription.charges.paid,
+      paymentMethod: prescription.charges.paymentMethod || "N/A",
+      createdAt: prescription.createdAt.toISOString(),
       issuedBy: {
-        name: user?.name || 'System'
-      }
+        name: user?.name || "System",
+      },
     };
     generatePharmacyReceipt(receiptData);
   };
 
-  const getMedicineInfo = (medicine: Types.ObjectId | IMedicineStock): MedicineInfo => {
-    if (isMedicinePopulated(medicine)) {
-      return {
-        name: medicine.name,
-        batchNumber: medicine.batchNumber
-      };
+  const getMedicineInfo = (
+    medication: IPrescriptionMedication,
+  ): MedicineInfo => {
+    let medicineName = medication.name;
+    let form = medication.form;
+    let dosage = medication.dosage;
+    let frequency = medication.frequency;
+    let route = medication.route;
+
+    // If medicine is populated, use its data
+    if (medication.medicine && isMedicinePopulated(medication.medicine)) {
+      medicineName = medication.medicine.name;
+      form = medication.medicine.form;
+      dosage = medication.medicine.dosage;
+      frequency = medication.medicine.frequency;
+      route = medication.medicine.route;
     }
+
     return {
-      name: 'Unknown Medicine',
-      batchNumber: 'N/A'
+      name: medicineName,
+      form: form,
+      dosage: dosage,
+      frequency: frequency,
+      route: route,
     };
   };
 
@@ -113,52 +152,84 @@ export const PrescriptionHistory = ({
       ) : (
         <div className="space-y-4">
           {prescriptions.map((prescription) => (
-            <div key={prescription._id.toString()} className="border rounded-lg p-4">
+            <div
+              key={prescription._id.toString()}
+              className="border rounded-lg p-4"
+            >
               <div className="flex flex-col sm:flex-row justify-between items-start gap-2">
                 <div className="flex-1 min-w-[200px]">
-                  <h3 className="font-medium text-sm sm:text-base">{prescription.patientName}</h3>
+                  <h3 className="font-medium text-sm sm:text-base">
+                    {(prescription as any).patient?.name || "Unknown Patient"}
+                  </h3>
                   <p className="text-xs sm:text-sm text-muted-foreground">
-                    {prescription.invoiceNumber} • {new Date(prescription.createdAt).toLocaleString()}
+                    {prescription.prescriptionId} •{" "}
+                    {new Date(prescription.createdAt).toLocaleString()}
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-sm sm:text-base font-bold">${prescription.totalAmount.toFixed(2)}</p>
-                  <p className="text-xs sm:text-sm capitalize">{prescription.paymentMethod}</p>
+                  <p className="text-sm sm:text-base font-bold">
+                    ${prescription.charges.totalAmount.toFixed(2)}
+                  </p>
+                  <p className="text-xs sm:text-sm capitalize">
+                    {prescription.charges.paymentMethod || "N/A"}
+                  </p>
                 </div>
               </div>
-              
+
               <div className="mt-4">
-                <div className="grid grid-cols-1 md:grid-cols-6 gap-2 font-medium text-xs sm:text-sm mb-2">
+                <div className="grid grid-cols-1 md:grid-cols-9 gap-2 font-medium text-xs sm:text-sm mb-2">
                   <div className="hidden md:block text-center">#</div>
                   <div>Medicine</div>
-                  <div className="hidden md:block text-center">Batch</div>
+                  <div className="hidden md:block text-center">Form</div>
+                  <div className="hidden md:block text-center">Dosage</div>
+                  <div className="hidden md:block text-center">Frequency</div>
+                  <div className="hidden md:block text-center">Route</div>
                   <div className="text-right md:text-center">Qty</div>
                   <div className="hidden sm:block text-right">Price</div>
                   <div className="text-right">Total</div>
                 </div>
-                
-                {prescription.items.map((item: PrescriptionItem, index: number) => {
-                  const medicineInfo = getMedicineInfo(item.medicine);
-                  return (
-                    <div key={index} className="grid grid-cols-1 md:grid-cols-6 gap-2 text-xs sm:text-sm py-2 border-t">
-                      <div className="hidden md:block text-center">{index + 1}</div>
-                      <div className="truncate">{medicineInfo.name}</div>
-                      <div className="hidden md:block text-center">{medicineInfo.batchNumber}</div>
-                      <div className="text-right md:text-center">{item.quantity}</div>
-                      <div className="hidden sm:block text-right">${item.unitPrice.toFixed(2)}</div>
-                      <div className="text-right">
-                        ${(item.quantity * item.unitPrice * (1 - item.discount / 100)).toFixed(2)}
+
+                {prescription.medications.map(
+                  (medication: IPrescriptionMedication, index: number) => {
+                    const medicineInfo = getMedicineInfo(medication);
+                    return (
+                      <div
+                        key={index}
+                        className="grid grid-cols-1 md:grid-cols-9 gap-2 text-xs sm:text-sm py-2 border-t"
+                      >
+                        <div className="hidden md:block text-center">
+                          {index + 1}
+                        </div>
+                        <div className="truncate">{medicineInfo.name}</div>
+                        <div className="hidden md:block text-center">
+                          {medicineInfo.form}
+                        </div>
+                        <div className="hidden md:block text-center">
+                          {medicineInfo.dosage}
+                        </div>
+                        <div className="hidden md:block text-center">
+                          {medicineInfo.frequency}
+                        </div>
+                        <div className="hidden md:block text-center">
+                          {medicineInfo.route}
+                        </div>
+                        <div className="text-right md:text-center">
+                          {medication.quantity}
+                        </div>
+                        <div className="hidden sm:block text-right">
+                          ${medication.price.toFixed(2)}
+                        </div>
+                        <div className="text-right">
+                          ${(medication.quantity * medication.price).toFixed(2)}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  },
+                )}
               </div>
-              
+
               <div className="mt-4 flex justify-end">
-                <Button 
-                  size="sm" 
-                  onClick={() => handlePrint(prescription)}
-                >
+                <Button size="sm" onClick={() => handlePrint(prescription)}>
                   <Printer className="mr-2 h-4 w-4" />
                   Print Receipt
                 </Button>

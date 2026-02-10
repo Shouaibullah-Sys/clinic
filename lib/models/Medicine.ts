@@ -6,8 +6,10 @@ export interface IMedicine extends mongoose.Document {
   patient: mongoose.Types.ObjectId;
   name: string;
   genericName?: string;
+  form: string;
   dosage: string;
   frequency: string;
+  route: string;
   duration: string;
   quantity: number;
   price: number;
@@ -49,12 +51,22 @@ const medicineSchema = new Schema<IMedicine>(
       type: String,
       trim: true,
     },
+    form: {
+      type: String,
+      required: true,
+      trim: true,
+    },
     dosage: {
       type: String,
       required: true,
       trim: true,
     },
     frequency: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    route: {
       type: String,
       required: true,
       trim: true,
@@ -107,7 +119,7 @@ const medicineSchema = new Schema<IMedicine>(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 // Indexes
@@ -132,13 +144,14 @@ medicineSchema.pre("save", function (next) {
     const random = Math.floor(1000 + Math.random() * 9000);
     this.medicineId = `MED${year}${month}${random}`;
   }
-  
+
   // Calculate total if not provided
   if (!this.total && this.price && this.quantity) {
     this.total = this.price * this.quantity;
   }
-  
+
   next();
 });
 
-export const Medicine = models.Medicine || model<IMedicine>("Medicine", medicineSchema);
+export const Medicine =
+  models.Medicine || model<IMedicine>("Medicine", medicineSchema);

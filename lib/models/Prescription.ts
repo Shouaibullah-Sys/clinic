@@ -21,6 +21,7 @@ export interface IPrescriptionCharges {
 export interface IPrescriptionMedication {
   medicine?: mongoose.Types.ObjectId;
   name: string;
+  form: string;
   dosage: string;
   frequency: string;
   duration: string;
@@ -129,6 +130,7 @@ const PrescriptionSchema = new Schema<IPrescription, PrescriptionModel>(
           required: false,
         },
         name: { type: String, required: true },
+        form: { type: String, required: true },
         dosage: { type: String, required: true },
         frequency: { type: String, required: true },
         duration: { type: String, required: true },
@@ -358,7 +360,7 @@ PrescriptionSchema.statics.verifyPayment = async function (
     {
       $set: {
         paymentVerified: true,
-        paymentVerifiedBy: verifiedBy,
+        paymentVerifiedBy: new mongoose.Types.ObjectId(verifiedBy),
         paymentVerifiedAt: new Date(),
         paymentStatus: "verified",
       },
@@ -422,7 +424,7 @@ PrescriptionSchema.statics.findActivePrescriptions = async function (
     .populate({
       path: "medications.medicine",
       select:
-        "name batchNumber currentQuantity sellingPrice unitPrice expiryDate supplier",
+        "name form dosage frequency route currentQuantity sellingPrice unitPrice expiryDate supplier",
     })
     .sort({ prescribedDate: -1 });
 };

@@ -207,7 +207,10 @@ export async function POST(
           medicineId: medicine._id.toString(),
           quantity: item.quantity,
           type: item.type,
-          batchNumber: medicine.batchNumber || "N/A",
+          form: medicine.form || "N/A",
+          dosage: medicine.dosage || "N/A",
+          frequency: medicine.frequency || "N/A",
+          route: medicine.route || "N/A",
           unitPrice: medicineData.unitPrice,
           total: item.quantity * medicineData.unitPrice,
         });
@@ -218,7 +221,10 @@ export async function POST(
           medicineId: medicineData.medicine?.toString() || "N/A",
           quantity: item.quantity,
           type: item.type,
-          batchNumber: "N/A",
+          form: "N/A",
+          dosage: "N/A",
+          frequency: "N/A",
+          route: "N/A",
           unitPrice: medicineData.unitPrice,
           total: item.quantity * medicineData.unitPrice,
         });
