@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
-import { DailyExpense } from "@/lib/models/DailyExpense";
+import { ReceptionExpense } from "@/lib/models/ReceptionExpense";
 import { jwtVerify } from "jose";
 
 // Helper function to generate expense ID
@@ -112,12 +112,12 @@ export async function GET(request: NextRequest) {
 
     const skip = (page - 1) * limit;
 
-    const expenses = await DailyExpense.find(query)
+    const expenses = await ReceptionExpense.find(query)
       .sort({ date: -1 })
       .skip(skip)
       .limit(limit);
 
-    const total = await DailyExpense.countDocuments(query);
+    const total = await ReceptionExpense.countDocuments(query);
 
     // Get summary stats
     let summary = null;
@@ -125,7 +125,7 @@ export async function GET(request: NextRequest) {
       const start = new Date(startDate);
       const end = new Date(endDate);
       end.setHours(23, 59, 59, 999);
-      const summaryData = await DailyExpense.getExpenseSummary(start, end);
+      const summaryData = await ReceptionExpense.getExpenseSummary(start, end);
       summary = {
         totalExpenses: summaryData.totalExpenses,
         pendingCount: summaryData.pendingCount,
@@ -136,7 +136,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: expenses.map((expense) => ({
+      data: expenses.map((expense: any) => ({
         id: expense._id.toString(),
         expenseId: expense.expenseId,
         staff: expense.staff,
@@ -216,7 +216,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const expense = await DailyExpense.create({
+    const expense = await ReceptionExpense.create({
       expenseId: generateExpenseId(),
       staff: userId,
       staffName: userName || "Unknown",

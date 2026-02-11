@@ -1,6 +1,5 @@
-    // lib/middleware/activity-logger.ts
+// lib/middleware/activity-logger.ts
 import { NextRequest } from "next/server";
-import { jwtDecode } from "jwt-decode";
 
 export interface ActivityLog {
   userId: string;
@@ -33,16 +32,15 @@ export class ActivityLogger {
     description: string,
     entityType: string,
     userId?: string,
-    metadata?: Record<string, any>
+    metadata?: Record<string, any>,
   ) {
     try {
       // Extract IP address from headers
       const ipAddress =
         request.headers.get("x-forwarded-for") ||
         request.headers.get("x-real-ip") ||
-        request.ip ||
         "unknown";
-      
+
       const userAgent = request.headers.get("user-agent") || "unknown";
       const path = request.nextUrl.pathname;
       const method = request.method;
@@ -98,22 +96,20 @@ export class ActivityLogger {
   }
 
   getLogsByUser(userId: string, limit: number = 50): ActivityLog[] {
-    return this.logs
-      .filter(log => log.userId === userId)
-      .slice(0, limit);
+    return this.logs.filter((log) => log.userId === userId).slice(0, limit);
   }
 
   getLogsByType(activityType: string, limit: number = 50): ActivityLog[] {
     return this.logs
-      .filter(log => log.activityType === activityType)
+      .filter((log) => log.activityType === activityType)
       .slice(0, limit);
   }
 
   clearOldLogs(olderThanDays: number = 7) {
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - olderThanDays);
-    
-    this.logs = this.logs.filter(log => log.timestamp > cutoff);
+
+    this.logs = this.logs.filter((log) => log.timestamp > cutoff);
   }
 }
 
@@ -124,14 +120,14 @@ export class ServiceActivityTracker {
     serviceType: string,
     action: string,
     userId: string,
-    resourceId?: string
+    resourceId?: string,
   ) {
     const logger = ActivityLogger.getInstance();
-    
+
     await logger.log(
       request,
       "service_access",
-      `${action} ${serviceType} ${resourceId ? `(${resourceId})` : ''}`,
+      `${action} ${serviceType} ${resourceId ? `(${resourceId})` : ""}`,
       "Service",
       userId,
       {
@@ -139,7 +135,7 @@ export class ServiceActivityTracker {
         action,
         resourceId,
         endpoint: request.nextUrl.pathname,
-      }
+      },
     );
   }
 
@@ -149,10 +145,10 @@ export class ServiceActivityTracker {
     action: string,
     userId: string,
     error: Error,
-    resourceId?: string
+    resourceId?: string,
   ) {
     const logger = ActivityLogger.getInstance();
-    
+
     await logger.log(
       request,
       "service_error",
@@ -164,8 +160,8 @@ export class ServiceActivityTracker {
         action,
         resourceId,
         error: error.message,
-        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
-      }
+        stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
+      },
     );
   }
 
@@ -176,10 +172,10 @@ export class ServiceActivityTracker {
     userId: string,
     resourceId: string,
     changes: any,
-    previousState?: any
+    previousState?: any,
   ) {
     const logger = ActivityLogger.getInstance();
-    
+
     await logger.log(
       request,
       "data_change",
@@ -193,7 +189,7 @@ export class ServiceActivityTracker {
         changes,
         previousState,
         endpoint: request.nextUrl.pathname,
-      }
+      },
     );
   }
 }

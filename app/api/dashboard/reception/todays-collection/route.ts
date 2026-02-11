@@ -4,7 +4,7 @@ import { Payment } from "@/lib/models/Payment";
 import { LabTest } from "@/lib/models/LabTest";
 import { RadiologyExam } from "@/lib/models/RadiologyExam";
 import { DiscountRequest } from "@/lib/models/DiscountRequest";
-import { DailyExpense } from "@/lib/models/DailyExpense";
+import { ReceptionExpense } from "@/lib/models/ReceptionExpense";
 
 // GET: Get comprehensive Today's Collection data
 export async function GET(request: NextRequest) {
@@ -138,7 +138,7 @@ export async function GET(request: NextRequest) {
     };
 
     // 5. Get Expenses (today)
-    const expenses = await DailyExpense.aggregate([
+    const expenses = await ReceptionExpense.aggregate([
       {
         $match: {
           date: { $gte: today, $lt: tomorrow },

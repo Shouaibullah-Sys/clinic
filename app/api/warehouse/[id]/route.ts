@@ -7,7 +7,7 @@ import { getTokenPayload } from "@/lib/auth/jwt";
 // GET: Get single warehouse medicine by ID
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     await dbConnect();
@@ -20,7 +20,8 @@ export async function GET(
       );
     }
 
-    const medicine = await Warehouse.findById(params.id).lean();
+    const { id } = await params;
+    const medicine = await Warehouse.findById(id).lean();
 
     if (!medicine) {
       return NextResponse.json(
@@ -48,7 +49,7 @@ export async function GET(
 // PUT: Update warehouse medicine
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     await dbConnect();
@@ -65,7 +66,8 @@ export async function PUT(
     const { name, genericName, category, manufacturer, description, isActive } =
       body;
 
-    const medicine = await Warehouse.findById(params.id);
+    const { id } = await params;
+    const medicine = await Warehouse.findById(id);
 
     if (!medicine) {
       return NextResponse.json(
@@ -104,7 +106,7 @@ export async function PUT(
 // DELETE: Delete warehouse medicine
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     await dbConnect();
@@ -120,7 +122,8 @@ export async function DELETE(
       );
     }
 
-    const medicine = await Warehouse.findById(params.id);
+    const { id } = await params;
+    const medicine = await Warehouse.findById(id);
 
     if (!medicine) {
       return NextResponse.json(
@@ -132,7 +135,7 @@ export async function DELETE(
     // Check if there are any batches for this medicine
     const { WarehouseBatch } = await import("@/lib/models/WarehouseBatch");
     const batchCount = await WarehouseBatch.countDocuments({
-      warehouse: params.id,
+      warehouse: id,
     });
 
     if (batchCount > 0) {
@@ -145,7 +148,7 @@ export async function DELETE(
       );
     }
 
-    await Warehouse.findByIdAndDelete(params.id);
+    await Warehouse.findByIdAndDelete(id);
 
     return NextResponse.json({
       success: true,

@@ -117,14 +117,14 @@ export default function RegisterForm() {
         <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 dark:bg-green-900 rounded-full mb-4">
           <CheckCircle2 className="w-8 h-8 text-green-600 dark:text-green-300" />
         </div>
-        <h3 className="text-lg font-semibold text-gray-800 dark:text-white">
+        <h3 className="text-lg font-semibold text-foreground">
           Registration Successful!
         </h3>
-        <p className="text-gray-600 dark:text-gray-300">
+        <p className="text-muted-foreground">
           Your account has been created and is pending admin approval. You will
           receive an email notification once your account is activated.
         </p>
-        <p className="text-sm text-gray-500 dark:text-gray-400">
+        <p className="text-sm text-muted-foreground">
           Redirecting to login page...
         </p>
         <Button
@@ -142,7 +142,7 @@ export default function RegisterForm() {
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
         {apiError && (
-          <div className="flex items-center gap-2 p-3 text-sm text-red-700 bg-red-50 dark:bg-red-900/20 dark:text-red-300 rounded-lg">
+          <div className="flex items-center gap-2 p-3 text-sm text-destructive-foreground bg-destructive/10 rounded-lg border border-destructive/20">
             <AlertCircle className="w-4 h-4 flex-shrink-0" />
             <span>{apiError}</span>
           </div>
@@ -154,14 +154,12 @@ export default function RegisterForm() {
             name="name"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="text-gray-700 dark:text-gray-300">
-                  Full Name
-                </FormLabel>
+                <FormLabel className="text-foreground">Full Name</FormLabel>
                 <FormControl>
                   <Input
                     placeholder="John Doe"
                     {...field}
-                    className="dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    className="bg-background"
                   />
                 </FormControl>
                 <FormMessage />
@@ -174,14 +172,12 @@ export default function RegisterForm() {
             name="phone"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="text-gray-700 dark:text-gray-300">
-                  Phone Number
-                </FormLabel>
+                <FormLabel className="text-foreground">Phone Number</FormLabel>
                 <FormControl>
                   <Input
                     placeholder="+1 (555) 123-4567"
                     {...field}
-                    className="dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    className="bg-background"
                   />
                 </FormControl>
                 <FormMessage />
@@ -195,15 +191,13 @@ export default function RegisterForm() {
           name="email"
           render={({ field }) => (
             <FormItem>
-              <FormLabel className="text-gray-700 dark:text-gray-300">
-                Email Address
-              </FormLabel>
+              <FormLabel className="text-foreground">Email Address</FormLabel>
               <FormControl>
                 <Input
                   type="email"
                   placeholder="user@example.com"
                   {...field}
-                  className="dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  className="bg-background"
                 />
               </FormControl>
               <FormMessage />
@@ -217,16 +211,14 @@ export default function RegisterForm() {
             name="password"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="text-gray-700 dark:text-gray-300">
-                  Password
-                </FormLabel>
+                <FormLabel className="text-foreground">Password</FormLabel>
                 <div className="relative">
                   <FormControl>
                     <Input
                       type={showPassword ? "text" : "password"}
                       placeholder="••••••••"
                       {...field}
-                      className="dark:bg-gray-700 dark:border-gray-600 dark:text-white pr-10"
+                      className="bg-background pr-10"
                     />
                   </FormControl>
                   <button
@@ -235,9 +227,9 @@ export default function RegisterForm() {
                     onClick={() => setShowPassword(!showPassword)}
                   >
                     {showPassword ? (
-                      <EyeOff className="h-4 w-4 text-gray-400" />
+                      <EyeOff className="h-4 w-4 text-muted-foreground" />
                     ) : (
-                      <Eye className="h-4 w-4 text-gray-400" />
+                      <Eye className="h-4 w-4 text-muted-foreground" />
                     )}
                   </button>
                 </div>
@@ -251,7 +243,7 @@ export default function RegisterForm() {
             name="confirmPassword"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="text-gray-700 dark:text-gray-300">
+                <FormLabel className="text-foreground">
                   Confirm Password
                 </FormLabel>
                 <div className="relative">
@@ -260,7 +252,7 @@ export default function RegisterForm() {
                       type={showConfirmPassword ? "text" : "password"}
                       placeholder="••••••••"
                       {...field}
-                      className="dark:bg-gray-700 dark:border-gray-600 dark:text-white pr-10"
+                      className="bg-background pr-10"
                     />
                   </FormControl>
                   <button
@@ -269,9 +261,9 @@ export default function RegisterForm() {
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                   >
                     {showConfirmPassword ? (
-                      <EyeOff className="h-4 w-4 text-gray-400" />
+                      <EyeOff className="h-4 w-4 text-muted-foreground" />
                     ) : (
-                      <Eye className="h-4 w-4 text-gray-400" />
+                      <Eye className="h-4 w-4 text-muted-foreground" />
                     )}
                   </button>
                 </div>
@@ -282,17 +274,17 @@ export default function RegisterForm() {
         </div>
 
         {/* Password Requirements */}
-        <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3 space-y-2">
-          <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+        <div className="bg-muted rounded-lg p-3 space-y-2">
+          <p className="text-sm font-medium text-foreground">
             Password Requirements:
           </p>
-          <ul className="text-xs text-gray-600 dark:text-gray-400 space-y-1">
+          <ul className="text-xs text-muted-foreground space-y-1">
             <li className="flex items-center">
               <div
                 className={`w-2 h-2 rounded-full mr-2 ${
                   form.watch("password")?.length >= 8
                     ? "bg-green-500"
-                    : "bg-gray-300"
+                    : "bg-muted-foreground/30"
                 }`}
               />
               At least 8 characters
@@ -302,7 +294,7 @@ export default function RegisterForm() {
                 className={`w-2 h-2 rounded-full mr-2 ${
                   /[A-Z]/.test(form.watch("password") || "")
                     ? "bg-green-500"
-                    : "bg-gray-300"
+                    : "bg-muted-foreground/30"
                 }`}
               />
               One uppercase letter
@@ -312,7 +304,7 @@ export default function RegisterForm() {
                 className={`w-2 h-2 rounded-full mr-2 ${
                   /[0-9]/.test(form.watch("password") || "")
                     ? "bg-green-500"
-                    : "bg-gray-300"
+                    : "bg-muted-foreground/30"
                 }`}
               />
               One number
@@ -322,7 +314,7 @@ export default function RegisterForm() {
                 className={`w-2 h-2 rounded-full mr-2 ${
                   /[!@#$%^&*]/.test(form.watch("password") || "")
                     ? "bg-green-500"
-                    : "bg-gray-300"
+                    : "bg-muted-foreground/30"
                 }`}
               />
               One special character
@@ -334,7 +326,7 @@ export default function RegisterForm() {
           {loading ? (
             <>
               <svg
-                className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
+                className="animate-spin -ml-1 mr-3 h-5 w-5 text-primary-foreground"
                 xmlns="http://www.w3.org/2000/svg"
                 fill="none"
                 viewBox="0 0 24 24"
@@ -360,18 +352,18 @@ export default function RegisterForm() {
           )}
         </Button>
 
-        <p className="text-center text-sm text-gray-600 dark:text-gray-400">
+        <p className="text-center text-sm text-muted-foreground">
           By creating an account, you agree to our{" "}
           <a
             href="#"
-            className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+            className="text-primary hover:text-primary/80 transition-colors"
           >
             Terms of Service
           </a>{" "}
           and{" "}
           <a
             href="#"
-            className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+            className="text-primary hover:text-primary/80 transition-colors"
           >
             Privacy Policy
           </a>

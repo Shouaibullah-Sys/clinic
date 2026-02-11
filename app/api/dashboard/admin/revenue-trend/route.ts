@@ -3,8 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth";
 import dbConnect from "@/lib/dbConnect";
 import { DailyRecord } from "@/lib/models/DailyRecord";
-import { Order } from "@/lib/models/Order";
-import { DailyExpense } from "@/lib/models/DailyExpense";
+import { Invoice } from "@/lib/models/Invoice";
+import { AdminExpense } from "@/lib/models/AdminExpense";
 
 export async function GET(req: NextRequest) {
   try {
@@ -41,8 +41,8 @@ export async function GET(req: NextRequest) {
       },
     ]);
 
-    // Order trend
-    const orderTrend = await Order.aggregate([
+    // Invoice trend
+    const invoiceTrend = await Invoice.aggregate([
       {
         $match: {
           createdAt: { $gte: thirtyDaysAgo },
@@ -64,7 +64,7 @@ export async function GET(req: NextRequest) {
     ]);
 
     // Expense trend
-    const expenseTrend = await DailyExpense.aggregate([
+    const expenseTrend = await AdminExpense.aggregate([
       {
         $match: {
           date: { $gte: thirtyDaysAgo },
@@ -86,14 +86,14 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       revenueTrend,
-      orderTrend,
+      invoiceTrend,
       expenseTrend,
     });
   } catch (error) {
     console.error("Revenue trend error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

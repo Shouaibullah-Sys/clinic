@@ -1,6 +1,6 @@
 // lib/api/services/route.ts - List all services
 import { NextRequest, NextResponse } from "next/server";
-import { getTokenPayload, getUserServices } from "@/lib/auth.jwt";
+import { getTokenPayload, getUserServices } from "@/lib/middleware/api-auth";
 
 export async function GET(request: NextRequest) {
   try {

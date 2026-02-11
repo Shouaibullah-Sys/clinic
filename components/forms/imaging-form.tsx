@@ -1,3 +1,5 @@
+"use client";
+
 // components/forms/imaging-form.tsx
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -29,7 +31,11 @@ interface ImagingFormProps {
   defaultValues?: Partial<ImagingRecord>;
 }
 
-export function ImagingForm({ onSubmit, isLoading, defaultValues }: ImagingFormProps) {
+export function ImagingForm({
+  onSubmit,
+  isLoading,
+  defaultValues,
+}: ImagingFormProps) {
   const form = useForm<ImagingRecord>({
     resolver: zodResolver(ImagingRecordSchema),
     defaultValues: {
@@ -51,7 +57,10 @@ export function ImagingForm({ onSubmit, isLoading, defaultValues }: ImagingFormP
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Imaging Type</FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <Select
+                  onValueChange={field.onChange}
+                  defaultValue={field.value}
+                >
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder="Select imaging type" />
@@ -103,7 +112,10 @@ export function ImagingForm({ onSubmit, isLoading, defaultValues }: ImagingFormP
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Priority</FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <Select
+                  onValueChange={field.onChange}
+                  defaultValue={field.value}
+                >
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder="Select priority" />
@@ -164,7 +176,10 @@ export function ImagingForm({ onSubmit, isLoading, defaultValues }: ImagingFormP
                 <FormItem>
                   <FormLabel>Contrast Type</FormLabel>
                   <FormControl>
-                    <Input placeholder="e.g., Iodinated, Gadolinium" {...field} />
+                    <Input
+                      placeholder="e.g., Iodinated, Gadolinium"
+                      {...field}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

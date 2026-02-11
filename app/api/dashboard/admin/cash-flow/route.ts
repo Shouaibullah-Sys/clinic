@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth";
 import dbConnect from "@/lib/dbConnect";
 import { Payment } from "@/lib/models/Payment";
-import { DailyExpense } from "@/lib/models/DailyExpense";
+import { AdminExpense } from "@/lib/models/AdminExpense";
 import { CashAtHand } from "@/lib/models/CashAtHand";
 import { DailyCashCollection } from "@/lib/models/DailyCashCollection";
 
@@ -83,7 +83,7 @@ export async function GET(req: NextRequest) {
     ]);
 
     // Get cash outflows (expenses)
-    const cashOutflows = await DailyExpense.aggregate([
+    const cashOutflows = await AdminExpense.aggregate([
       {
         $match: {
           date: { $gte: startDate, $lt: endDate },

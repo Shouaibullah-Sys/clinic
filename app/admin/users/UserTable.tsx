@@ -23,12 +23,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   AlertDialog,
@@ -107,7 +101,8 @@ export default function UserTable({
     }
   };
 
-  const formatDate = (date: Date | string) => {
+  const formatDate = (date: Date | string | undefined) => {
+    if (!date) return "N/A";
     return new Date(date).toLocaleDateString("en-US", {
       year: "numeric",
       month: "short",
@@ -119,7 +114,10 @@ export default function UserTable({
     return (
       <div className="space-y-2 p-4">
         {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="flex items-center space-x-4 p-4 border rounded-lg">
+          <div
+            key={i}
+            className="flex items-center space-x-4 p-4 border rounded-lg"
+          >
             <Skeleton className="h-12 w-12 rounded-full" />
             <div className="space-y-2 flex-1">
               <Skeleton className="h-4 w-1/4" />
@@ -155,9 +153,13 @@ export default function UserTable({
             <TableRow>
               <TableHead>User</TableHead>
               <TableHead className="hidden md:table-cell">Contact</TableHead>
-              <TableHead className="hidden lg:table-cell">Role & Department</TableHead>
+              <TableHead className="hidden lg:table-cell">
+                Role & Department
+              </TableHead>
               <TableHead className="hidden md:table-cell">Status</TableHead>
-              <TableHead className="hidden lg:table-cell">Joining Date</TableHead>
+              <TableHead className="hidden lg:table-cell">
+                Joining Date
+              </TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -201,7 +203,8 @@ export default function UserTable({
                     </div>
                     {user.gender && (
                       <div className="text-sm text-gray-500">
-                        {user.gender.charAt(0).toUpperCase() + user.gender.slice(1)}
+                        {user.gender.charAt(0).toUpperCase() +
+                          user.gender.slice(1)}
                       </div>
                     )}
                   </div>
@@ -226,22 +229,34 @@ export default function UserTable({
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
                       {user.approved ? (
-                        <Badge variant="default" className="flex items-center gap-1">
+                        <Badge
+                          variant="default"
+                          className="flex items-center gap-1"
+                        >
                           <UserCheck className="h-3 w-3" />
                           Approved
                         </Badge>
                       ) : (
-                        <Badge variant="secondary" className="flex items-center gap-1">
+                        <Badge
+                          variant="secondary"
+                          className="flex items-center gap-1"
+                        >
                           <UserX className="h-3 w-3" />
                           Pending
                         </Badge>
                       )}
                       {user.active ? (
-                        <Badge variant="outline" className="border-green-200 text-green-700">
+                        <Badge
+                          variant="outline"
+                          className="border-green-200 text-green-700"
+                        >
                           Active
                         </Badge>
                       ) : (
-                        <Badge variant="outline" className="border-red-200 text-red-700">
+                        <Badge
+                          variant="outline"
+                          className="border-red-200 text-red-700"
+                        >
                           Inactive
                         </Badge>
                       )}
@@ -268,7 +283,10 @@ export default function UserTable({
                       variant="destructive"
                       size="sm"
                       onClick={() => setUserToDelete(user)}
-                      disabled={user.role === "admin" && user.email === "admin@example.com"}
+                      disabled={
+                        user.role === "admin" &&
+                        user.email === "admin@example.com"
+                      }
                     >
                       <TrashIcon className="h-4 w-4 mr-1" />
                       <span className="hidden sm:inline">Delete</span>
@@ -290,15 +308,13 @@ export default function UserTable({
           <AlertDialogHeader>
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
             <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the user{" "}
-              <span className="font-semibold">{userToDelete?.name}</span> and
-              remove their data from our servers.
+              This action cannot be undone. This will permanently delete the
+              user <span className="font-semibold">{userToDelete?.name}</span>{" "}
+              and remove their data from our servers.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeleting}>
-              Cancel
-            </AlertDialogCancel>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
               disabled={isDeleting}

@@ -6,13 +6,23 @@ export interface IUser extends mongoose.Document {
   email: string;
   password: string;
   name: string;
-  role: "admin" | "staff" | "doctor" | "nurse" | "receptionist" | "pharmacist" | "lab_technician" | "radiologist" | "admission";
+  role:
+    | "admin"
+    | "staff"
+    | "doctor"
+    | "nurse"
+    | "receptionist"
+    | "pharmacist"
+    | "lab_technician"
+    | "radiologist"
+    | "admission";
   phone: string;
   avatar?: string;
   approved: boolean;
   active: boolean;
   employeeId?: string;
   department?: string;
+  designation?: string;
   specialization?: string;
   licenseNumber?: string;
   qualifications?: string[];
@@ -27,6 +37,8 @@ export interface IUser extends mongoose.Document {
   };
   biography?: string;
   joiningDate?: Date;
+  address?: string;
+  gender?: "male" | "female" | "other";
   permissions: string[];
   refreshTokens?: string[]; // Add refresh tokens for JWT
   createdAt: Date;
@@ -53,7 +65,17 @@ const userSchema = new Schema<IUser>(
     },
     role: {
       type: String,
-      enum: ["admin", "staff", "doctor", "nurse", "receptionist", "pharmacist", "lab_technician", "radiologist", "admission"],
+      enum: [
+        "admin",
+        "staff",
+        "doctor",
+        "nurse",
+        "receptionist",
+        "pharmacist",
+        "lab_technician",
+        "radiologist",
+        "admission",
+      ],
       required: true,
     },
     phone: {
@@ -80,6 +102,9 @@ const userSchema = new Schema<IUser>(
     department: {
       type: String,
     },
+    designation: {
+      type: String,
+    },
     specialization: {
       type: String,
     },
@@ -87,9 +112,18 @@ const userSchema = new Schema<IUser>(
       type: String,
       unique: true,
     },
-    qualifications: [{
+    address: {
       type: String,
-    }],
+    },
+    gender: {
+      type: String,
+      enum: ["male", "female", "other"],
+    },
+    qualifications: [
+      {
+        type: String,
+      },
+    ],
     experience: {
       type: Number,
       min: 0,
@@ -99,10 +133,20 @@ const userSchema = new Schema<IUser>(
       min: 0,
     },
     availability: {
-      days: [{
-        type: String,
-        enum: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"],
-      }],
+      days: [
+        {
+          type: String,
+          enum: [
+            "monday",
+            "tuesday",
+            "wednesday",
+            "thursday",
+            "friday",
+            "saturday",
+            "sunday",
+          ],
+        },
+      ],
       startTime: {
         type: String,
         match: /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, // HH:MM format
@@ -127,38 +171,42 @@ const userSchema = new Schema<IUser>(
     joiningDate: {
       type: Date,
     },
-    permissions: [{
-      type: String,
-    }],
-    refreshTokens: [{
-      type: String,
-    }],
+    permissions: [
+      {
+        type: String,
+      },
+    ],
+    refreshTokens: [
+      {
+        type: String,
+      },
+    ],
   },
   {
     timestamps: true,
     toJSON: {
-      transform: function(doc, ret) {
+      transform: function (doc, ret) {
         delete (ret as any).password;
         delete ret.refreshTokens;
         return ret;
-      }
+      },
     },
     toObject: {
-      transform: function(doc, ret) {
+      transform: function (doc, ret) {
         delete (ret as any).password;
         delete ret.refreshTokens;
         return ret;
-      }
-    }
-  }
+      },
+    },
+  },
 );
 
 // Counter for employeeId generation
 const counterSchema = new Schema({
   _id: { type: String, required: true },
-  seq: { type: Number, default: 0 }
+  seq: { type: Number, default: 0 },
 });
-const Counter = models.Counter || model('Counter', counterSchema);
+const Counter = models.Counter || model("Counter", counterSchema);
 
 // Indexes
 userSchema.index({ role: 1 });
@@ -169,18 +217,18 @@ userSchema.index({ active: 1, approved: 1 });
 // Pre-save hook for doctors
 userSchema.pre("save", async function (next) {
   const user = this;
-  
+
   // Only hash password if it's modified
-  if (user.isModified('password')) {
+  if (user.isModified("password")) {
     try {
-      const bcrypt = await import('bcryptjs');
+      const bcrypt = await import("bcryptjs");
       const salt = await bcrypt.genSalt(10);
       user.password = await bcrypt.hash(user.password, salt);
     } catch (error) {
       return next(error as any);
     }
   }
-  
+
   // Set default availability for doctors
   if (user.role === "doctor" && !user.availability) {
     user.availability = {
@@ -191,33 +239,38 @@ userSchema.pre("save", async function (next) {
       breakEnd: "14:00",
     };
   }
-  
+
   // Generate unique employeeId for doctors
   if (user.role === "doctor" && !user.employeeId) {
     try {
       const counter = await Counter.findOneAndUpdate(
-        { _id: 'employeeId' },
+        { _id: "employeeId" },
         { $inc: { seq: 1 } },
-        { new: true, upsert: true }
+        { new: true, upsert: true },
       );
-      
+
       // Generate unique ID with prefix based on role
       const prefix = "DOC";
-      user.employeeId = `${prefix}${counter.seq.toString().padStart(4, '0')}`;
-      console.log(`Generated employeeId: ${user.employeeId} for ${user.role} ${user.name}`);
+      user.employeeId = `${prefix}${counter.seq.toString().padStart(4, "0")}`;
+      console.log(
+        `Generated employeeId: ${user.employeeId} for ${user.role} ${user.name}`,
+      );
     } catch (error) {
-      console.error('Error generating employeeId:', error);
+      console.error("Error generating employeeId:", error);
       return next(error as any);
     }
   }
-  
+
   // Set joining date if not provided
   if (user.role === "doctor" && !user.joiningDate) {
     user.joiningDate = new Date();
   }
-  
+
   // Set default permissions for doctors
-  if (user.role === "doctor" && (!user.permissions || user.permissions.length === 0)) {
+  if (
+    user.role === "doctor" &&
+    (!user.permissions || user.permissions.length === 0)
+  ) {
     user.permissions = [
       "view_patients",
       "create_prescriptions",
@@ -228,9 +281,12 @@ userSchema.pre("save", async function (next) {
       "view_lab_results",
     ];
   }
-  
+
   // Set default permissions for receptionists
-  if (user.role === "receptionist" && (!user.permissions || user.permissions.length === 0)) {
+  if (
+    user.role === "receptionist" &&
+    (!user.permissions || user.permissions.length === 0)
+  ) {
     user.permissions = [
       "view_patients",
       "create_appointments",
@@ -239,7 +295,7 @@ userSchema.pre("save", async function (next) {
       "update_lab_charges",
     ];
   }
-  
+
   next();
 });
 
@@ -268,7 +324,9 @@ userSchema.statics.findActiveDoctors = function () {
     active: true,
     approved: true,
   })
-    .select("name specialization department phone email consultationFee availability")
+    .select(
+      "name specialization department phone email consultationFee availability",
+    )
     .sort({ name: 1 });
 };
 
@@ -291,12 +349,14 @@ userSchema.methods.isAvailableOnDay = function (day: string): boolean {
 };
 
 // Instance method to check password
-userSchema.methods.comparePassword = async function (candidatePassword: string): Promise<boolean> {
+userSchema.methods.comparePassword = async function (
+  candidatePassword: string,
+): Promise<boolean> {
   try {
-    const bcrypt = await import('bcryptjs');
+    const bcrypt = await import("bcryptjs");
     return await bcrypt.compare(candidatePassword, this.password);
   } catch (error) {
-    console.error('Error comparing password:', error);
+    console.error("Error comparing password:", error);
     return false;
   }
 };
@@ -307,12 +367,12 @@ userSchema.methods.addRefreshToken = function (token: string) {
     this.refreshTokens = [];
   }
   this.refreshTokens.push(token);
-  
+
   // Keep only last 5 refresh tokens
   if (this.refreshTokens.length > 5) {
     this.refreshTokens = this.refreshTokens.slice(-5);
   }
-  
+
   return this.save();
 };
 

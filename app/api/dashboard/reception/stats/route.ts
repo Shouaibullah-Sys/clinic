@@ -5,7 +5,7 @@ import { Patient } from "@/lib/models/Patient";
 import { Appointment } from "@/lib/models/Appointment";
 import { Payment } from "@/lib/models/Payment";
 import { DiscountRequest } from "@/lib/models/DiscountRequest";
-import { DailyExpense } from "@/lib/models/DailyExpense";
+import { ReceptionExpense } from "@/lib/models/ReceptionExpense";
 import { LabTest } from "@/lib/models/LabTest";
 import { RadiologyExam } from "@/lib/models/RadiologyExam";
 import { DischargeCard } from "@/lib/models/DischargeCard";
@@ -85,7 +85,7 @@ export async function GET(request: NextRequest) {
     const todayRevenue = todayPayments[0]?.totalRevenue || 0;
 
     // Get today's total expenses (all expenses, regardless of status)
-    const todayExpenses = await DailyExpense.aggregate([
+    const todayExpenses = await ReceptionExpense.aggregate([
       {
         $match: {
           date: { $gte: today, $lt: tomorrow },

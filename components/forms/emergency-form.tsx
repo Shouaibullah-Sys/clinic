@@ -1,7 +1,12 @@
+"use client";
+
 // components/forms/emergency-form.tsx
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { EmergencyCaseSchema, type EmergencyCase } from "@/lib/schemas/emergency";
+import {
+  EmergencyCaseSchema,
+  type EmergencyCase,
+} from "@/lib/schemas/emergency";
 import {
   Form,
   FormControl,
@@ -28,15 +33,19 @@ interface EmergencyFormProps {
   defaultValues?: {
     id?: string;
     patientId?: string;
-    triageLevel?: EmergencyCase['triageLevel'];
+    triageLevel?: EmergencyCase["triageLevel"];
     chiefComplaint?: string;
-    vitalSigns?: Partial<EmergencyCase['vitalSigns']>;
+    vitalSigns?: Partial<EmergencyCase["vitalSigns"]>;
     allergies?: string[];
     medications?: string[];
   };
 }
 
-export function EmergencyForm({ onSubmit, isLoading, defaultValues }: EmergencyFormProps) {
+export function EmergencyForm({
+  onSubmit,
+  isLoading,
+  defaultValues,
+}: EmergencyFormProps) {
   const form = useForm<EmergencyCase>({
     defaultValues: {
       triageLevel: "urgent",
@@ -78,7 +87,10 @@ export function EmergencyForm({ onSubmit, isLoading, defaultValues }: EmergencyF
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Triage Level</FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <Select
+                  onValueChange={field.onChange}
+                  defaultValue={field.value}
+                >
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder="Select triage level" />
@@ -126,7 +138,14 @@ export function EmergencyForm({ onSubmit, isLoading, defaultValues }: EmergencyF
                     placeholder="List allergies separated by commas..."
                     className="min-h-[60px]"
                     value={field.value?.join(", ") || ""}
-                    onChange={(e) => field.onChange(e.target.value.split(",").map(s => s.trim()).filter(s => s))}
+                    onChange={(e) =>
+                      field.onChange(
+                        e.target.value
+                          .split(",")
+                          .map((s) => s.trim())
+                          .filter((s) => s),
+                      )
+                    }
                   />
                 </FormControl>
                 <FormMessage />
@@ -145,7 +164,14 @@ export function EmergencyForm({ onSubmit, isLoading, defaultValues }: EmergencyF
                     placeholder="List current medications separated by commas..."
                     className="min-h-[60px]"
                     value={field.value?.join(", ") || ""}
-                    onChange={(e) => field.onChange(e.target.value.split(",").map(s => s.trim()).filter(s => s))}
+                    onChange={(e) =>
+                      field.onChange(
+                        e.target.value
+                          .split(",")
+                          .map((s) => s.trim())
+                          .filter((s) => s),
+                      )
+                    }
                   />
                 </FormControl>
                 <FormMessage />
@@ -181,7 +207,9 @@ export function EmergencyForm({ onSubmit, isLoading, defaultValues }: EmergencyF
                         type="number"
                         placeholder="72"
                         {...field}
-                        onChange={(e) => field.onChange(parseInt(e.target.value))}
+                        onChange={(e) =>
+                          field.onChange(parseInt(e.target.value))
+                        }
                       />
                     </FormControl>
                     <FormMessage />
@@ -200,7 +228,9 @@ export function EmergencyForm({ onSubmit, isLoading, defaultValues }: EmergencyF
                         type="number"
                         placeholder="16"
                         {...field}
-                        onChange={(e) => field.onChange(parseInt(e.target.value))}
+                        onChange={(e) =>
+                          field.onChange(parseInt(e.target.value))
+                        }
                       />
                     </FormControl>
                     <FormMessage />
@@ -220,7 +250,9 @@ export function EmergencyForm({ onSubmit, isLoading, defaultValues }: EmergencyF
                         step="0.1"
                         placeholder="37.0"
                         {...field}
-                        onChange={(e) => field.onChange(parseFloat(e.target.value))}
+                        onChange={(e) =>
+                          field.onChange(parseFloat(e.target.value))
+                        }
                       />
                     </FormControl>
                     <FormMessage />
@@ -239,7 +271,9 @@ export function EmergencyForm({ onSubmit, isLoading, defaultValues }: EmergencyF
                         type="number"
                         placeholder="98"
                         {...field}
-                        onChange={(e) => field.onChange(parseInt(e.target.value))}
+                        onChange={(e) =>
+                          field.onChange(parseInt(e.target.value))
+                        }
                       />
                     </FormControl>
                     <FormMessage />
@@ -260,7 +294,9 @@ export function EmergencyForm({ onSubmit, isLoading, defaultValues }: EmergencyF
                         max="10"
                         placeholder="0"
                         {...field}
-                        onChange={(e) => field.onChange(parseInt(e.target.value))}
+                        onChange={(e) =>
+                          field.onChange(parseInt(e.target.value))
+                        }
                       />
                     </FormControl>
                     <FormMessage />

@@ -11,14 +11,10 @@ import {
   ChevronLeft,
   ChevronRight,
   UserCog,
-  ShoppingCart,
-  Package,
   Eye,
   BarChart3,
   Shield,
-  DollarSign,
   FileText,
-  Warehouse,
   Scissors,
   Calendar,
   TrendingUp,
@@ -53,7 +49,18 @@ interface NavItem {
   title: string;
   href?: string;
   icon: React.ReactNode;
-  roles: ("admin" | "staff" | "doctor" | "nurse" | "receptionist" | "pharmacist" | "lab_technician" | "radiologist" | "admission")[];
+  roles: (
+    | "admin"
+    | "staff"
+    | "doctor"
+    | "nurse"
+    | "receptionist"
+    | "pharmacist"
+    | "pharmacy"
+    | "lab_technician"
+    | "radiologist"
+    | "admission"
+  )[];
   badge?: string | number;
   children?: NavItem[];
 }
@@ -143,7 +150,7 @@ export function AdmissionSidebar() {
 
   // Filter items based on user role
   const filteredItems = navItems.filter(
-    (item) => user?.role && item.roles.includes(user.role)
+    (item) => user?.role && item.roles.includes(user.role),
   );
 
   // If not authenticated, don't render the sidebar
@@ -160,7 +167,7 @@ export function AdmissionSidebar() {
     <aside
       className={cn(
         "relative h-screen border-r bg-linear-to-b from-slate-50 to-white dark:from-gray-900 dark:to-gray-800 transition-all duration-300 overflow-hidden",
-        collapsed ? "w-16" : "w-64"
+        collapsed ? "w-16" : "w-64",
       )}
     >
       <div className="flex h-full flex-col">
@@ -168,7 +175,7 @@ export function AdmissionSidebar() {
         <div
           className={cn(
             "flex items-center border-b p-4",
-            collapsed ? "justify-center" : "justify-between"
+            collapsed ? "justify-center" : "justify-between",
           )}
         >
           {!collapsed && (
@@ -207,7 +214,7 @@ export function AdmissionSidebar() {
             {filteredItems.map((item) => {
               const isActive = item.href && pathname.startsWith(item.href);
               const isGroupActive = item.children?.some(
-                (child) => child.href && pathname.startsWith(child.href)
+                (child) => child.href && pathname.startsWith(child.href),
               );
 
               return (
@@ -224,7 +231,7 @@ export function AdmissionSidebar() {
                               "flex items-center rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 group",
                               isGroupActive
                                 ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300"
-                                : "text-gray-700 dark:text-gray-300"
+                                : "text-gray-700 dark:text-gray-300",
                             )}
                             onClick={() =>
                               toggleGroup(item.title.toLowerCase())
@@ -236,7 +243,7 @@ export function AdmissionSidebar() {
                                   "p-1.5 rounded-md",
                                   isGroupActive
                                     ? "bg-blue-100 dark:bg-blue-800"
-                                    : "bg-gray-100 dark:bg-gray-700 group-hover:bg-blue-100 dark:group-hover:bg-blue-800"
+                                    : "bg-gray-100 dark:bg-gray-700 group-hover:bg-blue-100 dark:group-hover:bg-blue-800",
                                 )}
                               >
                                 {item.icon}
@@ -256,7 +263,7 @@ export function AdmissionSidebar() {
                                       "h-4 w-4 transition-transform",
                                       openGroups[item.title.toLowerCase()]
                                         ? "rotate-90"
-                                        : ""
+                                        : "",
                                     )}
                                   />
                                 </>
@@ -276,7 +283,7 @@ export function AdmissionSidebar() {
                           {item.children
                             .filter(
                               (child) =>
-                                user?.role && child.roles.includes(user.role)
+                                user?.role && child.roles.includes(user.role),
                             )
                             .map((child) => {
                               const isChildActive =
@@ -295,7 +302,7 @@ export function AdmissionSidebar() {
                                           "flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 group",
                                           isChildActive
                                             ? "text-blue-600 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/20 font-semibold"
-                                            : "text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+                                            : "text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-300 hover:bg-gray-50 dark:hover:bg-gray-800",
                                         )}
                                       >
                                         <span className="flex items-center w-full">
@@ -330,7 +337,7 @@ export function AdmissionSidebar() {
                             "flex items-center rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 hover:bg-gray-100 dark:hover:bg-gray-800 group",
                             isActive
                               ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300"
-                              : "text-gray-700 dark:text-gray-300"
+                              : "text-gray-700 dark:text-gray-300",
                           )}
                         >
                           <span className="flex items-center w-full">
@@ -339,7 +346,7 @@ export function AdmissionSidebar() {
                                 "p-1.5 rounded-md",
                                 isActive
                                   ? "bg-blue-100 dark:bg-blue-800"
-                                  : "bg-gray-100 dark:bg-gray-700 group-hover:bg-blue-100 dark:group-hover:bg-blue-800"
+                                  : "bg-gray-100 dark:bg-gray-700 group-hover:bg-blue-100 dark:group-hover:bg-blue-800",
                               )}
                             >
                               {item.icon}
@@ -381,7 +388,7 @@ export function AdmissionSidebar() {
           <div
             className={cn(
               "flex items-center",
-              collapsed ? "justify-center" : "justify-between"
+              collapsed ? "justify-center" : "justify-between",
             )}
           >
             <div className="flex items-center gap-3">

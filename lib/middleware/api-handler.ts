@@ -1,7 +1,7 @@
 // lib/middleware/api-handler.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import { apiAuthMiddleware } from "./api-auth";
+import { authorizeRoute } from "./api-auth";
 import { z, ZodSchema } from "zod";
 import { logAPIActivity } from "./api-logger";
 
@@ -22,9 +22,9 @@ export async function apiHandler(
     context: {
       user: any;
       params?: Record<string, string>;
-    }
+    },
   ) => Promise<NextResponse>,
-  options: HandlerOptions = {}
+  options: HandlerOptions = {},
 ) {
   try {
     const {
@@ -53,7 +53,7 @@ export async function apiHandler(
       } catch (error) {
         return NextResponse.json(
           { error: "Invalid request body", details: (error as any).errors },
-          { status: 400 }
+          { status: 400 },
         );
       }
     }
@@ -61,12 +61,12 @@ export async function apiHandler(
     // Authenticate if required
     let user = null;
     if (requireAuth) {
-      const authResult = await apiAuthMiddleware(request);
+      const authResult = await authorizeRoute(request);
 
       if (authResult.error || !authResult.user) {
         return NextResponse.json(
           { error: authResult.error || "Authentication required" },
-          { status: 401 }
+          { status: 401 },
         );
       }
 
@@ -75,7 +75,7 @@ export async function apiHandler(
       // Check role permissions
       if (requiredRoles.length > 0 && !requiredRoles.includes(user.role)) {
         if (logActivity) {
-          await logAPIActivity(user._id, "unauthorized", {
+          await logAPIActivity(user.id, "unauthorized", {
             path: request.nextUrl.pathname,
             method: request.method,
             requiredRoles,
@@ -85,7 +85,7 @@ export async function apiHandler(
 
         return NextResponse.json(
           { error: "Insufficient permissions" },
-          { status: 403 }
+          { status: 403 },
         );
       }
     }
@@ -95,7 +95,7 @@ export async function apiHandler(
 
     // Log successful activity
     if (logActivity && user) {
-      await logAPIActivity(user._id, "api_request", {
+      await logAPIActivity(user.id, "api_request", {
         path: request.nextUrl.pathname,
         method: request.method,
         status: response.status,
@@ -110,14 +110,14 @@ export async function apiHandler(
     if (error instanceof z.ZodError) {
       return NextResponse.json(
         { error: "Validation failed", details: error.message },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     // Handle other errors
     return NextResponse.json(
       { error: "Internal server error", message: (error as Error).message },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

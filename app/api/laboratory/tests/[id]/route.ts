@@ -7,7 +7,7 @@ import { authenticateRequest, canAccessLaboratory } from "@/lib/auth";
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     await dbConnect();
@@ -17,22 +17,27 @@ export async function GET(
     if (!auth.success) {
       return NextResponse.json(
         { success: false, error: auth.error },
-        { status: auth.status || 401 }
+        { status: auth.status || 401 },
       );
     }
 
     // Check if user can access laboratory
     if (!canAccessLaboratory(auth.userRole)) {
       return NextResponse.json(
-        { success: false, error: "Forbidden. You don't have permission to access lab tests." },
-        { status: 403 }
+        {
+          success: false,
+          error: "Forbidden. You don't have permission to access lab tests.",
+        },
+        { status: 403 },
       );
     }
 
     // Unwrap the params promise
     const { id: testId } = await params;
 
-    console.log(`Lab test requested by ${auth.userRole} ${auth.userName}: ${testId}`);
+    console.log(
+      `Lab test requested by ${auth.userRole} ${auth.userName}: ${testId}`,
+    );
 
     // Find the test by ID
     const test = await LabTest.findById(testId)
@@ -51,29 +56,35 @@ export async function GET(
     if (!test) {
       return NextResponse.json(
         { success: false, error: "Lab test not found" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
     // If user is doctor, check if they can access this test
-    if (auth.userRole === "doctor" && test.doctor.toString() !== auth.userId) {
+    if (
+      auth.userRole === "doctor" &&
+      test.doctor &&
+      test.doctor.toString() !== auth.userId
+    ) {
       return NextResponse.json(
-        { success: false, error: "Forbidden. You can only access your own lab tests." },
-        { status: 403 }
+        {
+          success: false,
+          error: "Forbidden. You can only access your own lab tests.",
+        },
+        { status: 403 },
       );
     }
 
     return NextResponse.json({
       success: true,
       data: test,
-      userRole: auth.userRole
+      userRole: auth.userRole,
     });
-
   } catch (error: any) {
     console.error("Error fetching lab test:", error);
     return NextResponse.json(
       { success: false, error: error.message || "Failed to fetch lab test" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

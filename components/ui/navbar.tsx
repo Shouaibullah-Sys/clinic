@@ -80,11 +80,21 @@ export default function Navbar({
             <p className="text-xs text-muted-foreground">
               {user?.role === "admin"
                 ? "Administrator"
-                : user?.role === "staff"
-                ? "Laboratory Staff"
-                : user?.role === "staff"
-                ? "Pharmacy Staff"
-                : "User"}
+                : user?.role === "doctor"
+                  ? "Doctor"
+                  : user?.role === "nurse"
+                    ? "Nurse"
+                    : user?.role === "receptionist"
+                      ? "Receptionist"
+                      : user?.role === "pharmacist" || user?.role === "pharmacy"
+                        ? "Pharmacy Staff"
+                        : user?.role === "lab_technician"
+                          ? "Laboratory Staff"
+                          : user?.role === "radiologist"
+                            ? "Radiologist"
+                            : user?.role === "admission"
+                              ? "Admission Staff"
+                              : "User"}
             </p>
           </div>
         </div>
@@ -94,7 +104,7 @@ export default function Navbar({
             <Input
               type="search"
               placeholder="Search..."
-              className="w-[200px] lg:w-[300px]"
+              className="w-50 lg:w-75"
             />
           </div>
 

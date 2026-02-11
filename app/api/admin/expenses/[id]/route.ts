@@ -1,7 +1,7 @@
 // app/api/admin/expenses/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
-import { DailyExpense } from "@/lib/models/DailyExpense";
+import { AdminExpense } from "@/lib/models/AdminExpense";
 
 // Helper function to get user info from request
 async function getUserInfo(request: NextRequest) {
@@ -15,7 +15,7 @@ async function getUserInfo(request: NextRequest) {
 // GET: Get a single expense by ID
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     await dbConnect();
@@ -36,8 +36,9 @@ export async function GET(
       );
     }
 
-    const expense = await DailyExpense.findById(params.id).populate(
-      "staff",
+    const { id } = await params;
+    const expense = await AdminExpense.findById(id).populate(
+      "admin",
       "name email",
     );
 
@@ -53,14 +54,13 @@ export async function GET(
       data: {
         id: expense._id.toString(),
         expenseId: expense.expenseId,
-        staff: expense.staff,
-        staffName: expense.staffName,
+        admin: expense.admin,
+        adminName: expense.adminName,
         date: expense.date,
         category: expense.category,
         description: expense.description,
         amount: expense.amount,
         receiptNumber: expense.receiptNumber,
-        status: expense.status,
         notes: expense.notes,
         createdAt: expense.createdAt,
         updatedAt: expense.updatedAt,
@@ -75,10 +75,10 @@ export async function GET(
   }
 }
 
-// PUT: Approve or reject an expense
+// PUT: Update an expense (no approval workflow for admin expenses)
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     await dbConnect();
@@ -100,62 +100,16 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { action, notes, amount, category, description, receiptNumber } =
-      body;
+    const { amount, category, description, receiptNumber, notes } = body;
 
-    const expense = await DailyExpense.findById(params.id);
+    const { id } = await params;
+    const expense = await AdminExpense.findById(id);
 
     if (!expense) {
       return NextResponse.json(
         { success: false, error: "Expense not found" },
         { status: 404 },
       );
-    }
-
-    // Handle approve/reject action
-    if (action) {
-      if (!["approve", "reject"].includes(action)) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: "Invalid action. Must be 'approve' or 'reject'",
-          },
-          { status: 400 },
-        );
-      }
-
-      if (action === "approve") {
-        expense.status = "approved";
-        expense.notes = notes || expense.notes;
-        await expense.save();
-
-        return NextResponse.json({
-          success: true,
-          data: {
-            id: expense._id.toString(),
-            expenseId: expense.expenseId,
-            status: expense.status,
-            notes: expense.notes,
-          },
-          message: "Expense approved successfully",
-        });
-      } else {
-        // Reject - keep as pending but add notes
-        expense.status = "pending";
-        expense.notes = notes || expense.notes;
-        await expense.save();
-
-        return NextResponse.json({
-          success: true,
-          data: {
-            id: expense._id.toString(),
-            expenseId: expense.expenseId,
-            status: expense.status,
-            notes: expense.notes,
-          },
-          message: "Expense rejected successfully",
-        });
-      }
     }
 
     // Handle update fields
@@ -192,14 +146,13 @@ export async function PUT(
       data: {
         id: expense._id.toString(),
         expenseId: expense.expenseId,
-        staff: expense.staff,
-        staffName: expense.staffName,
+        admin: expense.admin,
+        adminName: expense.adminName,
         date: expense.date,
         category: expense.category,
         description: expense.description,
         amount: expense.amount,
         receiptNumber: expense.receiptNumber,
-        status: expense.status,
         notes: expense.notes,
         createdAt: expense.createdAt,
         updatedAt: expense.updatedAt,
@@ -218,7 +171,7 @@ export async function PUT(
 // DELETE: Delete an expense (admin only)
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     await dbConnect();
@@ -239,7 +192,8 @@ export async function DELETE(
       );
     }
 
-    const expense = await DailyExpense.findById(params.id);
+    const { id } = await params;
+    const expense = await AdminExpense.findById(id);
 
     if (!expense) {
       return NextResponse.json(
@@ -248,7 +202,7 @@ export async function DELETE(
       );
     }
 
-    await DailyExpense.findByIdAndDelete(params.id);
+    await AdminExpense.findByIdAndDelete(id);
 
     return NextResponse.json({
       success: true,

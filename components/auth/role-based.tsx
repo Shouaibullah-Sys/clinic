@@ -6,7 +6,18 @@ import { ReactNode } from "react";
 
 interface RoleBasedProps {
   children: ReactNode;
-  allowedRoles: ("admin" | "staff")[];
+  allowedRoles: (
+    | "admin"
+    | "staff"
+    | "doctor"
+    | "nurse"
+    | "receptionist"
+    | "pharmacist"
+    | "pharmacy"
+    | "lab_technician"
+    | "radiologist"
+    | "admission"
+  )[];
   fallback?: ReactNode;
   showLoading?: boolean;
 }
@@ -76,7 +87,18 @@ export function StaffOnly({
 
 export function withRole<P extends object>(
   Component: React.ComponentType<P>,
-  allowedRoles: ("admin" | "staff")[]
+  allowedRoles: (
+    | "admin"
+    | "staff"
+    | "doctor"
+    | "nurse"
+    | "receptionist"
+    | "pharmacist"
+    | "pharmacy"
+    | "lab_technician"
+    | "radiologist"
+    | "admission"
+  )[],
 ) {
   return function WithRoleWrapper(props: P) {
     const { user } = useAuthStore();

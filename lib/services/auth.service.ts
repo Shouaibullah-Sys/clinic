@@ -1,7 +1,7 @@
 // lib/services/auth.service.ts
 import jwt from "jsonwebtoken";
 import { IUser, User } from "@/lib/models/User";
-import { Session, ISession } from "@/lib/models/Session";
+import { SessionModel as Session, ISession } from "@/lib/models/SessionModel";
 
 export interface DecodedToken {
   id: string;
@@ -21,7 +21,7 @@ export class AuthService {
         name: user.name,
       },
       process.env.JWT_SECRET!,
-      { expiresIn: "24h" }
+      { expiresIn: "24h" },
     );
 
     const refreshToken = jwt.sign(
@@ -31,7 +31,7 @@ export class AuthService {
         email: user.email,
       },
       process.env.JWT_REFRESH_SECRET!,
-      { expiresIn: "7d" }
+      { expiresIn: "7d" },
     );
 
     return { accessToken, refreshToken };
@@ -57,7 +57,7 @@ export class AuthService {
     userId: string,
     userRole: IUser["role"],
     ipAddress?: string,
-    userAgent?: string
+    userAgent?: string,
   ): Promise<string> {
     const sessionId = this.generateSessionId();
     const expiresAt = new Date();
@@ -101,7 +101,7 @@ export class AuthService {
 
 // Role-based access control
 export class RBAC {
-  private static permissions = {
+  private static permissions: any = {
     admin: {
       users: ["create", "read", "update", "delete", "approve"],
       patients: ["create", "read", "update", "delete", "export"],
@@ -141,25 +141,45 @@ export class RBAC {
       appointments: ["read"],
       inventory: ["read"],
     },
+    pharmacist: {
+      patients: ["read"],
+      medications: ["read", "update"],
+      prescriptions: ["read", "update"],
+    },
+    lab_technician: {
+      patients: ["read"],
+      lab_samples: ["create", "read", "update"],
+      lab_orders: ["read", "update"],
+    },
+    radiologist: {
+      patients: ["read"],
+      imaging_orders: ["read", "update"],
+      imaging_reports: ["create", "read"],
+    },
+    admission: {
+      patients: ["create", "read", "update"],
+      admissions: ["create", "read", "update"],
+    },
   };
 
-  static can(role: IUser["role"], resource: string, action: string): boolean {
+  static can(role: string, resource: string, action: string): boolean {
     if (role === "admin") return true;
 
     const rolePermissions = this.permissions[role];
     if (!rolePermissions) return false;
 
-    const resourcePermissions = rolePermissions[resource as keyof typeof rolePermissions];
+    const resourcePermissions =
+      rolePermissions[resource as keyof typeof rolePermissions];
     if (!resourcePermissions) return false;
 
     return resourcePermissions.includes(action);
   }
 
-  static getResourcesForRole(role: IUser["role"]): string[] {
+  static getResourcesForRole(role: string): string[] {
     return Object.keys(this.permissions[role] || {});
   }
 
-  static getActionsForRole(role: IUser["role"], resource: string): string[] {
+  static getActionsForRole(role: string, resource: string): string[] {
     if (role === "admin") return ["all"];
 
     const rolePermissions = this.permissions[role];
@@ -193,7 +213,7 @@ export async function authenticateUser(token: string): Promise<{
       };
     }
 
-    const user = await User.findById(decoded.id)
+    const user: any = await User.findById(decoded.id)
       .select("-password -refreshTokens")
       .lean();
 
@@ -242,7 +262,7 @@ export async function authenticateUser(token: string): Promise<{
 export function authorizeUser(
   user: Omit<IUser, "_id"> & { _id: string },
   resource: string,
-  action: string
+  action: string,
 ): boolean {
   return RBAC.can(user.role, resource, action);
 }
@@ -266,15 +286,16 @@ export const ServicePermissions = {
 export function canAccessService(
   userRole: IUser["role"],
   serviceType: string,
-  action: string
+  action: string,
 ): boolean {
-  const allowedRoles = ServicePermissions[serviceType as keyof typeof ServicePermissions] || [];
+  const allowedRoles =
+    ServicePermissions[serviceType as keyof typeof ServicePermissions] || [];
   return allowedRoles.includes(userRole) || userRole === "admin";
 }
 
 export function getServicesForRole(userRole: IUser["role"]): string[] {
   const allServices = Object.keys(ServicePermissions);
   return allServices.filter((service) =>
-    canAccessService(userRole, service, "read")
+    canAccessService(userRole, service, "read"),
   );
 }

@@ -2,7 +2,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth";
 import dbConnect from "@/lib/dbConnect";
-import { DailyExpense } from "@/lib/models/DailyExpense";
+import { AdminExpense } from "@/lib/models/AdminExpense";
+import { ReceptionExpense } from "@/lib/models/ReceptionExpense";
 
 export async function GET(req: NextRequest) {
   try {
@@ -56,8 +57,8 @@ export async function GET(req: NextRequest) {
         );
     }
 
-    // Get total expenses
-    const totalExpenses = await DailyExpense.aggregate([
+    // Get total expenses from both models
+    const adminTotalExpenses = await AdminExpense.aggregate([
       {
         $match: {
           date: { $gte: startDate, $lt: endDate },
@@ -72,13 +73,37 @@ export async function GET(req: NextRequest) {
       },
     ]);
 
-    const totalData = totalExpenses[0] || {
+    const receptionTotalExpenses = await ReceptionExpense.aggregate([
+      {
+        $match: {
+          date: { $gte: startDate, $lt: endDate },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalAmount: { $sum: "$amount" },
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    const adminTotalData = adminTotalExpenses[0] || {
+      totalAmount: 0,
+      count: 0,
+    };
+    const receptionTotalData = receptionTotalExpenses[0] || {
       totalAmount: 0,
       count: 0,
     };
 
-    // Get expenses by category
-    const expensesByCategory = await DailyExpense.aggregate([
+    const totalData = {
+      totalAmount: adminTotalData.totalAmount + receptionTotalData.totalAmount,
+      count: adminTotalData.count + receptionTotalData.count,
+    };
+
+    // Get expenses by category from both models
+    const adminExpensesByCategory = await AdminExpense.aggregate([
       {
         $match: {
           date: { $gte: startDate, $lt: endDate },
@@ -91,13 +116,48 @@ export async function GET(req: NextRequest) {
           count: { $sum: 1 },
         },
       },
+    ]);
+
+    const receptionExpensesByCategory = await ReceptionExpense.aggregate([
       {
-        $sort: { totalAmount: -1 },
+        $match: {
+          date: { $gte: startDate, $lt: endDate },
+        },
+      },
+      {
+        $group: {
+          _id: "$category",
+          totalAmount: { $sum: "$amount" },
+          count: { $sum: 1 },
+        },
       },
     ]);
 
-    // Get expenses by status
-    const expensesByStatus = await DailyExpense.aggregate([
+    // Combine category expenses
+    const categoryMap = new Map();
+    [...adminExpensesByCategory, ...receptionExpensesByCategory].forEach(
+      (item: any) => {
+        const existing = categoryMap.get(item._id) || {
+          totalAmount: 0,
+          count: 0,
+        };
+        categoryMap.set(item._id, {
+          totalAmount: existing.totalAmount + item.totalAmount,
+          count: existing.count + item.count,
+        });
+      },
+    );
+
+    const expensesByCategory = Array.from(categoryMap.entries())
+      .map(([category, data]) => ({
+        _id: category,
+        totalAmount: data.totalAmount,
+        count: data.count,
+      }))
+      .sort((a, b) => b.totalAmount - a.totalAmount);
+
+    // Get expenses by status (only from ReceptionExpense since AdminExpense has no status)
+    const expensesByStatus = await ReceptionExpense.aggregate([
       {
         $match: {
           date: { $gte: startDate, $lt: endDate },
@@ -112,8 +172,26 @@ export async function GET(req: NextRequest) {
       },
     ]);
 
-    // Get daily expense trend
-    const dailyExpenseTrend = await DailyExpense.aggregate([
+    // Add admin expenses as "approved" status
+    if (adminTotalData.count > 0) {
+      const approvedIndex = expensesByStatus.findIndex(
+        (item: any) => item._id === "approved",
+      );
+      if (approvedIndex >= 0) {
+        expensesByStatus[approvedIndex].totalAmount +=
+          adminTotalData.totalAmount;
+        expensesByStatus[approvedIndex].count += adminTotalData.count;
+      } else {
+        expensesByStatus.push({
+          _id: "approved",
+          totalAmount: adminTotalData.totalAmount,
+          count: adminTotalData.count,
+        });
+      }
+    }
+
+    // Get daily expense trend from both models
+    const adminDailyTrend = await AdminExpense.aggregate([
       {
         $match: {
           date: { $gte: startDate, $lt: endDate },
@@ -128,13 +206,48 @@ export async function GET(req: NextRequest) {
           count: { $sum: 1 },
         },
       },
+    ]);
+
+    const receptionDailyTrend = await ReceptionExpense.aggregate([
       {
-        $sort: { _id: 1 },
+        $match: {
+          date: { $gte: startDate, $lt: endDate },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            $dateToString: { format: "%Y-%m-%d", date: "$date" },
+          },
+          totalAmount: { $sum: "$amount" },
+          count: { $sum: 1 },
+        },
       },
     ]);
 
-    // Get pending expenses
-    const pendingExpenses = await DailyExpense.find({
+    // Combine daily trends
+    const dailyTrendMap = new Map();
+    [...adminDailyTrend, ...receptionDailyTrend].forEach((item: any) => {
+      const existing = dailyTrendMap.get(item._id) || {
+        totalAmount: 0,
+        count: 0,
+      };
+      dailyTrendMap.set(item._id, {
+        totalAmount: existing.totalAmount + item.totalAmount,
+        count: existing.count + item.count,
+      });
+    });
+
+    const dailyExpenseTrend = Array.from(dailyTrendMap.entries())
+      .map(([date, data]) => ({
+        _id: date,
+        totalAmount: data.totalAmount,
+        count: data.count,
+      }))
+      .sort((a, b) => a._id.localeCompare(b._id));
+
+    // Get pending expenses (only from ReceptionExpense)
+    const pendingExpenses = await ReceptionExpense.find({
       status: "pending",
     })
       .sort({ date: -1 })
@@ -142,17 +255,60 @@ export async function GET(req: NextRequest) {
       .populate("staff", "name email")
       .lean();
 
-    // Get recent expenses
-    const recentExpenses = await DailyExpense.find({
+    // Get recent expenses from both models
+    const adminRecentExpenses = await AdminExpense.find({
       date: { $gte: startDate, $lt: endDate },
     })
       .sort({ date: -1 })
-      .limit(20)
+      .limit(10)
+      .populate("admin", "name email")
+      .lean();
+
+    const receptionRecentExpenses = await ReceptionExpense.find({
+      date: { $gte: startDate, $lt: endDate },
+    })
+      .sort({ date: -1 })
+      .limit(10)
       .populate("staff", "name email")
       .lean();
 
-    // Get expenses by staff
-    const expensesByStaff = await DailyExpense.aggregate([
+    // Combine and sort recent expenses
+    const recentExpenses = [...adminRecentExpenses, ...receptionRecentExpenses]
+      .map((expense: any) => ({
+        id: expense._id.toString(),
+        expenseId: expense.expenseId,
+        staff: expense.admin || expense.staff,
+        staffName: expense.adminName || expense.staffName,
+        date: expense.date,
+        category: expense.category,
+        description: expense.description,
+        amount: expense.amount,
+        receiptNumber: expense.receiptNumber,
+        status: expense.status || "approved",
+        notes: expense.notes,
+        createdAt: expense.createdAt,
+      }))
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .slice(0, 20);
+
+    // Get expenses by staff from both models
+    const adminExpensesByStaff = await AdminExpense.aggregate([
+      {
+        $match: {
+          date: { $gte: startDate, $lt: endDate },
+        },
+      },
+      {
+        $group: {
+          _id: "$admin",
+          staffName: { $first: "$adminName" },
+          totalAmount: { $sum: "$amount" },
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    const receptionExpensesByStaff = await ReceptionExpense.aggregate([
       {
         $match: {
           date: { $gte: startDate, $lt: endDate },
@@ -166,13 +322,34 @@ export async function GET(req: NextRequest) {
           count: { $sum: 1 },
         },
       },
-      {
-        $sort: { totalAmount: -1 },
-      },
-      {
-        $limit: 10,
-      },
     ]);
+
+    // Combine staff expenses
+    const staffMap = new Map();
+    [...adminExpensesByStaff, ...receptionExpensesByStaff].forEach(
+      (item: any) => {
+        const existing = staffMap.get(item._id.toString()) || {
+          staffName: item.staffName,
+          totalAmount: 0,
+          count: 0,
+        };
+        staffMap.set(item._id.toString(), {
+          staffName: item.staffName,
+          totalAmount: existing.totalAmount + item.totalAmount,
+          count: existing.count + item.count,
+        });
+      },
+    );
+
+    const expensesByStaff = Array.from(staffMap.entries())
+      .map(([staffId, data]) => ({
+        _id: staffId,
+        staffName: data.staffName,
+        totalAmount: data.totalAmount,
+        count: data.count,
+      }))
+      .sort((a, b) => b.totalAmount - a.totalAmount)
+      .slice(0, 10);
 
     // Calculate category breakdown with percentages
     const categoryBreakdown = expensesByCategory.map((item: any) => ({
@@ -201,7 +378,7 @@ export async function GET(req: NextRequest) {
         yesterday.getDate() + 1,
       );
 
-      const yesterdayExpenses = await DailyExpense.aggregate([
+      const adminYesterdayExpenses = await AdminExpense.aggregate([
         {
           $match: {
             date: { $gte: yesterdayStart, $lt: yesterdayEnd },
@@ -215,7 +392,23 @@ export async function GET(req: NextRequest) {
         },
       ]);
 
-      previousPeriodExpenses = yesterdayExpenses[0]?.totalAmount || 0;
+      const receptionYesterdayExpenses = await ReceptionExpense.aggregate([
+        {
+          $match: {
+            date: { $gte: yesterdayStart, $lt: yesterdayEnd },
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            totalAmount: { $sum: "$amount" },
+          },
+        },
+      ]);
+
+      previousPeriodExpenses =
+        (adminYesterdayExpenses[0]?.totalAmount || 0) +
+        (receptionYesterdayExpenses[0]?.totalAmount || 0);
     }
 
     // Calculate growth percentage
@@ -258,20 +451,7 @@ export async function GET(req: NextRequest) {
           notes: expense.notes,
           createdAt: expense.createdAt,
         })),
-        recentExpenses: recentExpenses.map((expense: any) => ({
-          id: expense._id.toString(),
-          expenseId: expense.expenseId,
-          staff: expense.staff,
-          staffName: expense.staffName,
-          date: expense.date,
-          category: expense.category,
-          description: expense.description,
-          amount: expense.amount,
-          receiptNumber: expense.receiptNumber,
-          status: expense.status,
-          notes: expense.notes,
-          createdAt: expense.createdAt,
-        })),
+        recentExpenses: recentExpenses,
       },
     });
   } catch (error) {

@@ -17,7 +17,7 @@ async function getUserInfo(request: NextRequest) {
 // GET: Get a single cash collection by ID
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     await dbConnect();
@@ -38,7 +38,8 @@ export async function GET(
       );
     }
 
-    const collection = await DailyCashCollection.findById(params.id)
+    const { id } = await params;
+    const collection = await DailyCashCollection.findById(id)
       .populate("staff", "name email")
       .populate("reviewedBy", "name email");
 
@@ -109,7 +110,7 @@ export async function GET(
 // PUT: Approve or reject a cash collection
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     await dbConnect();
@@ -143,7 +144,8 @@ export async function PUT(
       );
     }
 
-    const collection = await DailyCashCollection.findById(params.id);
+    const { id } = await params;
+    const collection = await DailyCashCollection.findById(id);
 
     if (!collection) {
       return NextResponse.json(
@@ -250,7 +252,7 @@ export async function PUT(
 // DELETE: Delete a cash collection (admin only)
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     await dbConnect();
@@ -271,7 +273,8 @@ export async function DELETE(
       );
     }
 
-    const collection = await DailyCashCollection.findById(params.id);
+    const { id } = await params;
+    const collection = await DailyCashCollection.findById(id);
 
     if (!collection) {
       return NextResponse.json(
@@ -288,7 +291,7 @@ export async function DELETE(
       );
     }
 
-    await DailyCashCollection.findByIdAndDelete(params.id);
+    await DailyCashCollection.findByIdAndDelete(id);
 
     return NextResponse.json({
       success: true,

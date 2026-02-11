@@ -1,23 +1,23 @@
 // lib/services/base.service.ts
 import { NextRequest } from "next/server";
 import { IUser, User } from "@/lib/models/User";
-import { 
-  AuthService, 
-  RBAC, 
-  authenticateUser, 
+import {
+  AuthService,
+  RBAC,
+  authenticateUser,
   authorizeUser,
-  ServicePermissions 
+  ServicePermissions,
 } from "@/lib/services/auth.service";
-import { 
-  ActivityLogger, 
-  ServiceActivityTracker 
+import {
+  ActivityLogger,
+  ServiceActivityTracker,
 } from "@/lib/middleware/activity-logger";
 
 export class ServiceError extends Error {
   constructor(
     message: string,
     public statusCode: number = 400,
-    public code?: string
+    public code?: string,
   ) {
     super(message);
     this.name = "ServiceError";
@@ -26,46 +26,46 @@ export class ServiceError extends Error {
 
 export abstract class BaseService {
   protected request?: NextRequest;
-  
+
   constructor(request?: NextRequest) {
     this.request = request;
   }
 
-  protected setRequest(request: NextRequest) {
+  public setRequest(request: NextRequest) {
     this.request = request;
   }
 
   protected async authenticate(token: string): Promise<{
-    user: (Omit<IUser, "_id"> & { _id: string });
+    user: Omit<IUser, "_id"> & { _id: string };
     token: string;
   }> {
     const authResult = await authenticateUser(token);
-    
+
     if (!authResult.user || !authResult.token) {
       // Log authentication failure
       if (this.request) {
         await ServiceActivityTracker.trackServiceError(
           this.request,
-          this.constructor.name.replace('ServiceHandler', '').toLowerCase(),
-          'authenticate',
-          'unknown',
-          new Error(authResult.error || "Authentication failed")
+          this.constructor.name.replace("ServiceHandler", "").toLowerCase(),
+          "authenticate",
+          "unknown",
+          new Error(authResult.error || "Authentication failed"),
         );
       }
-      
+
       throw new ServiceError(authResult.error || "Authentication failed", 401);
     }
-    
+
     // Log successful authentication
     if (this.request) {
       await ServiceActivityTracker.trackServiceAccess(
         this.request,
-        this.constructor.name.replace('ServiceHandler', '').toLowerCase(),
-        'authenticate',
-        authResult.user._id
+        this.constructor.name.replace("ServiceHandler", "").toLowerCase(),
+        "authenticate",
+        authResult.user._id,
       );
     }
-    
+
     return {
       user: authResult.user,
       token: authResult.token,
@@ -75,21 +75,21 @@ export abstract class BaseService {
   protected async authorize(
     user: Omit<IUser, "_id"> & { _id: string },
     resource: string,
-    action: string
+    action: string,
   ): Promise<void> {
     if (!authorizeUser(user, resource, action)) {
       // Log authorization failure
       if (this.request) {
         await ServiceActivityTracker.trackServiceError(
           this.request,
-          this.constructor.name.replace('ServiceHandler', '').toLowerCase(),
+          this.constructor.name.replace("ServiceHandler", "").toLowerCase(),
           action,
           user._id,
           new Error("Unauthorized access"),
-          resource
+          resource,
         );
       }
-      
+
       throw new ServiceError("Unauthorized access", 403);
     }
   }
@@ -97,14 +97,16 @@ export abstract class BaseService {
   protected async validateAndAuthorize(
     token: string,
     resource: string,
-    action: string
-  ): Promise<{ user: (Omit<IUser, "_id"> & { _id: string }) }> {
+    action: string,
+  ): Promise<{ user: Omit<IUser, "_id"> & { _id: string } }> {
     const auth = await this.authenticate(token);
     await this.authorize(auth.user, resource, action);
     return { user: auth.user };
   }
 
-  protected async getUserFromToken(token: string): Promise<(Omit<IUser, "_id"> & { _id: string })> {
+  protected async getUserFromToken(
+    token: string,
+  ): Promise<Omit<IUser, "_id"> & { _id: string }> {
     const auth = await this.authenticate(token);
     return auth.user;
   }
@@ -112,9 +114,10 @@ export abstract class BaseService {
   protected async checkServiceAccess(
     user: Omit<IUser, "_id"> & { _id: string },
     serviceType: string,
-    action: string = "read"
+    action: string = "read",
   ): Promise<void> {
-    const allowedRoles = ServicePermissions[serviceType as keyof typeof ServicePermissions] || [];
+    const allowedRoles =
+      ServicePermissions[serviceType as keyof typeof ServicePermissions] || [];
     if (!allowedRoles.includes(user.role) && user.role !== "admin") {
       // Log service access denial
       if (this.request) {
@@ -124,19 +127,22 @@ export abstract class BaseService {
           action,
           user._id,
           new Error(`Access denied to ${serviceType} service`),
-          serviceType
+          serviceType,
         );
       }
-      
+
       throw new ServiceError(`Access denied to ${serviceType} service`, 403);
     }
   }
 
   // Common methods for all services
-  protected async populateUserDetails(doc: any, fields: string[] = ["name", "email", "role", "department"]) {
+  protected async populateUserDetails(
+    doc: any,
+    fields: string[] = ["name", "email", "role", "department"],
+  ) {
     if (!doc) return doc;
 
-    const populateFields = fields.map(field => {
+    const populateFields = fields.map((field) => {
       if (field.includes(".")) {
         return {
           path: field.split(".")[0],
@@ -164,21 +170,21 @@ export abstract class BaseService {
     resourceId: string,
     userId: string,
     userRole: string,
-    details: any = {}
+    details: any = {},
   ) {
     // Log to activity tracker
     if (this.request) {
       await ServiceActivityTracker.trackDataChange(
         this.request,
-        this.constructor.name.replace('ServiceHandler', '').toLowerCase(),
+        this.constructor.name.replace("ServiceHandler", "").toLowerCase(),
         action,
         userId,
         resourceId,
         details.changes || {},
-        details.previousState
+        details.previousState,
       );
     }
-    
+
     // Additional audit logging to database
     console.log("AUDIT:", {
       action,
@@ -189,7 +195,7 @@ export abstract class BaseService {
       timestamp: new Date(),
       ...details,
     });
-    
+
     // In production, save to audit database
     // await AuditLog.create({ ... });
   }
@@ -199,7 +205,7 @@ export abstract class BaseService {
     userId: string,
     action: string,
     maxRequests: number = 100,
-    windowMs: number = 15 * 60 * 1000 // 15 minutes
+    windowMs: number = 15 * 60 * 1000, // 15 minutes
   ): Promise<void> {
     // Implement rate limiting logic here
     // You can use Redis or in-memory store
@@ -225,11 +231,11 @@ export class ServiceRegistry {
     if (!service) {
       throw new ServiceError(`Service ${name} not found`, 404);
     }
-    
+
     if (request) {
       service.setRequest(request);
     }
-    
+
     return service as T;
   }
 

@@ -11,6 +11,7 @@ export const UserRoleEnum = [
   "pharmacist",
   "lab_technician",
   "radiologist",
+  "admission",
 ] as const;
 
 // Base user schema for validation
@@ -38,7 +39,7 @@ export const CreateUserSchema = BaseUserSchema.extend({
     .min(8, "Password must be at least 8 characters")
     .regex(
       /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/,
-      "Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character"
+      "Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character",
     ),
 });
 
@@ -49,15 +50,15 @@ export const UpdateUserSchema = BaseUserSchema.extend({
     .optional()
     .refine(
       (val) => !val || val.length >= 8,
-      "Password must be at least 8 characters"
+      "Password must be at least 8 characters",
     )
     .refine(
       (val) =>
         !val ||
         /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/.test(
-          val
+          val,
         ),
-      "Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character"
+      "Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character",
     ),
 });
 

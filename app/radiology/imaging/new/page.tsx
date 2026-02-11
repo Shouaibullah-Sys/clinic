@@ -1,27 +1,36 @@
+"use client";
+
 // app/(dashboard)/services/imaging/new/page.tsx
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { ImagingForm } from "@/components/forms/imaging-form";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { useCreateService } from "@/lib/hooks/use-services";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import type { ImagingRecord } from "@/lib/schemas/imaging";
 
 export default function NewImagingPage() {
   const router = useRouter();
   const createMutation = useCreateService("imaging");
 
-  const handleSubmit = async (data: any) => {
+  const handleSubmit = async (data: ImagingRecord) => {
     try {
       await createMutation.mutateAsync(data);
-      toast("Success",{
+      toast("Success", {
         description: "Imaging record created successfully",
       });
       router.push("/services/imaging");
     } catch (error) {
-      toast("Error",{
+      toast("Error", {
         description: "Failed to create imaging record",
       });
     }
@@ -37,7 +46,9 @@ export default function NewImagingPage() {
             </Button>
           </Link>
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">New Imaging Record</h1>
+            <h1 className="text-3xl font-bold tracking-tight">
+              New Imaging Record
+            </h1>
             <p className="text-muted-foreground">
               Schedule a new X-Ray, CT Scan, MRI, or Ultrasound
             </p>
@@ -66,7 +77,9 @@ export default function NewImagingPage() {
           <CardContent className="space-y-2 text-sm">
             <ul className="list-disc pl-5 space-y-1">
               <li>Ensure patient consent is obtained before imaging</li>
-              <li>Check for pregnancy in female patients of childbearing age</li>
+              <li>
+                Check for pregnancy in female patients of childbearing age
+              </li>
               <li>Verify no contraindications for contrast agents</li>
               <li>Use appropriate radiation protection measures</li>
               <li>Document any previous imaging studies for comparison</li>

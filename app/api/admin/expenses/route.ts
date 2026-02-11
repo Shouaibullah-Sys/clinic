@@ -1,7 +1,7 @@
 // app/api/admin/expenses/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
-import { DailyExpense } from "@/lib/models/DailyExpense";
+import { AdminExpense } from "@/lib/models/AdminExpense";
 
 // Helper function to get user info from request
 async function getUserInfo(request: NextRequest) {
@@ -38,8 +38,6 @@ export async function GET(request: NextRequest) {
     const startDate = searchParams.get("startDate");
     const endDate = searchParams.get("endDate");
     const category = searchParams.get("category");
-    const status = searchParams.get("status");
-    const staffId = searchParams.get("staffId");
     const limit = parseInt(searchParams.get("limit") || "50");
     const page = parseInt(searchParams.get("page") || "1");
 
@@ -59,36 +57,24 @@ export async function GET(request: NextRequest) {
       query.category = category;
     }
 
-    // Filter by status
-    if (status) {
-      query.status = status;
-    }
-
-    // Filter by staff
-    if (staffId) {
-      query.staff = staffId;
-    }
-
     const skip = (page - 1) * limit;
 
-    const expenses = await DailyExpense.find(query)
-      .populate("staff", "name email")
+    const expenses = await AdminExpense.find(query)
+      .populate("admin", "name email")
       .sort({ date: -1 })
       .skip(skip)
       .limit(limit);
 
-    const total = await DailyExpense.countDocuments(query);
+    const total = await AdminExpense.countDocuments(query);
 
     // Get summary stats
     let summary = null;
     if (startDate && endDate) {
       const start = new Date(startDate);
       const end = new Date(endDate);
-      const summaryData = await DailyExpense.getExpenseSummary(start, end);
+      const summaryData = await AdminExpense.getExpenseSummary(start, end);
       summary = {
         totalExpenses: summaryData.totalExpenses,
-        pendingCount: summaryData.pendingCount,
-        approvedCount: summaryData.approvedCount,
         byCategory: summaryData.summary,
         expenseCount: summaryData.expenseCount,
       };
@@ -96,17 +82,16 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: expenses.map((expense) => ({
+      data: expenses.map((expense: any) => ({
         id: expense._id.toString(),
         expenseId: expense.expenseId,
-        staff: expense.staff,
-        staffName: expense.staffName,
+        admin: expense.admin,
+        adminName: expense.adminName,
         date: expense.date,
         category: expense.category,
         description: expense.description,
         amount: expense.amount,
         receiptNumber: expense.receiptNumber,
-        status: expense.status,
         notes: expense.notes,
         createdAt: expense.createdAt,
         updatedAt: expense.updatedAt,
@@ -190,19 +175,18 @@ export async function POST(request: NextRequest) {
     const month = (dateObj.getMonth() + 1).toString().padStart(2, "0");
     const day = dateObj.getDate().toString().padStart(2, "0");
     const random = Math.floor(1000 + Math.random() * 9000);
-    const expenseId = `EXP${year}${month}${day}${random}`;
+    const expenseId = `ADM${year}${month}${day}${random}`;
 
-    const expense = await DailyExpense.create({
+    const expense = await AdminExpense.create({
       expenseId,
-      staff: staffId || userId,
-      staffName: userName || "Unknown",
+      admin: staffId || userId,
+      adminName: userName || "Unknown",
       date: date ? new Date(date) : new Date(),
       category,
       description,
       amount: parseFloat(amount),
       receiptNumber,
       notes,
-      status: "pending",
     });
 
     return NextResponse.json({
@@ -210,14 +194,13 @@ export async function POST(request: NextRequest) {
       data: {
         id: expense._id.toString(),
         expenseId: expense.expenseId,
-        staff: expense.staff,
-        staffName: expense.staffName,
+        admin: expense.admin,
+        adminName: expense.adminName,
         date: expense.date,
         category: expense.category,
         description: expense.description,
         amount: expense.amount,
         receiptNumber: expense.receiptNumber,
-        status: expense.status,
         notes: expense.notes,
         createdAt: expense.createdAt,
         updatedAt: expense.updatedAt,

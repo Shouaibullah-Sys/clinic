@@ -1,6 +1,6 @@
 // app/api/admissions/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import  dbConnect  from "@/lib/dbConnect";
+import dbConnect from "@/lib/dbConnect";
 import { Admission } from "@/lib/models/Admission";
 import { Patient } from "@/lib/models/Patient";
 import { User } from "@/lib/models/User";
@@ -8,20 +8,24 @@ import { authMiddleware } from "@/lib/middleware/auth";
 
 // GET single admission
 export async function GET(
-   request: NextRequest,
-   { params }: { params: { id: string } }
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
 ) {
-   try {
-     console.log("params:", params, "typeof params:", typeof params);
-     // Apply auth middleware
-     const authResponse = authMiddleware(request);
-     if (authResponse instanceof NextResponse) {
-       return authResponse;
-     }
+  try {
+    const { id } = await params;
+    console.log("params:", id, "typeof params:", typeof id);
+    // Apply auth middleware
+    const authResult = await authMiddleware(request);
+    if (!authResult.user) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 },
+      );
+    }
 
-     await dbConnect();
+    await dbConnect();
 
-    const admission = await Admission.findById(params.id)
+    const admission = await Admission.findById(id)
       .populate("patient")
       .populate("doctor")
       .populate("treatments.administeredBy", "name role")
@@ -30,7 +34,7 @@ export async function GET(
     if (!admission) {
       return NextResponse.json(
         { success: false, error: "Admission not found" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -42,7 +46,7 @@ export async function GET(
     console.error("Error fetching admission:", error);
     return NextResponse.json(
       { success: false, error: "Failed to fetch admission" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -50,13 +54,16 @@ export async function GET(
 // PUT update admission
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     // Apply auth middleware
-    const authResponse = authMiddleware(request);
-    if (authResponse instanceof NextResponse) {
-      return authResponse;
+    const authResult = await authMiddleware(request);
+    if (!authResult.user) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 },
+      );
     }
 
     await dbConnect();
@@ -69,15 +76,16 @@ export async function PUT(
     if (!["admin", "doctor", "nurse"].includes(userRole || "")) {
       return NextResponse.json(
         { success: false, error: "Insufficient permissions" },
-        { status: 403 }
+        { status: 403 },
       );
     }
 
-    const admission = await Admission.findById(params.id);
+    const { id } = await params;
+    const admission = await Admission.findById(id);
     if (!admission) {
       return NextResponse.json(
         { success: false, error: "Admission not found" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -85,18 +93,21 @@ export async function PUT(
     if (body.status === "discharged") {
       if (!["admin", "doctor"].includes(userRole || "")) {
         return NextResponse.json(
-          { success: false, error: "Only admin or doctor can discharge patients" },
-          { status: 403 }
+          {
+            success: false,
+            error: "Only admin or doctor can discharge patients",
+          },
+          { status: 403 },
         );
       }
-      
+
       if (!body.dischargeSummary) {
         return NextResponse.json(
           { success: false, error: "Discharge summary is required" },
-          { status: 400 }
+          { status: 400 },
         );
       }
-      
+
       body.dischargeDate = new Date();
     }
 
@@ -139,7 +150,7 @@ export async function PUT(
     console.error("Error updating admission:", error);
     return NextResponse.json(
       { success: false, error: "Failed to update admission" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -147,13 +158,16 @@ export async function PUT(
 // DELETE admission
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     // Apply auth middleware
-    const authResponse = authMiddleware(request);
-    if (authResponse instanceof NextResponse) {
-      return authResponse;
+    const authResult = await authMiddleware(request);
+    if (!authResult.user) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 },
+      );
     }
 
     await dbConnect();
@@ -164,15 +178,16 @@ export async function DELETE(
     if (userRole !== "admin") {
       return NextResponse.json(
         { success: false, error: "Only admin can delete admissions" },
-        { status: 403 }
+        { status: 403 },
       );
     }
 
-    const admission = await Admission.findById(params.id);
+    const { id } = await params;
+    const admission = await Admission.findById(id);
     if (!admission) {
       return NextResponse.json(
         { success: false, error: "Admission not found" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -180,7 +195,7 @@ export async function DELETE(
     if (admission.status === "admitted") {
       return NextResponse.json(
         { success: false, error: "Cannot delete active admission" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -194,7 +209,7 @@ export async function DELETE(
     console.error("Error deleting admission:", error);
     return NextResponse.json(
       { success: false, error: "Failed to delete admission" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

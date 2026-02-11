@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
-import { DailyExpense } from "@/lib/models/DailyExpense";
+import { ReceptionExpense } from "@/lib/models/ReceptionExpense";
 import { jwtVerify } from "jose";
 
 // Helper function to get user info from request
@@ -56,7 +56,7 @@ export async function GET(
       );
     }
 
-    const expense = await DailyExpense.findById(id);
+    const expense = await ReceptionExpense.findById(id);
 
     if (!expense) {
       return NextResponse.json(
@@ -127,7 +127,7 @@ export async function PUT(
     const body = await request.json();
     const { date, category, description, amount, receiptNumber, notes } = body;
 
-    const expense = await DailyExpense.findById(id);
+    const expense = await ReceptionExpense.findById(id);
 
     if (!expense) {
       return NextResponse.json(
@@ -223,7 +223,7 @@ export async function DELETE(
       );
     }
 
-    const expense = await DailyExpense.findById(id);
+    const expense = await ReceptionExpense.findById(id);
 
     if (!expense) {
       return NextResponse.json(
@@ -232,7 +232,7 @@ export async function DELETE(
       );
     }
 
-    await DailyExpense.findByIdAndDelete(id);
+    await ReceptionExpense.findByIdAndDelete(id);
 
     return NextResponse.json({
       success: true,

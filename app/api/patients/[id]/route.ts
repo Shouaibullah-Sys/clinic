@@ -15,47 +15,52 @@ const calculateAge = (dateOfBirth: Date): number => {
   const today = new Date();
   let age = today.getFullYear() - dob.getFullYear();
   const monthDiff = today.getMonth() - dob.getMonth();
-  
+
   if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
     age--;
   }
-  
+
   return age;
 };
 
 // GET: Get patient details by ID
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     await dbConnect();
 
-  // Update the authenticateRequest call to handle the promise properly
-const auth = await authenticateRequest(request);
-if (!auth.success) {
-  return NextResponse.json(
-    { success: false, error: auth.error },
-    { status: auth.status || 401 }
-  );
-}
+    // Update the authenticateRequest call to handle the promise properly
+    const auth = await authenticateRequest(request);
+    if (!auth.success) {
+      return NextResponse.json(
+        { success: false, error: auth.error },
+        { status: auth.status || 401 },
+      );
+    }
 
-// Access auth properties safely
-const userId = auth.userId as string;
-const userRole = auth.userRole as string;
-const userName = auth.userName as string;
+    // Access auth properties safely
+    const userId = auth.userId as string;
+    const userRole = auth.userRole as string;
+    const userName = auth.userName as string;
     // Check if user has permission to view patient data
     const allowedRoles = ["admin", "doctor", "nurse", "receptionist"];
     if (!auth.userRole || !allowedRoles.includes(auth.userRole)) {
       return NextResponse.json(
-        { success: false, error: "Forbidden. You don't have permission to access patient data." },
-        { status: 403 }
+        {
+          success: false,
+          error: "Forbidden. You don't have permission to access patient data.",
+        },
+        { status: 403 },
       );
     }
 
     const { id: patientId } = await params;
 
-    console.log(`Fetching patient data for ID: ${patientId} by user: ${auth.userRole} ${auth.userName}`);
+    console.log(
+      `Fetching patient data for ID: ${patientId} by user: ${auth.userRole} ${auth.userName}`,
+    );
 
     // Get patient basic information
     const patient = await Patient.findById(patientId)
@@ -65,7 +70,7 @@ const userName = auth.userName as string;
     if (!patient) {
       return NextResponse.json(
         { success: false, error: "Patient not found" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -74,28 +79,30 @@ const userName = auth.userName as string;
 
     // If user is a doctor, check if they have treated this patient
     if (auth.userRole === "doctor") {
-      console.log(`Doctor access check: userRole=${auth.userRole}, userId=${auth.userId}, patientId=${patientId}`);
+      console.log(
+        `Doctor access check: userRole=${auth.userRole}, userId=${auth.userId}, patientId=${patientId}`,
+      );
       const hasAccess = await Appointment.exists({
         patient: patientId,
         doctor: auth.userId,
-        status: { $nin: ["cancelled", "no-show"] }
+        status: { $nin: ["cancelled", "no-show"] },
       });
       console.log(`Doctor access check result: hasAccess=${hasAccess}`);
 
       if (!hasAccess) {
         return NextResponse.json(
-          { 
-            success: false, 
-            error: "Forbidden. You can only access patients you have treated." 
+          {
+            success: false,
+            error: "Forbidden. You can only access patients you have treated.",
           },
-          { status: 403 }
+          { status: 403 },
         );
       }
     }
 
     // Get patient appointments
     const appointmentQuery: any = { patient: patientId };
-    
+
     // Filter by doctor if user is doctor
     if (auth.userRole === "doctor") {
       appointmentQuery.doctor = auth.userId;
@@ -144,9 +151,9 @@ const userName = auth.userName as string;
           oxygenSaturation: "$vitalSigns.oxygenSaturation",
           weight: "$vitalSigns.weight",
           height: "$vitalSigns.height",
-          bmi: "$vitalSigns.bmi"
-        }
-      }
+          bmi: "$vitalSigns.bmi",
+        },
+      },
     ]);
 
     // Format the response data
@@ -154,21 +161,32 @@ const userName = auth.userName as string;
       patient: {
         ...patient,
         age,
-        fullAddress: patient.address || null
+        fullAddress: patient.address || null,
       },
       statistics: {
-        totalAppointments: await Appointment.countDocuments({ patient: patientId, status: { $nin: ["cancelled", "no-show"] } }),
-        completedAppointments: await Appointment.countDocuments({ patient: patientId, status: "completed" }),
-        upcomingAppointments: await Appointment.countDocuments({ 
-          patient: patientId, 
-          status: { $in: ["scheduled", "confirmed"] },
-          date: { $gte: new Date() }
+        totalAppointments: await Appointment.countDocuments({
+          patient: patientId,
+          status: { $nin: ["cancelled", "no-show"] },
         }),
-        totalPrescriptions: await Prescription.countDocuments({ patient: patientId }),
-        totalLabTests: await LabTest.countDocuments({ patient: patientId, status: { $ne: "cancelled" } }),
-        lastVisit: appointments.length > 0 ? appointments[0].date : null
+        completedAppointments: await Appointment.countDocuments({
+          patient: patientId,
+          status: "completed",
+        }),
+        upcomingAppointments: await Appointment.countDocuments({
+          patient: patientId,
+          status: { $in: ["scheduled", "confirmed"] },
+          date: { $gte: new Date() },
+        }),
+        totalPrescriptions: await Prescription.countDocuments({
+          patient: patientId,
+        }),
+        totalLabTests: await LabTest.countDocuments({
+          patient: patientId,
+          status: { $ne: "cancelled" },
+        }),
+        lastVisit: appointments.length > 0 ? appointments[0].date : null,
       },
-      appointments: appointments.map(apt => ({
+      appointments: appointments.map((apt) => ({
         _id: apt._id,
         appointmentId: apt.appointmentId,
         date: apt.date,
@@ -181,9 +199,9 @@ const userName = auth.userName as string;
         doctor: apt.doctor,
         notes: apt.notes,
         checkInTime: apt.checkInTime,
-        checkOutTime: apt.checkOutTime
+        checkOutTime: apt.checkOutTime,
       })),
-      medicalRecords: medicalRecords.map(record => ({
+      medicalRecords: medicalRecords.map((record) => ({
         _id: record._id,
         recordId: record.recordId,
         visitDate: record.visitDate,
@@ -193,20 +211,19 @@ const userName = auth.userName as string;
         notes: record.notes,
         vitalSigns: record.vitalSigns,
         followUpDate: record.followUpDate,
-        createdBy: record.createdBy
+        createdBy: record.createdBy,
       })),
-      prescriptions: prescriptions.map(pres => ({
+      prescriptions: prescriptions.map((pres) => ({
         _id: pres._id,
         prescriptionId: pres.prescriptionId,
         prescribedDate: pres.prescribedDate,
-        prescribedBy: pres.prescribedBy,
+        doctor: pres.doctor,
         medications: pres.medications,
         instructions: pres.instructions,
         status: pres.status,
-        refillsRemaining: pres.refillsRemaining,
-        expiryDate: pres.expiryDate
+        expiryDate: pres.expiryDate,
       })),
-      labTests: labTests.map(test => ({
+      labTests: labTests.map((test) => ({
         _id: test._id,
         testId: test.testId,
         testName: test.testName,
@@ -217,32 +234,36 @@ const userName = auth.userName as string;
         doctor: test.doctor,
         orderedBy: test.orderedBy,
         results: test.results,
-        priority: test.priority
+        priority: test.priority,
       })),
       vitalSignsHistory,
       permissions: {
         canEdit: auth.userRole === "admin" || auth.userRole === "receptionist",
-        canAddMedicalRecord: auth.userRole === "admin" || auth.userRole === "doctor" || auth.userRole === "nurse",
-        canWritePrescription: auth.userRole === "admin" || auth.userRole === "doctor",
-        canOrderLabTest: auth.userRole === "admin" || auth.userRole === "doctor"
-      }
+        canAddMedicalRecord:
+          auth.userRole === "admin" ||
+          auth.userRole === "doctor" ||
+          auth.userRole === "nurse",
+        canWritePrescription:
+          auth.userRole === "admin" || auth.userRole === "doctor",
+        canOrderLabTest:
+          auth.userRole === "admin" || auth.userRole === "doctor",
+      },
     };
 
     return NextResponse.json({
       success: true,
       data: responseData,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
-
   } catch (error: any) {
     console.error("Error fetching patient data:", error);
     return NextResponse.json(
-      { 
-        success: false, 
+      {
+        success: false,
         error: error.message || "Failed to fetch patient data",
-        ...(process.env.NODE_ENV === 'development' && { stack: error.stack })
+        ...(process.env.NODE_ENV === "development" && { stack: error.stack }),
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -250,7 +271,7 @@ const userName = auth.userName as string;
 // PUT: Update patient information
 export async function PUT(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     await dbConnect();
@@ -259,7 +280,7 @@ export async function PUT(
     if (!auth.success) {
       return NextResponse.json(
         { success: false, error: auth.error },
-        { status: auth.status || 401 }
+        { status: auth.status || 401 },
       );
     }
 
@@ -267,22 +288,28 @@ export async function PUT(
     const allowedRoles = ["admin", "receptionist"];
     if (!auth.userRole || !allowedRoles.includes(auth.userRole)) {
       return NextResponse.json(
-        { success: false, error: "Forbidden. Only admin and receptionist can update patient information." },
-        { status: 403 }
+        {
+          success: false,
+          error:
+            "Forbidden. Only admin and receptionist can update patient information.",
+        },
+        { status: 403 },
       );
     }
 
     const { id: patientId } = await params;
     const body = await request.json();
 
-    console.log(`Updating patient ${patientId} by ${auth.userRole} ${auth.userName}`);
+    console.log(
+      `Updating patient ${patientId} by ${auth.userRole} ${auth.userName}`,
+    );
 
     // Check if patient exists
     const existingPatient = await Patient.findById(patientId);
     if (!existingPatient) {
       return NextResponse.json(
         { success: false, error: "Patient not found" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -304,7 +331,7 @@ export async function PUT(
       "familyHistory",
       "lifestyle",
       "insurance",
-      "primaryPhysician"
+      "primaryPhysician",
     ];
 
     // Filter update data to only allowed fields
@@ -334,58 +361,60 @@ export async function PUT(
     const updatedPatient = await Patient.findByIdAndUpdate(
       patientId,
       { $set: updateData },
-      { new: true, runValidators: true }
+      { new: true, runValidators: true },
     ).select("-__v -createdAt -updatedAt");
 
     // Add audit log entry
-    await fetch(`${process.env.NEXT_PUBLIC_API_URL || ''}/api/audit-logs`, {
-      method: 'POST',
+    await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/audit-logs`, {
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': request.headers.get('authorization') || ''
+        "Content-Type": "application/json",
+        Authorization: request.headers.get("authorization") || "",
       },
       body: JSON.stringify({
-        action: 'UPDATE_PATIENT',
-        entityType: 'Patient',
+        action: "UPDATE_PATIENT",
+        entityType: "Patient",
         entityId: patientId,
         userId: auth.userId,
         userRole: auth.userRole,
         userName: auth.userName,
         changes: updateData,
-        ipAddress: request.headers.get('x-forwarded-for') || 'unknown'
-      })
-    }).catch(err => console.error('Failed to create audit log:', err));
+        ipAddress: request.headers.get("x-forwarded-for") || "unknown",
+      }),
+    }).catch((err) => console.error("Failed to create audit log:", err));
 
     return NextResponse.json({
       success: true,
       data: updatedPatient,
-      message: "Patient information updated successfully"
+      message: "Patient information updated successfully",
     });
-
   } catch (error: any) {
     console.error("Error updating patient:", error);
-    
+
     // Handle validation errors
-    if (error.name === 'ValidationError') {
+    if (error.name === "ValidationError") {
       const errors = Object.values(error.errors).map((err: any) => err.message);
       return NextResponse.json(
         { success: false, error: "Validation failed", details: errors },
-        { status: 400 }
+        { status: 400 },
       );
     }
-    
+
     // Handle duplicate key errors
     if (error.code === 11000) {
       const field = Object.keys(error.keyPattern)[0];
       return NextResponse.json(
-        { success: false, error: `Duplicate ${field} detected. Please use a different value.` },
-        { status: 409 }
+        {
+          success: false,
+          error: `Duplicate ${field} detected. Please use a different value.`,
+        },
+        { status: 409 },
       );
     }
-    
+
     return NextResponse.json(
       { success: false, error: error.message || "Failed to update patient" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -393,7 +422,7 @@ export async function PUT(
 // DELETE: Delete patient (soft delete)
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     await dbConnect();
@@ -402,15 +431,18 @@ export async function DELETE(
     if (!auth.success) {
       return NextResponse.json(
         { success: false, error: auth.error },
-        { status: auth.status || 401 }
+        { status: auth.status || 401 },
       );
     }
 
     // Only admin can delete patients
     if (auth.userRole !== "admin") {
       return NextResponse.json(
-        { success: false, error: "Forbidden. Only administrators can delete patients." },
-        { status: 403 }
+        {
+          success: false,
+          error: "Forbidden. Only administrators can delete patients.",
+        },
+        { status: 403 },
       );
     }
 
@@ -423,69 +455,69 @@ export async function DELETE(
     if (!patient) {
       return NextResponse.json(
         { success: false, error: "Patient not found" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
     // Check if patient has active appointments
     const activeAppointments = await Appointment.countDocuments({
       patient: patientId,
-      status: { $in: ["scheduled", "confirmed", "checked-in"] }
+      status: { $in: ["scheduled", "confirmed", "checked-in"] },
     });
 
     if (activeAppointments > 0) {
       return NextResponse.json(
-        { 
-          success: false, 
-          error: "Cannot delete patient with active appointments. Please cancel all appointments first." 
+        {
+          success: false,
+          error:
+            "Cannot delete patient with active appointments. Please cancel all appointments first.",
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     // Soft delete: Mark as inactive instead of actual deletion
     const updatedPatient = await Patient.findByIdAndUpdate(
       patientId,
-      { 
-        $set: { 
+      {
+        $set: {
           active: false,
           deletedAt: new Date(),
-          deletedBy: auth.userId
-        } 
+          deletedBy: auth.userId,
+        },
       },
-      { new: true }
+      { new: true },
     ).select("-__v -createdAt -updatedAt");
 
     // Add audit log entry
-    await fetch(`${process.env.NEXT_PUBLIC_API_URL || ''}/api/audit-logs`, {
-      method: 'POST',
+    await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/audit-logs`, {
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': request.headers.get('authorization') || ''
+        "Content-Type": "application/json",
+        Authorization: request.headers.get("authorization") || "",
       },
       body: JSON.stringify({
-        action: 'DELETE_PATIENT',
-        entityType: 'Patient',
+        action: "DELETE_PATIENT",
+        entityType: "Patient",
         entityId: patientId,
         userId: auth.userId,
         userRole: auth.userRole,
         userName: auth.userName,
         changes: { active: false, deletedAt: new Date() },
-        ipAddress: request.headers.get('x-forwarded-for') || 'unknown'
-      })
-    }).catch(err => console.error('Failed to create audit log:', err));
+        ipAddress: request.headers.get("x-forwarded-for") || "unknown",
+      }),
+    }).catch((err) => console.error("Failed to create audit log:", err));
 
     return NextResponse.json({
       success: true,
       data: updatedPatient,
-      message: "Patient marked as inactive successfully"
+      message: "Patient marked as inactive successfully",
     });
-
   } catch (error: any) {
     console.error("Error deleting patient:", error);
     return NextResponse.json(
       { success: false, error: error.message || "Failed to delete patient" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -493,7 +525,7 @@ export async function DELETE(
 // PATCH: Partial update of patient information
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     await dbConnect();
@@ -502,7 +534,7 @@ export async function PATCH(
     if (!auth.success) {
       return NextResponse.json(
         { success: false, error: auth.error },
-        { status: auth.status || 401 }
+        { status: auth.status || 401 },
       );
     }
 
@@ -510,42 +542,48 @@ export async function PATCH(
     const allowedRoles = ["admin", "receptionist", "doctor"];
     if (!auth.userRole || !allowedRoles.includes(auth.userRole)) {
       return NextResponse.json(
-        { success: false, error: "Forbidden. You don't have permission to update patient information." },
-        { status: 403 }
+        {
+          success: false,
+          error:
+            "Forbidden. You don't have permission to update patient information.",
+        },
+        { status: 403 },
       );
     }
 
     const { id: patientId } = await params;
     const body = await request.json();
 
-    console.log(`Partial update for patient ${patientId} by ${auth.userRole} ${auth.userName}`);
+    console.log(
+      `Partial update for patient ${patientId} by ${auth.userRole} ${auth.userName}`,
+    );
 
     // Check if patient exists
     const existingPatient = await Patient.findById(patientId);
     if (!existingPatient) {
       return NextResponse.json(
         { success: false, error: "Patient not found" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
     // Define allowed fields based on user role
     let allowedFields: string[] = [];
-    
+
     if (auth.userRole === "admin" || auth.userRole === "receptionist") {
       allowedFields = [
         "phone",
         "email",
         "emergencyContact",
         "address",
-        "insurance"
+        "insurance",
       ];
     } else if (auth.userRole === "doctor") {
       allowedFields = [
         "allergies",
         "chronicConditions",
         "currentMedications",
-        "familyHistory"
+        "familyHistory",
       ];
     }
 
@@ -578,49 +616,48 @@ export async function PATCH(
     const updatedPatient = await Patient.findByIdAndUpdate(
       patientId,
       { $set: updateData },
-      { new: true, runValidators: true }
+      { new: true, runValidators: true },
     ).select("-__v -createdAt -updatedAt");
 
     // Add audit log entry
-    await fetch(`${process.env.NEXT_PUBLIC_API_URL || ''}/api/audit-logs`, {
-      method: 'POST',
+    await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/audit-logs`, {
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': request.headers.get('authorization') || ''
+        "Content-Type": "application/json",
+        Authorization: request.headers.get("authorization") || "",
       },
       body: JSON.stringify({
-        action: 'UPDATE_PATIENT_PARTIAL',
-        entityType: 'Patient',
+        action: "UPDATE_PATIENT_PARTIAL",
+        entityType: "Patient",
         entityId: patientId,
         userId: auth.userId,
         userRole: auth.userRole,
         userName: auth.userName,
         changes: updateData,
-        ipAddress: request.headers.get('x-forwarded-for') || 'unknown'
-      })
-    }).catch(err => console.error('Failed to create audit log:', err));
+        ipAddress: request.headers.get("x-forwarded-for") || "unknown",
+      }),
+    }).catch((err) => console.error("Failed to create audit log:", err));
 
     return NextResponse.json({
       success: true,
       data: updatedPatient,
-      message: "Patient information updated successfully"
+      message: "Patient information updated successfully",
     });
-
   } catch (error: any) {
     console.error("Error updating patient:", error);
-    
+
     // Handle validation errors
-    if (error.name === 'ValidationError') {
+    if (error.name === "ValidationError") {
       const errors = Object.values(error.errors).map((err: any) => err.message);
       return NextResponse.json(
         { success: false, error: "Validation failed", details: errors },
-        { status: 400 }
+        { status: 400 },
       );
     }
-    
+
     return NextResponse.json(
       { success: false, error: error.message || "Failed to update patient" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth";
 import dbConnect from "@/lib/dbConnect";
 import { Payment } from "@/lib/models/Payment";
-import { DailyExpense } from "@/lib/models/DailyExpense";
+import { AdminExpense } from "@/lib/models/AdminExpense";
 import { DiscountRequest } from "@/lib/models/DiscountRequest";
 import { LabTest } from "@/lib/models/LabTest";
 import { RadiologyExam } from "@/lib/models/RadiologyExam";
@@ -180,7 +180,7 @@ export async function GET(req: NextRequest) {
     ]);
 
     // Get expenses by category
-    const expensesByCategory = await DailyExpense.aggregate([
+    const expensesByCategory = await AdminExpense.aggregate([
       {
         $match: {
           date: { $gte: startDate, $lt: endDate },
@@ -380,7 +380,7 @@ export async function GET(req: NextRequest) {
     ]);
 
     // Get daily expenses for trend
-    const dailyExpenseTrend = await DailyExpense.aggregate([
+    const dailyExpenseTrend = await AdminExpense.aggregate([
       {
         $match: {
           date: { $gte: startDate, $lt: endDate },
@@ -465,7 +465,7 @@ export async function GET(req: NextRequest) {
         },
       ]);
 
-      const yesterdayExpenses = await DailyExpense.aggregate([
+      const yesterdayExpenses = await AdminExpense.aggregate([
         {
           $match: {
             date: { $gte: yesterdayStart, $lt: yesterdayEnd },

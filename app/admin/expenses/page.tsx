@@ -5,9 +5,6 @@ import { useState, useEffect } from "react";
 import {
   DollarSign,
   Plus,
-  CheckCircle,
-  XCircle,
-  Clock,
   RefreshCw,
   Edit,
   Trash2,
@@ -52,14 +49,13 @@ import {
 interface Expense {
   id: string;
   expenseId: string;
-  staff: any;
-  staffName: string;
+  admin: any;
+  adminName: string;
   date: string;
   category: string;
   description: string;
   amount: number;
   receiptNumber?: string;
-  status: "pending" | "approved";
   notes?: string;
   createdAt: string;
   updatedAt: string;
@@ -67,8 +63,6 @@ interface Expense {
 
 interface ExpenseSummary {
   totalExpenses: number;
-  pendingCount: number;
-  approvedCount: number;
   byCategory: {
     supplies: number;
     maintenance: number;
@@ -105,12 +99,7 @@ export default function AdminExpensesPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [isApproveDialogOpen, setIsApproveDialogOpen] = useState(false);
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
-  const [approvalAction, setApprovalAction] = useState<"approve" | "reject">(
-    "approve",
-  );
-  const [approvalNotes, setApprovalNotes] = useState("");
 
   // Form state
   const [formData, setFormData] = useState({
@@ -123,7 +112,6 @@ export default function AdminExpensesPage() {
   });
 
   // Filters
-  const [statusFilter, setStatusFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
@@ -132,7 +120,6 @@ export default function AdminExpensesPage() {
     try {
       setIsLoading(true);
       const params = new URLSearchParams();
-      if (statusFilter !== "all") params.append("status", statusFilter);
       if (categoryFilter !== "all") params.append("category", categoryFilter);
       if (startDate) params.append("startDate", startDate);
       if (endDate) params.append("endDate", endDate);
@@ -158,7 +145,7 @@ export default function AdminExpensesPage() {
 
   useEffect(() => {
     fetchExpenses();
-  }, [user, statusFilter, categoryFilter, startDate, endDate]);
+  }, [user, categoryFilter, startDate, endDate]);
 
   const handleCreateExpense = async () => {
     try {
@@ -220,42 +207,6 @@ export default function AdminExpensesPage() {
     }
   };
 
-  const handleApprove = async () => {
-    if (!selectedExpense) return;
-
-    try {
-      const response = await fetch(
-        `/api/admin/expenses/${selectedExpense.id}`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            "x-user-id": user?._id || "",
-            "x-user-role": user?.role || "",
-            "x-user-name": user?.name || "",
-          },
-          body: JSON.stringify({
-            action: approvalAction,
-            notes: approvalNotes,
-          }),
-        },
-      );
-
-      const data = await response.json();
-      if (data.success) {
-        setIsApproveDialogOpen(false);
-        setApprovalNotes("");
-        setSelectedExpense(null);
-        fetchExpenses();
-      } else {
-        alert(data.error || "Failed to process expense");
-      }
-    } catch (error) {
-      console.error("Error processing expense:", error);
-      alert("Failed to process expense");
-    }
-  };
-
   const handleDeleteExpense = async (id: string) => {
     if (!confirm("Are you sure you want to delete this expense?")) return;
 
@@ -293,16 +244,6 @@ export default function AdminExpensesPage() {
     setIsEditDialogOpen(true);
   };
 
-  const openApproveDialog = (
-    expense: Expense,
-    action: "approve" | "reject",
-  ) => {
-    setSelectedExpense(expense);
-    setApprovalAction(action);
-    setApprovalNotes("");
-    setIsApproveDialogOpen(true);
-  };
-
   const resetForm = () => {
     setFormData({
       date: new Date().toISOString().split("T")[0],
@@ -326,32 +267,6 @@ export default function AdminExpensesPage() {
     });
   };
 
-  const getStatusBadge = (status: string) => {
-    const statusConfig: Record<
-      string,
-      { color: string; icon: any; label: string }
-    > = {
-      pending: {
-        color: "bg-yellow-100 text-yellow-700",
-        icon: Clock,
-        label: "Pending",
-      },
-      approved: {
-        color: "bg-green-100 text-green-700",
-        icon: CheckCircle,
-        label: "Approved",
-      },
-    };
-    const config = statusConfig[status] || statusConfig.pending;
-    const Icon = config.icon;
-    return (
-      <Badge className={config.color}>
-        <Icon className="h-3 w-3 mr-1" />
-        {config.label}
-      </Badge>
-    );
-  };
-
   const getCategoryBadge = (category: string) => {
     const Icon = categoryIcons[category] || Receipt;
     const color = categoryColors[category] || "bg-gray-100 text-gray-700";
@@ -363,9 +278,6 @@ export default function AdminExpensesPage() {
     );
   };
 
-  const pendingCount = expenses.filter((e) => e.status === "pending").length;
-  const approvedCount = expenses.filter((e) => e.status === "approved").length;
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -373,9 +285,7 @@ export default function AdminExpensesPage() {
           <h1 className="text-3xl font-bold tracking-tight">
             Expense Management
           </h1>
-          <p className="text-muted-foreground">
-            Manage and approve daily expenses
-          </p>
+          <p className="text-muted-foreground">Manage daily expenses</p>
         </div>
         <div className="flex items-center gap-2">
           <Button
@@ -396,7 +306,7 @@ export default function AdminExpensesPage() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
@@ -411,32 +321,6 @@ export default function AdminExpensesPage() {
             <p className="text-xs text-muted-foreground">
               {summary?.expenseCount || 0} expenses
             </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pending</CardTitle>
-            <Clock className="h-4 w-4 text-yellow-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-yellow-600">
-              {pendingCount}
-            </div>
-            <p className="text-xs text-muted-foreground">Awaiting approval</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Approved</CardTitle>
-            <CheckCircle className="h-4 w-4 text-green-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              {approvedCount}
-            </div>
-            <p className="text-xs text-muted-foreground">Approved expenses</p>
           </CardContent>
         </Card>
 
@@ -489,21 +373,7 @@ export default function AdminExpensesPage() {
           <CardTitle>Filters</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="space-y-2">
-              <Label>Status</Label>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="approved">Approved</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label>Category</Label>
               <Select value={categoryFilter} onValueChange={setCategoryFilter}>
@@ -567,12 +437,11 @@ export default function AdminExpensesPage() {
                   <div className="flex items-center gap-4">
                     <div className="flex items-center gap-2">
                       {getCategoryBadge(expense.category)}
-                      {getStatusBadge(expense.status)}
                     </div>
                     <div>
                       <p className="font-semibold">{expense.description}</p>
                       <p className="text-sm text-muted-foreground">
-                        {expense.staffName} • {formatDate(expense.date)}
+                        {expense.adminName} • {formatDate(expense.date)}
                         {expense.receiptNumber &&
                           ` • Receipt: ${expense.receiptNumber}`}
                       </p>
@@ -600,28 +469,6 @@ export default function AdminExpensesPage() {
                           <Edit className="h-4 w-4 mr-2" />
                           Edit
                         </DropdownMenuItem>
-                        {expense.status === "pending" && (
-                          <>
-                            <DropdownMenuItem
-                              onClick={() =>
-                                openApproveDialog(expense, "approve")
-                              }
-                              className="text-green-600"
-                            >
-                              <CheckCircle className="h-4 w-4 mr-2" />
-                              Approve
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() =>
-                                openApproveDialog(expense, "reject")
-                              }
-                              className="text-red-600"
-                            >
-                              <XCircle className="h-4 w-4 mr-2" />
-                              Reject
-                            </DropdownMenuItem>
-                          </>
-                        )}
                         <DropdownMenuItem
                           onClick={() => handleDeleteExpense(expense.id)}
                           className="text-red-600"
@@ -846,67 +693,6 @@ export default function AdminExpensesPage() {
             <Button onClick={handleUpdateExpense}>
               <Edit className="h-4 w-4 mr-2" />
               Update Expense
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Approve/Reject Dialog */}
-      <Dialog open={isApproveDialogOpen} onOpenChange={setIsApproveDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {approvalAction === "approve"
-                ? "Approve Expense"
-                : "Reject Expense"}
-            </DialogTitle>
-            <DialogDescription>
-              {selectedExpense?.expenseId} -{" "}
-              {formatCurrency(selectedExpense?.amount || 0)}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            {selectedExpense && (
-              <div className="p-3 bg-muted rounded-lg">
-                <p className="font-medium">{selectedExpense.description}</p>
-                <p className="text-sm text-muted-foreground">
-                  {selectedExpense.staffName} •{" "}
-                  {formatDate(selectedExpense.date)}
-                </p>
-              </div>
-            )}
-            <div className="space-y-2">
-              <Label>Notes (Optional)</Label>
-              <Textarea
-                placeholder="Add any notes about this decision..."
-                value={approvalNotes}
-                onChange={(e) => setApprovalNotes(e.target.value)}
-                rows={3}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsApproveDialogOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleApprove}
-              variant={approvalAction === "approve" ? "default" : "destructive"}
-            >
-              {approvalAction === "approve" ? (
-                <>
-                  <CheckCircle className="h-4 w-4 mr-2" />
-                  Approve
-                </>
-              ) : (
-                <>
-                  <XCircle className="h-4 w-4 mr-2" />
-                  Reject
-                </>
-              )}
             </Button>
           </DialogFooter>
         </DialogContent>
