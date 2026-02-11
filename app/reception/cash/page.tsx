@@ -20,6 +20,7 @@ import {
   Calendar,
   Receipt,
   Minus,
+  Pill,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -109,6 +110,7 @@ export default function CashPage() {
     totalLabPaymentsToday: 0,
     totalRadiologyPaymentsToday: 0,
     totalDischargePaymentsToday: 0,
+    totalPharmacyPaymentsToday: 0,
   });
 
   const [denominations, setDenominations] = useState<Denominations>({
@@ -168,15 +170,17 @@ export default function CashPage() {
   const expectedFromLab = dailyStats.totalLabPaymentsToday;
   const expectedFromRadiology = dailyStats.totalRadiologyPaymentsToday;
   const expectedFromDischarge = dailyStats.totalDischargePaymentsToday;
+  const expectedFromPharmacy = dailyStats.totalPharmacyPaymentsToday;
   const approvedDiscounts = dailyStats.totalApprovedDiscountsToday;
   const todaysExpenses = dailyStats.totalExpensesToday;
 
-  // Total Expected Amount = (Appointments + Lab + Radiology + Discharge) - Discounts
+  // Total Expected Amount = (Appointments + Lab + Radiology + Discharge + Pharmacy) - Discounts
   const totalExpectedAmount =
     expectedFromAppointments +
     expectedFromLab +
     expectedFromRadiology +
-    expectedFromDischarge -
+    expectedFromDischarge +
+    expectedFromPharmacy -
     approvedDiscounts;
 
   // Net Cash After Expenses = Total Expected - Today's Expenses
@@ -276,6 +280,7 @@ export default function CashPage() {
             data.data.totalRadiologyPaymentsToday || 0,
           totalDischargePaymentsToday:
             data.data.totalDischargePaymentsToday || 0,
+          totalPharmacyPaymentsToday: data.data.totalPharmacyPaymentsToday || 0,
         });
       }
     } catch (error) {
@@ -545,6 +550,12 @@ export default function CashPage() {
                           {formatCurrency(expectedFromDischarge)}
                         </span>
                       </div>
+                      <div className="flex justify-between text-sm">
+                        <span>Pharmacy Payments:</span>
+                        <span className="font-medium">
+                          {formatCurrency(expectedFromPharmacy)}
+                        </span>
+                      </div>
                       <div className="flex justify-between text-sm text-orange-600">
                         <span className="flex items-center gap-1">
                           <TrendingDown className="h-3 w-3" /> Approved
@@ -779,7 +790,7 @@ export default function CashPage() {
       </div>
 
       {/* Daily Statistics Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
@@ -864,6 +875,23 @@ export default function CashPage() {
             </div>
             <p className="text-xs text-muted-foreground">
               Paid discharges today
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">
+              Pharmacy Payments
+            </CardTitle>
+            <Pill className="h-4 w-4 text-emerald-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-emerald-600">
+              {formatCurrency(dailyStats.totalPharmacyPaymentsToday)}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Paid medicines today
             </p>
           </CardContent>
         </Card>

@@ -52,7 +52,7 @@ const paymentSchema = new Schema<IPayment>(
     patient: {
       type: Schema.Types.ObjectId,
       ref: "Patient",
-      required: true,
+      required: false, // Optional for walk-in sales
     },
     invoice: {
       type: Schema.Types.ObjectId,

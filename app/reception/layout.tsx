@@ -13,6 +13,7 @@ import {
   CalendarCheck,
   DollarSign,
   Receipt,
+  Pill,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeProvider } from "@/providers/ThemeProvider";
@@ -36,6 +37,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 
 const navLinks = [
   { href: "/reception/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -53,6 +55,11 @@ const navLinks = [
     href: "/reception/lab-test-payments",
     label: "Lab Test Payments",
     icon: Users,
+  },
+  {
+    href: "/reception/pharmacy-payments",
+    label: "Pharmacy Payments",
+    icon: Pill,
   },
   {
     href: "/reception/radiology-exam-payments",
@@ -262,6 +269,7 @@ export default function ReceptionLayout({
             {/* Mobile Header - Only show on mobile */}
             <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 md:hidden">
               <div className="flex items-center gap-4 ml-auto">
+                <ThemeToggle />
                 {user?.role === "admin" && (
                   <Link href="/dashboard">
                     <Button variant="secondary" size="sm" className="gap-2">
@@ -287,6 +295,7 @@ export default function ReceptionLayout({
             <header className="sticky top-0 z-30 hidden h-14 items-center gap-4 border-b bg-background px-6 md:flex">
               <SidebarTrigger className="-ml-1" />
               <div className="flex-1" /> {/* Spacer */}
+              <ThemeToggle />
               <div className="flex items-center gap-4">
                 {user?.role === "admin" && (
                   <Link href="/dashboard">

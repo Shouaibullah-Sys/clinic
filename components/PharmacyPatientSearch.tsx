@@ -34,6 +34,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/components/ui/cn";
+import { useAuthStore } from "@/store/useAuthStore";
 
 export interface Patient {
   _id: string;
@@ -82,7 +83,6 @@ const BLOOD_GROUPS = [
   "O+",
   "O-",
   "unknown",
-  "",
 ];
 
 // Gender options
@@ -137,6 +137,7 @@ export default function PharmacyPatientSearch({
   selectedPatient,
   placeholder = "Search patient by name, phone, or ID...",
 }: PharmacyPatientSearchProps) {
+  const accessToken = useAuthStore((state) => state.accessToken);
   const [searchQuery, setSearchQuery] = useState("");
   const [results, setResults] = useState<Patient[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -322,8 +323,7 @@ export default function PharmacyPatientSearch({
     setCreateError(null);
 
     try {
-      const token = localStorage.getItem("token");
-      if (!token) {
+      if (!accessToken) {
         throw new Error("Authentication required");
       }
 
@@ -331,7 +331,7 @@ export default function PharmacyPatientSearch({
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${accessToken}`,
         },
         body: JSON.stringify({
           name: newPatient.name.trim(),

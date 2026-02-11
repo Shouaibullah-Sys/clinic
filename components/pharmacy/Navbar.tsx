@@ -1,19 +1,29 @@
 // components/pharmacy/Navbar.tsx
-'use client';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { useState } from 'react';
-import { LayoutDashboard, Pill, Package, Receipt, Home, Menu, X } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
-import { useAuthStore } from '@/store/useAuthStore';
-import { cn } from '@/lib/utils';
+"use client";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useState } from "react";
+import {
+  LayoutDashboard,
+  Pill,
+  Package,
+  Receipt,
+  Home,
+  Menu,
+  X,
+  Warehouse,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { useAuthStore } from "@/store/useAuthStore";
+import { cn } from "@/lib/utils";
 
 const navLinks = [
-  { href: '/pharmacy', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/pharmacy/stock', label: 'Stock Management', icon: Package },
-  { href: '/pharmacy/issue', label: 'Issue Medicine', icon: Pill },
-  { href: '/pharmacy/cash', label: 'Cash at Hand', icon: Receipt },
+  { href: "/pharmacy", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/warehouse", label: "Warehouse", icon: Warehouse },
+  { href: "/warehouse/medicines", label: "Medicines", icon: Package },
+  { href: "/warehouse/batches", label: "Batches", icon: Package },
+  { href: "/warehouse/transfer", label: "Medicines Transfer", icon: Package },
 ];
 
 export default function PharmacyNavbar() {
@@ -36,15 +46,15 @@ export default function PharmacyNavbar() {
               <div className="flex flex-col gap-4 py-6">
                 <div className="mb-4 flex items-center justify-between">
                   <h2 className="text-lg font-semibold">Pharmacy</h2>
-                  <Button 
-                    variant="ghost" 
+                  <Button
+                    variant="ghost"
                     size="icon"
                     onClick={() => setIsOpen(false)}
                   >
                     <X className="h-5 w-5" />
                   </Button>
                 </div>
-                
+
                 {navLinks.map((link) => (
                   <Link
                     key={link.href}
@@ -54,15 +64,15 @@ export default function PharmacyNavbar() {
                       "flex items-center gap-3 rounded-md px-3 py-2 transition-colors",
                       pathname === link.href
                         ? "bg-primary text-primary-foreground"
-                        : "hover:bg-accent"
+                        : "hover:bg-accent",
                     )}
                   >
                     <link.icon className="h-4 w-4" />
                     {link.label}
                   </Link>
                 ))}
-                
-                {user?.role === 'admin' && (
+
+                {user?.role === "admin" && (
                   <Link
                     href="/admin/dashboard"
                     onClick={() => setIsOpen(false)}
@@ -89,7 +99,9 @@ export default function PharmacyNavbar() {
                 href={link.href}
                 className={cn(
                   "text-sm font-medium transition-colors hover:text-primary",
-                  pathname === link.href ? "text-primary" : "text-muted-foreground"
+                  pathname === link.href
+                    ? "text-primary"
+                    : "text-muted-foreground",
                 )}
               >
                 {link.label}
@@ -100,9 +112,13 @@ export default function PharmacyNavbar() {
 
         <div className="flex items-center gap-4">
           {/* Admin dashboard button (desktop) */}
-          {user?.role === 'admin' && (
+          {user?.role === "admin" && (
             <Link href="/admin/dashboard">
-              <Button variant="secondary" size="sm" className="hidden md:flex gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                className="hidden md:flex gap-2"
+              >
                 <Home className="h-4 w-4" />
                 Admin Dashboard
               </Button>
@@ -112,15 +128,17 @@ export default function PharmacyNavbar() {
           {/* User profile dropdown */}
           <div className="flex items-center gap-2">
             <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground">
-              {user?.name?.charAt(0) || 'U'}
+              {user?.name?.charAt(0) || "U"}
             </div>
             <div className="hidden sm:block">
               <p className="text-sm font-medium">{user?.name}</p>
-              <p className="text-xs text-muted-foreground capitalize">{user?.role}</p>
+              <p className="text-xs text-muted-foreground capitalize">
+                {user?.role}
+              </p>
             </div>
-            <Button 
-              variant="outline" 
-              size="sm" 
+            <Button
+              variant="outline"
+              size="sm"
               onClick={logout}
               className="ml-2"
             >

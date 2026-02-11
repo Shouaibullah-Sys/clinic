@@ -34,6 +34,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 import SessionChecker from "@/components/SessionChecker";
 
 const navLinks = [
@@ -42,7 +43,7 @@ const navLinks = [
   { href: "/pharmacy/issue", label: "Issue Medicine", icon: Pill },
   { href: "/pharmacy/dispense", label: "Dispense Medicine", icon: HandCoins },
   { href: "/pharmacy/inventory", label: "Inventory", icon: CheckCheck },
-  { href: "/pharmacy/receipts", label: "Receipts", icon: Receipt },
+  { href: "/warehouse/batches", label: "batches", icon: Receipt },
 ];
 
 export default function PharmacyLayout({
@@ -268,6 +269,7 @@ export default function PharmacyLayout({
             {/* Mobile Header - Only show on mobile */}
             <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 md:hidden">
               <div className="flex items-center gap-4 ml-auto">
+                <ThemeToggle />
                 {user?.role === "admin" && (
                   <Link href="/dashboard">
                     <Button variant="secondary" size="sm" className="gap-2">
@@ -293,6 +295,7 @@ export default function PharmacyLayout({
             <header className="sticky top-0 z-30 hidden h-14 items-center gap-4 border-b bg-background px-6 md:flex">
               <SidebarTrigger className="-ml-1" />
               <div className="flex-1" /> {/* Spacer */}
+              <ThemeToggle />
               <div className="flex items-center gap-4">
                 {user?.role === "admin" && (
                   <Link href="/dashboard">

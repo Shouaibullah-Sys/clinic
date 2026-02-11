@@ -17,6 +17,7 @@ import {
   Printer,
   Clock,
   DollarSign,
+  AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,6 +50,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import MedicineSearch, { MedicineStock } from "@/components/MedicineSearch";
 import PharmacyPatientSearch, {
   Patient,
@@ -85,24 +92,30 @@ interface PrescriptionItem {
     _id: string;
     name: string;
   };
+  name?: string;
   quantity?: number;
   unitPrice?: number;
   discount?: number;
-  total?: number;
+  totalPrice?: number;
 }
 
 interface Prescription {
   _id: string;
+  saleId?: string;
   invoiceNumber: string;
-  patientName: string;
-  patientPhone: string;
-  medications: PrescriptionItem[];
+  customerName: string;
+  customerPhone: string;
+  items: PrescriptionItem[];
+  subtotal?: number;
   totalAmount?: number;
   amountPaid?: number;
+  balance?: number;
   paymentMethod: string;
+  paymentStatus?: string;
   status: string;
+  saleDate?: string;
   createdAt: string;
-  issuedBy?: {
+  soldBy?: {
     _id: string;
     name: string;
   };
@@ -111,6 +124,7 @@ interface Prescription {
 interface User {
   id: string;
   name: string;
+  role?: string;
 }
 
 interface AuthStore {
@@ -158,14 +172,59 @@ const fetcher = async (url: string) => {
   return response.json();
 };
 
+// Helper function to get payment status badge with appropriate color
+const getPaymentStatusBadge = (paymentStatus?: string) => {
+  const status = paymentStatus?.toLowerCase() || "pending";
+  switch (status) {
+    case "paid":
+      return (
+        <Badge className="bg-green-100 text-green-800 hover:bg-green-100 border-green-200">
+          <CheckCircle className="h-3 w-3 mr-1" />
+          Paid
+        </Badge>
+      );
+    case "partial":
+      return (
+        <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100 border-yellow-200">
+          <Clock className="h-3 w-3 mr-1" />
+          Partial
+        </Badge>
+      );
+    case "pending":
+    default:
+      return (
+        <Badge className="bg-red-100 text-red-800 hover:bg-red-100 border-red-200">
+          <AlertCircle className="h-3 w-3 mr-1" />
+          Pending
+        </Badge>
+      );
+  }
+};
+
+// Helper function to check if PDF download is allowed
+const canDownloadPDF = (paymentStatus?: string, status?: string) => {
+  const isPaid = paymentStatus === "paid";
+  const isCompleted = status === "completed";
+  return isPaid || isCompleted;
+};
+
 // Mobile Prescription Card Component
 const MobilePrescriptionCard = ({
   prescription,
   onDownload,
+  user,
+  accessToken,
 }: {
   prescription: Prescription;
   onDownload: (prescription: Prescription) => void;
+  user: User | null;
+  accessToken: string | null;
 }) => {
+  const canDownload = canDownloadPDF(
+    prescription.paymentStatus,
+    prescription.status,
+  );
+
   return (
     <Card className="mb-3">
       <CardContent className="p-4">
@@ -181,12 +240,12 @@ const MobilePrescriptionCard = ({
             </div>
             <div className="space-y-1 text-xs text-muted-foreground">
               <div className="flex justify-between">
-                <span>Patient:</span>
-                <span>{prescription.patientName}</span>
+                <span>Customer:</span>
+                <span>{prescription.customerName}</span>
               </div>
               <div className="flex justify-between">
                 <span>Phone:</span>
-                <span>{prescription.patientPhone}</span>
+                <span>{prescription.customerPhone}</span>
               </div>
               <div className="flex justify-between">
                 <span>Date:</span>
@@ -194,25 +253,41 @@ const MobilePrescriptionCard = ({
                   {new Date(prescription.createdAt).toLocaleDateString()}
                 </span>
               </div>
-              <div className="flex justify-between">
+              <div className="flex justify-between items-center">
                 <span>Payment:</span>
                 <Badge variant="outline" className="capitalize text-xs">
                   {prescription.paymentMethod}
                 </Badge>
               </div>
+              <div className="flex justify-between items-center">
+                <span>Status:</span>
+                {getPaymentStatusBadge(prescription.paymentStatus)}
+              </div>
             </div>
           </div>
         </div>
         <div className="flex justify-end space-x-2 mt-3 pt-3 border-t">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onDownload(prescription)}
-            className="h-7 text-xs"
-          >
-            <DownloadIcon className="h-3 w-3 mr-1" />
-            PDF
-          </Button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onDownload(prescription)}
+                  className="h-7 text-xs"
+                  disabled={!canDownload}
+                >
+                  <DownloadIcon className="h-3 w-3 mr-1" />
+                  PDF
+                </Button>
+              </TooltipTrigger>
+              {!canDownload && (
+                <TooltipContent>
+                  <p>PDF download only available for paid/finalized sales</p>
+                </TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
         </div>
       </CardContent>
     </Card>
@@ -220,7 +295,9 @@ const MobilePrescriptionCard = ({
 };
 
 export default function PharmacyPage() {
-  const { user } = useAuthStore() as AuthStore;
+  const { user, accessToken } = useAuthStore() as AuthStore & {
+    accessToken: string | null;
+  };
   const [activeTab, setActiveTab] = useState<"issue" | "history">("issue");
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<string>("cash");
@@ -310,9 +387,11 @@ export default function PharmacyPage() {
       const searchLower = prescriptionSearchTerm.toLowerCase();
       return (
         prescription.invoiceNumber.toLowerCase().includes(searchLower) ||
-        prescription.patientName.toLowerCase().includes(searchLower) ||
-        prescription.patientPhone.toLowerCase().includes(searchLower) ||
-        prescription.paymentMethod.toLowerCase().includes(searchLower)
+        prescription.customerName.toLowerCase().includes(searchLower) ||
+        prescription.customerPhone.toLowerCase().includes(searchLower) ||
+        prescription.paymentMethod.toLowerCase().includes(searchLower) ||
+        (prescription.saleId &&
+          prescription.saleId.toLowerCase().includes(searchLower))
       );
     });
   }, [prescriptions, prescriptionSearchTerm]);
@@ -496,20 +575,20 @@ export default function PharmacyPage() {
 
     doc.setFontSize(12);
     doc.setTextColor(0);
-    doc.text("Patient Information:", 14, 50);
-    doc.text(`Name: ${prescription.patientName}`, 20, 58);
-    doc.text(`Phone: ${prescription.patientPhone}`, 20, 66);
+    doc.text("Customer Information:", 14, 50);
+    doc.text(`Name: ${prescription.customerName}`, 20, 58);
+    doc.text(`Phone: ${prescription.customerPhone}`, 20, 66);
 
     doc.setFontSize(12);
-    doc.text("Prescribed Items:", 14, 80);
+    doc.text("Sold Items:", 14, 80);
 
     const itemData =
-      prescription.medications && Array.isArray(prescription.medications)
-        ? prescription.medications.map((item) => [
-            item.medicine?.name || "Unknown",
+      prescription.items && Array.isArray(prescription.items)
+        ? prescription.items.map((item) => [
+            item.name || item.medicine?.name || "Unknown",
             item.quantity?.toString() || "0",
             `AFN ${(item.unitPrice || 0).toFixed(2)}`,
-            `AFN ${(item.total || 0).toFixed(2)}`,
+            `AFN ${(item.totalPrice || 0).toFixed(2)}`,
           ])
         : [];
 
@@ -553,8 +632,8 @@ export default function PharmacyPage() {
       : 120;
     doc.setFontSize(10);
     doc.setTextColor(100);
-    doc.text("Prescribed by:", 14, lastY);
-    doc.text(prescription.issuedBy?.name || "System", 14, lastY + 5);
+    doc.text("Sold by:", 14, lastY);
+    doc.text(prescription.soldBy?.name || "System", 14, lastY + 5);
     doc.text("Thank you for your visit!", 105, lastY + 10, { align: "center" });
 
     doc.save(`prescription-${prescription.invoiceNumber}.pdf`);
@@ -572,16 +651,25 @@ export default function PharmacyPage() {
       return;
     }
 
+    if (!accessToken) {
+      toast.error("Authentication required");
+      return;
+    }
+
     try {
       const response = await fetch("/api/pharmacy/prescriptions", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
         body: JSON.stringify({
-          patientName: selectedPatient.name,
-          patientPhone: selectedPatient.phone,
+          customerName: selectedPatient.name,
+          customerPhone: selectedPatient.phone,
           invoiceNumber,
           items: items.map((item) => ({
             medicine: item.medicine,
+            name: item.name,
             quantity: item.quantity,
             discount: item.discount,
             unitPrice: item.unitPrice,
@@ -625,16 +713,25 @@ export default function PharmacyPage() {
       return;
     }
 
+    if (!accessToken) {
+      toast.error("Authentication required");
+      return;
+    }
+
     try {
       const response = await fetch("/api/pharmacy/prescriptions", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
         body: JSON.stringify({
-          patientName: selectedPatient.name,
-          patientPhone: selectedPatient.phone,
+          customerName: selectedPatient.name,
+          customerPhone: selectedPatient.phone,
           invoiceNumber,
           items: items.map((item) => ({
             medicine: item.medicine,
+            name: item.name,
             quantity: item.quantity,
             discount: item.discount,
             unitPrice: item.unitPrice,
@@ -642,7 +739,7 @@ export default function PharmacyPage() {
           totalAmount: calculateTotal,
           amountPaid: 0,
           paymentMethod,
-          status: "active",
+          status: "pending",
         }),
       });
 
@@ -671,13 +768,21 @@ export default function PharmacyPage() {
       return;
     }
 
+    if (!accessToken) {
+      toast.error("Authentication required");
+      return;
+    }
+
     try {
       // Update prescription status to completed
       const response = await fetch(
         `/api/pharmacy/prescriptions/${currentPrescriptionId}`,
         {
           method: "PATCH",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
           body: JSON.stringify({
             status: "completed",
             paymentStatus: "paid",
@@ -941,7 +1046,6 @@ export default function PharmacyPage() {
                       <SelectItem value="cash">Cash</SelectItem>
                       <SelectItem value="card">Card</SelectItem>
                       <SelectItem value="insurance">Insurance</SelectItem>
-                      <SelectItem value="mobile">Mobile Payment</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -1075,6 +1179,8 @@ export default function PharmacyPage() {
                       key={prescription._id}
                       prescription={prescription}
                       onDownload={generatePrescriptionPDF}
+                      user={user}
+                      accessToken={accessToken}
                     />
                   ))
                 ) : (
@@ -1096,58 +1202,90 @@ export default function PharmacyPage() {
                       <TableHead>Date</TableHead>
                       <TableHead>Amount</TableHead>
                       <TableHead>Payment</TableHead>
+                      <TableHead>Status</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {isLoadingPrescriptions ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="h-24 text-center">
+                        <TableCell colSpan={7} className="h-24 text-center">
                           Loading prescriptions...
                         </TableCell>
                       </TableRow>
                     ) : currentPrescriptions.length > 0 ? (
-                      currentPrescriptions.map((prescription: Prescription) => (
-                        <TableRow key={prescription._id}>
-                          <TableCell className="font-medium">
-                            {prescription.invoiceNumber}
-                          </TableCell>
-                          <TableCell>
-                            <div>{prescription.patientName}</div>
-                            <div className="text-xs text-muted-foreground">
-                              {prescription.patientPhone}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            {new Date(
-                              prescription.createdAt,
-                            ).toLocaleDateString()}
-                          </TableCell>
-                          <TableCell>
-                            AFN {prescription.totalAmount?.toFixed(2) || "0.00"}
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className="capitalize">
-                              {prescription.paymentMethod}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() =>
-                                generatePrescriptionPDF(prescription)
-                              }
-                              title="Download PDF"
-                            >
-                              <DownloadIcon className="h-4 w-4" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))
+                      currentPrescriptions.map((prescription: Prescription) => {
+                        const canDownload = canDownloadPDF(
+                          prescription.paymentStatus,
+                          prescription.status,
+                        );
+
+                        return (
+                          <TableRow key={prescription._id}>
+                            <TableCell className="font-medium">
+                              {prescription.invoiceNumber}
+                            </TableCell>
+                            <TableCell>
+                              <div>{prescription.customerName}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {prescription.customerPhone}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {new Date(
+                                prescription.createdAt,
+                              ).toLocaleDateString()}
+                            </TableCell>
+                            <TableCell>
+                              AFN{" "}
+                              {prescription.totalAmount?.toFixed(2) || "0.00"}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className="capitalize">
+                                {prescription.paymentMethod}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              {getPaymentStatusBadge(
+                                prescription.paymentStatus,
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex justify-end gap-1">
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() =>
+                                          generatePrescriptionPDF(prescription)
+                                        }
+                                        title="Download PDF"
+                                        disabled={!canDownload}
+                                        className="h-8 w-8"
+                                      >
+                                        <DownloadIcon className="h-4 w-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    {!canDownload && (
+                                      <TooltipContent>
+                                        <p>
+                                          PDF download only available for
+                                          paid/finalized sales
+                                        </p>
+                                      </TooltipContent>
+                                    )}
+                                  </Tooltip>
+                                </TooltipProvider>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
                     ) : (
                       <TableRow>
-                        <TableCell colSpan={6} className="h-24 text-center">
+                        <TableCell colSpan={7} className="h-24 text-center">
                           No prescriptions found
                         </TableCell>
                       </TableRow>

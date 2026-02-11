@@ -215,6 +215,27 @@ export async function GET(request: NextRequest) {
     const totalDischargePaymentsToday =
       todayDischargePayments[0]?.totalAmount || 0;
 
+    // Get today's pharmacy payments (cash payments only)
+    const todayPharmacyPayments = await Payment.aggregate([
+      {
+        $match: {
+          paymentDate: { $gte: today, $lt: tomorrow },
+          department: "pharmacy",
+          status: "completed",
+          paymentMethod: "cash",
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalAmount: { $sum: "$amount" },
+        },
+      },
+    ]);
+
+    const totalPharmacyPaymentsToday =
+      todayPharmacyPayments[0]?.totalAmount || 0;
+
     // Get pending discounts
     const pendingDiscounts = await DiscountRequest.countDocuments({
       status: "pending",
@@ -258,6 +279,7 @@ export async function GET(request: NextRequest) {
       totalLabPaymentsToday,
       totalRadiologyPaymentsToday,
       totalDischargePaymentsToday,
+      totalPharmacyPaymentsToday,
     };
 
     return NextResponse.json({

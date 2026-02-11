@@ -15,6 +15,7 @@ export interface IMedicineStock {
   sellingPrice: number;
   supplier: string;
   description?: string;
+  warehouseBatchId?: Types.ObjectId; // Reference to warehouse batch
   createdAt: Date;
   updatedAt: Date;
 }
@@ -33,6 +34,7 @@ const medicineStockSchema = new Schema<IMedicineStock>(
     sellingPrice: { type: Number, required: true, min: 0 },
     supplier: { type: String, required: true },
     description: { type: String },
+    warehouseBatchId: { type: Schema.Types.ObjectId, ref: "WarehouseBatch" },
   },
   {
     timestamps: true,
@@ -45,6 +47,11 @@ const medicineStockSchema = new Schema<IMedicineStock>(
 medicineStockSchema.virtual("remainingPercentage").get(function () {
   return (this.currentQuantity / this.originalQuantity) * 100;
 });
+
+// Indexes
+medicineStockSchema.index({ name: 1 });
+medicineStockSchema.index({ warehouseBatchId: 1 });
+medicineStockSchema.index({ expiryDate: 1 });
 
 export const MedicineStock =
   mongoose.models.MedicineStock ||

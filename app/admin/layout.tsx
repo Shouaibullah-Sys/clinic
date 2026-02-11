@@ -10,6 +10,8 @@ import {
   Percent,
   Home,
   Menu,
+  DollarSign,
+  Receipt,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeProvider } from "@/providers/ThemeProvider";
@@ -33,13 +35,19 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 
 const navLinks = [
   { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  {
+    href: "/admin/cash-collection",
+    label: "Cash Collection",
+    icon: DollarSign,
+  },
+  { href: "/admin/expenses", label: "Expenses", icon: Receipt },
   { href: "/admin/doctors", label: "Doctors", icon: Users },
   { href: "/admin/users", label: "Users", icon: UserCog },
   { href: "/admin/discounts", label: "Discounts", icon: Percent },
-  { href: "/admin/settings", label: "Settings", icon: Settings },
 ];
 
 export default function AdminLayout({
@@ -237,6 +245,7 @@ export default function AdminLayout({
             {/* Mobile Header - Only show on mobile */}
             <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 md:hidden">
               <div className="flex items-center gap-4 ml-auto">
+                <ThemeToggle />
                 <div className="flex items-center gap-2">
                   <Avatar className="h-8 w-8">
                     <AvatarFallback className="bg-primary text-primary-foreground">
@@ -254,6 +263,7 @@ export default function AdminLayout({
             <header className="sticky top-0 z-30 hidden h-14 items-center gap-4 border-b bg-background px-6 md:flex">
               <SidebarTrigger className="-ml-1" />
               <div className="flex-1" /> {/* Spacer */}
+              <ThemeToggle />
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-2">
                   <Avatar className="h-8 w-8">
