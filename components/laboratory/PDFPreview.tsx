@@ -331,9 +331,12 @@ const PDFPreview = ({ test, backgroundConfig }: PDFPreviewProps) => {
             <Button
               variant="default"
               size="sm"
-              onClick={() => {
-                // You can implement actual PDF download here
-                generateLabTestPDF(test, "download");
+              onClick={async () => {
+                try {
+                  await generateLabTestPDF(test, "download");
+                } catch (error) {
+                  console.error("Failed to generate PDF:", error);
+                }
               }}
             >
               Generate PDF

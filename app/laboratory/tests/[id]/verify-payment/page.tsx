@@ -712,7 +712,9 @@ export default function VerifyPaymentPage() {
               {test.paymentVerified && test.collectionStatus === "pending" && (
                 <Button
                   className="w-full"
-                  onClick={() => router.push(`/laboratory/tests`)}
+                  onClick={() =>
+                    router.push(`/laboratory/tests/${params.id}/collect`)
+                  }
                 >
                   <CheckCircle className="h-4 w-4 mr-2" />
                   Collect Sample

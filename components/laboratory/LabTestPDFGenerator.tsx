@@ -148,7 +148,14 @@ const LabTestPDFGenerator = ({
             <div className="grid grid-cols-2 gap-4">
               <Button
                 variant="outline"
-                onClick={() => generateLabTestPDF(test, "download")}
+                onClick={async () => {
+                  try {
+                    await generateLabTestPDF(test, "download");
+                  } catch (error) {
+                    console.error("Failed to generate PDF:", error);
+                    alert("Failed to generate PDF. Please try again.");
+                  }
+                }}
               >
                 <Download className="h-4 w-4 mr-2" />
                 Quick Download

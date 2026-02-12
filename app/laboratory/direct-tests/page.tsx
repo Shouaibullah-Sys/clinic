@@ -1,7 +1,8 @@
 // app/laboratory/direct-tests/page.tsx
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   Card,
   CardContent,
@@ -51,6 +52,15 @@ import { format, parseISO } from "date-fns";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { generateDirectTestPDF } from "@/lib/pdf-generator";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 
 interface DirectLabTest {
   _id: string;
@@ -100,61 +110,47 @@ interface DirectLabTest {
 
 export default function DirectTestsPage() {
   const { accessToken, user } = useAuthStore();
-  const [tests, setTests] = useState<DirectLabTest[]>([]);
-  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [paymentStatusFilter, setPaymentStatusFilter] = useState("all");
   const [activeTab, setActiveTab] = useState("all");
   const [printingId, setPrintingId] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 10;
 
-  useEffect(() => {
-    fetchTests();
-  }, [accessToken]);
-
-  const fetchTests = async () => {
-    try {
-      setLoading(true);
-      if (!accessToken) {
-        console.log("No access token available");
-        return;
-      }
-
-      console.log("Fetching direct lab tests...");
-      const url = `/api/laboratory/direct-tests`;
-      console.log("API URL:", url);
-
-      const response = await fetch(url, {
+  const {
+    data: tests = [],
+    isLoading: loading,
+    refetch,
+  } = useQuery<DirectLabTest[]>({
+    queryKey: ["laboratory-direct-tests", accessToken],
+    enabled: !!accessToken,
+    queryFn: async () => {
+      const response = await fetch(`/api/laboratory/direct-tests`, {
         headers: {
           Authorization: `Bearer ${accessToken}`,
           "Content-Type": "application/json",
         },
       });
-
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error("API Error:", errorText);
-        toast.error(
+        throw new Error(
           `Failed to fetch tests: ${response.status} ${response.statusText}`,
         );
-        return;
       }
-
       const data = await response.json();
-      console.log("API Response:", data);
-
-      if (data.success) {
-        setTests(data.data || []);
-        console.log(`Loaded ${data.data?.length || 0} direct lab tests`);
-      } else {
-        toast.error(data.error || "Failed to load direct lab tests");
-        console.error("API Error:", data.error);
+      if (!data.success) {
+        throw new Error(data.error || "Failed to load direct lab tests");
       }
+      return data.data || [];
+    },
+  });
+
+  const fetchTests = async () => {
+    try {
+      await refetch();
     } catch (error) {
       console.error("Error fetching tests:", error);
       toast.error("Network error. Please try again.");
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -166,11 +162,8 @@ export default function DirectTestsPage() {
         (t) => t.status === "pending" || t.status === "ordered",
       );
     }
-    if (activeTab === "processing") {
-      return tests.filter((t) => t.status === "processing");
-    }
-    if (activeTab === "ready-to-print") {
-      return tests.filter((t) => t.readyForPrint && !t.printedAt);
+    if (activeTab === "collected") {
+      return tests.filter((t) => t.collectionStatus === "collected");
     }
     return tests;
   };
@@ -190,7 +183,8 @@ export default function DirectTestsPage() {
       if (statusFilter === "all") return true;
       if (statusFilter === "pending")
         return test.status === "pending" || test.status === "ordered";
-      if (statusFilter === "processing") return test.status === "processing";
+      if (statusFilter === "collected")
+        return test.collectionStatus === "collected";
       if (statusFilter === "completed")
         return test.status === "completed" || test.status === "reported";
       if (statusFilter === "cancelled") return test.status === "cancelled";
@@ -207,6 +201,31 @@ export default function DirectTestsPage() {
       return true;
     });
 
+  const totalPages = Math.max(1, Math.ceil(filteredTests.length / pageSize));
+  const paginatedTests = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredTests.slice(start, start + pageSize);
+  }, [filteredTests, currentPage]);
+
+  const visiblePages = useMemo(() => {
+    const delta = 1;
+    const start = Math.max(1, currentPage - delta);
+    const end = Math.min(totalPages, currentPage + delta);
+    const pages: number[] = [];
+    for (let i = start; i <= end; i++) pages.push(i);
+    return pages;
+  }, [currentPage, totalPages]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, searchQuery, statusFilter, paymentStatusFilter]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
   const getStatusBadge = (test: DirectLabTest) => {
     if (test.status === "cancelled") {
       return <Badge variant="destructive">Cancelled</Badge>;
@@ -220,18 +239,8 @@ export default function DirectTestsPage() {
       return <Badge className="bg-blue-100 text-blue-800">Completed</Badge>;
     }
 
-    if (test.status === "processing") {
-      return (
-        <Badge className="bg-purple-100 text-purple-800">Processing</Badge>
-      );
-    }
-
     if (test.collectionStatus === "collected") {
-      return (
-        <Badge className="bg-yellow-100 text-yellow-800">
-          Ready for Processing
-        </Badge>
-      );
+      return <Badge className="bg-green-100 text-green-800">Collected</Badge>;
     }
 
     if (test.collectionStatus === "pending") {
@@ -315,19 +324,25 @@ export default function DirectTestsPage() {
     const pending = tests.filter(
       (t) => t.status === "pending" || t.status === "ordered",
     ).length;
-    const processing = tests.filter((t) => t.status === "processing").length;
+    const collected = tests.filter(
+      (t) => t.collectionStatus === "collected",
+    ).length;
     const completed = tests.filter(
       (t) => t.status === "completed" || t.status === "reported",
     ).length;
     const finalized = tests.filter((t) => t.finalized).length;
     const readyForPrint = tests.filter(
-      (t) => t.readyForPrint && !t.printedAt,
+      (t) => t.collectionStatus === "collected",
     ).length;
 
-    return { all, pending, processing, completed, finalized, readyForPrint };
+    return { all, pending, collected, completed, finalized, readyForPrint };
   };
 
   const counts = getTestCounts();
+
+  const canPrintTest = (test: DirectLabTest) => {
+    return test.collectionStatus === "collected";
+  };
 
   const handlePrintPDF = async (test: DirectLabTest) => {
     setPrintingId(test._id);
@@ -358,17 +373,19 @@ export default function DirectTestsPage() {
         throw new Error(data.error || "Failed to fetch test data for printing");
       }
 
-      // Mark the test as printed
-      await fetch(`/api/laboratory/direct-tests/${test._id}/print`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-      });
+      // Mark only the first successful print
+      if (!test.printedAt) {
+        await fetch(`/api/laboratory/direct-tests/${test._id}/print`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+        });
+      }
 
       // Generate and print PDF using the fetched test data
-      generateDirectTestPDF(data.data);
+      await generateDirectTestPDF(data.data);
 
       // Refresh tests to update printed status
       fetchTests();
@@ -474,10 +491,10 @@ export default function DirectTestsPage() {
           <CardContent className="pt-4 md:pt-6 px-3 md:px-6">
             <div className="text-center">
               <div className="text-xl md:text-2xl font-bold text-purple-600">
-                {counts.processing}
+                {counts.collected}
               </div>
               <div className="text-xs md:text-sm text-gray-500 truncate">
-                Processing
+                Collected
               </div>
             </div>
           </CardContent>
@@ -498,7 +515,7 @@ export default function DirectTestsPage() {
 
       {/* Tabs for different test categories */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
-        <TabsList className="grid grid-cols-4 w-full">
+        <TabsList className="grid grid-cols-3 w-full">
           <TabsTrigger value="all" className="text-xs md:text-sm px-1 md:px-3">
             <span className="hidden md:inline">All Tests</span>
             <span className="md:hidden">All</span>
@@ -511,18 +528,11 @@ export default function DirectTestsPage() {
             <span className="md:hidden">Pend</span>
           </TabsTrigger>
           <TabsTrigger
-            value="processing"
+            value="collected"
             className="text-xs md:text-sm px-1 md:px-3"
           >
-            <span className="hidden md:inline">Processing</span>
-            <span className="md:hidden">Proc</span>
-          </TabsTrigger>
-          <TabsTrigger
-            value="ready-to-print"
-            className="text-xs md:text-sm px-1 md:px-3"
-          >
-            <span className="hidden md:inline">Ready to Print</span>
-            <span className="md:hidden">Print</span>
+            <span className="hidden md:inline">Collected</span>
+            <span className="md:hidden">Collected</span>
           </TabsTrigger>
         </TabsList>
       </Tabs>
@@ -552,7 +562,7 @@ export default function DirectTestsPage() {
                 <SelectContent>
                   <SelectItem value="all">All Statuses</SelectItem>
                   <SelectItem value="pending">Pending/Ordered</SelectItem>
-                  <SelectItem value="processing">Processing</SelectItem>
+                  <SelectItem value="collected">Collected</SelectItem>
                   <SelectItem value="completed">Completed</SelectItem>
                   <SelectItem value="cancelled">Cancelled</SelectItem>
                 </SelectContent>
@@ -638,7 +648,7 @@ export default function DirectTestsPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredTests.map((test) => (
+                  paginatedTests.map((test) => (
                     <TableRow
                       key={test._id}
                       className={
@@ -733,7 +743,7 @@ export default function DirectTestsPage() {
                               View
                             </Link>
                           </Button>
-                          {test.readyForPrint && !test.printedAt && (
+                          {canPrintTest(test) && (
                             <Button
                               size="sm"
                               onClick={() => handlePrintPDF(test)}
@@ -788,7 +798,7 @@ export default function DirectTestsPage() {
             </CardContent>
           </Card>
         ) : (
-          filteredTests.map((test) => (
+          paginatedTests.map((test) => (
             <Card
               key={test._id}
               className={`
@@ -902,7 +912,7 @@ export default function DirectTestsPage() {
                       View Details
                     </Link>
                   </Button>
-                  {test.readyForPrint && !test.printedAt && (
+                  {canPrintTest(test) && (
                     <Button
                       size="sm"
                       onClick={() => handlePrintPDF(test)}
@@ -925,6 +935,77 @@ export default function DirectTestsPage() {
           ))
         )}
       </div>
+
+      {filteredTests.length > 0 && (
+        <Pagination className="mt-6">
+          <PaginationContent>
+            <PaginationItem>
+              <PaginationPrevious
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setCurrentPage((p) => Math.max(1, p - 1));
+                }}
+                className={currentPage === 1 ? "pointer-events-none opacity-50" : ""}
+              />
+            </PaginationItem>
+            {currentPage > 2 && (
+              <>
+                <PaginationItem>
+                  <PaginationLink href="#" onClick={(e) => e.preventDefault()}>
+                    1
+                  </PaginationLink>
+                </PaginationItem>
+                <PaginationItem>
+                  <PaginationEllipsis />
+                </PaginationItem>
+              </>
+            )}
+            {visiblePages.map((page) => (
+              <PaginationItem key={page}>
+                <PaginationLink
+                  href="#"
+                  isActive={page === currentPage}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setCurrentPage(page);
+                  }}
+                >
+                  {page}
+                </PaginationLink>
+              </PaginationItem>
+            ))}
+            {currentPage < totalPages - 1 && (
+              <>
+                <PaginationItem>
+                  <PaginationEllipsis />
+                </PaginationItem>
+                <PaginationItem>
+                  <PaginationLink
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setCurrentPage(totalPages);
+                    }}
+                  >
+                    {totalPages}
+                  </PaginationLink>
+                </PaginationItem>
+              </>
+            )}
+            <PaginationItem>
+              <PaginationNext
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setCurrentPage((p) => Math.min(totalPages, p + 1));
+                }}
+                className={currentPage === totalPages ? "pointer-events-none opacity-50" : ""}
+              />
+            </PaginationItem>
+          </PaginationContent>
+        </Pagination>
+      )}
     </div>
   );
 }

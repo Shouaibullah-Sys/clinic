@@ -264,19 +264,19 @@ export default function DirectTestPrintPage() {
       </div>
 
       {/* Print Warning */}
-      {!test.finalized && (
+      {test.collectionStatus !== "collected" && (
         <Alert variant="destructive" className="mb-6">
           <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Test Not Finalized</AlertTitle>
+          <AlertTitle>Sample Not Collected</AlertTitle>
           <AlertDescription>
-            This test has not been finalized yet. Please finalize the test
-            before printing.
+            This test sample has not been collected yet. Collect the sample
+            first before printing.
           </AlertDescription>
         </Alert>
       )}
 
       {/* PDF Generator */}
-      {test.finalized && (
+      {test.collectionStatus === "collected" && (
         <div className="bg-white p-6 rounded-lg shadow-lg">
           <LabTestPDFGenerator
             test={{

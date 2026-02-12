@@ -56,6 +56,7 @@ export async function PUT(
       collectionNotes,
       sampleConditionNotes,
       specimen,
+      results,
       testParameters,
     } = body;
 
@@ -134,6 +135,7 @@ export async function PUT(
     // Update the test with collection details
     test.collectionStatus = "collected";
     test.status = "completed"; // Sample collection is now the final step
+    test.processingStatus = "completed"; // No separate processing step in this workflow
 
     // Basic collection details
     test.collectionDetails = {
@@ -167,9 +169,8 @@ export async function PUT(
       };
     }
 
-    // Update results with test parameters if provided
-    if (testParameters && testParameters.length > 0) {
-      test.results = {
+    const resolvedResults =
+      (testParameters && testParameters.length > 0 && {
         parameters: testParameters.map((p: any) => ({
           name: p.name,
           value: p.value,
@@ -177,6 +178,31 @@ export async function PUT(
           normalRange: p.normalRange || "",
           remarks: p.remarks || "",
         })),
+      }) ||
+      (results?.parameters && results.parameters.length > 0 && {
+        parameters: results.parameters.map((p: any) => ({
+          name: p.name,
+          value: p.value ?? p.result ?? "",
+          unit: p.unit || "",
+          normalRange: p.normalRange || "",
+          remarks: p.remarks || "",
+        })),
+      }) ||
+      (specimen?.parameters &&
+        specimen.parameters.length > 0 && {
+          parameters: specimen.parameters.map((p: any) => ({
+            name: p.name,
+            value: p.value ?? p.result ?? "",
+            unit: p.unit || "",
+            normalRange: p.normalRange || "",
+            remarks: p.remarks || "",
+          })),
+      });
+
+    // Update results with test parameters if provided
+    if (resolvedResults) {
+      test.results = {
+        parameters: resolvedResults.parameters,
         reportedBy: collectedBy,
         reportedAt: new Date(),
       };

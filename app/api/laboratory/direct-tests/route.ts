@@ -8,6 +8,25 @@ import { Patient } from "@/lib/models/Patient";
 import { authenticateRequest } from "@/lib/auth";
 import mongoose from "mongoose";
 
+const normalizeDirectTestWorkflow = (test: any) => {
+  const isCollected = test.collectionStatus === "collected";
+  const hasResults = (test.results?.parameters?.length || 0) > 0;
+
+  if (!isCollected) return test;
+
+  return {
+    ...test,
+    status:
+      test.status === "pending" ||
+      test.status === "ordered" ||
+      test.status === "processing"
+        ? "completed"
+        : test.status,
+    processingStatus: "completed",
+    readyForPrint: hasResults ? true : test.readyForPrint,
+  };
+};
+
 // GET: List all direct tests with optional filtering
 export async function GET(request: NextRequest) {
   try {
@@ -80,11 +99,12 @@ export async function GET(request: NextRequest) {
       .sort(sortObj)
       .limit(limit)
       .lean();
+    const normalizedTests = tests.map(normalizeDirectTestWorkflow);
 
     return NextResponse.json({
       success: true,
-      data: tests,
-      count: tests.length,
+      data: normalizedTests,
+      count: normalizedTests.length,
       userRole: auth.userRole,
     });
   } catch (error: any) {

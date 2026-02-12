@@ -5,6 +5,25 @@ import dbConnect from "@/lib/dbConnect";
 import { LabTest } from "@/lib/models/LabTest";
 import { authenticateRequest } from "@/lib/auth";
 
+const normalizeDirectTestWorkflow = (test: any) => {
+  const isCollected = test.collectionStatus === "collected";
+  const hasResults = (test.results?.parameters?.length || 0) > 0;
+
+  if (!isCollected) return test;
+
+  return {
+    ...test,
+    status:
+      test.status === "pending" ||
+      test.status === "ordered" ||
+      test.status === "processing"
+        ? "completed"
+        : test.status,
+    processingStatus: "completed",
+    readyForPrint: hasResults ? true : test.readyForPrint,
+  };
+};
+
 // GET: Get a single direct lab test by ID
 export async function GET(
   request: NextRequest,
@@ -68,7 +87,7 @@ export async function GET(
 
     return NextResponse.json({
       success: true,
-      data: labTest,
+      data: normalizeDirectTestWorkflow(labTest),
     });
   } catch (error: any) {
     console.error("Error fetching direct lab test:", error);

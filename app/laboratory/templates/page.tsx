@@ -2,7 +2,8 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   Card,
   CardContent,
@@ -13,7 +14,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
@@ -77,6 +77,15 @@ import { useAuthStore } from "@/store/useAuthStore";
 import { TemplateDetailsDialog } from "./components/TemplateDetailsDialog";
 import { TemplateEditDialog } from "./components/TemplateEditDialog";
 import { TemplateCreateDialog } from "./components/TemplateCreateDialog";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 
 interface LabTestTemplate {
   _id: string;
@@ -114,14 +123,11 @@ interface LabTestTemplate {
 
 export default function LabTemplatesPage() {
   const { accessToken } = useAuthStore();
-  const [templates, setTemplates] = useState<LabTestTemplate[]>([]);
-  const [filteredTemplates, setFilteredTemplates] = useState<LabTestTemplate[]>(
-    [],
-  );
-  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 10;
   const [selectedTemplate, setSelectedTemplate] =
     useState<LabTestTemplate | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -131,57 +137,50 @@ export default function LabTemplatesPage() {
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-
-  // Get unique categories from templates
-  const categories = Array.from(new Set(templates.map((t) => t.category)));
-
-  useEffect(() => {
-    fetchTemplates();
-  }, []);
-
-  useEffect(() => {
-    filterTemplates();
-  }, [searchQuery, categoryFilter, statusFilter, templates]);
-
-  const fetchTemplates = async () => {
-    try {
-      setLoading(true);
-      if (!accessToken) {
-        setError("Authentication required");
-        return;
-      }
-
+  const {
+    data: templates = [],
+    isLoading: loading,
+    error: queryError,
+    refetch,
+  } = useQuery<LabTestTemplate[]>({
+    queryKey: ["laboratory-templates", accessToken],
+    enabled: !!accessToken,
+    queryFn: async () => {
       const response = await fetch("/api/laboratory/templates", {
         headers: {
           Authorization: `Bearer ${accessToken}`,
           "Content-Type": "application/json",
         },
       });
-
       if (response.status === 401) {
-        setError("Session expired. Please login again.");
-        return;
+        throw new Error("Session expired. Please login again.");
       }
-
       if (!response.ok) {
         throw new Error("Failed to fetch templates");
       }
-
       const data = await response.json();
-      setTemplates(data.data || []);
-      setFilteredTemplates(data.data || []);
-    } catch (err: any) {
-      setError(err.message || "Failed to load templates");
-      console.error("Error fetching templates:", err);
-    } finally {
-      setLoading(false);
+      return data.data || [];
+    },
+  });
+
+  useEffect(() => {
+    if (queryError) {
+      setError(
+        queryError instanceof Error
+          ? queryError.message
+          : "Failed to load templates",
+      );
     }
+  }, [queryError]);
+
+  const fetchTemplates = async () => {
+    setError(null);
+    await refetch();
   };
 
-  const filterTemplates = () => {
+  const filteredTemplates = useMemo(() => {
     let filtered = [...templates];
 
-    // Apply search filter
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(
@@ -193,22 +192,53 @@ export default function LabTemplatesPage() {
       );
     }
 
-    // Apply category filter
     if (categoryFilter !== "all") {
       filtered = filtered.filter(
         (template) => template.category === categoryFilter,
       );
     }
 
-    // Apply status filter
     if (statusFilter !== "all") {
       filtered = filtered.filter((template) =>
         statusFilter === "active" ? template.active : !template.active,
       );
     }
 
-    setFilteredTemplates(filtered);
-  };
+    return filtered;
+  }, [templates, searchQuery, categoryFilter, statusFilter]);
+
+  const categories = useMemo(
+    () => Array.from(new Set(templates.map((t) => t.category))),
+    [templates],
+  );
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredTemplates.length / pageSize),
+  );
+  const paginatedTemplates = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredTemplates.slice(start, start + pageSize);
+  }, [filteredTemplates, currentPage]);
+
+  const visiblePages = useMemo(() => {
+    const delta = 1;
+    const start = Math.max(1, currentPage - delta);
+    const end = Math.min(totalPages, currentPage + delta);
+    const pages: number[] = [];
+    for (let i = start; i <= end; i++) pages.push(i);
+    return pages;
+  }, [currentPage, totalPages]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, categoryFilter, statusFilter]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
   const handleDeleteTemplate = async () => {
     if (!selectedTemplate) return;
@@ -568,164 +598,247 @@ export default function LabTemplatesPage() {
               </Button>
             </div>
           ) : (
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Test Code</TableHead>
-                    <TableHead>Test Name</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead>Specimen</TableHead>
-                    <TableHead>Parameters</TableHead>
-                    <TableHead>Price</TableHead>
-                    <TableHead>Turnaround</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredTemplates.map((template) => (
-                    <TableRow key={template._id}>
-                      <TableCell className="font-mono font-medium">
-                        {template.testCode}
-                      </TableCell>
-                      <TableCell>
-                        <div className="space-y-1 max-w-38">
-                          <div className="font-medium">{template.testName}</div>
-                          {template.description && (
-                            <div className="text-sm text-muted-foreground line-clamp-1 truncate">
-                              {template.description}
+            <>
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Test Code</TableHead>
+                      <TableHead>Test Name</TableHead>
+                      <TableHead>Category</TableHead>
+                      <TableHead>Specimen</TableHead>
+                      <TableHead>Parameters</TableHead>
+                      <TableHead>Price</TableHead>
+                      <TableHead>Turnaround</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedTemplates.map((template) => (
+                      <TableRow key={template._id}>
+                        <TableCell className="font-mono font-medium">
+                          {template.testCode}
+                        </TableCell>
+                        <TableCell>
+                          <div className="space-y-1 max-w-38">
+                            <div className="font-medium">
+                              {template.testName}
                             </div>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant="outline"
-                          className={getCategoryColor(template.category)}
-                        >
-                          <div className="flex items-center gap-1">
-                            {getCategoryIcon(template.category)}
-                            <span className="capitalize">
-                              {template.category
-                                .replace(/_/g, " ")
-                                .replace(/\b\w/g, (l) => l.toUpperCase())}
+                            {template.description && (
+                              <div className="text-sm text-muted-foreground line-clamp-1 truncate">
+                                {template.description}
+                              </div>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant="outline"
+                            className={getCategoryColor(template.category)}
+                          >
+                            <div className="flex items-center gap-1">
+                              {getCategoryIcon(template.category)}
+                              <span className="capitalize">
+                                {template.category
+                                  .replace(/_/g, " ")
+                                  .replace(/\b\w/g, (l) => l.toUpperCase())}
+                              </span>
+                            </div>
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="space-y-1">
+                            <div className="text-sm">
+                              {template.specimenType.join(", ")}
+                            </div>
+                            {template.sampleVolume && (
+                              <div className="text-xs text-muted-foreground">
+                                Volume: {template.sampleVolume}
+                              </div>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="bg-gray-50">
+                            {template.parameters?.length || 0} params
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <DollarSign className="h-4 w-4 text-green-600" />
+                            <span className="font-medium">
+                              {formatPrice(template.basePrice)}
                             </span>
                           </div>
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="space-y-1">
-                          <div className="text-sm">
-                            {template.specimenType.join(", ")}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Clock className="h-4 w-4 text-blue-600" />
+                            <span className="text-sm">
+                              {template.turnaroundTime}h
+                            </span>
                           </div>
-                          {template.sampleVolume && (
-                            <div className="text-xs text-muted-foreground">
-                              Volume: {template.sampleVolume}
-                            </div>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="bg-gray-50">
-                          {template.parameters?.length || 0} params
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <DollarSign className="h-4 w-4 text-green-600" />
-                          <span className="font-medium">
-                            {formatPrice(template.basePrice)}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Clock className="h-4 w-4 text-blue-600" />
-                          <span className="text-sm">
-                            {template.turnaroundTime}h
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          {template.active ? (
-                            <Badge className="bg-green-100 text-green-800 hover:bg-green-100">
-                              <CheckCircle className="h-3 w-3 mr-1" />
-                              Active
-                            </Badge>
-                          ) : (
-                            <Badge
-                              variant="outline"
-                              className="text-gray-500 border-gray-300"
-                            >
-                              <XCircle className="h-3 w-3 mr-1" />
-                              Inactive
-                            </Badge>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm">
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              onClick={() => {
-                                setSelectedTemplate(template);
-                                setShowDetailsDialog(true);
-                              }}
-                            >
-                              <Eye className="h-4 w-4 mr-2" />
-                              View Details
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => {
-                                setSelectedTemplate(template);
-                                setShowEditDialog(true);
-                              }}
-                            >
-                              <Edit className="h-4 w-4 mr-2" />
-                              Edit Template
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              onClick={() => handleToggleStatus(template)}
-                              disabled={actionLoading}
-                            >
-                              {template.active ? (
-                                <>
-                                  <XCircle className="h-4 w-4 mr-2 text-red-600" />
-                                  Deactivate
-                                </>
-                              ) : (
-                                <>
-                                  <CheckCircle className="h-4 w-4 mr-2 text-green-600" />
-                                  Activate
-                                </>
-                              )}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              className="text-red-600"
-                              onClick={() => {
-                                setSelectedTemplate(template);
-                                setShowDeleteDialog(true);
-                              }}
-                            >
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            {template.active ? (
+                              <Badge className="bg-green-100 text-green-800 hover:bg-green-100">
+                                <CheckCircle className="h-3 w-3 mr-1" />
+                                Active
+                              </Badge>
+                            ) : (
+                              <Badge
+                                variant="outline"
+                                className="text-gray-500 border-gray-300"
+                              >
+                                <XCircle className="h-3 w-3 mr-1" />
+                                Inactive
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm">
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  setSelectedTemplate(template);
+                                  setShowDetailsDialog(true);
+                                }}
+                              >
+                                <Eye className="h-4 w-4 mr-2" />
+                                View Details
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  setSelectedTemplate(template);
+                                  setShowEditDialog(true);
+                                }}
+                              >
+                                <Edit className="h-4 w-4 mr-2" />
+                                Edit Template
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={() => handleToggleStatus(template)}
+                                disabled={actionLoading}
+                              >
+                                {template.active ? (
+                                  <>
+                                    <XCircle className="h-4 w-4 mr-2 text-red-600" />
+                                    Deactivate
+                                  </>
+                                ) : (
+                                  <>
+                                    <CheckCircle className="h-4 w-4 mr-2 text-green-600" />
+                                    Activate
+                                  </>
+                                )}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className="text-red-600"
+                                onClick={() => {
+                                  setSelectedTemplate(template);
+                                  setShowDeleteDialog(true);
+                                }}
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              <Pagination className="mt-6">
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationPrevious
+                      href="#"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setCurrentPage((p) => Math.max(1, p - 1));
+                      }}
+                      className={
+                        currentPage === 1
+                          ? "pointer-events-none opacity-50"
+                          : ""
+                      }
+                    />
+                  </PaginationItem>
+                  {currentPage > 2 && (
+                    <>
+                      <PaginationItem>
+                        <PaginationLink
+                          href="#"
+                          onClick={(e) => e.preventDefault()}
+                        >
+                          1
+                        </PaginationLink>
+                      </PaginationItem>
+                      <PaginationItem>
+                        <PaginationEllipsis />
+                      </PaginationItem>
+                    </>
+                  )}
+                  {visiblePages.map((page) => (
+                    <PaginationItem key={page}>
+                      <PaginationLink
+                        href="#"
+                        isActive={page === currentPage}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          setCurrentPage(page);
+                        }}
+                      >
+                        {page}
+                      </PaginationLink>
+                    </PaginationItem>
                   ))}
-                </TableBody>
-              </Table>
-            </div>
+                  {currentPage < totalPages - 1 && (
+                    <>
+                      <PaginationItem>
+                        <PaginationEllipsis />
+                      </PaginationItem>
+                      <PaginationItem>
+                        <PaginationLink
+                          href="#"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            setCurrentPage(totalPages);
+                          }}
+                        >
+                          {totalPages}
+                        </PaginationLink>
+                      </PaginationItem>
+                    </>
+                  )}
+                  <PaginationItem>
+                    <PaginationNext
+                      href="#"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setCurrentPage((p) => Math.min(totalPages, p + 1));
+                      }}
+                      className={
+                        currentPage === totalPages
+                          ? "pointer-events-none opacity-50"
+                          : ""
+                      }
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+            </>
           )}
         </CardContent>
       </Card>
@@ -802,155 +915,6 @@ export default function LabTemplatesPage() {
           setSuccess("Template created successfully");
         }}
       />
-
-      {/* Category Tabs (Alternative View) */}
-      <Tabs defaultValue="all" className="w-full">
-        <TabsList className="grid grid-cols-3 md:grid-cols-6 w-full">
-          <TabsTrigger value="all">All ({templates.length})</TabsTrigger>
-          <TabsTrigger value="hematology">
-            <div className="flex items-center gap-1">
-              <Droplets className="h-3 w-3" />
-              <span>Hematology</span>
-            </div>
-          </TabsTrigger>
-          <TabsTrigger value="biochemistry">
-            <div className="flex items-center gap-1">
-              <FlaskConical className="h-3 w-3" />
-              <span>Biochemistry</span>
-            </div>
-          </TabsTrigger>
-          <TabsTrigger value="microbiology">
-            <div className="flex items-center gap-1">
-              <Microscope className="h-3 w-3" />
-              <span>Microbiology</span>
-            </div>
-          </TabsTrigger>
-          <TabsTrigger value="serology">
-            <div className="flex items-center gap-1">
-              <TestTube className="h-3 w-3" />
-              <span>Serology</span>
-            </div>
-          </TabsTrigger>
-          <TabsTrigger value="urinalysis">
-            <div className="flex items-center gap-1">
-              <Beaker className="h-3 w-3" />
-              <span>Urinalysis</span>
-            </div>
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="all" className="space-y-4">
-          {/* All templates are already shown in main table */}
-        </TabsContent>
-
-        {categories.map((category) => (
-          <TabsContent key={category} value={category} className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  {getCategoryIcon(category)}
-                  <span className="capitalize">
-                    {category
-                      .replace(/_/g, " ")
-                      .replace(/\b\w/g, (l) => l.toUpperCase())}{" "}
-                    Tests
-                  </span>
-                </CardTitle>
-                <CardDescription>
-                  {
-                    filteredTemplates.filter((t) => t.category === category)
-                      .length
-                  }{" "}
-                  templates available
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {filteredTemplates
-                    .filter((template) => template.category === category)
-                    .map((template) => (
-                      <Card
-                        key={template._id}
-                        className="hover:shadow-md transition-shadow"
-                      >
-                        <CardHeader className="pb-3">
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <CardTitle className="text-lg">
-                                {template.testName}
-                              </CardTitle>
-                              <CardDescription className="font-mono">
-                                {template.testCode}
-                              </CardDescription>
-                            </div>
-                            <Badge
-                              className={
-                                template.active
-                                  ? "bg-green-100 text-green-800"
-                                  : "bg-gray-100 text-gray-800"
-                              }
-                            >
-                              {template.active ? "Active" : "Inactive"}
-                            </Badge>
-                          </div>
-                        </CardHeader>
-                        <CardContent className="space-y-3">
-                          <div className="flex items-center justify-between text-sm">
-                            <div className="flex items-center gap-2">
-                              <Clock className="h-4 w-4 text-blue-600" />
-                              <span>{template.turnaroundTime}h</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <DollarSign className="h-4 w-4 text-green-600" />
-                              <span className="font-medium">
-                                {formatPrice(template.basePrice)}
-                              </span>
-                            </div>
-                          </div>
-
-                          <div className="text-sm">
-                            <div className="font-medium">Specimen:</div>
-                            <div className="text-muted-foreground">
-                              {template.specimenType.join(", ")}
-                            </div>
-                          </div>
-
-                          <div className="flex items-center justify-between">
-                            <Badge variant="outline">
-                              {template.parameters?.length || 0} parameters
-                            </Badge>
-                            <div className="flex gap-2">
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => {
-                                  setSelectedTemplate(template);
-                                  setShowDetailsDialog(true);
-                                }}
-                              >
-                                <Eye className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => {
-                                  setSelectedTemplate(template);
-                                  setShowEditDialog(true);
-                                }}
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        ))}
-      </Tabs>
     </div>
   );
 }

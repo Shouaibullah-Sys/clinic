@@ -54,8 +54,8 @@ async function safePopulateLabTest(labTest: any) {
   return populated;
 }
 
-// PUT: Update lab test charges (receptionist)
-export async function PUT(
+// POST: Process payment for lab test (receptionist)
+export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
@@ -84,12 +84,12 @@ export async function PUT(
     const userId = payload.id as string;
     const userRole = payload.role as string;
 
-    // Only receptionist and admin can update charges
+    // Only receptionist and admin can process payments
     if (!["receptionist", "admin"].includes(userRole)) {
       return NextResponse.json(
         {
           success: false,
-          error: "Forbidden. Only receptionists can update charges.",
+          error: "Forbidden. Only receptionists can process payments.",
         },
         { status: 403 },
       );
@@ -104,8 +104,8 @@ export async function PUT(
       paymentMethod,
       paidAmount,
       transactionId,
-      verifyPayment = true, // Default to true when payment is made
-      price, // Allow receptionists to set/update the price
+      verifyPayment = true,
+      price,
     } = body;
 
     // Find lab test
@@ -121,7 +121,7 @@ export async function PUT(
     // Check if test is cancelled
     if (labTest.status === "cancelled") {
       return NextResponse.json(
-        { success: false, error: "Cannot update charges for cancelled test" },
+        { success: false, error: "Cannot process payment for cancelled test" },
         { status: 400 },
       );
     }
@@ -209,13 +209,13 @@ export async function PUT(
 
     if (!updatedLabTest) {
       return NextResponse.json(
-        { success: false, error: "Failed to update lab test charges" },
+        { success: false, error: "Failed to process payment" },
         { status: 500 },
       );
     }
 
     console.log(
-      `Payment update for test ${testId}: paid=${updatedLabTest.charges.paid}, paymentStatus=${updatedLabTest.charges.paymentStatus}, paymentVerified=${updatedLabTest.paymentVerified}`,
+      `Payment processed for test ${testId}: paid=${updatedLabTest.charges.paid}, paymentStatus=${updatedLabTest.charges.paymentStatus}, paymentVerified=${updatedLabTest.paymentVerified}`,
     );
 
     // Check if sample collection can now proceed
@@ -253,10 +253,10 @@ export async function PUT(
           !updatedLabTest.paymentVerified &&
           updatedLabTest.priority === "routine",
       },
-      message: "Lab test charges updated successfully",
+      message: "Payment processed successfully",
     });
   } catch (error: any) {
-    console.error("Error updating lab test charges:", error);
+    console.error("Error processing payment:", error);
 
     // Handle specific validation errors
     if (error.name === "ValidationError") {
@@ -275,7 +275,7 @@ export async function PUT(
     }
 
     return NextResponse.json(
-      { success: false, error: error.message || "Failed to update charges" },
+      { success: false, error: error.message || "Failed to process payment" },
       { status: 500 },
     );
   }

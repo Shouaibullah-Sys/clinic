@@ -2,7 +2,8 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   Card,
   CardContent,
@@ -54,6 +55,15 @@ import { format, parseISO } from "date-fns";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import LabTestPDFGenerator from "@/components/laboratory/LabTestPDFGenerator";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 
 interface LabTest {
   _id: string;
@@ -87,72 +97,59 @@ interface LabTest {
     type: string;
     quantity?: string;
   };
+  results?: {
+    parameters?: Array<{
+      name: string;
+      value: string | number;
+      unit?: string;
+      normalRange?: string;
+      remarks?: string;
+    }>;
+  };
 }
 
 export default function LaboratoryTestsPage() {
   const { accessToken, user } = useAuthStore();
-  const [tests, setTests] = useState<LabTest[]>([]);
-  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [collectionStatusFilter, setCollectionStatusFilter] = useState("all");
   const [activeTab, setActiveTab] = useState("pending");
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 10;
 
-  useEffect(() => {
-    fetchTests();
-  }, [accessToken, activeTab]);
-
-  const fetchTests = async () => {
-    try {
-      setLoading(true);
-      if (!accessToken) {
-        console.log("No access token available");
-        return;
-      }
-
-      console.log("Fetching lab tests for laboratory...");
-      const url = `/api/laboratory/tests?tab=${activeTab}`;
-      console.log("API URL:", url);
-
-      const response = await fetch(url, {
+  const {
+    data: tests = [],
+    isLoading: loading,
+    refetch,
+  } = useQuery<LabTest[]>({
+    queryKey: ["laboratory-tests", accessToken],
+    enabled: !!accessToken,
+    queryFn: async () => {
+      const response = await fetch(`/api/laboratory/tests?tab=all`, {
         headers: {
           Authorization: `Bearer ${accessToken}`,
           "Content-Type": "application/json",
         },
       });
-
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error("API Error:", errorText);
-        toast.error(
+        throw new Error(
           `Failed to fetch tests: ${response.status} ${response.statusText}`,
         );
-        return;
       }
-
       const data = await response.json();
-      console.log("API Response:", data);
-
-      if (data.success) {
-        setTests(data.data || []);
-        console.log(`Loaded ${data.data?.length || 0} lab tests`);
-
-        if (data.data?.length === 0) {
-          console.log("No tests found. Possible reasons:");
-          console.log("- No lab tests in database");
-          console.log("- User role not authorized");
-          console.log("- Filter criteria too strict");
-          console.log("- Payment verification required but not done");
-        }
-      } else {
-        toast.error(data.error || "Failed to load lab tests");
-        console.error("API Error:", data.error);
+      if (!data.success) {
+        throw new Error(data.error || "Failed to load lab tests");
       }
+      return data.data || [];
+    },
+  });
+
+  const fetchTests = async () => {
+    try {
+      await refetch();
     } catch (error) {
       console.error("Error fetching tests:", error);
       toast.error("Network error. Please try again.");
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -200,37 +197,50 @@ export default function LaboratoryTestsPage() {
       return test.collectionStatus === collectionStatusFilter;
     });
 
+  const totalPages = Math.max(1, Math.ceil(filteredTests.length / pageSize));
+  const paginatedTests = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredTests.slice(start, start + pageSize);
+  }, [filteredTests, currentPage]);
+
+  const visiblePages = useMemo(() => {
+    const delta = 1;
+    const start = Math.max(1, currentPage - delta);
+    const end = Math.min(totalPages, currentPage + delta);
+    const pages: number[] = [];
+    for (let i = start; i <= end; i++) pages.push(i);
+    return pages;
+  }, [currentPage, totalPages]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, searchQuery, statusFilter, collectionStatusFilter]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
   const getStatusBadge = (test: LabTest) => {
     if (test.status === "cancelled") {
       return <Badge variant="destructive">Cancelled</Badge>;
     }
 
     if (test.status === "reported") {
-      return <Badge className="bg-green-100 text-green-800">Reported</Badge>;
+      return <Badge className="bg-primary/15 text-primary">Reported</Badge>;
     }
 
     if (test.status === "completed") {
-      return <Badge className="bg-blue-100 text-blue-800">Completed</Badge>;
-    }
-
-    if (test.status === "processing") {
-      return (
-        <Badge className="bg-purple-100 text-purple-800">Processing</Badge>
-      );
+      return <Badge className="bg-primary/15 text-primary">Completed</Badge>;
     }
 
     if (test.collectionStatus === "collected") {
-      return (
-        <Badge className="bg-yellow-100 text-yellow-800">
-          Ready for Processing
-        </Badge>
-      );
+      return <Badge className="bg-primary/15 text-primary">Collected</Badge>;
     }
 
     if (test.collectionStatus === "pending") {
-      return (
-        <Badge className="bg-gray-100 text-gray-800">Pending Collection</Badge>
-      );
+      return <Badge variant="secondary">Pending Collection</Badge>;
     }
 
     return <Badge variant="outline">{test.status || "Unknown"}</Badge>;
@@ -238,16 +248,16 @@ export default function LaboratoryTestsPage() {
 
   const getCollectionStatusBadge = (status: string) => {
     const variants: Record<string, { bg: string; text: string }> = {
-      pending: { bg: "bg-gray-100", text: "text-gray-800" },
-      scheduled: { bg: "bg-blue-100", text: "text-blue-800" },
-      collected: { bg: "bg-green-100", text: "text-green-800" },
-      rejected: { bg: "bg-red-100", text: "text-red-800" },
-      insufficient: { bg: "bg-orange-100", text: "text-orange-800" },
+      pending: { bg: "bg-muted", text: "text-foreground" },
+      scheduled: { bg: "bg-primary/15", text: "text-primary" },
+      collected: { bg: "bg-primary/15", text: "text-primary" },
+      rejected: { bg: "bg-destructive/15", text: "text-destructive" },
+      insufficient: { bg: "bg-muted", text: "text-foreground" },
     };
 
     const variant = variants[status] || {
-      bg: "bg-gray-100",
-      text: "text-gray-800",
+      bg: "bg-muted",
+      text: "text-foreground",
     };
 
     return (
@@ -280,11 +290,8 @@ export default function LaboratoryTestsPage() {
   };
 
   const canPrintTest = (test: LabTest) => {
-    // Can print if test is completed or reported (has results)
-    return (
-      (test.status === "completed" || test.status === "reported") &&
-      test.processingStatus === "completed"
-    );
+    // Collection is the final step, so print should be available after collection
+    return test.collectionStatus === "collected";
   };
 
   const getTestCounts = () => {
@@ -319,63 +326,6 @@ export default function LaboratoryTestsPage() {
 
   return (
     <div className="container mx-auto p-4 md:p-6">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
-            Laboratory Tests
-          </h1>
-          <p className="text-muted-foreground mt-1 text-sm md:text-base">
-            Manage and process laboratory test samples
-          </p>
-          {user && (
-            <p className="text-xs md:text-sm text-gray-500 mt-1">
-              Logged in as: <span className="font-medium">{user.name}</span> (
-              {user.role})
-            </p>
-          )}
-        </div>
-        <div className="flex items-center gap-2 w-full md:w-auto">
-          <Button
-            variant="outline"
-            onClick={fetchTests}
-            className="flex-1 md:flex-none"
-          >
-            <RefreshCw className="h-4 w-4 mr-2" />
-            <span className="hidden md:inline">Refresh</span>
-            <span className="md:hidden">Sync</span>
-          </Button>
-        </div>
-      </div>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 gap-3 md:gap-4 mb-6">
-        <Card>
-          <CardContent className="pt-4 md:pt-6 px-3 md:px-6">
-            <div className="text-center">
-              <div className="text-xl md:text-2xl font-bold text-blue-600">
-                {counts.pending}
-              </div>
-              <div className="text-xs md:text-sm text-gray-500 truncate">
-                Pending Collection
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4 md:pt-6 px-3 md:px-6">
-            <div className="text-center">
-              <div className="text-xl md:text-2xl font-bold text-emerald-600">
-                {counts.collected}
-              </div>
-              <div className="text-xs md:text-sm text-gray-500 truncate">
-                Collected
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
       {/* Tabs for different test categories */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
         <TabsList className="grid grid-cols-3 w-full">
@@ -488,21 +438,12 @@ export default function LaboratoryTestsPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredTests.map((test) => (
-                    <TableRow
-                      key={test._id}
-                      className={
-                        test.priority === "emergency"
-                          ? "hover:bg-red-100"
-                          : test.priority === "urgent"
-                            ? "hover:bg-orange-100"
-                            : ""
-                      }
-                    >
+                  paginatedTests.map((test) => (
+                    <TableRow key={test._id} className="hover:bg-muted/50">
                       <TableCell className="font-mono font-bold whitespace-nowrap">
                         {test.testId}
                         {test.labReferenceId && (
-                          <div className="text-xs text-gray-500">
+                          <div className="text-xs text-muted-foreground">
                             Ref: {test.labReferenceId}
                           </div>
                         )}
@@ -510,11 +451,11 @@ export default function LaboratoryTestsPage() {
                       <TableCell>
                         <div>
                           <div className="font-medium">{test.testName}</div>
-                          <div className="text-sm text-gray-500">
+                          <div className="text-sm text-muted-foreground">
                             {test.category}
                           </div>
                           {test.specimen?.type && (
-                            <div className="text-xs text-gray-400">
+                            <div className="text-xs text-muted-foreground">
                               Specimen: {test.specimen.type}
                               {test.specimen.quantity &&
                                 ` (${test.specimen.quantity})`}
@@ -528,11 +469,11 @@ export default function LaboratoryTestsPage() {
                             <User className="h-3 w-3" />
                             {test.patient.name}
                           </div>
-                          <div className="text-sm text-gray-500 whitespace-nowrap">
+                          <div className="text-sm text-muted-foreground whitespace-nowrap">
                             ID: {test.patient.patientId}
                           </div>
                           {test.patient.phone && (
-                            <div className="text-xs text-gray-400 whitespace-nowrap">
+                            <div className="text-xs text-muted-foreground whitespace-nowrap">
                               {test.patient.phone}
                             </div>
                           )}
@@ -553,10 +494,10 @@ export default function LaboratoryTestsPage() {
                           variant="outline"
                           className={
                             test.priority === "emergency"
-                              ? "border-red-300 text-red-700 bg-red-50"
+                              ? "border-destructive/40 text-destructive bg-destructive/10"
                               : test.priority === "urgent"
-                                ? "border-orange-300 text-orange-700 bg-orange-50"
-                                : "border-blue-300 text-blue-700"
+                                ? "border-primary/40 text-primary bg-primary/10"
+                                : "border-primary/40 text-primary"
                           }
                         >
                           {test.priority}
@@ -566,7 +507,7 @@ export default function LaboratoryTestsPage() {
                         <div className="text-sm">
                           {format(parseISO(test.orderedAt), "MMM dd")}
                         </div>
-                        <div className="text-xs text-gray-500">
+                        <div className="text-xs text-muted-foreground">
                           {format(parseISO(test.orderedAt), "HH:mm")}
                         </div>
                       </TableCell>
@@ -595,12 +536,10 @@ export default function LaboratoryTestsPage() {
                           )}
 
                           {canCollectSample(test) && (
-                            <Button
-                              size="sm"
-                              asChild
-                              className="h-8 px-3 bg-blue-600 hover:bg-blue-700"
-                            >
-                              <Link href={`/laboratory/tests`}>
+                            <Button size="sm" asChild className="h-8 px-3">
+                              <Link
+                                href={`/laboratory/tests/${test._id}/collect`}
+                              >
                                 <FlaskConical className="h-3 w-3 mr-1" />
                                 Collect
                               </Link>
@@ -641,13 +580,12 @@ export default function LaboratoryTestsPage() {
             </CardContent>
           </Card>
         ) : (
-          filteredTests.map((test) => (
+          paginatedTests.map((test) => (
             <Card
               key={test._id}
               className={`
                 overflow-hidden
-                ${test.priority === "emergency" ? "border-red-200 bg-red-50/30" : ""}
-                ${test.priority === "urgent" ? "border-orange-200 bg-orange-50/30" : ""}
+                hover:bg-muted/50
               `}
             >
               <CardContent className="p-4">
@@ -655,29 +593,31 @@ export default function LaboratoryTestsPage() {
                 <div className="flex items-start justify-between mb-3">
                   <div>
                     <div className="flex items-center gap-2">
-                      <Hash className="h-4 w-4 text-gray-400" />
+                      <Hash className="h-4 w-4 text-muted-foreground" />
                       <span className="font-mono font-bold text-sm">
                         {test.testId}
                       </span>
                     </div>
                     {test.labReferenceId && (
-                      <p className="text-xs text-gray-500 mt-0.5">
+                      <p className="text-xs text-muted-foreground mt-0.5">
                         Ref: {test.labReferenceId}
                       </p>
                     )}
                     <h3 className="font-semibold text-base mt-1">
                       {test.testName}
                     </h3>
-                    <p className="text-xs text-gray-500">{test.category}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {test.category}
+                    </p>
                   </div>
                   <Badge
                     variant="outline"
                     className={
                       test.priority === "emergency"
-                        ? "border-red-300 text-red-700 bg-red-50 text-xs"
+                        ? "border-destructive/40 text-destructive bg-destructive/10 text-xs"
                         : test.priority === "urgent"
-                          ? "border-orange-300 text-orange-700 bg-orange-50 text-xs"
-                          : "border-blue-300 text-blue-700 text-xs"
+                          ? "border-primary/40 text-primary bg-primary/10 text-xs"
+                          : "border-primary/40 text-primary text-xs"
                     }
                   >
                     {test.priority}
@@ -685,45 +625,45 @@ export default function LaboratoryTestsPage() {
                 </div>
 
                 {/* Patient & Doctor Info - FIXED: Added optional chaining and fallback */}
-                <div className="bg-gray-50 rounded-lg p-3 mb-3">
+                <div className="bg-muted/30 rounded-lg p-3 mb-3">
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <div className="flex items-center gap-1 text-sm font-medium">
-                        <User className="h-3.5 w-3.5 text-gray-500" />
+                        <User className="h-3.5 w-3.5 text-muted-foreground" />
                         {test.patient.name}
                       </div>
-                      <p className="text-xs text-gray-500 mt-0.5">
+                      <p className="text-xs text-muted-foreground mt-0.5">
                         ID: {test.patient.patientId}
                       </p>
                       {test.patient.phone && (
-                        <p className="text-xs text-gray-400 mt-0.5">
+                        <p className="text-xs text-muted-foreground mt-0.5">
                           {test.patient.phone}
                         </p>
                       )}
                       {/* FIXED: Added optional chaining and fallback for doctor */}
                       {test.doctor ? (
-                        <div className="flex items-center gap-1 mt-2 text-xs text-gray-600">
+                        <div className="flex items-center gap-1 mt-2 text-xs text-muted-foreground">
                           <Stethoscope className="h-3 w-3" />
                           Dr. {test.doctor.name}
                           {test.doctor.specialization && (
-                            <span className="text-gray-400">
+                            <span className="text-muted-foreground">
                               ({test.doctor.specialization})
                             </span>
                           )}
                         </div>
                       ) : (
-                        <div className="flex items-center gap-1 mt-2 text-xs text-gray-500">
+                        <div className="flex items-center gap-1 mt-2 text-xs text-muted-foreground">
                           <Stethoscope className="h-3 w-3" />
                           <span className="italic">No doctor assigned</span>
                         </div>
                       )}
                     </div>
                     <div className="text-right">
-                      <div className="flex items-center gap-1 text-xs text-gray-500">
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
                         <Calendar className="h-3 w-3" />
                         {format(parseISO(test.orderedAt), "MMM dd")}
                       </div>
-                      <div className="text-xs text-gray-400 mt-0.5">
+                      <div className="text-xs text-muted-foreground mt-0.5">
                         {format(parseISO(test.orderedAt), "hh:mm a")}
                       </div>
                     </div>
@@ -733,7 +673,7 @@ export default function LaboratoryTestsPage() {
                 {/* Status Grid */}
                 <div className="grid grid-cols-2 gap-2 mb-3">
                   <div>
-                    <p className="text-xs text-gray-500 mb-1">
+                    <p className="text-xs text-muted-foreground mb-1">
                       Collection Status
                     </p>
                     {getCollectionStatusBadge(test.collectionStatus)}
@@ -745,14 +685,14 @@ export default function LaboratoryTestsPage() {
                     )}
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500 mb-1">Processing</p>
+                    <p className="text-xs text-muted-foreground mb-1">Status</p>
                     {getStatusBadge(test)}
                   </div>
                 </div>
 
                 {/* Specimen Info */}
                 {test.specimen?.type && (
-                  <div className="text-xs text-gray-500 mb-3 flex items-center gap-1">
+                  <div className="text-xs text-muted-foreground mb-3 flex items-center gap-1">
                     <Layers className="h-3 w-3" />
                     Specimen: {test.specimen.type}
                     {test.specimen.quantity && ` (${test.specimen.quantity})`}
@@ -784,12 +724,8 @@ export default function LaboratoryTestsPage() {
                   )}
 
                   {canCollectSample(test) && (
-                    <Button
-                      size="sm"
-                      asChild
-                      className="flex-1 bg-blue-600 hover:bg-blue-700"
-                    >
-                      <Link href={`/laboratory/tests`}>
+                    <Button size="sm" asChild className="flex-1">
+                      <Link href={`/laboratory/tests/${test._id}/collect`}>
                         <FlaskConical className="h-4 w-4 mr-1" />
                         Collect
                       </Link>
@@ -801,6 +737,83 @@ export default function LaboratoryTestsPage() {
           ))
         )}
       </div>
+
+      {filteredTests.length > 0 && (
+        <Pagination className="mt-6">
+          <PaginationContent>
+            <PaginationItem>
+              <PaginationPrevious
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setCurrentPage((p) => Math.max(1, p - 1));
+                }}
+                className={
+                  currentPage === 1 ? "pointer-events-none opacity-50" : ""
+                }
+              />
+            </PaginationItem>
+            {currentPage > 2 && (
+              <>
+                <PaginationItem>
+                  <PaginationLink href="#" onClick={(e) => e.preventDefault()}>
+                    1
+                  </PaginationLink>
+                </PaginationItem>
+                <PaginationItem>
+                  <PaginationEllipsis />
+                </PaginationItem>
+              </>
+            )}
+            {visiblePages.map((page) => (
+              <PaginationItem key={page}>
+                <PaginationLink
+                  href="#"
+                  isActive={page === currentPage}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setCurrentPage(page);
+                  }}
+                >
+                  {page}
+                </PaginationLink>
+              </PaginationItem>
+            ))}
+            {currentPage < totalPages - 1 && (
+              <>
+                <PaginationItem>
+                  <PaginationEllipsis />
+                </PaginationItem>
+                <PaginationItem>
+                  <PaginationLink
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setCurrentPage(totalPages);
+                    }}
+                  >
+                    {totalPages}
+                  </PaginationLink>
+                </PaginationItem>
+              </>
+            )}
+            <PaginationItem>
+              <PaginationNext
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setCurrentPage((p) => Math.min(totalPages, p + 1));
+                }}
+                className={
+                  currentPage === totalPages
+                    ? "pointer-events-none opacity-50"
+                    : ""
+                }
+              />
+            </PaginationItem>
+          </PaginationContent>
+        </Pagination>
+      )}
     </div>
   );
 }

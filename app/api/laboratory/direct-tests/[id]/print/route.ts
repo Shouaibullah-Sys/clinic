@@ -157,7 +157,7 @@ export async function POST(
     // Debug logging
     console.log(`[DEBUG] Print attempt for test ${labTest.testId}:`, {
       isDirectTest: labTest.isDirectTest,
-      finalized: labTest.finalized,
+      collectionStatus: labTest.collectionStatus,
       readyForPrint: labTest.readyForPrint,
       printedAt: labTest.printedAt,
       status: labTest.status,
@@ -166,7 +166,7 @@ export async function POST(
     // Build detailed validation report
     const validationReport = {
       isDirectTest: labTest.isDirectTest,
-      finalized: labTest.finalized,
+      collectionStatus: labTest.collectionStatus,
       readyForPrint: labTest.readyForPrint,
       printedAt: labTest.printedAt
         ? new Date(labTest.printedAt).toISOString()
@@ -189,12 +189,29 @@ export async function POST(
       );
     }
 
-    if (!labTest.finalized) {
-      console.log(`[DEBUG] Print failed: Not finalized`);
+    if (labTest.collectionStatus !== "collected") {
+      console.log(`[DEBUG] Print failed: Sample not collected`);
       return NextResponse.json(
         {
           success: false,
-          error: "Cannot mark test as printed. Test has not been finalized.",
+          error:
+            "Cannot mark test as printed. Sample has not been collected yet.",
+          validation: validationReport,
+        },
+        { status: 400 },
+      );
+    }
+
+    if (
+      !labTest.results ||
+      !labTest.results.parameters ||
+      labTest.results.parameters.length === 0
+    ) {
+      console.log(`[DEBUG] Print failed: Results are missing`);
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Cannot mark test as printed. Results are missing.",
           validation: validationReport,
         },
         { status: 400 },

@@ -56,6 +56,7 @@ export async function POST(
       collectionNotes,
       sampleConditionNotes,
       specimen,
+      results,
       testParameters,
     } = body;
 
@@ -151,7 +152,11 @@ export async function POST(
 
     // Update the test with collection details
     test.collectionStatus = "collected";
-    test.status = "collected"; // Update status to collected
+    test.status = "completed"; // Collection is the final step
+    test.processingStatus = "completed"; // No separate processing step in this workflow
+    test.finalized = true;
+    test.finalizedAt = new Date();
+    test.finalizedBy = collectedBy;
 
     // Basic collection details
     test.collectionDetails = {
@@ -184,9 +189,8 @@ export async function POST(
       };
     }
 
-    // Update results with test parameters if provided
-    if (testParameters && testParameters.length > 0) {
-      test.results = {
+    const resolvedResults =
+      (testParameters && testParameters.length > 0 && {
         parameters: testParameters.map((p: any) => ({
           name: p.name,
           value: p.value,
@@ -194,11 +198,39 @@ export async function POST(
           normalRange: p.normalRange || "",
           remarks: p.remarks || "",
         })),
+      }) ||
+      (results?.parameters && results.parameters.length > 0 && {
+        parameters: results.parameters.map((p: any) => ({
+          name: p.name,
+          value: p.value ?? p.result ?? "",
+          unit: p.unit || "",
+          normalRange: p.normalRange || "",
+          remarks: p.remarks || "",
+        })),
+      }) ||
+      (specimen?.parameters &&
+        specimen.parameters.length > 0 && {
+          parameters: specimen.parameters.map((p: any) => ({
+            name: p.name,
+            value: p.value ?? p.result ?? "",
+            unit: p.unit || "",
+            normalRange: p.normalRange || "",
+            remarks: p.remarks || "",
+          })),
+        });
+
+    // Update results with test parameters if provided
+    if (resolvedResults) {
+      test.results = {
+        parameters: resolvedResults.parameters,
         reportedBy: collectedBy,
         reportedAt: new Date(),
       };
       // Set processingStatus to completed since test parameters are added
       test.processingStatus = "completed";
+      test.readyForPrint = true;
+    } else {
+      test.readyForPrint = false;
     }
 
     test.collectedAt = new Date();

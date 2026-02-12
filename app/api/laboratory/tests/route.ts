@@ -265,10 +265,24 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    const normalizedTests = tests.map((test: any) => {
+      if (
+        test.collectionStatus === "collected" &&
+        test.processingStatus === "pending"
+      ) {
+        return {
+          ...test,
+          processingStatus: "completed",
+          status: test.status === "collected" ? "completed" : test.status,
+        };
+      }
+      return test;
+    });
+
     return NextResponse.json({
       success: true,
-      data: tests,
-      count: tests.length,
+      data: normalizedTests,
+      count: normalizedTests.length,
       userRole: userRole,
       query: query,
       tab: tab,

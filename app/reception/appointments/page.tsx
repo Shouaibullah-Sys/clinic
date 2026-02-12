@@ -934,7 +934,7 @@ export default function AppointmentsPage() {
                               : "Not assigned"}
                           </p>
                           <p className="text-sm text-gray-500">
-                            {appointment.doctor.specialization}
+                            {appointment.doctor?.specialization || "N/A"}
                           </p>
                         </div>
                       </TableCell>
@@ -1089,7 +1089,9 @@ export default function AppointmentsPage() {
                   <div>
                     <p className="text-gray-500">Doctor</p>
                     <p className="font-medium">
-                      Dr. {selectedAppointment.doctor.name}
+                      {selectedAppointment.doctor?.name
+                        ? `Dr. ${selectedAppointment.doctor.name}`
+                        : "Not assigned"}
                     </p>
                   </div>
                   <div>

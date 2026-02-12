@@ -104,6 +104,7 @@ export function LabTestOrderDialog({
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<LabTestTemplate[]>([]);
+  const [allTemplates, setAllTemplates] = useState<LabTestTemplate[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [selectedTemplate, setSelectedTemplate] =
@@ -196,7 +197,7 @@ export function LabTestOrderDialog({
         setSearchLoading(true);
         try {
           const response = await fetch(
-            `/api/laboratory/templates?search=${encodeURIComponent(searchQuery)}`,
+            `/api/laboratory/templates?active=true&search=${encodeURIComponent(searchQuery)}`,
             {
               headers: {
                 Authorization: `Bearer ${accessToken}`,
@@ -226,6 +227,34 @@ export function LabTestOrderDialog({
 
     return () => clearTimeout(debounceTimer);
   }, [searchQuery, accessToken]);
+
+  useEffect(() => {
+    const loadAllTemplates = async () => {
+      if (!open || !accessToken) return;
+      try {
+        const response = await fetch("/api/laboratory/templates?active=true", {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        });
+        const result = await response.json();
+        if (result.success && result.data) {
+          setAllTemplates(result.data);
+        }
+      } catch (error) {
+        console.error("Error loading template categories:", error);
+      }
+    };
+    loadAllTemplates();
+  }, [open, accessToken]);
+
+  const categoryOptions = Array.from(
+    new Set(
+      allTemplates
+        .map((template) => template.category)
+        .filter((category): category is string => Boolean(category)),
+    ),
+  );
 
   // Handle template selection
   const handleSelectTemplate = (template: LabTestTemplate) => {
@@ -436,7 +465,15 @@ export function LabTestOrderDialog({
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
-                  {TEST_CATEGORIES.map((category) => (
+                  {(categoryOptions.length > 0
+                    ? categoryOptions.map((category) => ({
+                        value: category,
+                        label: category
+                          .replace(/_/g, " ")
+                          .replace(/\b\w/g, (c) => c.toUpperCase()),
+                      }))
+                    : TEST_CATEGORIES
+                  ).map((category) => (
                     <SelectItem key={category.value} value={category.value}>
                       {category.label}
                     </SelectItem>

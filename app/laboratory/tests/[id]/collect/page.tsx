@@ -1975,6 +1975,17 @@ export default function CollectSamplePage() {
           ]);
         }
       }
+      // Pre-fill selected test from ordered test name when specimen type is not set
+      else if (data.data.testName) {
+        const normalizedName = String(data.data.testName).trim().toLowerCase();
+        const orderedTest = labTests
+          .flatMap((category) => category.tests)
+          .find((t) => t.name.trim().toLowerCase() === normalizedName);
+        if (orderedTest) {
+          setSelectedTestId(orderedTest.id);
+          setParameters(orderedTest.parameters);
+        }
+      }
 
       // Pre-fill other specimen details
       if (data.data.specimen?.quantity) {
@@ -2085,6 +2096,13 @@ export default function CollectSamplePage() {
           remarks: specimenRemarks,
           parameters: validParameters,
         },
+        // Keep backward compatibility with API expecting testParameters
+        testParameters: validParameters.map((p) => ({
+          name: p.name,
+          value: p.result,
+          unit: p.unit,
+          normalRange: p.normalRange,
+        })),
         results: {
           parameters: validParameters.map((p) => ({
             name: p.name,

@@ -50,10 +50,6 @@ export async function GET(
     const userId = payload.id as string;
     const userRole = payload.role as string;
 
-    console.log(
-      `Fetching lab tests for patient ${patientId} by doctor ${userId}`,
-    );
-
     // Only doctors can access
     if (userRole !== "doctor") {
       return NextResponse.json(
@@ -64,26 +60,20 @@ export async function GET(
 
     const doctorId = new mongoose.Types.ObjectId(userId);
 
-    // Get lab tests for this patient, either ordered by this doctor or linked to appointments with this doctor
+    // Get lab tests for this patient requested by this doctor.
+    // `orderedBy` is included as fallback for older records where `doctor` may be missing.
     const labTests = await LabTest.find({
-      $or: [
-        { patient: patientId, doctor: doctorId },
-        {
-          patient: patientId,
-          appointment: { $exists: true },
-          doctor: doctorId,
-        },
-      ],
+      patient: patientId,
+      $or: [{ doctor: doctorId }, { orderedBy: doctorId }],
     })
       .select(
-        "_id testId testName category orderedAt status collectionStatus priority instructions results reportedDate charges price discountedPrice",
+        "_id testId testName category orderedAt status collectionStatus processingStatus verificationStatus priority instructions results reportedAt completedAt charges price discountedPrice",
       )
       .populate("doctor", "name")
+      .populate("orderedBy", "name")
       .populate("appointment", "appointmentId date")
       .sort({ orderedAt: -1 })
       .lean();
-
-    console.log(`Found ${labTests.length} lab tests for patient ${patientId}`);
 
     return NextResponse.json({
       success: true,

@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   Card,
@@ -82,12 +82,28 @@ interface LabTest {
   id: string;
   name: string;
   price: number;
+  category?: string;
+  specimenType?: string;
   parameters: SampleParameter[];
 }
 
 interface LabTestCategory {
   name: string;
   tests: LabTest[];
+}
+
+interface LabTestTemplate {
+  _id: string;
+  testName: string;
+  category: string;
+  basePrice: number;
+  specimenType?: string[];
+  parameters?: Array<{
+    parameterName?: string;
+    name?: string;
+    unit?: string;
+    normalRange?: string;
+  }>;
 }
 
 // Comprehensive lab tests data structure with all categories (same as collect page)
@@ -1663,18 +1679,77 @@ export default function CreateDirectTestPage() {
     address: "",
   });
 
+  const [templateLabTests, setTemplateLabTests] = useState<LabTestCategory[]>(
+    [],
+  );
+
+  const activeLabTests = useMemo(
+    () => (templateLabTests.length > 0 ? templateLabTests : labTests),
+    [templateLabTests],
+  );
+
+  const loadTemplateTests = async () => {
+    try {
+      if (!accessToken) return;
+      const response = await fetch("/api/laboratory/templates?active=true", {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+      if (!response.ok) return;
+      const data = await response.json();
+      const templates: LabTestTemplate[] = data?.data || [];
+      if (templates.length === 0) return;
+
+      const grouped = new Map<string, LabTest[]>();
+      templates.forEach((template) => {
+        const categoryKey = template.category || "general";
+        const categoryName = categoryKey
+          .replace(/_/g, " ")
+          .replace(/\b\w/g, (c) => c.toUpperCase());
+        const current = grouped.get(categoryName) || [];
+        current.push({
+          id: template._id,
+          name: template.testName,
+          price: Number(template.basePrice) || 0,
+          category: template.category,
+          specimenType: template.specimenType?.[0] || "blood",
+          parameters: (template.parameters || []).map((p, index) => ({
+            id: String(index + 1),
+            name: p.parameterName || p.name || "",
+            unit: p.unit || "",
+            normalRange: p.normalRange || "",
+            result: "",
+          })),
+        });
+        grouped.set(categoryName, current);
+      });
+
+      const mappedCategories: LabTestCategory[] = Array.from(
+        grouped.entries(),
+      ).map(([name, tests]) => ({ name, tests }));
+
+      setTemplateLabTests(mappedCategories);
+    } catch (err) {
+      console.error("Error loading template tests:", err);
+    }
+  };
+
   // Load recent patients on component mount
   useEffect(() => {
     loadRecentPatients();
-    loadPopularTests();
+    loadTemplateTests();
+  }, [accessToken]);
 
+  useEffect(() => {
+    loadPopularTests();
     // Initialize all categories as expanded by default
     const initialExpanded: { [key: string]: boolean } = {};
-    labTests.forEach((category) => {
+    activeLabTests.forEach((category) => {
       initialExpanded[category.name] = true;
     });
     setExpandedCategories(initialExpanded);
-  }, []);
+  }, [activeLabTests]);
 
   const loadRecentPatients = async () => {
     try {
@@ -1696,14 +1771,7 @@ export default function CreateDirectTestPage() {
   };
 
   const loadPopularTests = () => {
-    // Simulate popular tests - in a real app, this would come from an API
-    const popular = [
-      labTests.flatMap((c) => c.tests).find((t) => t.id === "h1")!, // CBC
-      labTests.flatMap((c) => c.tests).find((t) => t.id === "cc6")!, // LFT
-      labTests.flatMap((c) => c.tests).find((t) => t.id === "cc7")!, // KFT
-      labTests.flatMap((c) => c.tests).find((t) => t.id === "cc5")!, // Lipid Profile
-      labTests.flatMap((c) => c.tests).find((t) => t.id === "cp1")!, // Urine Routine
-    ].filter(Boolean);
+    const popular = activeLabTests.flatMap((c) => c.tests).slice(0, 5);
     setPopularTests(popular);
   };
 
@@ -1741,7 +1809,7 @@ export default function CreateDirectTestPage() {
     const query = testSearchQuery.toLowerCase().trim();
     const results: LabTest[] = [];
 
-    labTests.forEach((category) => {
+    activeLabTests.forEach((category) => {
       category.tests.forEach((test) => {
         const testName = test.name.toLowerCase();
         const categoryName = category.name.toLowerCase();
@@ -1783,12 +1851,12 @@ export default function CreateDirectTestPage() {
 
     setTestSearchResults(results.slice(0, 10));
     setShowTestDropdown(results.length > 0);
-  }, [testSearchQuery]);
+  }, [testSearchQuery, activeLabTests]);
 
   // Handle test selection change - populate test parameters
   useEffect(() => {
     if (selectedTestId) {
-      const test = labTests
+      const test = activeLabTests
         .flatMap((category) => category.tests)
         .find((t) => t.id === selectedTestId);
       if (test) {
@@ -1829,7 +1897,7 @@ export default function CreateDirectTestPage() {
         },
       ]);
     }
-  }, [selectedTestId]);
+  }, [selectedTestId, activeLabTests]);
 
   const searchPatients = async () => {
     try {
@@ -1999,14 +2067,14 @@ export default function CreateDirectTestPage() {
       const payload = {
         patientId: selectedPatient._id,
         testName: selectedTest?.name,
-        category: labTests
+        category: activeLabTests
           .find((cat) => cat.tests.some((t) => t.id === selectedTestId))
-          ?.name.replace(/\s+/g, "_")
-          .toLowerCase(),
+          ?.tests.find((t) => t.id === selectedTestId)
+          ?.category,
         price: selectedTest?.price,
         priority,
         notes: notes || undefined,
-        specimenType: selectedTestId,
+        specimenType: selectedTest?.specimenType || "blood",
         results: {
           parameters: validTestParameters.map((p) => ({
             name: p.name,
@@ -2045,7 +2113,7 @@ export default function CreateDirectTestPage() {
 
   // FIX 1: Show all tests by default
   // FIX 2: When searching, filter tests but still show them
-  const filteredTests = labTests.map((category) => {
+  const filteredTests = activeLabTests.map((category) => {
     if (!testSearchQuery) {
       // When no search query, show all tests
       return {
@@ -2328,7 +2396,7 @@ export default function CreateDirectTestPage() {
                         </div>
                       </div>
                       {testSearchResults.map((test) => {
-                        const category = labTests.find((cat) =>
+                        const category = activeLabTests.find((cat) =>
                           cat.tests.some((t) => t.id === test.id),
                         )?.name;
 
@@ -2621,7 +2689,7 @@ export default function CreateDirectTestPage() {
                     <Label>Category</Label>
                     <div className="mt-1">
                       <Badge variant="outline">
-                        {labTests.find((cat) =>
+                        {activeLabTests.find((cat) =>
                           cat.tests.some((t) => t.id === selectedTestId),
                         )?.name || "General"}
                       </Badge>

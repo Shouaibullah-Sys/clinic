@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { toast } from "sonner";
-import DirectTestPDFGenerator from "@/components/laboratory/DirectTestPDFGenerator";
+import { generateDirectTestPDF } from "@/lib/pdf-generator";
 
 interface DirectLabTest {
   _id: string;
@@ -115,7 +115,6 @@ export default function DirectTestDetailPage() {
   const [test, setTest] = useState<DirectLabTest | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [finalizing, setFinalizing] = useState(false);
   const [printing, setPrinting] = useState(false);
 
   useEffect(() => {
@@ -157,16 +156,16 @@ export default function DirectTestDetailPage() {
     }
   };
 
-  const handleFinalizeTest = async () => {
+  const handlePrintPDF = async () => {
     if (!test) return;
 
-    try {
-      setFinalizing(true);
+    setPrinting(true);
 
+    try {
       const response = await fetch(
-        `/api/laboratory/direct-tests/${test._id}/finalize`,
+        `/api/laboratory/direct-tests/${test._id}/print`,
         {
-          method: "POST",
+          method: "GET",
           headers: {
             Authorization: `Bearer ${accessToken}`,
             "Content-Type": "application/json",
@@ -176,81 +175,39 @@ export default function DirectTestDetailPage() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to finalize test");
+        throw new Error(errorData.error || "Failed to fetch test for printing");
       }
 
       const data = await response.json();
-      toast.success("Test finalized successfully");
-      fetchTestDetails();
-    } catch (err: unknown) {
-      toast.error(
-        err instanceof Error ? err.message : "Failed to finalize test",
-      );
-    } finally {
-      setFinalizing(false);
-    }
-  };
+      if (!data.success) {
+        throw new Error(data.error || "Failed to fetch test for printing");
+      }
 
-  const handlePrintPDF = async () => {
-    if (!test) return;
+      // Generate PDF
+      await generateDirectTestPDF(data.data, "print");
 
-    setPrinting(true);
-
-    try {
-      // Mark the test as printed
-      await fetch(`/api/laboratory/direct-tests/${test._id}/print`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-      });
-
-      // Generate and print PDF using the centralized component
-      DirectTestPDFGenerator({
-        test: {
-          _id: test._id,
-          testId: test.testId,
-          testName: test.testName,
-          category: test.category,
-          patient: test.patient,
-          status: test.status,
-          collectionStatus: test.collectionStatus,
-          processingStatus: test.processingStatus,
-          createdAtDirect: test.createdAtDirect,
-          createdBy: test.createdBy,
-          paymentVerified: test.paymentVerified,
-          finalized: test.finalized,
-          readyForPrint: test.readyForPrint,
-          printedAt: test.printedAt,
-          charges: test.charges,
-          specimen: test.specimen,
-          results: test.results
-            ? {
-                parameters: test.results.parameters,
-                interpretation: test.results.interpretation,
-                reportedBy: test.results.reportedBy,
-                reportedAt: test.results.reportedAt,
-                verifiedBy: test.results.verifiedBy,
-                verifiedAt: test.results.verifiedAt,
-              }
-            : undefined,
-          priority: test.priority,
-        },
-      });
+      // Mark as printed only once after successful PDF generation
+      if (!test.printedAt) {
+        await fetch(`/api/laboratory/direct-tests/${test._id}/print`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+        });
+      }
 
       // Refresh test details to update printed status
       fetchTestDetails();
     } catch (err) {
       console.error("Error printing PDF:", err);
-      toast.error("Failed to generate print job");
+      toast.error(err instanceof Error ? err.message : "Failed to print report");
     } finally {
       setPrinting(false);
     }
   };
 
-  const canFinalize = test?.paymentVerified && !test?.finalized;
-  const canPrint = test?.finalized && test?.readyForPrint;
+  const canPrint = test?.collectionStatus === "collected";
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat("en-IN", {
@@ -309,15 +266,15 @@ export default function DirectTestDetailPage() {
               <Badge variant="outline">{test.testId}</Badge>
               <Badge
                 className={
-                  test.finalized
+                  test.collectionStatus === "collected"
                     ? "bg-green-100 text-green-800"
                     : test.status === "completed" || test.status === "reported"
                       ? "bg-blue-100 text-blue-800"
                       : "bg-yellow-100 text-yellow-800"
                 }
               >
-                {test.finalized
-                  ? "Finalized"
+                {test.collectionStatus === "collected"
+                  ? "Collected"
                   : test.status === "completed" || test.status === "reported"
                     ? "Completed"
                     : test.status}
@@ -349,28 +306,28 @@ export default function DirectTestDetailPage() {
       </div>
 
       {/* Status Alert */}
-      {test.finalized ? (
-        <Alert className="bg-green-50 border-green-200 mb-6">
-          <CheckCircle className="h-4 w-4 text-green-600" />
-          <AlertTitle className="text-green-800">Test Finalized</AlertTitle>
-          <AlertDescription className="text-green-700">
-            This test has been finalized and is ready for printing.
-          </AlertDescription>
-        </Alert>
-      ) : !test.paymentVerified ? (
+      {!test.paymentVerified ? (
         <Alert variant="destructive" className="mb-6">
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>Payment Verification Required</AlertTitle>
           <AlertDescription>
-            Payment must be verified by receptionist before finalizing the test.
+            Payment must be verified by receptionist before collecting sample.
+          </AlertDescription>
+        </Alert>
+      ) : test.collectionStatus === "collected" ? (
+        <Alert className="bg-green-50 border-green-200 mb-6">
+          <CheckCircle className="h-4 w-4 text-green-600" />
+          <AlertTitle className="text-green-800">Sample Collected</AlertTitle>
+          <AlertDescription className="text-green-700">
+            Collection is completed for this direct test.
           </AlertDescription>
         </Alert>
       ) : (
         <Alert className="bg-blue-50 border-blue-200 mb-6">
           <CheckCircle className="h-4 w-4 text-blue-600" />
-          <AlertTitle className="text-blue-800">Ready to Finalize</AlertTitle>
+          <AlertTitle className="text-blue-800">Ready for Collection</AlertTitle>
           <AlertDescription className="text-blue-700">
-            Payment verified. You can finalize this test now.
+            Payment verified. You can proceed with sample collection.
           </AlertDescription>
         </Alert>
       )}
@@ -511,7 +468,7 @@ export default function DirectTestDetailPage() {
               {test.finalized && test.finalizedAt && (
                 <TableRow>
                   <TableCell className="font-medium text-muted-foreground">
-                    Finalized
+                    Completed
                   </TableCell>
                   <TableCell>
                     {format(
@@ -627,32 +584,32 @@ export default function DirectTestDetailPage() {
                 <TableCell>
                   <Badge
                     className={
-                      test.status === "completed" || test.status === "reported"
+                      test.collectionStatus === "collected" ||
+                      test.status === "completed" ||
+                      test.status === "reported"
                         ? "bg-green-100 text-green-800"
-                        : test.status === "processing"
-                          ? "bg-blue-100 text-blue-800"
-                          : "bg-yellow-100 text-yellow-800"
+                        : "bg-yellow-100 text-yellow-800"
                     }
                   >
-                    {test.status}
+                    {test.collectionStatus === "collected"
+                      ? "Collected"
+                      : test.status}
                   </Badge>
                 </TableCell>
               </TableRow>
               <TableRow>
                 <TableCell className="font-medium text-muted-foreground">
-                  Processing
+                  Collection
                 </TableCell>
                 <TableCell>
                   <Badge
                     className={
-                      test.processingStatus === "completed"
+                      test.collectionStatus === "collected"
                         ? "bg-green-100 text-green-800"
-                        : test.processingStatus === "processing"
-                          ? "bg-blue-100 text-blue-800"
-                          : "bg-yellow-100 text-yellow-800"
+                        : "bg-yellow-100 text-yellow-800"
                     }
                   >
-                    {test.processingStatus}
+                    {test.collectionStatus}
                   </Badge>
                 </TableCell>
               </TableRow>
@@ -661,47 +618,7 @@ export default function DirectTestDetailPage() {
                   Verification
                 </TableCell>
                 <TableCell>
-                  <Badge
-                    className={
-                      test.verificationStatus === "verified"
-                        ? "bg-green-100 text-green-800"
-                        : "bg-yellow-100 text-yellow-800"
-                    }
-                  >
-                    {test.verificationStatus}
-                  </Badge>
-                </TableCell>
-              </TableRow>
-              <TableRow>
-                <TableCell className="font-medium text-muted-foreground">
-                  Finalized
-                </TableCell>
-                <TableCell>
-                  <Badge
-                    className={
-                      test.finalized
-                        ? "bg-green-100 text-green-800"
-                        : "bg-gray-100 text-gray-800"
-                    }
-                  >
-                    {test.finalized ? "Yes" : "No"}
-                  </Badge>
-                </TableCell>
-              </TableRow>
-              <TableRow>
-                <TableCell className="font-medium text-muted-foreground">
-                  Ready for Print
-                </TableCell>
-                <TableCell>
-                  <Badge
-                    className={
-                      test.readyForPrint
-                        ? "bg-green-100 text-green-800"
-                        : "bg-gray-100 text-gray-800"
-                    }
-                  >
-                    {test.readyForPrint ? "Yes" : "No"}
-                  </Badge>
+                  <Badge className="bg-green-100 text-green-800">Completed</Badge>
                 </TableCell>
               </TableRow>
             </TableBody>
@@ -804,25 +721,6 @@ export default function DirectTestDetailPage() {
         </div>
         <div className="p-4">
           <div className="flex flex-wrap gap-4">
-            {canFinalize && (
-              <Button
-                onClick={handleFinalizeTest}
-                disabled={finalizing}
-                className="bg-green-600 hover:bg-green-700"
-              >
-                {finalizing ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Finalizing...
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle className="h-4 w-4 mr-2" />
-                    Finalize Test
-                  </>
-                )}
-              </Button>
-            )}
             {canPrint && (
               <Button onClick={handlePrintPDF} disabled={printing}>
                 {printing ? (

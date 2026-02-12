@@ -75,9 +75,20 @@ export async function GET(
       );
     }
 
+    const normalizedTest =
+      test.collectionStatus === "collected" &&
+      test.processingStatus === "pending"
+        ? {
+            ...test,
+            processingStatus: "completed",
+            status:
+              test.status === "collected" ? "completed" : (test.status as any),
+          }
+        : test;
+
     return NextResponse.json({
       success: true,
-      data: test,
+      data: normalizedTest,
       userRole: auth.userRole,
     });
   } catch (error: any) {

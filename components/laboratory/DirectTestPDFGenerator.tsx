@@ -36,8 +36,13 @@ const DirectTestPDFGenerator = ({
   /**
    * Generates the PDF document with test results
    */
-  const handleGeneratePDF = () => {
-    generateDirectTestPDF(test, mode);
+  const handleGeneratePDF = async () => {
+    try {
+      await generateDirectTestPDF(test, mode);
+    } catch (error) {
+      console.error("Failed to generate direct test PDF:", error);
+      alert("Failed to generate PDF. Please try again.");
+    }
   };
 
   const icon =

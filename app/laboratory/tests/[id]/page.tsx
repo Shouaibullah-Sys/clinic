@@ -146,11 +146,7 @@ export default function TestDetailPage() {
     test?.collectionStatus !== "collected" &&
     test?.status !== "cancelled";
 
-  const canPrintTest =
-    (test?.status === "completed" || test?.status === "reported") &&
-    test?.processingStatus === "completed" &&
-    test?.results?.parameters &&
-    test.results.parameters.length > 0;
+  const canPrintTest = test?.collectionStatus === "collected";
 
   if (loading) {
     return (
@@ -424,22 +420,6 @@ export default function TestDetailPage() {
                           {test.collectionStatus}
                         </Badge>
                       </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">
-                          Processing
-                        </p>
-                        <Badge
-                          className={
-                            test.processingStatus === "completed"
-                              ? "bg-green-100 text-green-800 text-xs"
-                              : test.processingStatus === "processing"
-                                ? "bg-blue-100 text-blue-800 text-xs"
-                                : "bg-yellow-100 text-yellow-800 text-xs"
-                          }
-                        >
-                          {test.processingStatus}
-                        </Badge>
-                      </div>
                     </div>
                   </td>
                 </tr>
@@ -625,22 +605,6 @@ export default function TestDetailPage() {
                   {test.collectionStatus}
                 </Badge>
               </div>
-              <div>
-                <p className="text-xs text-muted-foreground">
-                  Processing Status
-                </p>
-                <Badge
-                  className={
-                    test.processingStatus === "completed"
-                      ? "bg-green-100 text-green-800 text-xs"
-                      : test.processingStatus === "processing"
-                        ? "bg-blue-100 text-blue-800 text-xs"
-                        : "bg-yellow-100 text-yellow-800 text-xs"
-                  }
-                >
-                  {test.processingStatus}
-                </Badge>
-              </div>
             </div>
           </CardContent>
         </Card>
@@ -710,7 +674,7 @@ export default function TestDetailPage() {
           <div className="flex flex-col sm:flex-row flex-wrap gap-3">
             {canCollectSample && (
               <Button asChild size="default" className="w-full sm:w-auto">
-                <Link href={`/laboratory/tests/${test._id}`}>
+                <Link href={`/laboratory/tests/${test._id}/collect`}>
                   <FlaskConical className="h-4 w-4 mr-2" />
                   Collect Sample
                 </Link>

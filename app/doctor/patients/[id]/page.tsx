@@ -54,6 +54,7 @@ import { MedicalRecordDialog } from "@/components/doctor/MedicalRecordDialog";
 import { PrescriptionDialog } from "@/components/doctor/PrescriptionDialog";
 import { ImagingOrderDialog } from "@/components/doctor/ImagingOrderDialog";
 import { ImagingResultsDialog } from "@/components/doctor/ImagingResultsDialog";
+import { LabTestResultsDialog } from "@/components/doctor/LabTestResultsDialog";
 import { DischargeCardDialog } from "@/components/doctor/DischargeCardDialog";
 import { DischargeCardPrintButton } from "@/components/doctor/DischargeCardPrintButton";
 import { PatientVisitsOverview } from "@/components/doctor/PatientVisitsOverview";
@@ -123,7 +124,15 @@ interface LabTest {
   status: string;
   results?: {
     reportedAt?: string;
-    parameters?: any[];
+    interpretation?: string;
+    parameters?: Array<{
+      name: string;
+      value: string | number;
+      unit?: string;
+      normalRange?: string;
+      flag?: "normal" | "low" | "high" | "critical";
+      remarks?: string;
+    }>;
   };
   doctor: {
     name: string;
@@ -514,6 +523,20 @@ export default function DoctorPatientDetailPage() {
     } catch {
       return "Invalid date";
     }
+  };
+
+  const hasLabResults = (test: LabTest) => {
+    const hasValues = Boolean(
+      test.results?.parameters &&
+        test.results.parameters.some(
+          (param) =>
+            param?.value !== undefined &&
+            param?.value !== null &&
+            String(param.value).trim() !== "",
+        ),
+    );
+
+    return Boolean(test.results?.reportedAt || hasValues);
   };
 
   if (loading) {
@@ -1156,8 +1179,8 @@ export default function DoctorPatientDetailPage() {
                         <TableCell>{formatDate(test.orderedAt)}</TableCell>
                         <TableCell>{getStatusBadge(test.status)}</TableCell>
                         <TableCell>
-                          {test.results?.reportedAt ? (
-                            <Badge variant="default">Reported</Badge>
+                          {hasLabResults(test) ? (
+                            <Badge variant="default">Available</Badge>
                           ) : (
                             <span className="text-muted-foreground">
                               Pending
@@ -1165,15 +1188,23 @@ export default function DoctorPatientDetailPage() {
                           )}
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() =>
-                              router.push(`/laboratory/tests/${test._id}`)
+                          <LabTestResultsDialog
+                            patientId={patientId}
+                            testId={test._id}
+                            trigger={
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                title={
+                                  hasLabResults(test)
+                                    ? "View Results"
+                                    : "View Test Status"
+                                }
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
                             }
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
+                          />
                         </TableCell>
                       </TableRow>
                     ))}
