@@ -38,10 +38,14 @@ import { ThemeToggle } from "@/components/ui/theme-toggle";
 import SessionChecker from "@/components/SessionChecker";
 
 const navLinks = [
-  { href: "/pharmacy", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/pharmacy/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/pharmacy/stock", label: "Stock Management", icon: Package },
   { href: "/pharmacy/issue", label: "Issue Medicine", icon: Pill },
-  { href: "/pharmacy/dispense", label: "Dispense Medicine", icon: HandCoins },
+  {
+    href: "/pharmacy/select-prescription",
+    label: "Dispense Medicine",
+    icon: HandCoins,
+  },
   { href: "/pharmacy/inventory", label: "Inventory", icon: CheckCheck },
   { href: "/warehouse", label: "Warehouse Managment", icon: Receipt },
 ];

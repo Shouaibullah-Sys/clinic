@@ -19,7 +19,7 @@ import { useAuthStore } from "@/store/useAuthStore";
 import { cn } from "@/lib/utils";
 
 const navLinks = [
-  { href: "/pharmacy", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/pharmacy/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/warehouse", label: "Warehouse", icon: Warehouse },
   { href: "/warehouse/medicines", label: "Medicines", icon: Package },
   { href: "/warehouse/batches", label: "Batches", icon: Package },
@@ -89,9 +89,6 @@ export default function PharmacyNavbar() {
 
         {/* Desktop navigation */}
         <div className="hidden md:flex items-center gap-6">
-          <Link href="/pharmacy" className="font-bold">
-            Pharmacy
-          </Link>
           <nav className="flex items-center gap-4">
             {navLinks.map((link) => (
               <Link

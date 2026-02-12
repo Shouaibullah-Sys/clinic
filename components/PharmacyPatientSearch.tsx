@@ -214,12 +214,14 @@ export default function PharmacyPatientSearch({
         setIsOpen(patientsWithAge.length > 0);
       } else {
         setResults([]);
-        setError(data.error || "No patients found");
+        setIsOpen(false);
+        setError(null);
       }
     } catch (err) {
       console.error("Error searching patients:", err);
       setError("Failed to search patients. Please try again.");
       setResults([]);
+      setIsOpen(false);
     } finally {
       setIsLoading(false);
     }
@@ -562,6 +564,21 @@ export default function PharmacyPatientSearch({
         </div>
       )}
 
+      {/* Create New Patient option when no results found */}
+      {!isOpen && searchQuery && !isLoading && results.length === 0 && (
+        <div className="mt-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleOpenCreateDialog}
+            className="w-full"
+          >
+            <UserPlus className="h-4 w-4 mr-2" />
+            Create New Patient
+          </Button>
+        </div>
+      )}
+
       {/* Create New Patient Dialog */}
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
         <DialogContent className="sm:max-w-md">
@@ -687,7 +704,11 @@ export default function PharmacyPatientSearch({
             >
               Cancel
             </Button>
-            <Button onClick={handleCreatePatient} disabled={isCreatingPatient}>
+            <Button
+              variant="secondary"
+              onClick={handleCreatePatient}
+              disabled={isCreatingPatient}
+            >
               {isCreatingPatient ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />

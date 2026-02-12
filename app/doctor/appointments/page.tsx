@@ -5,7 +5,13 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/useAuthStore";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -79,7 +85,8 @@ export default function DoctorAppointmentsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [dateFilter, setDateFilter] = useState("all");
-  const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
+  const [selectedAppointment, setSelectedAppointment] =
+    useState<Appointment | null>(null);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
 
   useEffect(() => {
@@ -94,16 +101,16 @@ export default function DoctorAppointmentsPage() {
     try {
       setLoading(true);
       setError(null);
-      
+
       const response = await fetch("/api/doctor/appointments", {
         headers: {
           "Content-Type": "application/json",
           ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         },
       });
-      
+
       const data = await response.json();
-      
+
       if (data.success) {
         setAppointments(data.data);
       } else {
@@ -117,33 +124,36 @@ export default function DoctorAppointmentsPage() {
     }
   };
 
-  const filteredAppointments = appointments.filter(appointment => {
+  const filteredAppointments = appointments.filter((appointment) => {
     // Search filter
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
-      if (!(
-        appointment.patient.name.toLowerCase().includes(query) ||
-        appointment.patient.phone.toLowerCase().includes(query) ||
-        appointment.reason.toLowerCase().includes(query) ||
-        appointment.appointmentId.toLowerCase().includes(query)
-      )) {
+      if (
+        !(
+          appointment.patient.name.toLowerCase().includes(query) ||
+          appointment.patient.phone.toLowerCase().includes(query) ||
+          appointment.reason.toLowerCase().includes(query) ||
+          appointment.appointmentId.toLowerCase().includes(query)
+        )
+      ) {
         return false;
       }
     }
-    
+
     // Status filter
     if (statusFilter !== "all" && appointment.status !== statusFilter) {
       return false;
     }
-    
+
     // Date filter
     if (dateFilter !== "all") {
       const appointmentDate = new Date(appointment.date);
       const today = new Date();
-      
+
       switch (dateFilter) {
         case "today":
-          if (appointmentDate.toDateString() !== today.toDateString()) return false;
+          if (appointmentDate.toDateString() !== today.toDateString())
+            return false;
           break;
         case "week":
           const weekAgo = new Date(today);
@@ -157,7 +167,7 @@ export default function DoctorAppointmentsPage() {
           break;
       }
     }
-    
+
     return true;
   });
 
@@ -168,9 +178,17 @@ export default function DoctorAppointmentsPage() {
       case "confirmed":
         return <Badge variant="default">Confirmed</Badge>;
       case "checked-in":
-        return <Badge className="bg-purple-100 text-purple-800 hover:bg-purple-100">Checked In</Badge>;
+        return (
+          <Badge className="bg-purple-100 text-purple-800 hover:bg-purple-100">
+            Checked In
+          </Badge>
+        );
       case "in-progress":
-        return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">In Progress</Badge>;
+        return (
+          <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">
+            In Progress
+          </Badge>
+        );
       case "completed":
         return <Badge variant="outline">Completed</Badge>;
       case "cancelled":
@@ -185,7 +203,11 @@ export default function DoctorAppointmentsPage() {
       case "emergency":
         return <Badge variant="destructive">Emergency</Badge>;
       case "high":
-        return <Badge className="bg-orange-100 text-orange-800 hover:bg-orange-100">High</Badge>;
+        return (
+          <Badge className="bg-orange-100 text-orange-800 hover:bg-orange-100">
+            High
+          </Badge>
+        );
       case "medium":
         return <Badge variant="default">Medium</Badge>;
       case "low":
@@ -197,14 +219,17 @@ export default function DoctorAppointmentsPage() {
 
   const handleCheckIn = async (appointmentId: string) => {
     try {
-      const response = await fetch(`/api/appointments/${appointmentId}/checkin`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      const response = await fetch(
+        `/api/appointments/${appointmentId}/checkin`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
         },
-      });
-      
+      );
+
       const data = await response.json();
       if (data.success) {
         fetchAppointments();
@@ -216,14 +241,17 @@ export default function DoctorAppointmentsPage() {
 
   const handleCheckOut = async (appointmentId: string) => {
     try {
-      const response = await fetch(`/api/appointments/${appointmentId}/checkout`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      const response = await fetch(
+        `/api/appointments/${appointmentId}/checkout`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
         },
-      });
-      
+      );
+
       const data = await response.json();
       if (data.success) {
         fetchAppointments();
@@ -251,9 +279,7 @@ export default function DoctorAppointmentsPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold">My Appointments</h1>
-          <p className="text-gray-500 mt-1">
-            Manage your patient appointments
-          </p>
+          <p className="text-gray-500 mt-1">Manage your patient appointments</p>
         </div>
         <div className="flex items-center gap-3">
           <Button variant="outline" size="sm" onClick={fetchAppointments}>
@@ -284,7 +310,7 @@ export default function DoctorAppointmentsPage() {
                 className="pl-9"
               />
             </div>
-            
+
             <div>
               <Label>Status</Label>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -302,7 +328,7 @@ export default function DoctorAppointmentsPage() {
                 </SelectContent>
               </Select>
             </div>
-            
+
             <div>
               <Label>Date</Label>
               <Select value={dateFilter} onValueChange={setDateFilter}>
@@ -319,13 +345,17 @@ export default function DoctorAppointmentsPage() {
                 </SelectContent>
               </Select>
             </div>
-            
+
             <div className="flex items-end">
-              <Button variant="outline" className="w-full" onClick={() => {
-                setSearchQuery("");
-                setStatusFilter("all");
-                setDateFilter("all");
-              }}>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => {
+                  setSearchQuery("");
+                  setStatusFilter("all");
+                  setDateFilter("all");
+                }}
+              >
                 <Filter className="h-4 w-4 mr-2" />
                 Clear Filters
               </Button>
@@ -339,7 +369,8 @@ export default function DoctorAppointmentsPage() {
         <CardHeader>
           <CardTitle>Appointments</CardTitle>
           <CardDescription>
-            {filteredAppointments.length} appointment{filteredAppointments.length !== 1 ? 's' : ''} found
+            {filteredAppointments.length} appointment
+            {filteredAppointments.length !== 1 ? "s" : ""} found
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -350,7 +381,9 @@ export default function DoctorAppointmentsPage() {
           ) : filteredAppointments.length === 0 ? (
             <div className="text-center py-12">
               <Calendar className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold mb-2">No Appointments Found</h3>
+              <h3 className="text-lg font-semibold mb-2">
+                No Appointments Found
+              </h3>
               <p className="text-gray-500">
                 {searchQuery || statusFilter !== "all" || dateFilter !== "all"
                   ? "No appointments match your filters"
@@ -389,14 +422,18 @@ export default function DoctorAppointmentsPage() {
                       </TableCell>
                       <TableCell>
                         <div>
-                          <p className="font-medium">{appointment.patient.name}</p>
+                          <p className="font-medium">
+                            {appointment.patient.name}
+                          </p>
                           <p className="text-sm text-gray-500">
                             {appointment.patient.phone}
                           </p>
                         </div>
                       </TableCell>
                       <TableCell>
-                        <p className="truncate max-w-xs">{appointment.reason}</p>
+                        <p className="truncate max-w-xs">
+                          {appointment.reason}
+                        </p>
                       </TableCell>
                       <TableCell>
                         {getPriorityBadge(appointment.priority)}
@@ -419,28 +456,14 @@ export default function DoctorAppointmentsPage() {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => router.push(`/doctor/patients/${appointment.patient._id}`)}
+                            onClick={() =>
+                              router.push(
+                                `/doctor/patients/${appointment.patient._id}`,
+                              )
+                            }
                           >
                             <User className="h-4 w-4" />
                           </Button>
-                          {["scheduled", "confirmed"].includes(appointment.status) && (
-                            <Button
-                              size="sm"
-                              onClick={() => handleCheckIn(appointment._id)}
-                              className="bg-green-600 hover:bg-green-700"
-                            >
-                              Check In
-                            </Button>
-                          )}
-                          {appointment.status === "checked-in" && (
-                            <Button
-                              size="sm"
-                              onClick={() => handleCheckOut(appointment._id)}
-                              className="bg-blue-600 hover:bg-blue-700"
-                            >
-                              Check Out
-                            </Button>
-                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -461,86 +484,126 @@ export default function DoctorAppointmentsPage() {
               Complete information about the appointment
             </DialogDescription>
           </DialogHeader>
-          
+
           {selectedAppointment && (
             <div className="space-y-6">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label className="text-sm font-medium text-gray-500">Appointment ID</Label>
-                  <p className="font-medium">{selectedAppointment.appointmentId}</p>
+                  <Label className="text-sm font-medium text-gray-500">
+                    Appointment ID
+                  </Label>
+                  <p className="font-medium">
+                    {selectedAppointment.appointmentId}
+                  </p>
                 </div>
                 <div>
-                  <Label className="text-sm font-medium text-gray-500">Status</Label>
-                  <div className="mt-1">{getStatusBadge(selectedAppointment.status)}</div>
+                  <Label className="text-sm font-medium text-gray-500">
+                    Status
+                  </Label>
+                  <div className="mt-1">
+                    {getStatusBadge(selectedAppointment.status)}
+                  </div>
                 </div>
                 <div>
-                  <Label className="text-sm font-medium text-gray-500">Date & Time</Label>
-                  <p className="font-medium">{formatDateTime(selectedAppointment.startTime)}</p>
+                  <Label className="text-sm font-medium text-gray-500">
+                    Date & Time
+                  </Label>
+                  <p className="font-medium">
+                    {formatDateTime(selectedAppointment.startTime)}
+                  </p>
                 </div>
                 <div>
-                  <Label className="text-sm font-medium text-gray-500">Duration</Label>
-                  <p className="font-medium">{selectedAppointment.duration} minutes</p>
+                  <Label className="text-sm font-medium text-gray-500">
+                    Duration
+                  </Label>
+                  <p className="font-medium">
+                    {selectedAppointment.duration} minutes
+                  </p>
                 </div>
                 <div>
-                  <Label className="text-sm font-medium text-gray-500">Priority</Label>
-                  <div className="mt-1">{getPriorityBadge(selectedAppointment.priority)}</div>
+                  <Label className="text-sm font-medium text-gray-500">
+                    Priority
+                  </Label>
+                  <div className="mt-1">
+                    {getPriorityBadge(selectedAppointment.priority)}
+                  </div>
                 </div>
                 <div>
-                  <Label className="text-sm font-medium text-gray-500">Reason for Visit</Label>
+                  <Label className="text-sm font-medium text-gray-500">
+                    Reason for Visit
+                  </Label>
                   <p className="font-medium">{selectedAppointment.reason}</p>
                 </div>
               </div>
-              
+
               <div>
-                <h3 className="text-lg font-semibold mb-3">Patient Information</h3>
-                <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg">
+                <h3 className="text-lg font-semibold mb-3">
+                  Patient Information
+                </h3>
+                <div className="grid grid-cols-2 gap-4 p-4 rounded-lg">
                   <div>
-                    <Label className="text-sm font-medium text-gray-500">Name</Label>
-                    <p className="font-medium">{selectedAppointment.patient.name}</p>
-                  </div>
-                  <div>
-                    <Label className="text-sm font-medium text-gray-500">Patient ID</Label>
-                    <p className="font-medium">{selectedAppointment.patient.patientId}</p>
-                  </div>
-                  <div>
-                    <Label className="text-sm font-medium text-gray-500">Phone</Label>
-                    <p className="font-medium">{selectedAppointment.patient.phone}</p>
-                  </div>
-                  <div>
-                    <Label className="text-sm font-medium text-gray-500">Date of Birth</Label>
+                    <Label className="text-sm font-medium text-gray-500">
+                      Name
+                    </Label>
                     <p className="font-medium">
-                      {format(parseISO(selectedAppointment.patient.dateOfBirth), "MMM d, yyyy")}
+                      {selectedAppointment.patient.name}
                     </p>
                   </div>
                   <div>
-                    <Label className="text-sm font-medium text-gray-500">Gender</Label>
-                    <p className="font-medium capitalize">{selectedAppointment.patient.gender}</p>
+                    <Label className="text-sm font-medium text-gray-500">
+                      Patient ID
+                    </Label>
+                    <p className="font-medium">
+                      {selectedAppointment.patient.patientId}
+                    </p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium text-gray-500">
+                      Phone
+                    </Label>
+                    <p className="font-medium">
+                      {selectedAppointment.patient.phone}
+                    </p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium text-gray-500">
+                      Date of Birth
+                    </Label>
+                    <p className="font-medium">
+                      {format(
+                        parseISO(selectedAppointment.patient.dateOfBirth),
+                        "MMM d, yyyy",
+                      )}
+                    </p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium text-gray-500">
+                      Gender
+                    </Label>
+                    <p className="font-medium capitalize">
+                      {selectedAppointment.patient.gender}
+                    </p>
                   </div>
                 </div>
               </div>
-              
+
               {selectedAppointment.notes && (
                 <div>
-                  <Label className="text-sm font-medium text-gray-500">Notes</Label>
-                  <p className="mt-1 p-3 bg-gray-50 rounded-lg">{selectedAppointment.notes}</p>
+                  <Label className="text-sm font-medium text-gray-500">
+                    Notes
+                  </Label>
+                  <p className="mt-1 p-3 bg-gray-50 rounded-lg">
+                    {selectedAppointment.notes}
+                  </p>
                 </div>
               )}
-              
+
               <DialogFooter className="gap-2">
                 <Button
                   variant="outline"
                   onClick={() => setViewDialogOpen(false)}
                 >
                   Close
-                </Button>
-                <Button
-                  onClick={() => {
-                    setViewDialogOpen(false);
-                    router.push(`/doctor/patients/${selectedAppointment.patient._id}/medical-record?appointment=${selectedAppointment._id}`);
-                  }}
-                >
-                  <FileText className="h-4 w-4 mr-2" />
-                  Open Medical Record
                 </Button>
               </DialogFooter>
             </div>

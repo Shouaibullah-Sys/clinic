@@ -465,10 +465,6 @@ export default function DailyIssuedItemsPage() {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            <Button onClick={generateDailyReport}>
-              <PrinterIcon className="mr-2 h-4 w-4" />
-              Daily Report
-            </Button>
           </div>
         </CardHeader>
 

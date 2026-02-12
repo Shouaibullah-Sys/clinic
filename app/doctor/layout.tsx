@@ -44,31 +44,31 @@ const navLinks = [
     label: "Today's Appointments",
     icon: CalendarCheck,
   },
-  {
-    href: "/doctor/patients",
-    label: "Patients",
-    icon: Users,
-  },
-  {
-    href: "/doctor/prescriptions",
-    label: "Prescriptions",
-    icon: Pill,
-  },
-  {
-    href: "/doctor/medical-records",
-    label: "Medical Records",
-    icon: FileText,
-  },
-  {
-    href: "/doctor/lab-results",
-    label: "Lab Results",
-    icon: FlaskConical,
-  },
-  {
-    href: "/doctor/imaging",
-    label: "Imaging",
-    icon: Image,
-  },
+  // {
+  //   href: "/doctor/patients",
+  //   label: "Patients",
+  //   icon: Users,
+  // },
+  // {
+  //   href: "/doctor/prescriptions",
+  //   label: "Prescriptions",
+  //   icon: Pill,
+  // },
+  // {
+  //   href: "/doctor/medical-records",
+  //   label: "Medical Records",
+  //   icon: FileText,
+  // },
+  // {
+  //   href: "/doctor/lab-results",
+  //   label: "Lab Results",
+  //   icon: FlaskConical,
+  // },
+  // {
+  //   href: "/doctor/imaging",
+  //   label: "Imaging",
+  //   icon: Image,
+  // },
 ];
 
 export default function DoctorLayout({

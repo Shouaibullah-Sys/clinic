@@ -60,6 +60,7 @@ const prescriptionSchema = z.object({
     .array(
       z.object({
         name: z.string().min(1, "Medication name is required"),
+        form: z.string().min(1, "Form is required"),
         dosage: z.string().min(1, "Dosage is required"),
         frequency: z.string().min(1, "Frequency is required"),
         duration: z.string().min(1, "Duration is required"),
@@ -177,6 +178,21 @@ const ROUTE_OPTIONS = [
   { value: "transdermal", label: "Transdermal" },
 ];
 
+const FORM_OPTIONS = [
+  { value: "tablet", label: "Tablet" },
+  { value: "capsule", label: "Capsule" },
+  { value: "syrup", label: "Syrup" },
+  { value: "suspension", label: "Suspension" },
+  { value: "injection", label: "Injection" },
+  { value: "cream", label: "Cream" },
+  { value: "ointment", label: "Ointment" },
+  { value: "gel", label: "Gel" },
+  { value: "drops", label: "Drops" },
+  { value: "inhaler", label: "Inhaler" },
+  { value: "patch", label: "Patch" },
+  { value: "suppository", label: "Suppository" },
+];
+
 export function PrescriptionDialog({
   patientId,
   patientName,
@@ -274,6 +290,7 @@ export function PrescriptionDialog({
   const addNewMedication = () => {
     append({
       name: "",
+      form: "",
       dosage: "",
       frequency: "",
       duration: "",
@@ -314,20 +331,30 @@ export function PrescriptionDialog({
       return;
     }
 
-    // Extract dosage from medicine name if possible
-    const extractedDosage = extractDosageFromName(medicine.name);
+    // Normalize form to lowercase for matching FORM_OPTIONS
+    const normalizedForm = (medicine.form || "").toLowerCase().trim();
 
-    // Add new medication row
-    append({
+    // Normalize dosage to lowercase for matching DOSAGE_OPTIONS
+    const normalizedDosage = (medicine.dosage || "").toLowerCase().trim();
+
+    // Normalize frequency to lowercase for matching FREQUENCY_OPTIONS
+    const normalizedFrequency = (medicine.frequency || "").toLowerCase().trim();
+
+    // Add new medication row with auto-filled values from medicine
+    const newMedication = {
       name: medicine.name,
-      dosage: extractedDosage || "",
-      frequency: "Twice daily",
+      form: normalizedForm,
+      dosage: normalizedDosage,
+      frequency: normalizedFrequency || "twice daily",
       duration: "7 days",
       instructions: `Take as prescribed`,
       quantity: "1",
-      route: "oral",
+      route: (medicine.route || "oral").toLowerCase().trim(),
       medicineId: medicine._id,
-    });
+    };
+
+    // Append the new medication
+    append(newMedication);
 
     // Clear search and hide table
     setSearchQuery("");
@@ -369,6 +396,7 @@ export function PrescriptionDialog({
 
       const medications = data.medications.map((med) => ({
         name: med.name,
+        form: med.form,
         dosage: med.dosage,
         frequency: med.frequency,
         duration: med.duration,
@@ -800,9 +828,10 @@ export function PrescriptionDialog({
                           <Table>
                             <TableHeader>
                               <TableRow>
-                                <TableHead className="w-50">
+                                <TableHead className="w-40">
                                   Medication
                                 </TableHead>
+                                <TableHead>Form</TableHead>
                                 <TableHead>Dosage</TableHead>
                                 <TableHead>Frequency</TableHead>
                                 <TableHead>Duration</TableHead>
@@ -825,6 +854,39 @@ export function PrescriptionDialog({
                                       <p className="text-xs text-destructive mt-1">
                                         {
                                           errors.medications[index]?.name
+                                            ?.message
+                                        }
+                                      </p>
+                                    )}
+                                  </TableCell>
+                                  <TableCell>
+                                    <Select
+                                      onValueChange={(value) =>
+                                        setValue(
+                                          `medications.${index}.form`,
+                                          value,
+                                        )
+                                      }
+                                      value={watch(`medications.${index}.form`)}
+                                    >
+                                      <SelectTrigger className="border-none focus:ring-0 p-0 h-8">
+                                        <SelectValue placeholder="Select" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {FORM_OPTIONS.map((form, idx) => (
+                                          <SelectItem
+                                            key={idx}
+                                            value={form.value}
+                                          >
+                                            {form.label}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                    {errors.medications?.[index]?.form && (
+                                      <p className="text-xs text-destructive mt-1">
+                                        {
+                                          errors.medications[index]?.form
                                             ?.message
                                         }
                                       </p>

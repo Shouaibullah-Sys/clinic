@@ -18,7 +18,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Separator } from "@/components/ui/separator";
 import {
   Select,
   SelectContent,
@@ -440,7 +439,7 @@ export default function PharmacyStockPage() {
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh
           </Button>
-          <Button onClick={() => setAddDialogOpen(true)}>
+          <Button variant="secondary" onClick={() => setAddDialogOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
             Add Medicine
           </Button>
@@ -528,11 +527,11 @@ export default function PharmacyStockPage() {
       {/* Filters */}
       <Card>
         <CardContent className="pt-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label>Search</Label>
               <div className="relative">
-                <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                <Search className="absolute left-3 top-3 h-4 w-4 text-gray-500" />
                 <Input
                   placeholder="Search medicines..."
                   value={searchQuery}
@@ -561,22 +560,8 @@ export default function PharmacyStockPage() {
 
             <div className="space-y-2">
               <Label>Total Items</Label>
-              <div className="text-2xl font-bold text-gray-900">
+              <div className="text-2xl font-bold">
                 {filteredMedicines.length}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Quick Actions</Label>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" className="flex-1">
-                  <Download className="h-4 w-4 mr-2" />
-                  Export
-                </Button>
-                <Button variant="outline" size="sm" className="flex-1">
-                  <Printer className="h-4 w-4 mr-2" />
-                  Print
-                </Button>
               </div>
             </div>
           </div>
@@ -1086,7 +1071,9 @@ export default function PharmacyStockPage() {
               >
                 Cancel
               </Button>
-              <Button type="submit">Update Medicine</Button>
+              <Button variant="secondary" type="submit">
+                Update Medicine
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>

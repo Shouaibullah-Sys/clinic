@@ -797,7 +797,13 @@ export default function DoctorDashboardPage() {
                     </TableHeader>
                     <TableBody>
                       {patients.map((patient) => (
-                        <TableRow key={patient._id}>
+                        <TableRow
+                          key={patient._id}
+                          className="cursor-pointer hover:bg-muted/50 transition-colors"
+                          onClick={() =>
+                            router.push(`/doctor/patients/${patient._id}`)
+                          }
+                        >
                           <TableCell className="font-medium">
                             {patient.patientId}
                           </TableCell>
@@ -839,29 +845,17 @@ export default function DoctorDashboardPage() {
                             )}
                           </TableCell>
                           <TableCell className="text-right">
-                            <div className="flex justify-end gap-2">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() =>
-                                  router.push(`/doctor/patients/${patient._id}`)
-                                }
-                              >
-                                <Eye className="h-4 w-4 mr-1" />
-                                View
-                              </Button>
-                              <Button
-                                size="sm"
-                                onClick={() =>
-                                  router.push(
-                                    `/doctor/patients/${patient._id}/medical-record`,
-                                  )
-                                }
-                              >
-                                <FileText className="h-4 w-4 mr-1" />
-                                Record
-                              </Button>
-                            </div>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                router.push(`/doctor/patients/${patient._id}`);
+                              }}
+                            >
+                              <Eye className="h-4 w-4 mr-1" />
+                              View
+                            </Button>
                           </TableCell>
                         </TableRow>
                       ))}

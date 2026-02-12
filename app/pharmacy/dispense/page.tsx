@@ -494,6 +494,7 @@ export default function DispensePage() {
               No Prescription Selected
             </h2>
             <Button
+              variant="secondary"
               onClick={() => router.push("/pharmacy/select-prescription")}
             >
               Select Prescription

@@ -218,9 +218,15 @@ export async function POST(
 
     // Validate each medication
     const validatedMedications = medications.map((med: any, index: number) => {
-      if (!med.name || !med.dosage || !med.frequency || !med.duration) {
+      if (
+        !med.name ||
+        !med.dosage ||
+        !med.frequency ||
+        !med.duration ||
+        !med.form
+      ) {
         throw new Error(
-          `Medication ${index + 1} is missing required fields (name, dosage, frequency, duration)`,
+          `Medication ${index + 1} is missing required fields (name, dosage, frequency, duration, form)`,
         );
       }
 
@@ -261,6 +267,7 @@ export async function POST(
       return {
         medicine: med._id || med.medicine || undefined, // Use medicine ID from search results, optional
         name: med.name.trim(),
+        form: med.form.trim(),
         dosage: med.dosage.toString().trim(),
         frequency: med.frequency.toString().trim(),
         duration: med.duration.toString().trim(),

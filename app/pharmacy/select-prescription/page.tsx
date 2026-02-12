@@ -332,7 +332,9 @@ export default function SelectPrescriptionPage() {
                   : "No prescriptions match your search criteria."}
               </p>
               <div className="flex gap-3 justify-center">
-                <Button onClick={fetchPrescriptions}>Refresh List</Button>
+                <Button variant="secondary" onClick={fetchPrescriptions}>
+                  Refresh List
+                </Button>
                 {searchTerm && (
                   <Button onClick={() => setSearchTerm("")} variant="outline">
                     Clear Search
