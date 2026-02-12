@@ -299,7 +299,6 @@ const cashReconciliationSchema = new Schema<ICashReconciliation>(
 );
 
 // Indexes for performance
-cashReconciliationSchema.index({ reconciliationId: 1 });
 cashReconciliationSchema.index({ date: 1, shift: 1 });
 cashReconciliationSchema.index({ reconciledBy: 1 });
 cashReconciliationSchema.index({ status: 1 });

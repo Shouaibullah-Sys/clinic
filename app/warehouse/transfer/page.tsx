@@ -266,7 +266,7 @@ export default function WarehouseTransferPage() {
       )}
 
       {success && (
-        <Alert className="bg-green-50 text-green-800 border-green-200">
+        <Alert className=" text-green-800 border-green-200">
           <CheckCircle className="h-4 w-4 text-green-600" />
           <AlertDescription>{success}</AlertDescription>
         </Alert>
@@ -329,7 +329,7 @@ export default function WarehouseTransferPage() {
                           </span>
                         </div>
                       </div>
-                      <Badge className="bg-green-100 text-green-700">
+                      <Badge className=" text-green-700">
                         {medicine.totalAvailableQuantity} units
                       </Badge>
                     </div>
@@ -339,7 +339,7 @@ export default function WarehouseTransferPage() {
                       {medicine.availableBatches.map((batch) => (
                         <div
                           key={batch._id}
-                          className="flex items-center justify-between p-2 bg-gray-50 rounded"
+                          className="flex items-center justify-between p-2  rounded"
                         >
                           <div className="flex-1">
                             <div className="flex items-center gap-2">
@@ -367,6 +367,7 @@ export default function WarehouseTransferPage() {
                             </div>
                           </div>
                           <Button
+                            variant="secondary"
                             size="sm"
                             onClick={() =>
                               addToTransferList(batch, medicine.name)
@@ -491,6 +492,7 @@ export default function WarehouseTransferPage() {
 
                 <Button
                   className="w-full"
+                  variant="secondary"
                   onClick={executeTransfer}
                   disabled={isTransferring || selectedItems.length === 0}
                 >

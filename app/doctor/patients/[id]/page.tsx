@@ -56,6 +56,7 @@ import { ImagingOrderDialog } from "@/components/doctor/ImagingOrderDialog";
 import { ImagingResultsDialog } from "@/components/doctor/ImagingResultsDialog";
 import { DischargeCardDialog } from "@/components/doctor/DischargeCardDialog";
 import { DischargeCardPrintButton } from "@/components/doctor/DischargeCardPrintButton";
+import { PatientVisitsOverview } from "@/components/doctor/PatientVisitsOverview";
 
 interface Patient {
   _id: string;
@@ -720,154 +721,12 @@ export default function DoctorPatientDetailPage() {
           <TabsTrigger value="appointments">Appointments</TabsTrigger>
         </TabsList>
 
-        {/* Overview Tab */}
+        {/* Overview Tab - Visit History with All Records */}
         <TabsContent value="overview" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Quick Stats */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Medical Summary</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-muted-foreground">
-                    Total Visits
-                  </span>
-                  <span className="font-semibold">{medicalRecords.length}</span>
-                </div>
-                <Separator />
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-muted-foreground">
-                    Active Prescriptions
-                  </span>
-                  <span className="font-semibold">
-                    {prescriptions.filter((p) => p.status === "active").length}
-                  </span>
-                </div>
-                <Separator />
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-muted-foreground">
-                    Pending Tests
-                  </span>
-                  <span className="font-semibold">
-                    {labTests.filter((t) => t.status === "pending").length}
-                  </span>
-                </div>
-                <Separator />
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-muted-foreground">
-                    Pending Imaging
-                  </span>
-                  <span className="font-semibold">
-                    {
-                      imagingStudies.filter((i) => i.status === "scheduled")
-                        .length
-                    }
-                  </span>
-                </div>
-                <Separator />
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-muted-foreground">
-                    Upcoming Appointments
-                  </span>
-                  <span className="font-semibold">
-                    {
-                      appointments.filter(
-                        (a) =>
-                          new Date(a.date) >= new Date() &&
-                          ["scheduled", "confirmed"].includes(a.status),
-                      ).length
-                    }
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Recent Medical Records */}
-            <Card className="lg:col-span-2">
-              <CardHeader>
-                <CardTitle className="flex justify-between items-center">
-                  <span>Recent Medical Records</span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setActiveTab("medical")}
-                  >
-                    View All
-                  </Button>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {medicalRecords.length === 0 ? (
-                  <div className="text-center py-8">
-                    <FileText className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                    <p className="text-gray-500">No medical records found</p>
-                    <MedicalRecordDialog
-                      patientId={patientId}
-                      patientName={patient?.name || "Patient"}
-                      onRecordCreated={handleRecordCreated}
-                      trigger={
-                        <Button variant="outline" className="mt-3">
-                          <Plus className="h-4 w-4 mr-2" />
-                          Add Medical Record
-                        </Button>
-                      }
-                    />
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {medicalRecords.slice(0, 3).map((record) => (
-                      <div key={record._id} className="p-4 border rounded-lg">
-                        <div className="flex justify-between items-start mb-2">
-                          <div>
-                            <p className="text-sm text-muted-foreground">
-                              {formatDate(record.date)} • Dr.{" "}
-                              {record.doctor.name}
-                            </p>
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() =>
-                              router.push(
-                                `/doctor/medical-records/${record._id}`,
-                              )
-                            }
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                        </div>
-                        {record.vitals && (
-                          <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mt-3 text-sm">
-                            <div className="flex items-center gap-1">
-                              <span>🩸</span>
-                              <span>BP: {record.vitals.bloodPressure}</span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <span>❤️</span>
-                              <span>HR: {record.vitals.heartRate} bpm</span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <span>🌡️</span>
-                              <span>Temp: {record.vitals.temperature}°C</span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <span>⚖️</span>
-                              <span>Wt: {record.vitals.weight} kg</span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <span>📐</span>
-                              <span>BMI: {record.vitals.bmi.toFixed(1)}</span>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+          <PatientVisitsOverview
+            patientId={patientId}
+            patientName={patient?.name || ""}
+          />
 
           {/* Quick Actions */}
           <Card>

@@ -135,7 +135,6 @@ const CashAuditSchema = new Schema<ICashAudit>(
   }
 );
 
-CashAuditSchema.index({ auditId: 1 });
 CashAuditSchema.index({ auditor: 1 });
 CashAuditSchema.index({ cashier: 1 });
 CashAuditSchema.index({ auditDate: -1 });

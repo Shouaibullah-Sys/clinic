@@ -148,7 +148,6 @@ const billingSchema = new Schema<IBilling>(
 );
 
 // Indexes
-billingSchema.index({ invoiceId: 1 });
 billingSchema.index({ patient: 1 });
 billingSchema.index({ paymentStatus: 1 });
 billingSchema.index({ billingDate: -1 });

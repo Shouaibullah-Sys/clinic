@@ -138,12 +138,16 @@ export async function POST(request: NextRequest) {
       });
 
       // Prepare pharmacy stock update
+      const normalizedBatchNumber =
+        (typeof batch.batchNumber === "string" && batch.batchNumber.trim()) ||
+        (typeof batch.lotNumber === "string" && batch.lotNumber.trim()) ||
+        `WB-${String(batch._id)}`;
+
       pharmacyStockUpdates.push({
         name: batch.warehouse.name,
         form: batch.form,
         dosage: batch.dosage,
-        frequency: batch.frequency,
-        route: batch.route,
+        batchNumber: normalizedBatchNumber,
         expiryDate: batch.expiryDate,
         currentQuantity: quantity,
         originalQuantity: quantity,

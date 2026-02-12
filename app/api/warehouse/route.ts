@@ -107,7 +107,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Generate warehouseId if not provided
+    let warehouseId = body.warehouseId;
+    if (!warehouseId) {
+      const date = new Date();
+      const year = date.getFullYear().toString().slice(-2);
+      const month = (date.getMonth() + 1).toString().padStart(2, "0");
+      const random = Math.floor(1000 + Math.random() * 9000);
+      warehouseId = `WH${year}${month}${random}`;
+    }
+
     const medicine = new Warehouse({
+      warehouseId,
       name: name.trim(),
       genericName: genericName?.trim(),
       category,

@@ -50,8 +50,6 @@ const warehouseTransferSchema = new Schema<IWarehouseTransfer>(
   {
     transferId: {
       type: String,
-      required: true,
-      unique: true,
       uppercase: true,
     },
     items: {

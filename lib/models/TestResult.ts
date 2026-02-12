@@ -109,7 +109,6 @@ const testResultSchema = new Schema<ITestResult>(
 );
 
 // Indexes
-testResultSchema.index({ resultId: 1 });
 testResultSchema.index({ patient: 1 });
 testResultSchema.index({ test: 1 });
 testResultSchema.index({ requestDate: -1 });

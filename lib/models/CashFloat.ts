@@ -78,7 +78,6 @@ const CashFloatSchema = new Schema<ICashFloat>(
   }
 );
 
-CashFloatSchema.index({ floatId: 1 });
 CashFloatSchema.index({ cashier: 1 });
 CashFloatSchema.index({ dateAssigned: -1 });
 CashFloatSchema.index({ status: 1 });

@@ -86,8 +86,6 @@ export async function POST(request: NextRequest) {
       lotNumber,
       form,
       dosage,
-      frequency,
-      route,
       expiryDate,
       quantity,
       unitCost,
@@ -103,8 +101,6 @@ export async function POST(request: NextRequest) {
       !lotNumber ||
       !form ||
       !dosage ||
-      !frequency ||
-      !route ||
       !expiryDate ||
       !quantity ||
       !unitCost ||
@@ -145,8 +141,6 @@ export async function POST(request: NextRequest) {
       lotNumber: lotNumber.trim(),
       form,
       dosage,
-      frequency,
-      route,
       expiryDate: new Date(expiryDate),
       quantity: parseInt(quantity),
       originalQuantity: parseInt(quantity),

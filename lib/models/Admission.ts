@@ -123,7 +123,6 @@ const admissionSchema = new Schema<IAdmission>(
 );
 
 // Indexes
-admissionSchema.index({ admissionId: 1 });
 admissionSchema.index({ patient: 1 });
 admissionSchema.index({ doctor: 1 });
 admissionSchema.index({ ward: 1 });

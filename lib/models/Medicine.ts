@@ -123,7 +123,6 @@ const medicineSchema = new Schema<IMedicine>(
 );
 
 // Indexes
-medicineSchema.index({ medicineId: 1 });
 medicineSchema.index({ appointment: 1 });
 medicineSchema.index({ patient: 1 });
 medicineSchema.index({ status: 1 });

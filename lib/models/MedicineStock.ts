@@ -6,6 +6,7 @@ export interface IMedicineStock {
   name: string;
   form: string;
   dosage: string;
+  batchNumber?: string;
   expiryDate: Date;
   currentQuantity: number;
   originalQuantity: number;
@@ -23,6 +24,7 @@ const medicineStockSchema = new Schema<IMedicineStock>(
     name: { type: String, required: true },
     form: { type: String, required: true },
     dosage: { type: String, required: true },
+    batchNumber: { type: String },
     expiryDate: { type: Date, required: true },
     currentQuantity: { type: Number, required: true, min: 0 },
     originalQuantity: { type: Number, required: true, min: 0 },
@@ -42,6 +44,17 @@ const medicineStockSchema = new Schema<IMedicineStock>(
 // Add virtual for remaining stock percentage
 medicineStockSchema.virtual("remainingPercentage").get(function () {
   return (this.currentQuantity / this.originalQuantity) * 100;
+});
+
+// Ensure batchNumber is always a non-empty string.
+medicineStockSchema.pre("validate", function (next) {
+  if (typeof this.batchNumber === "string" && this.batchNumber.trim()) {
+    this.batchNumber = this.batchNumber.trim();
+    return next();
+  }
+
+  this.batchNumber = `AUTO-BATCH-${this._id.toString()}`;
+  return next();
 });
 
 // Indexes

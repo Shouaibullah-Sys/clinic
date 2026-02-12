@@ -40,8 +40,6 @@ export async function GET(req: NextRequest) {
       ];
     }
 
-    console.log("Query for pending prescriptions:", query);
-
     const prescriptions = await Prescription.find(query)
       .populate({
         path: "patient",
@@ -79,8 +77,6 @@ export async function GET(req: NextRequest) {
       : prescriptions;
 
     const total = await Prescription.countDocuments(query);
-
-    console.log(`Found ${filteredPrescriptions.length} prescriptions`);
 
     return NextResponse.json({
       success: true,

@@ -8,8 +8,6 @@ export interface IWarehouseBatch extends mongoose.Document {
   lotNumber: string;
   form: string;
   dosage: string;
-  frequency: string;
-  route: string;
   expiryDate: Date;
   quantity: number;
   originalQuantity: number;
@@ -26,7 +24,6 @@ const warehouseBatchSchema = new Schema<IWarehouseBatch>(
   {
     batchId: {
       type: String,
-      required: true,
       unique: true,
       uppercase: true,
     },
@@ -66,29 +63,6 @@ const warehouseBatchSchema = new Schema<IWarehouseBatch>(
       type: String,
       required: true,
       trim: true,
-    },
-    frequency: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-    route: {
-      type: String,
-      required: true,
-      trim: true,
-      enum: [
-        "Oral",
-        "IV",
-        "IM",
-        "SC",
-        "Topical",
-        "Inhalation",
-        "Ophthalmic",
-        "Otic",
-        "Nasal",
-        "Rectal",
-        "Other",
-      ],
     },
     expiryDate: {
       type: Date,

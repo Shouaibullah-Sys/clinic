@@ -137,7 +137,6 @@ dailyRecordSchema.index({ customerName: 1 });
 dailyRecordSchema.index({ phoneNumber: 1 });
 dailyRecordSchema.index({ serviceType: 1 });
 dailyRecordSchema.index({ clothingType: 1 });
-dailyRecordSchema.index({ invoiceNumber: 1 });
 
 // Compound indexes for common queries
 dailyRecordSchema.index({ orderStatus: 1, deliveryDate: 1 });
