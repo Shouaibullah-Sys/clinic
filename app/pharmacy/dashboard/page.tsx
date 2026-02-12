@@ -7,14 +7,14 @@ import { useAuthStore } from "@/store/useAuthStore";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { 
-  Package, 
-  AlertTriangle, 
-  CheckCircle, 
+import {
+  Package,
+  AlertTriangle,
+  CheckCircle,
   Clock,
   TrendingUp,
   Users,
-  Pill
+  Pill,
 } from "lucide-react";
 
 interface PharmacyStats {
@@ -33,7 +33,7 @@ export default function PharmacyDashboardPage() {
     lowStockMedicines: 0,
     dispensedToday: 0,
     totalRevenue: 0,
-    activePatients: 0
+    activePatients: 0,
   });
   const [loading, setLoading] = useState(true);
 
@@ -45,10 +45,10 @@ export default function PharmacyDashboardPage() {
     try {
       const response = await fetch("/api/pharmacy/dashboard/stats", {
         headers: {
-          Authorization: `Bearer ${accessToken}`
-        }
+          Authorization: `Bearer ${accessToken}`,
+        },
       });
-      
+
       if (response.ok) {
         const data = await response.json();
         setStats(data.data);
@@ -71,15 +71,16 @@ export default function PharmacyDashboardPage() {
 
       {/* Quick Actions */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <Button 
+        <Button
           onClick={() => router.push("/pharmacy/select-prescription")}
+          variant="secondary"
           className="h-24 flex flex-col items-center justify-center"
         >
           <Package className="h-8 w-8 mb-2" />
           <span>Dispense Prescription</span>
         </Button>
-        
-        <Button 
+
+        <Button
           onClick={() => router.push("/pharmacy/inventory")}
           variant="outline"
           className="h-24 flex flex-col items-center justify-center"
@@ -87,8 +88,8 @@ export default function PharmacyDashboardPage() {
           <Pill className="h-8 w-8 mb-2" />
           <span>Manage Inventory</span>
         </Button>
-        
-        <Button 
+
+        <Button
           onClick={() => router.push("/pharmacy/pending")}
           variant="outline"
           className="h-24 flex flex-col items-center justify-center"
@@ -96,8 +97,8 @@ export default function PharmacyDashboardPage() {
           <Clock className="h-8 w-8 mb-2" />
           <span>View Pending</span>
         </Button>
-        
-        <Button 
+
+        <Button
           onClick={() => router.push("/pharmacy/reports")}
           variant="outline"
           className="h-24 flex flex-col items-center justify-center"
@@ -117,7 +118,9 @@ export default function PharmacyDashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="flex items-center justify-between">
-              <div className="text-2xl font-bold">{stats.pendingPrescriptions}</div>
+              <div className="text-2xl font-bold">
+                {stats.pendingPrescriptions}
+              </div>
               <Clock className="h-8 w-8 text-yellow-500" />
             </div>
           </CardContent>
@@ -131,7 +134,9 @@ export default function PharmacyDashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="flex items-center justify-between">
-              <div className="text-2xl font-bold">{stats.lowStockMedicines}</div>
+              <div className="text-2xl font-bold">
+                {stats.lowStockMedicines}
+              </div>
               <AlertTriangle className="h-8 w-8 text-red-500" />
             </div>
           </CardContent>

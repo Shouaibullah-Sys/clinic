@@ -23,7 +23,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -250,15 +249,15 @@ export default function WarehouseBatchesPage() {
     });
   };
 
-  // Get status badge
+  // Get status badge - Using shadcn theme colors
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "available":
-        return <Badge className="bg-green-100 text-green-700">Available</Badge>;
+        return <Badge variant="default">Available</Badge>;
       case "partial":
-        return <Badge className="bg-yellow-100 text-yellow-700">Partial</Badge>;
+        return <Badge variant="secondary">Partial</Badge>;
       case "depleted":
-        return <Badge variant="secondary">Depleted</Badge>;
+        return <Badge variant="outline">Depleted</Badge>;
       case "expired":
         return <Badge variant="destructive">Expired</Badge>;
       default:
@@ -270,9 +269,9 @@ export default function WarehouseBatchesPage() {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">
-          <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+          <AlertCircle className="h-12 w-12 text-destructive mx-auto mb-4" />
           <h2 className="text-xl font-semibold mb-2">Unauthorized Access</h2>
-          <p className="text-gray-600">
+          <p className="text-muted-foreground">
             You don't have permission to access this page.
           </p>
         </div>
@@ -281,12 +280,14 @@ export default function WarehouseBatchesPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-4 md:p-6">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold">Warehouse Batches</h1>
-          <p className="text-gray-500 mt-1">
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
+            Warehouse Batches
+          </h1>
+          <p className="text-muted-foreground mt-1 text-sm md:text-base">
             Manage medicine batches with expiry dates and quantities
           </p>
         </div>
@@ -307,9 +308,11 @@ export default function WarehouseBatchesPage() {
       )}
 
       {success && (
-        <Alert className="bg-green-50 text-green-800 border-green-200">
-          <AlertCircle className="h-4 w-4 text-green-600" />
-          <AlertDescription>{success}</AlertDescription>
+        <Alert className="border-primary/20 bg-primary/10">
+          <AlertCircle className="h-4 w-4 text-primary" />
+          <AlertDescription className="text-foreground">
+            {success}
+          </AlertDescription>
         </Alert>
       )}
 
@@ -317,7 +320,7 @@ export default function WarehouseBatchesPage() {
       <Card>
         <CardContent className="pt-6">
           <div className="relative">
-            <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+            <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search batches by batch number, lot number, or supplier..."
               value={searchQuery}
@@ -328,9 +331,9 @@ export default function WarehouseBatchesPage() {
         </CardContent>
       </Card>
 
-      {/* Batches Table */}
-      <Card>
-        <CardHeader>
+      {/* Batches Table - Desktop */}
+      <Card className="hidden md:block">
+        <CardHeader className="px-6">
           <CardTitle>Batch Inventory</CardTitle>
           <CardDescription>
             {batches.length} batch(es) in warehouse
@@ -339,13 +342,13 @@ export default function WarehouseBatchesPage() {
         <CardContent>
           {loading ? (
             <div className="flex items-center justify-center h-64">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             </div>
           ) : batches.length === 0 ? (
             <div className="text-center py-12">
-              <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <Package className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
               <h3 className="text-lg font-semibold mb-2">No batches found</h3>
-              <p className="text-gray-500">
+              <p className="text-muted-foreground text-sm">
                 {searchQuery
                   ? "Try adjusting your search terms"
                   : "No batches have been added yet."}
@@ -356,14 +359,26 @@ export default function WarehouseBatchesPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Batch ID</TableHead>
-                    <TableHead>Medicine</TableHead>
-                    <TableHead>Batch/Lot</TableHead>
-                    <TableHead>Form/Dosage</TableHead>
-                    <TableHead>Quantity</TableHead>
-                    <TableHead>Expiry Date</TableHead>
-                    <TableHead>Cost</TableHead>
-                    <TableHead>Status</TableHead>
+                    <TableHead className="whitespace-nowrap">
+                      Batch ID
+                    </TableHead>
+                    <TableHead className="whitespace-nowrap">
+                      Medicine
+                    </TableHead>
+                    <TableHead className="whitespace-nowrap">
+                      Batch/Lot
+                    </TableHead>
+                    <TableHead className="whitespace-nowrap">
+                      Form/Dosage
+                    </TableHead>
+                    <TableHead className="whitespace-nowrap">
+                      Quantity
+                    </TableHead>
+                    <TableHead className="whitespace-nowrap">
+                      Expiry Date
+                    </TableHead>
+                    <TableHead className="whitespace-nowrap">Cost</TableHead>
+                    <TableHead className="whitespace-nowrap">Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -372,7 +387,7 @@ export default function WarehouseBatchesPage() {
                       (batch.quantity / batch.originalQuantity) * 100;
                     return (
                       <TableRow key={batch._id}>
-                        <TableCell className="font-mono text-sm">
+                        <TableCell className="font-mono text-sm whitespace-nowrap">
                           {batch.batchId}
                         </TableCell>
                         <TableCell>
@@ -380,7 +395,7 @@ export default function WarehouseBatchesPage() {
                             {batch.warehouse.name}
                           </div>
                           {batch.warehouse.genericName && (
-                            <div className="text-xs text-gray-500">
+                            <div className="text-xs text-muted-foreground">
                               {batch.warehouse.genericName}
                             </div>
                           )}
@@ -388,7 +403,7 @@ export default function WarehouseBatchesPage() {
                         <TableCell>
                           <div className="text-sm">
                             <div>{batch.batchNumber}</div>
-                            <div className="text-xs text-gray-500">
+                            <div className="text-xs text-muted-foreground">
                               {batch.lotNumber}
                             </div>
                           </div>
@@ -396,31 +411,31 @@ export default function WarehouseBatchesPage() {
                         <TableCell>
                           <div className="text-sm">
                             <div>{batch.form}</div>
-                            <div className="text-xs text-gray-500">
+                            <div className="text-xs text-muted-foreground">
                               {batch.dosage}
                             </div>
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div className="space-y-1">
+                          <div className="space-y-1 min-w-30">
                             <Progress
                               value={remainingPercentage}
                               className="h-2"
                             />
-                            <div className="text-xs text-gray-500">
+                            <div className="text-xs text-muted-foreground">
                               {batch.quantity} / {batch.originalQuantity}
                             </div>
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center text-sm">
-                            <Calendar className="h-3 w-3 mr-1 text-gray-400" />
+                          <div className="flex items-center text-sm whitespace-nowrap">
+                            <Calendar className="h-3 w-3 mr-1 text-muted-foreground" />
                             {format(new Date(batch.expiryDate), "MMM d, yyyy")}
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center text-sm">
-                            <DollarSign className="h-3 w-3 mr-1 text-gray-400" />
+                          <div className="flex items-center text-sm whitespace-nowrap">
+                            <DollarSign className="h-3 w-3 mr-1 text-muted-foreground" />
                             {batch.unitCost.toFixed(2)}
                           </div>
                         </TableCell>
@@ -435,9 +450,149 @@ export default function WarehouseBatchesPage() {
         </CardContent>
       </Card>
 
+      {/* Batches Cards - Mobile */}
+      <div className="md:hidden space-y-4">
+        {loading ? (
+          <Card>
+            <CardContent className="flex items-center justify-center h-64">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            </CardContent>
+          </Card>
+        ) : batches.length === 0 ? (
+          <Card>
+            <CardContent className="text-center py-12">
+              <Package className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-lg font-semibold mb-2">No batches found</h3>
+              <p className="text-muted-foreground text-sm">
+                {searchQuery
+                  ? "Try adjusting your search terms"
+                  : "No batches have been added yet."}
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          batches.map((batch) => {
+            const remainingPercentage =
+              (batch.quantity / batch.originalQuantity) * 100;
+            return (
+              <Card key={batch._id}>
+                <CardContent className="p-4">
+                  {/* Header */}
+                  <div className="flex items-start justify-between mb-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold text-sm">
+                          {batch.batchId}
+                        </span>
+                      </div>
+                      <h3 className="font-semibold text-base mt-1">
+                        {batch.warehouse.name}
+                      </h3>
+                      {batch.warehouse.genericName && (
+                        <p className="text-xs text-muted-foreground">
+                          {batch.warehouse.genericName}
+                        </p>
+                      )}
+                    </div>
+                    <div>{getStatusBadge(batch.status)}</div>
+                  </div>
+
+                  {/* Batch Details */}
+                  <div className="bg-muted/30 rounded-lg p-3 mb-3">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <p className="text-xs text-muted-foreground">
+                          Batch Number
+                        </p>
+                        <p className="text-sm font-medium">
+                          {batch.batchNumber}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">
+                          Lot Number
+                        </p>
+                        <p className="text-sm font-medium">{batch.lotNumber}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Form</p>
+                        <p className="text-sm font-medium">{batch.form}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Dosage</p>
+                        <p className="text-sm font-medium">{batch.dosage}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Route</p>
+                        <p className="text-sm font-medium">{batch.route}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">
+                          Frequency
+                        </p>
+                        <p className="text-sm font-medium">{batch.frequency}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Quantity & Expiry */}
+                  <div className="space-y-3 mb-3">
+                    <div>
+                      <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                        <span>Quantity</span>
+                        <span>
+                          {batch.quantity} / {batch.originalQuantity}
+                        </span>
+                      </div>
+                      <Progress value={remainingPercentage} className="h-2" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <p className="text-xs text-muted-foreground">
+                          Expiry Date
+                        </p>
+                        <div className="flex items-center text-sm">
+                          <Calendar className="h-3 w-3 mr-1 text-muted-foreground" />
+                          {format(new Date(batch.expiryDate), "MMM d, yyyy")}
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">
+                          Unit Cost
+                        </p>
+                        <div className="flex items-center text-sm">
+                          <DollarSign className="h-3 w-3 mr-1 text-muted-foreground" />
+                          {batch.unitCost.toFixed(2)}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Supplier & Location */}
+                  <div className="grid grid-cols-2 gap-3 text-sm border-t pt-3">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Supplier</p>
+                      <p className="font-medium">{batch.supplier}</p>
+                    </div>
+                    {batch.location && (
+                      <div>
+                        <p className="text-xs text-muted-foreground">
+                          Location
+                        </p>
+                        <p className="font-medium">{batch.location}</p>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })
+        )}
+      </div>
+
       {/* Add Batch Dialog */}
       <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add New Batch</DialogTitle>
             <DialogDescription>
@@ -445,7 +600,7 @@ export default function WarehouseBatchesPage() {
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit}>
-            <div className="space-y-4">
+            <div className="space-y-4 py-4">
               <div className="space-y-2">
                 <Label htmlFor="warehouse">Medicine *</Label>
                 <Select
@@ -453,6 +608,7 @@ export default function WarehouseBatchesPage() {
                   onValueChange={(value) =>
                     setBatchForm({ ...batchForm, warehouse: value })
                   }
+                  required
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select medicine" />
@@ -467,7 +623,7 @@ export default function WarehouseBatchesPage() {
                 </Select>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="batchNumber">Batch Number *</Label>
                   <Input
@@ -497,7 +653,7 @@ export default function WarehouseBatchesPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="form">Form *</Label>
                   <Select
@@ -505,6 +661,7 @@ export default function WarehouseBatchesPage() {
                     onValueChange={(value) =>
                       setBatchForm({ ...batchForm, form: value })
                     }
+                    required
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select form" />
@@ -537,6 +694,7 @@ export default function WarehouseBatchesPage() {
                     onValueChange={(value) =>
                       setBatchForm({ ...batchForm, route: value })
                     }
+                    required
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select route" />
@@ -565,7 +723,7 @@ export default function WarehouseBatchesPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="expiryDate">Expiry Date *</Label>
                   <Input
@@ -592,7 +750,7 @@ export default function WarehouseBatchesPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="quantity">Quantity *</Label>
                   <Input
@@ -636,15 +794,18 @@ export default function WarehouseBatchesPage() {
                 />
               </div>
             </div>
-            <DialogFooter className="mt-6">
+            <DialogFooter className="flex-col sm:flex-row gap-2">
               <Button
                 type="button"
                 variant="outline"
                 onClick={() => setAddDialogOpen(false)}
+                className="w-full sm:w-auto"
               >
                 Cancel
               </Button>
-              <Button type="submit">Add Batch</Button>
+              <Button type="submit" className="w-full sm:w-auto">
+                Add Batch
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>

@@ -29,8 +29,6 @@ const formSchema = z.object({
   name: z.string().min(1, "Name is required"),
   form: z.string().min(1, "Form is required"),
   dosage: z.string().min(1, "Dosage is required"),
-  frequency: z.string().min(1, "Frequency is required"),
-  route: z.string().min(1, "Route is required"),
   expiryDate: z.string().min(1, "Expiry date is required"),
   currentQuantity: z.number().min(0, "Quantity cannot be negative"),
   originalQuantity: z.number().min(1, "Original quantity must be at least 1"),
@@ -61,8 +59,6 @@ export function MedicineStockForm({
       name: "",
       form: "",
       dosage: "",
-      frequency: "",
-      route: "",
       expiryDate: "",
       currentQuantity: 0,
       originalQuantity: 0,
@@ -79,8 +75,6 @@ export function MedicineStockForm({
         name: initialData.name,
         form: initialData.form,
         dosage: initialData.dosage,
-        frequency: initialData.frequency,
-        route: initialData.route,
         expiryDate: initialData.expiryDate,
         currentQuantity: initialData.currentQuantity,
         originalQuantity: initialData.originalQuantity,
@@ -173,32 +167,6 @@ export function MedicineStockForm({
                     <FormLabel>Dosage</FormLabel>
                     <FormControl>
                       <Input placeholder="e.g., 500mg" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="frequency"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Frequency</FormLabel>
-                    <FormControl>
-                      <Input placeholder="e.g., 3 times daily" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="route"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Route</FormLabel>
-                    <FormControl>
-                      <Input placeholder="e.g., Oral, IV, IM" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

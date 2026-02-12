@@ -76,13 +76,11 @@ export const PrescriptionHistory = ({
         let frequency = item.frequency;
         let route = item.route;
 
-        // If medicine is populated, use its data
+        // If medicine is populated, use its data for name, form, and dosage
         if (item.medicine && isMedicinePopulated(item.medicine)) {
           medicineName = item.medicine.name;
           form = item.medicine.form;
           dosage = item.medicine.dosage;
-          frequency = item.medicine.frequency;
-          route = item.medicine.route;
         }
 
         return {
@@ -118,13 +116,12 @@ export const PrescriptionHistory = ({
     let frequency = medication.frequency;
     let route = medication.route;
 
-    // If medicine is populated, use its data
+    // If medicine is populated, use its data for name, form, and dosage
     if (medication.medicine && isMedicinePopulated(medication.medicine)) {
       medicineName = medication.medicine.name;
       form = medication.medicine.form;
       dosage = medication.medicine.dosage;
-      frequency = medication.medicine.frequency;
-      route = medication.medicine.route;
+      // Note: frequency and route come from prescription, not medicine stock
     }
 
     return {

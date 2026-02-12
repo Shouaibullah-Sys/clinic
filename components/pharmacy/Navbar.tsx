@@ -32,7 +32,7 @@ export default function PharmacyNavbar() {
   const { user, logout } = useAuthStore();
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60">
       <div className="container flex h-14 items-center justify-between">
         {/* Mobile sidebar toggle */}
         <div className="md:hidden">
@@ -42,7 +42,7 @@ export default function PharmacyNavbar() {
                 <Menu className="h-5 w-5" />
               </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="w-[250px]">
+            <SheetContent side="left" className="w-62.5">
               <div className="flex flex-col gap-4 py-6">
                 <div className="mb-4 flex items-center justify-between">
                   <h2 className="text-lg font-semibold">Pharmacy</h2>

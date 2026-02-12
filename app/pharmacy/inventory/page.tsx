@@ -80,8 +80,6 @@ interface DailyIssuedItem {
   name: string;
   form: string;
   dosage: string;
-  frequency: string;
-  route: string;
   quantityIssued: number;
   currentStock: number;
   originalStock: number;
@@ -116,14 +114,6 @@ const MobileInventoryCard = ({ item }: { item: DailyIssuedItem }) => {
               <div className="flex justify-between">
                 <span>Dosage:</span>
                 <span>{item.dosage}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Frequency:</span>
-                <span>{item.frequency}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Route:</span>
-                <span>{item.route}</span>
               </div>
               <div className="flex justify-between">
                 <span>Qty Issued:</span>
@@ -219,8 +209,6 @@ export default function DailyIssuedItemsPage() {
         item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         item.form.toLowerCase().includes(searchTerm.toLowerCase()) ||
         item.dosage.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.frequency.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.route.toLowerCase().includes(searchTerm.toLowerCase()) ||
         item.issuedTo.toLowerCase().includes(searchTerm.toLowerCase());
 
       const matchesIssuedTo =
@@ -241,7 +229,7 @@ export default function DailyIssuedItemsPage() {
           <div className="font-medium">
             {item.name}
             <div className="text-xs text-muted-foreground">
-              {item.form} | {item.dosage} | {item.frequency} | {item.route}
+              {item.form} | {item.dosage}
             </div>
           </div>
         );
@@ -395,8 +383,6 @@ export default function DailyIssuedItemsPage() {
           "Medicine",
           "Form",
           "Dosage",
-          "Frequency",
-          "Route",
           "Qty Issued",
           "Qty on Hand",
           "Issued To",
@@ -409,8 +395,6 @@ export default function DailyIssuedItemsPage() {
         item.name,
         item.form,
         item.dosage,
-        item.frequency,
-        item.route,
         item.quantityIssued.toString(),
         `${item.currentStock}/${item.originalStock}`,
         item.issuedTo,

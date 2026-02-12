@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/useAuthStore";
 import { Button } from "@/components/ui/button";
 import { Heart, ArrowRight } from "lucide-react";
+import Image from "next/image";
 
 export default function LandingPage() {
   const router = useRouter();
@@ -36,7 +37,16 @@ export default function LandingPage() {
       <header className="border-b border-border">
         <div className="max-w-6xl mx-auto px-4 py-4 flex justify-between items-center">
           <div className="flex items-center gap-2">
-            <Heart className="h-6 w-6 text-primary" />
+            <div className="inline-flex items-center justify-center rounded-lg p-2">
+              <Image
+                src="/logo2.png"
+                alt="Sajad Barakzai Logo"
+                width={40}
+                height={40}
+                className="w-full h-full object-contain"
+                priority
+              />
+            </div>
             <span className="font-semibold text-foreground">
               Sajad Barakzai Hospital
             </span>
@@ -45,7 +55,9 @@ export default function LandingPage() {
             <Button variant="ghost" onClick={() => router.push("/login")}>
               Login
             </Button>
-            <Button onClick={() => router.push("/register")}>Register</Button>
+            <Button variant="secondary" onClick={() => router.push("/login")}>
+              Register
+            </Button>
           </div>
         </div>
       </header>
@@ -66,14 +78,18 @@ export default function LandingPage() {
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button size="lg" onClick={() => router.push("/login")}>
+            <Button
+              variant="secondary"
+              size="lg"
+              onClick={() => router.push("/login")}
+            >
               Login to Dashboard
               <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
             <Button
               size="lg"
               variant="outline"
-              onClick={() => router.push("/register")}
+              onClick={() => router.push("/login")}
             >
               Request Account
             </Button>

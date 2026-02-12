@@ -1,3 +1,5 @@
+// app/laboratory/tests/[id]/page.tsx
+
 "use client";
 
 import { useState, useEffect } from "react";
@@ -22,6 +24,13 @@ import {
   Clock,
   RefreshCw,
   Printer,
+  Calendar,
+  Hash,
+  CreditCard,
+  FlaskConical,
+  Microscope,
+  Phone,
+  IdCard,
 } from "lucide-react";
 
 interface LabTest {
@@ -145,11 +154,14 @@ export default function TestDetailPage() {
 
   if (loading) {
     return (
-      <div className="container mx-auto p-6">
-        <Skeleton className="h-8 w-64 mb-6" />
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Skeleton className="h-64" />
-          <Skeleton className="h-64" />
+      <div className="container mx-auto p-4 md:p-6">
+        <div className="flex flex-col md:flex-row items-start md:items-center gap-4 mb-6">
+          <Skeleton className="h-8 w-16 md:w-24" />
+          <Skeleton className="h-8 w-48 md:w-64" />
+        </div>
+        <div className="grid grid-cols-1 gap-6">
+          <Skeleton className="h-[400px] md:h-[300px] w-full" />
+          <Skeleton className="h-24 w-full" />
         </div>
       </div>
     );
@@ -157,16 +169,16 @@ export default function TestDetailPage() {
 
   if (error || !test) {
     return (
-      <div className="container mx-auto p-6">
-        <div className="text-center py-12">
+      <div className="container mx-auto p-4 md:p-6">
+        <div className="text-center py-8 md:py-12">
           <AlertTriangle className="h-12 w-12 mx-auto text-yellow-500 mb-4" />
-          <h3 className="text-lg font-medium">Test Not Found</h3>
-          <p className="text-muted-foreground mt-2">
+          <h3 className="text-lg md:text-xl font-medium">Test Not Found</h3>
+          <p className="text-muted-foreground mt-2 text-sm md:text-base">
             {error || "The requested test could not be found."}
           </p>
           <Button
             onClick={() => router.push("/laboratory/tests")}
-            className="mt-4"
+            className="mt-4 w-full md:w-auto"
           >
             Back to Tests
           </Button>
@@ -176,114 +188,140 @@ export default function TestDetailPage() {
   }
 
   return (
-    <div className="container mx-auto p-6">
+    <div className="container mx-auto p-4 md:p-6 max-w-7xl">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-4">
-          <Button variant="outline" size="icon" onClick={() => router.back()}>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+        <div className="flex items-start gap-3">
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => router.back()}
+            className="shrink-0"
+          >
             <ArrowLeft className="h-4 w-4" />
           </Button>
-          <div>
-            <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-xl md:text-3xl font-bold tracking-tight break-words">
               {test.testName}
             </h1>
-            <div className="flex items-center gap-2 mt-1">
-              <Badge variant="outline">{test.testId}</Badge>
+            <div className="flex flex-wrap items-center gap-2 mt-2">
+              <Badge variant="outline" className="text-xs md:text-sm">
+                <Hash className="h-3 w-3 mr-1 inline" />
+                {test.testId}
+              </Badge>
               <Badge
                 className={
                   test.collectionStatus === "collected"
-                    ? "bg-green-100 text-green-800"
-                    : "bg-yellow-100 text-yellow-800"
+                    ? "bg-green-100 text-green-800 text-xs md:text-sm"
+                    : "bg-yellow-100 text-yellow-800 text-xs md:text-sm"
                 }
               >
                 {test.collectionStatus === "collected"
                   ? "Collected"
-                  : "Pending"}
+                  : "Pending Collection"}
+              </Badge>
+              <Badge
+                className={
+                  test.priority === "emergency"
+                    ? "bg-red-100 text-red-800 text-xs md:text-sm"
+                    : test.priority === "urgent"
+                      ? "bg-orange-100 text-orange-800 text-xs md:text-sm"
+                      : "bg-blue-100 text-blue-800 text-xs md:text-sm"
+                }
+              >
+                {test.priority}
               </Badge>
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={fetchTestDetails}>
+        <div className="flex items-center gap-2 md:self-start">
+          <Button
+            variant="outline"
+            onClick={fetchTestDetails}
+            size="sm"
+            className="flex-1 md:flex-none"
+          >
             <RefreshCw className="h-4 w-4 mr-2" />
-            Refresh
+            <span className="hidden md:inline">Refresh</span>
+            <span className="md:hidden">Sync</span>
           </Button>
         </div>
       </div>
 
-      {/* Status Alert */}
+      {/* Status Alert - Mobile Optimized */}
       {test.collectionStatus === "collected" ? (
         <Alert className="bg-green-50 border-green-200 mb-6">
           <CheckCircle className="h-4 w-4 text-green-600" />
-          <AlertTitle className="text-green-800">Sample Collected</AlertTitle>
-          <AlertDescription className="text-green-700">
+          <AlertTitle className="text-green-800 text-sm md:text-base">
+            Sample Collected
+          </AlertTitle>
+          <AlertDescription className="text-green-700 text-xs md:text-sm">
             The sample has been collected successfully.
           </AlertDescription>
         </Alert>
       ) : canCollectSample ? (
         <Alert className=" border-blue-200 mb-6">
-          <Clock className="h-4 w-4 text-blue-600" />
-          <AlertTitle>Ready for Sample Collection</AlertTitle>
-          <AlertDescription>Ready to collect the sample.</AlertDescription>
+          <Clock className="h-4 w-4" />
+          <AlertTitle className=" text-sm md:text-base">
+            Ready for Sample Collection
+          </AlertTitle>
+          <AlertDescription className="text-blue-700 text-xs md:text-sm">
+            Ready to collect the sample.
+          </AlertDescription>
         </Alert>
       ) : !test.paymentVerified && test.priority === "routine" ? (
         <Alert variant="destructive" className="mb-6">
           <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Payment Verification Required</AlertTitle>
-          <AlertDescription>
+          <AlertTitle className="text-sm md:text-base">
+            Payment Verification Required
+          </AlertTitle>
+          <AlertDescription className="text-xs md:text-sm">
             Payment must be verified before collecting the sample.
           </AlertDescription>
         </Alert>
       ) : null}
 
-      {/* Combined Information Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Test Information</CardTitle>
+      {/* Desktop: Single Row Table Layout (LG screens) */}
+      <Card className="hidden lg:block mb-6">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg">Complete Test Information</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b-2">
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">
-                    Information Type
-                  </th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">
-                    Details
-                  </th>
-                </tr>
-              </thead>
+            <table className="w-full border-collapse">
               <tbody>
-                {/* Patient Information Row */}
                 <tr className="border-b">
-                  <td className="py-4 px-4 align-top">
+                  <td className="py-4 px-4 font-medium w-1/5 align-top">
                     <div className="flex items-center gap-2">
-                      <User className="h-4 w-4" />
-                      <span className="font-medium">Patient Information</span>
+                      <User className="h-4 w-4 text-gray-500" />
+                      <span>Patient</span>
                     </div>
                   </td>
                   <td className="py-4 px-4">
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-4 gap-4">
                       <div>
-                        <p className="text-sm text-muted-foreground">Name</p>
-                        <p className="font-medium">{patientInfo.name}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">
-                          Patient ID
+                        <p className="text-xs text-muted-foreground">Name</p>
+                        <p className="font-medium text-sm">
+                          {patientInfo.name}
                         </p>
-                        <p className="font-medium">{patientInfo.patientId}</p>
                       </div>
                       <div>
-                        <p className="text-sm text-muted-foreground">Phone</p>
-                        <p className="font-medium">{patientInfo.phone}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">
-                          Age / Gender
+                        <p className="text-xs text-muted-foreground">ID</p>
+                        <p className="font-medium text-sm">
+                          {patientInfo.patientId}
                         </p>
-                        <p className="font-medium">
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Phone</p>
+                        <p className="font-medium text-sm">
+                          {patientInfo.phone}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">
+                          Age/Gender
+                        </p>
+                        <p className="font-medium text-sm">
                           {patientInfo.age ? `${patientInfo.age}y` : "N/A"} /{" "}
                           {patientInfo.gender || "N/A"}
                         </p>
@@ -291,40 +329,40 @@ export default function TestDetailPage() {
                     </div>
                   </td>
                 </tr>
-
-                {/* Doctor Information Row */}
-                <tr className="border-b ">
-                  <td className="py-4 px-4 align-top">
+                <tr className="border-b">
+                  <td className="py-4 px-4 font-medium align-top">
                     <div className="flex items-center gap-2">
-                      <Stethoscope className="h-4 w-4" />
-                      <span className="font-medium">Doctor Information</span>
+                      <Stethoscope className="h-4 w-4 text-gray-500" />
+                      <span>Doctor</span>
                     </div>
                   </td>
                   <td className="py-4 px-4">
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-3 gap-4">
                       <div>
-                        <p className="text-sm text-muted-foreground">Doctor</p>
-                        <p className="font-medium">Dr. {doctorInfo.name}</p>
+                        <p className="text-xs text-muted-foreground">Name</p>
+                        <p className="font-medium text-sm">
+                          Dr. {doctorInfo.name}
+                        </p>
                       </div>
                       <div>
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                           Specialization
                         </p>
-                        <p className="font-medium">
+                        <p className="font-medium text-sm">
                           {doctorInfo.specialization}
                         </p>
                       </div>
                       <div>
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                           Priority
                         </p>
                         <Badge
                           className={
                             test.priority === "emergency"
-                              ? "bg-red-100 text-red-800"
+                              ? "bg-red-100 text-red-800 text-xs"
                               : test.priority === "urgent"
-                                ? "bg-orange-100 text-orange-800"
-                                : "bg-blue-100 text-blue-800"
+                                ? "bg-orange-100 text-orange-800 text-xs"
+                                : "bg-blue-100 text-blue-800 text-xs"
                           }
                         >
                           {test.priority}
@@ -333,107 +371,97 @@ export default function TestDetailPage() {
                     </div>
                   </td>
                 </tr>
-
-                {/* Test Details Row */}
-                <tr className="border-b ">
-                  <td className="py-4 px-4 align-top">
+                <tr className="border-b">
+                  <td className="py-4 px-4  font-medium align-top">
                     <div className="flex items-center gap-2">
-                      <TestTube className="h-4 w-4" />
-                      <span className="font-medium">Test Details</span>
+                      <TestTube className="h-4 w-4 text-gray-500" />
+                      <span>Test</span>
                     </div>
                   </td>
                   <td className="py-4 px-4">
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-4 gap-4">
                       <div>
-                        <p className="text-sm text-muted-foreground">
-                          Test Name
-                        </p>
-                        <p className="font-medium">{test.testName}</p>
+                        <p className="text-xs text-muted-foreground">Name</p>
+                        <p className="font-medium text-sm">{test.testName}</p>
                       </div>
                       {test.category && (
                         <div>
-                          <p className="text-sm text-muted-foreground">
+                          <p className="text-xs text-muted-foreground">
                             Category
                           </p>
-                          <p className="font-medium">
+                          <p className="font-medium text-sm">
                             {test.category.replace(/_/g, " ")}
                           </p>
                         </div>
                       )}
                       {test.specimen?.type && (
                         <div>
-                          <p className="text-sm text-muted-foreground">
+                          <p className="text-xs text-muted-foreground">
                             Specimen
                           </p>
-                          <p className="font-medium">{test.specimen.type}</p>
+                          <p className="font-medium text-sm">
+                            {test.specimen.type}
+                          </p>
                         </div>
                       )}
-                      <div className="col-span-2 md:col-span-3 mt-2">
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <p className="text-sm text-muted-foreground">
-                              Collection Status
-                            </p>
-                            <Badge
-                              className={
-                                test.collectionStatus === "collected"
-                                  ? "bg-green-100 text-green-800"
-                                  : "bg-yellow-100 text-yellow-800"
-                              }
-                            >
-                              {test.collectionStatus === "collected"
-                                ? "Collected"
-                                : "Pending"}
-                            </Badge>
-                          </div>
-                          <div>
-                            <p className="text-sm text-muted-foreground">
-                              Processing Status
-                            </p>
-                            <Badge
-                              className={
-                                test.processingStatus === "completed"
-                                  ? "bg-green-100 text-green-800"
-                                  : test.processingStatus === "processing"
-                                    ? "bg-blue-100 text-blue-800"
-                                    : "bg-yellow-100 text-yellow-800"
-                              }
-                            >
-                              {test.processingStatus === "completed"
-                                ? "Completed"
-                                : test.processingStatus === "processing"
-                                  ? "Processing"
-                                  : "Pending"}
-                            </Badge>
-                          </div>
-                        </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Ordered</p>
+                        <p className="font-medium text-sm">
+                          {new Date(test.orderedAt).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">
+                          Collection
+                        </p>
+                        <Badge
+                          className={
+                            test.collectionStatus === "collected"
+                              ? "bg-green-100 text-green-800 text-xs"
+                              : "bg-yellow-100 text-yellow-800 text-xs"
+                          }
+                        >
+                          {test.collectionStatus}
+                        </Badge>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">
+                          Processing
+                        </p>
+                        <Badge
+                          className={
+                            test.processingStatus === "completed"
+                              ? "bg-green-100 text-green-800 text-xs"
+                              : test.processingStatus === "processing"
+                                ? "bg-blue-100 text-blue-800 text-xs"
+                                : "bg-yellow-100 text-yellow-800 text-xs"
+                          }
+                        >
+                          {test.processingStatus}
+                        </Badge>
                       </div>
                     </div>
                   </td>
                 </tr>
-
-                {/* Payment Information Row */}
-                <tr className="">
-                  <td className="py-4 px-4 align-top">
+                <tr>
+                  <td className="py-4 px-4 font-medium align-top">
                     <div className="flex items-center gap-2">
-                      <DollarSign className="h-4 w-4" />
-                      <span className="font-medium">Payment Information</span>
+                      <DollarSign className="h-4 w-4 text-gray-500" />
+                      <span>Payment</span>
                     </div>
                   </td>
                   <td className="py-4 px-4">
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-4 gap-4">
                       <div>
-                        <p className="text-sm text-muted-foreground">
-                          Payment Status
-                        </p>
+                        <p className="text-xs text-muted-foreground">Status</p>
                         <div className="flex items-center gap-2">
                           <Badge
                             className={
                               test.paymentVerified
-                                ? "bg-green-100 text-green-800"
+                                ? "bg-green-100 text-green-800 text-xs"
                                 : chargesInfo.paymentStatus === "paid"
-                                  ? "bg-green-100 text-green-800"
-                                  : "bg-red-100 text-red-800"
+                                  ? "bg-green-100 text-green-800 text-xs"
+                                  : "bg-red-100 text-red-800 text-xs"
                             }
                           >
                             {test.paymentVerified
@@ -446,27 +474,21 @@ export default function TestDetailPage() {
                         </div>
                       </div>
                       <div>
-                        <p className="text-sm text-muted-foreground">
-                          Total Amount
-                        </p>
-                        <p className="font-medium">
+                        <p className="text-xs text-muted-foreground">Total</p>
+                        <p className="font-medium text-sm">
                           ₹{chargesInfo.totalAmount}
                         </p>
                       </div>
                       <div>
-                        <p className="text-sm text-muted-foreground">
-                          Paid Amount
-                        </p>
-                        <p className="font-medium text-green-600">
+                        <p className="text-xs text-muted-foreground">Paid</p>
+                        <p className="font-medium text-sm text-green-600">
                           ₹{chargesInfo.paid}
                         </p>
                       </div>
                       {chargesInfo.due > 0 && (
-                        <div className="md:col-span-3">
-                          <p className="text-sm text-muted-foreground">
-                            Due Amount
-                          </p>
-                          <p className="font-medium text-red-600">
+                        <div>
+                          <p className="text-xs text-muted-foreground">Due</p>
+                          <p className="font-medium text-sm text-red-600">
                             ₹{chargesInfo.due}
                           </p>
                         </div>
@@ -480,17 +502,216 @@ export default function TestDetailPage() {
         </CardContent>
       </Card>
 
+      {/* Mobile/Tablet: Card Grid Layout */}
+      <div className="lg:hidden space-y-4 mb-6">
+        {/* Patient Card */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <User className="h-4 w-4" />
+              Patient Information
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-xs text-muted-foreground">Name</p>
+                <p className="font-medium text-sm break-words">
+                  {patientInfo.name}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Patient ID</p>
+                <p className="font-medium text-sm">{patientInfo.patientId}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Phone</p>
+                <p className="font-medium text-sm">{patientInfo.phone}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Age/Gender</p>
+                <p className="font-medium text-sm">
+                  {patientInfo.age ? `${patientInfo.age}y` : "N/A"} /{" "}
+                  {patientInfo.gender || "N/A"}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Doctor Card */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Stethoscope className="h-4 w-4" />
+              Doctor Information
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2 md:col-span-1">
+                <p className="text-xs text-muted-foreground">Doctor</p>
+                <p className="font-medium text-sm">Dr. {doctorInfo.name}</p>
+              </div>
+              <div className="col-span-2 md:col-span-1">
+                <p className="text-xs text-muted-foreground">Specialization</p>
+                <p className="font-medium text-sm">
+                  {doctorInfo.specialization}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Priority</p>
+                <Badge
+                  className={
+                    test.priority === "emergency"
+                      ? "bg-red-100 text-red-800 text-xs"
+                      : test.priority === "urgent"
+                        ? "bg-orange-100 text-orange-800 text-xs"
+                        : "bg-blue-100 text-blue-800 text-xs"
+                  }
+                >
+                  {test.priority}
+                </Badge>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Ordered Date</p>
+                <p className="font-medium text-sm">
+                  {new Date(test.orderedAt).toLocaleDateString()}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Test Details Card */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <TestTube className="h-4 w-4" />
+              Test Details
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2">
+                <p className="text-xs text-muted-foreground">Test Name</p>
+                <p className="font-medium text-sm">{test.testName}</p>
+              </div>
+              {test.category && (
+                <div>
+                  <p className="text-xs text-muted-foreground">Category</p>
+                  <p className="font-medium text-sm">
+                    {test.category.replace(/_/g, " ")}
+                  </p>
+                </div>
+              )}
+              {test.specimen?.type && (
+                <div>
+                  <p className="text-xs text-muted-foreground">Specimen</p>
+                  <p className="font-medium text-sm">{test.specimen.type}</p>
+                </div>
+              )}
+              <div>
+                <p className="text-xs text-muted-foreground">
+                  Collection Status
+                </p>
+                <Badge
+                  className={
+                    test.collectionStatus === "collected"
+                      ? "bg-green-100 text-green-800 text-xs"
+                      : "bg-yellow-100 text-yellow-800 text-xs"
+                  }
+                >
+                  {test.collectionStatus}
+                </Badge>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">
+                  Processing Status
+                </p>
+                <Badge
+                  className={
+                    test.processingStatus === "completed"
+                      ? "bg-green-100 text-green-800 text-xs"
+                      : test.processingStatus === "processing"
+                        ? "bg-blue-100 text-blue-800 text-xs"
+                        : "bg-yellow-100 text-yellow-800 text-xs"
+                  }
+                >
+                  {test.processingStatus}
+                </Badge>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Payment Card */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <DollarSign className="h-4 w-4" />
+              Payment Information
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2">
+                <p className="text-xs text-muted-foreground">Payment Status</p>
+                <div className="flex items-center gap-2 mt-1">
+                  <Badge
+                    className={
+                      test.paymentVerified
+                        ? "bg-green-100 text-green-800 text-xs"
+                        : chargesInfo.paymentStatus === "paid"
+                          ? "bg-green-100 text-green-800 text-xs"
+                          : "bg-red-100 text-red-800 text-xs"
+                    }
+                  >
+                    {test.paymentVerified
+                      ? "Verified"
+                      : chargesInfo.paymentStatus}
+                  </Badge>
+                  {test.paymentVerified && (
+                    <CheckCircle className="h-4 w-4 text-green-500" />
+                  )}
+                </div>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Total Amount</p>
+                <p className="font-medium text-sm">
+                  ₹{chargesInfo.totalAmount}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Paid Amount</p>
+                <p className="font-medium text-sm text-green-600">
+                  ₹{chargesInfo.paid}
+                </p>
+              </div>
+              {chargesInfo.due > 0 && (
+                <div className="col-span-2">
+                  <p className="text-xs text-muted-foreground">Due Amount</p>
+                  <p className="font-medium text-sm text-red-600">
+                    ₹{chargesInfo.due}
+                  </p>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       {/* Quick Actions */}
-      <Card className="mt-6">
-        <CardHeader>
-          <CardTitle>Quick Actions</CardTitle>
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base md:text-lg">Quick Actions</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-wrap gap-4">
+          <div className="flex flex-col sm:flex-row flex-wrap gap-3">
             {canCollectSample && (
-              <Button asChild size="lg">
-                <Link href={`/laboratory/tests/${test._id}/collect`}>
-                  <TestTube className="h-4 w-4 mr-2" />
+              <Button asChild size="default" className="w-full sm:w-auto">
+                <Link href={`/laboratory/tests/${test._id}`}>
+                  <FlaskConical className="h-4 w-4 mr-2" />
                   Collect Sample
                 </Link>
               </Button>
@@ -501,13 +722,16 @@ export default function TestDetailPage() {
                 test={test}
                 mode="print"
                 buttonVariant="default"
-                buttonSize="lg"
+                buttonSize="default"
                 buttonLabel="Print Report"
               />
             )}
 
-            <Button variant="outline" asChild>
-              <Link href="/laboratory/tests">Back to All Tests</Link>
+            <Button variant="outline" asChild className="w-full sm:w-auto">
+              <Link href="/laboratory/tests">
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back to Tests
+              </Link>
             </Button>
           </div>
         </CardContent>

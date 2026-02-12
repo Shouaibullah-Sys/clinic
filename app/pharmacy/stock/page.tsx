@@ -14,7 +14,6 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -78,8 +77,6 @@ interface MedicineStock {
   name: string;
   form: string;
   dosage: string;
-  frequency: string;
-  route: string;
   currentQuantity: number;
   originalQuantity: number;
   expiryDate: string;
@@ -115,8 +112,6 @@ export default function PharmacyStockPage() {
     name: "",
     form: "",
     dosage: "",
-    frequency: "",
-    route: "",
     expiryDate: "",
     originalQuantity: "",
     currentQuantity: "",
@@ -251,8 +246,6 @@ export default function PharmacyStockPage() {
           name: medicineForm.name,
           form: medicineForm.form,
           dosage: medicineForm.dosage,
-          frequency: medicineForm.frequency,
-          route: medicineForm.route,
           expiryDate: medicineForm.expiryDate,
           originalQuantity: parseInt(medicineForm.originalQuantity),
           currentQuantity: parseInt(
@@ -331,8 +324,6 @@ export default function PharmacyStockPage() {
       name: "",
       form: "",
       dosage: "",
-      frequency: "",
-      route: "",
       expiryDate: "",
       originalQuantity: "",
       currentQuantity: "",
@@ -351,8 +342,6 @@ export default function PharmacyStockPage() {
       name: medicine.name,
       form: medicine.form,
       dosage: medicine.dosage,
-      frequency: medicine.frequency,
-      route: medicine.route,
       expiryDate: format(new Date(medicine.expiryDate), "yyyy-MM-dd"),
       originalQuantity: medicine.originalQuantity.toString(),
       currentQuantity: medicine.currentQuantity.toString(),
@@ -625,8 +614,6 @@ export default function PharmacyStockPage() {
                     <TableHead>Medicine Name</TableHead>
                     <TableHead>Form</TableHead>
                     <TableHead>Dosage</TableHead>
-                    <TableHead>Frequency</TableHead>
-                    <TableHead>Route</TableHead>
                     <TableHead>Stock Level</TableHead>
                     <TableHead>Expiry Date</TableHead>
                     <TableHead>Price</TableHead>
@@ -653,12 +640,6 @@ export default function PharmacyStockPage() {
                         </TableCell>
                         <TableCell className="text-sm">
                           {medicine.dosage}
-                        </TableCell>
-                        <TableCell className="text-sm">
-                          {medicine.frequency}
-                        </TableCell>
-                        <TableCell className="text-sm">
-                          {medicine.route}
                         </TableCell>
                         <TableCell>
                           <div className="space-y-2">
@@ -724,7 +705,7 @@ export default function PharmacyStockPage() {
 
       {/* Add Medicine Dialog */}
       <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-[95vw] lg:max-w-6xl max-h-[90vh] overflow-y-auto p-6">
           <DialogHeader>
             <DialogTitle>Add New Medicine</DialogTitle>
             <DialogDescription>
@@ -776,36 +757,6 @@ export default function PharmacyStockPage() {
                       })
                     }
                     placeholder="e.g., 500mg"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="frequency">Frequency *</Label>
-                  <Input
-                    id="frequency"
-                    value={medicineForm.frequency}
-                    onChange={(e) =>
-                      setMedicineForm({
-                        ...medicineForm,
-                        frequency: e.target.value,
-                      })
-                    }
-                    placeholder="e.g., 3 times daily"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="route">Route *</Label>
-                  <Input
-                    id="route"
-                    value={medicineForm.route}
-                    onChange={(e) =>
-                      setMedicineForm({
-                        ...medicineForm,
-                        route: e.target.value,
-                      })
-                    }
-                    placeholder="e.g., Oral, IV, IM"
                     required
                   />
                 </div>
@@ -951,7 +902,7 @@ export default function PharmacyStockPage() {
 
       {/* Edit Medicine Dialog */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-[95vw] lg:max-w-6xl max-h-[90vh] overflow-y-auto p-6">
           <DialogHeader>
             <DialogTitle>Edit Medicine</DialogTitle>
             <DialogDescription>Update medicine details</DialogDescription>
@@ -997,34 +948,6 @@ export default function PharmacyStockPage() {
                       setMedicineForm({
                         ...medicineForm,
                         dosage: e.target.value,
-                      })
-                    }
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-frequency">Frequency *</Label>
-                  <Input
-                    id="edit-frequency"
-                    value={medicineForm.frequency}
-                    onChange={(e) =>
-                      setMedicineForm({
-                        ...medicineForm,
-                        frequency: e.target.value,
-                      })
-                    }
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-route">Route *</Label>
-                  <Input
-                    id="edit-route"
-                    value={medicineForm.route}
-                    onChange={(e) =>
-                      setMedicineForm({
-                        ...medicineForm,
-                        route: e.target.value,
                       })
                     }
                     required
@@ -1171,7 +1094,7 @@ export default function PharmacyStockPage() {
 
       {/* View Medicine Dialog */}
       <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-[95vw] lg:max-w-6xl max-h-[90vh] overflow-y-auto p-6">
           <DialogHeader>
             <DialogTitle>Medicine Details</DialogTitle>
             <DialogDescription>
@@ -1199,14 +1122,6 @@ export default function PharmacyStockPage() {
                     <div>
                       <Label className="text-sm text-gray-500">Dosage</Label>
                       <p className="text-sm">{selectedMedicine.dosage}</p>
-                    </div>
-                    <div>
-                      <Label className="text-sm text-gray-500">Frequency</Label>
-                      <p className="text-sm">{selectedMedicine.frequency}</p>
-                    </div>
-                    <div>
-                      <Label className="text-sm text-gray-500">Route</Label>
-                      <p className="text-sm">{selectedMedicine.route}</p>
                     </div>
                     <div>
                       <Label className="text-sm text-gray-500">Supplier</Label>
@@ -1337,14 +1252,6 @@ export default function PharmacyStockPage() {
                 <div>
                   <p className="text-gray-500">Dosage</p>
                   <p className="font-medium">{selectedMedicine.dosage}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500">Frequency</p>
-                  <p className="font-medium">{selectedMedicine.frequency}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500">Route</p>
-                  <p className="font-medium">{selectedMedicine.route}</p>
                 </div>
                 <div>
                   <p className="text-gray-500">Current Stock</p>

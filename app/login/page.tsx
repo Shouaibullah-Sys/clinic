@@ -10,11 +10,11 @@ export const metadata: Metadata = {
 
 export default function LoginPage() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted  p-4">
+    <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-background to-muted  p-4">
       <div className="w-full max-w-md">
         {/* Logo/Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-28 h-28 rounded-lg bg-card p-2">
+          <div className="inline-flex items-center justify-center w-28 h-28 rounded-lg border p-2">
             <Image
               src="/logo2.png"
               alt="Sajad Barakzai Logo"
@@ -25,7 +25,7 @@ export default function LoginPage() {
             />
           </div>
           <h1 className="text-3xl font-bold text-foreground mt-4">
-            Sajad Barakzai Hospital
+            Sajad Barakzai Hospital Managment System
           </h1>
           <p className="text-muted-foreground mt-2">
             Manage your hospital business efficiently

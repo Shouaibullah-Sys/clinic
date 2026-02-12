@@ -43,7 +43,7 @@ const navLinks = [
   { href: "/pharmacy/issue", label: "Issue Medicine", icon: Pill },
   { href: "/pharmacy/dispense", label: "Dispense Medicine", icon: HandCoins },
   { href: "/pharmacy/inventory", label: "Inventory", icon: CheckCheck },
-  { href: "/warehouse/batches", label: "batches", icon: Receipt },
+  { href: "/warehouse", label: "Warehouse Managment", icon: Receipt },
 ];
 
 export default function PharmacyLayout({

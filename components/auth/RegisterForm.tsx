@@ -322,7 +322,13 @@ export default function RegisterForm() {
           </ul>
         </div>
 
-        <Button type="submit" className="w-full" disabled={loading} size="lg">
+        <Button
+          variant="outline"
+          type="submit"
+          className="w-full"
+          disabled={loading}
+          size="lg"
+        >
           {loading ? (
             <>
               <svg
@@ -351,23 +357,6 @@ export default function RegisterForm() {
             "Create Account"
           )}
         </Button>
-
-        <p className="text-center text-sm text-muted-foreground">
-          By creating an account, you agree to our{" "}
-          <a
-            href="#"
-            className="text-primary hover:text-primary/80 transition-colors"
-          >
-            Terms of Service
-          </a>{" "}
-          and{" "}
-          <a
-            href="#"
-            className="text-primary hover:text-primary/80 transition-colors"
-          >
-            Privacy Policy
-          </a>
-        </p>
       </form>
     </Form>
   );

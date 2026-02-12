@@ -36,9 +36,7 @@ export default function AddTestParametersPage() {
           <p className="text-sm text-muted-foreground">
             If you are not redirected automatically,{" "}
             <button
-              onClick={() =>
-                router.push(`/laboratory/tests/${params.id}/collect`)
-              }
+              onClick={() => router.push(`/laboratory/tests`)}
               className="text-blue-600 hover:underline"
             >
               click here

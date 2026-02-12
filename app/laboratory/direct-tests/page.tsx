@@ -41,6 +41,9 @@ import {
   FileText,
   Printer,
   Filter,
+  Calendar,
+  Hash,
+  Layers,
 } from "lucide-react";
 import Link from "next/link";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -82,7 +85,6 @@ interface DirectLabTest {
   specimen?: {
     type: string;
   };
-  // Update this to match the TestParameter interface
   results?: {
     parameters: Array<{
       name: string;
@@ -389,14 +391,17 @@ export default function DirectTestsPage() {
 
   if (loading) {
     return (
-      <div className="container mx-auto p-6">
-        <div className="flex items-center justify-between mb-6">
-          <div className="h-8 rounded animate-pulse w-1/4" />
-          <div className="h-10 rounded animate-pulse w-24" />
+      <div className="container mx-auto p-4 md:p-6">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-6">
+          <div className="h-8 rounded animate-pulse w-3/4 md:w-1/4 bg-gray-200" />
+          <div className="h-10 rounded animate-pulse w-full md:w-24 bg-gray-200" />
         </div>
         <div className="space-y-4">
           {[...Array(5)].map((_, i) => (
-            <div key={i} className="h-16 rounded animate-pulse" />
+            <div
+              key={i}
+              className="h-20 md:h-16 rounded animate-pulse bg-gray-200"
+            />
           ))}
         </div>
       </div>
@@ -411,67 +416,81 @@ export default function DirectTestsPage() {
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
             Direct Lab Tests
           </h1>
-          <p className="text-muted-foreground mt-1">
+          <p className="text-muted-foreground mt-1 text-sm md:text-base">
             Manage lab tests for patients visiting without a doctor
           </p>
           {user && (
-            <p className="text-sm text-gray-500 mt-1">
+            <p className="text-xs md:text-sm text-gray-500 mt-1">
               Logged in as: <span className="font-medium">{user.name}</span> (
               {user.role})
             </p>
           )}
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={fetchTests}>
+        <div className="flex items-center gap-2 w-full md:w-auto">
+          <Button
+            variant="outline"
+            onClick={fetchTests}
+            className="flex-1 md:flex-none"
+          >
             <RefreshCw className="h-4 w-4 mr-2" />
-            Refresh
+            <span className="hidden md:inline">Refresh</span>
+            <span className="md:hidden">Sync</span>
           </Button>
-          <Button asChild>
+          <Button asChild className="flex-1 md:flex-none">
             <Link href="/laboratory/direct-tests/create">
               <Plus className="h-4 w-4 mr-2" />
-              New Direct Test
+              <span className="hidden md:inline">New Direct Test</span>
+              <span className="md:hidden">New</span>
             </Link>
           </Button>
         </div>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6">
         <Card>
-          <CardContent className="pt-6">
+          <CardContent className="pt-4 md:pt-6 px-3 md:px-6">
             <div className="text-center">
-              <div className="text-2xl font-bold">{counts.all}</div>
-              <div className="text-sm text-gray-500">All Tests</div>
+              <div className="text-xl md:text-2xl font-bold">{counts.all}</div>
+              <div className="text-xs md:text-sm text-gray-500 truncate">
+                All Tests
+              </div>
             </div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="pt-6">
+          <CardContent className="pt-4 md:pt-6 px-3 md:px-6">
             <div className="text-center">
-              <div className="text-2xl font-bold text-blue-600">
+              <div className="text-xl md:text-2xl font-bold text-blue-600">
                 {counts.pending}
               </div>
-              <div className="text-sm text-gray-500">Pending</div>
+              <div className="text-xs md:text-sm text-gray-500 truncate">
+                Pending
+              </div>
             </div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="pt-6">
+          <CardContent className="pt-4 md:pt-6 px-3 md:px-6">
             <div className="text-center">
-              <div className="text-2xl font-bold text-purple-600">
+              <div className="text-xl md:text-2xl font-bold text-purple-600">
                 {counts.processing}
               </div>
-              <div className="text-sm text-gray-500">Processing</div>
+              <div className="text-xs md:text-sm text-gray-500 truncate">
+                Processing
+              </div>
             </div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="pt-6">
+          <CardContent className="pt-4 md:pt-6 px-3 md:px-6">
             <div className="text-center">
-              <div className="text-2xl font-bold text-green-600">
+              <div className="text-xl md:text-2xl font-bold text-green-600">
                 {counts.readyForPrint}
               </div>
-              <div className="text-sm text-gray-500">Ready to Print</div>
+              <div className="text-xs md:text-sm text-gray-500 truncate">
+                Ready to Print
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -479,34 +498,55 @@ export default function DirectTestsPage() {
 
       {/* Tabs for different test categories */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
-        <TabsList className="grid grid-cols-4">
-          <TabsTrigger value="all">All Tests</TabsTrigger>
-          <TabsTrigger value="pending">Pending</TabsTrigger>
-          <TabsTrigger value="processing">Processing</TabsTrigger>
-          <TabsTrigger value="ready-to-print">Ready to Print</TabsTrigger>
+        <TabsList className="grid grid-cols-4 w-full">
+          <TabsTrigger value="all" className="text-xs md:text-sm px-1 md:px-3">
+            <span className="hidden md:inline">All Tests</span>
+            <span className="md:hidden">All</span>
+          </TabsTrigger>
+          <TabsTrigger
+            value="pending"
+            className="text-xs md:text-sm px-1 md:px-3"
+          >
+            <span className="hidden md:inline">Pending</span>
+            <span className="md:hidden">Pend</span>
+          </TabsTrigger>
+          <TabsTrigger
+            value="processing"
+            className="text-xs md:text-sm px-1 md:px-3"
+          >
+            <span className="hidden md:inline">Processing</span>
+            <span className="md:hidden">Proc</span>
+          </TabsTrigger>
+          <TabsTrigger
+            value="ready-to-print"
+            className="text-xs md:text-sm px-1 md:px-3"
+          >
+            <span className="hidden md:inline">Ready to Print</span>
+            <span className="md:hidden">Print</span>
+          </TabsTrigger>
         </TabsList>
       </Tabs>
 
       {/* Filters and Search */}
       <Card className="mb-6">
-        <CardContent className="pt-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="relative">
+        <CardContent className="pt-4 md:pt-6">
+          <div className="flex flex-col md:grid md:grid-cols-4 gap-3 md:gap-4">
+            <div className="relative w-full">
               <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search by test ID, patient..."
-                className="pl-9"
+                placeholder="Search ID, patient..."
+                className="pl-9 w-full"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
 
-            <div>
+            <div className="w-full">
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger>
+                <SelectTrigger className="w-full">
                   <div className="flex items-center gap-2">
-                    <Filter className="h-4 w-4" />
-                    <SelectValue placeholder="Filter by status" />
+                    <Filter className="h-4 w-4 shrink-0" />
+                    <SelectValue placeholder="Status" />
                   </div>
                 </SelectTrigger>
                 <SelectContent>
@@ -519,19 +559,19 @@ export default function DirectTestsPage() {
               </Select>
             </div>
 
-            <div>
+            <div className="w-full">
               <Select
                 value={paymentStatusFilter}
                 onValueChange={setPaymentStatusFilter}
               >
-                <SelectTrigger>
+                <SelectTrigger className="w-full">
                   <div className="flex items-center gap-2">
-                    <DollarSign className="h-4 w-4" />
-                    <SelectValue placeholder="Filter by payment" />
+                    <DollarSign className="h-4 w-4 shrink-0" />
+                    <SelectValue placeholder="Payment" />
                   </div>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Payment Status</SelectItem>
+                  <SelectItem value="all">All Payments</SelectItem>
                   <SelectItem value="pending">Pending</SelectItem>
                   <SelectItem value="partial">Partial</SelectItem>
                   <SelectItem value="paid">Paid</SelectItem>
@@ -542,28 +582,34 @@ export default function DirectTestsPage() {
         </CardContent>
       </Card>
 
-      {/* Tests Table */}
-      <Card>
-        <CardHeader>
+      {/* Tests Table - Desktop */}
+      <Card className="hidden md:block">
+        <CardHeader className="px-6">
           <CardTitle>Direct Lab Tests ({filteredTests.length})</CardTitle>
           <CardDescription>
             Showing tests based on current filters
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="rounded-md border">
+          <div className="rounded-md border overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Test ID</TableHead>
-                  <TableHead>Test Details</TableHead>
-                  <TableHead>Patient</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Collection</TableHead>
-                  <TableHead>Payment</TableHead>
-                  <TableHead>Priority</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead className="whitespace-nowrap">Test ID</TableHead>
+                  <TableHead className="whitespace-nowrap">
+                    Test Details
+                  </TableHead>
+                  <TableHead className="whitespace-nowrap">Patient</TableHead>
+                  <TableHead className="whitespace-nowrap">Status</TableHead>
+                  <TableHead className="whitespace-nowrap">
+                    Collection
+                  </TableHead>
+                  <TableHead className="whitespace-nowrap">Payment</TableHead>
+                  <TableHead className="whitespace-nowrap">Priority</TableHead>
+                  <TableHead className="whitespace-nowrap">Created</TableHead>
+                  <TableHead className="whitespace-nowrap text-right">
+                    Actions
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -603,7 +649,7 @@ export default function DirectTestsPage() {
                             : ""
                       }
                     >
-                      <TableCell className="font-mono font-bold">
+                      <TableCell className="font-mono font-bold whitespace-nowrap">
                         {test.testId}
                       </TableCell>
                       <TableCell>
@@ -621,36 +667,38 @@ export default function DirectTestsPage() {
                       </TableCell>
                       <TableCell>
                         <div>
-                          <div className="font-medium flex items-center gap-1">
+                          <div className="font-medium flex items-center gap-1 whitespace-nowrap">
                             <User className="h-3 w-3" />
                             {test.patient.name}
                           </div>
-                          <div className="text-sm text-gray-500">
+                          <div className="text-sm text-gray-500 whitespace-nowrap">
                             ID: {test.patient.patientId}
                           </div>
                           {test.patient.phone && (
-                            <div className="text-xs text-gray-400">
+                            <div className="text-xs text-gray-400 whitespace-nowrap">
                               {test.patient.phone}
                             </div>
                           )}
                         </div>
                       </TableCell>
-                      <TableCell>{getStatusBadge(test)}</TableCell>
-                      <TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        {getStatusBadge(test)}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
                         {getCollectionStatusBadge(test.collectionStatus)}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="whitespace-nowrap">
                         {getPaymentStatusBadge(
                           test.charges?.paymentStatus || "pending",
                           test.paymentVerified,
                         )}
                         {test.charges && (
-                          <div className="text-xs text-gray-500 mt-1">
+                          <div className="text-xs text-gray-500 mt-1 whitespace-nowrap">
                             {formatPrice(test.charges.totalAmount)}
                           </div>
                         )}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="whitespace-nowrap">
                         <Badge
                           variant="outline"
                           className={
@@ -664,7 +712,7 @@ export default function DirectTestsPage() {
                           {test.priority}
                         </Badge>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="whitespace-nowrap">
                         <div className="text-sm">
                           {format(parseISO(test.createdAtDirect), "MMM dd")}
                         </div>
@@ -672,7 +720,7 @@ export default function DirectTestsPage() {
                           {format(parseISO(test.createdAtDirect), "HH:mm")}
                         </div>
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right whitespace-nowrap">
                         <div className="flex justify-end gap-2">
                           <Button
                             variant="outline"
@@ -712,6 +760,171 @@ export default function DirectTestsPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Tests Cards - Mobile */}
+      <div className="md:hidden space-y-4">
+        {filteredTests.length === 0 ? (
+          <Card>
+            <CardContent className="py-8 text-center">
+              <TestTube className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+              <h3 className="text-lg font-medium">No tests found</h3>
+              <p className="text-muted-foreground mt-2 text-sm">
+                {searchQuery ||
+                statusFilter !== "all" ||
+                paymentStatusFilter !== "all"
+                  ? "No tests match your filters"
+                  : "No direct lab tests available"}
+              </p>
+              {tests.length === 0 && (
+                <div className="mt-4">
+                  <Button asChild size="sm">
+                    <Link href="/laboratory/direct-tests/create">
+                      <Plus className="h-4 w-4 mr-2" />
+                      Create First Test
+                    </Link>
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        ) : (
+          filteredTests.map((test) => (
+            <Card
+              key={test._id}
+              className={`
+                overflow-hidden
+                ${test.priority === "emergency" ? "border-red-200 bg-red-50/30" : ""}
+                ${test.priority === "urgent" ? "border-orange-200 bg-orange-50/30" : ""}
+              `}
+            >
+              <CardContent className="p-4">
+                {/* Header with ID and Priority */}
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Hash className="h-4 w-4 text-gray-400" />
+                      <span className="font-mono font-bold text-sm">
+                        {test.testId}
+                      </span>
+                    </div>
+                    <h3 className="font-semibold text-base mt-1">
+                      {test.testName}
+                    </h3>
+                    <p className="text-xs text-gray-500">{test.category}</p>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className={
+                      test.priority === "emergency"
+                        ? "border-red-300 text-red-700 bg-red-50 text-xs"
+                        : test.priority === "urgent"
+                          ? "border-orange-300 text-orange-700 bg-orange-50 text-xs"
+                          : "border-blue-300 text-blue-700 text-xs"
+                    }
+                  >
+                    {test.priority}
+                  </Badge>
+                </div>
+
+                {/* Patient Info */}
+                <div className="bg-gray-50 rounded-lg p-3 mb-3">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <div className="flex items-center gap-1 text-sm font-medium">
+                        <User className="h-3.5 w-3.5 text-gray-500" />
+                        {test.patient.name}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        ID: {test.patient.patientId}
+                      </p>
+                      {test.patient.phone && (
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          {test.patient.phone}
+                        </p>
+                      )}
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xs text-gray-500">
+                        {format(parseISO(test.createdAtDirect), "MMM dd, yyyy")}
+                      </div>
+                      <div className="text-xs text-gray-400">
+                        {format(parseISO(test.createdAtDirect), "hh:mm a")}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Status Grid */}
+                <div className="grid grid-cols-2 gap-2 mb-3">
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Status</p>
+                    {getStatusBadge(test)}
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Collection</p>
+                    {getCollectionStatusBadge(test.collectionStatus)}
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Payment</p>
+                    {getPaymentStatusBadge(
+                      test.charges?.paymentStatus || "pending",
+                      test.paymentVerified,
+                    )}
+                  </div>
+                  {test.charges && (
+                    <div>
+                      <p className="text-xs text-gray-500 mb-1">Amount</p>
+                      <p className="text-sm font-semibold">
+                        {formatPrice(test.charges.totalAmount)}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Specimen Info */}
+                {test.specimen?.type && (
+                  <div className="text-xs text-gray-500 mb-3 flex items-center gap-1">
+                    <Layers className="h-3 w-3" />
+                    Specimen: {test.specimen.type}
+                  </div>
+                )}
+
+                {/* Actions */}
+                <div className="flex items-center gap-2 pt-2 border-t">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    asChild
+                    className="flex-1"
+                  >
+                    <Link href={`/laboratory/direct-tests/${test._id}`}>
+                      <Eye className="h-4 w-4 mr-1" />
+                      View Details
+                    </Link>
+                  </Button>
+                  {test.readyForPrint && !test.printedAt && (
+                    <Button
+                      size="sm"
+                      onClick={() => handlePrintPDF(test)}
+                      disabled={printingId === test._id}
+                      className="flex-1 bg-green-600 hover:bg-green-700"
+                    >
+                      {printingId === test._id ? (
+                        <>Printing...</>
+                      ) : (
+                        <>
+                          <Printer className="h-4 w-4 mr-1" />
+                          Print
+                        </>
+                      )}
+                    </Button>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          ))
+        )}
+      </div>
     </div>
   );
 }

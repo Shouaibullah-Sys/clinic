@@ -274,11 +274,17 @@ export default function PharmacyPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <Button onClick={() => router.push("/pharmacy/issue")}>
+          <Button
+            onClick={() => router.push("/pharmacy/issue")}
+            variant="secondary"
+          >
             <PlusCircle className="mr-2 h-4 w-4" />
             Direct Sale
           </Button>
-          <Button onClick={() => router.push("/pharmacy/stock")}>
+          <Button
+            variant="outline"
+            onClick={() => router.push("/pharmacy/stock")}
+          >
             <Package className="mr-2 h-4 w-4" />
             Manage Stock
           </Button>
@@ -360,7 +366,9 @@ export default function PharmacyPage() {
                   <p className="text-gray-500 mb-6">
                     All prescriptions have been processed.
                   </p>
-                  <Button onClick={fetchPendingPrescriptions}>Refresh</Button>
+                  <Button variant="outline" onClick={fetchPendingPrescriptions}>
+                    Refresh
+                  </Button>
                 </div>
               ) : (
                 <>
@@ -505,7 +513,12 @@ export default function PharmacyPage() {
                   <p className="text-gray-500 mb-6">
                     All discharge card medicines have been processed.
                   </p>
-                  <Button onClick={fetchPendingDischargeCards}>Refresh</Button>
+                  <Button
+                    variant="outline"
+                    onClick={fetchPendingDischargeCards}
+                  >
+                    Refresh
+                  </Button>
                 </div>
               ) : (
                 <>
@@ -621,7 +634,10 @@ export default function PharmacyPage() {
                   Manage your medicine stock, add new items, and track inventory
                   levels.
                 </p>
-                <Button onClick={() => router.push("/pharmacy/stock")}>
+                <Button
+                  variant="secondary"
+                  onClick={() => router.push("/pharmacy/stock")}
+                >
                   Go to Stock Management
                 </Button>
               </div>
@@ -645,7 +661,10 @@ export default function PharmacyPage() {
                   View the complete history of all dispensed prescriptions and
                   medicines.
                 </p>
-                <Button onClick={() => router.push("/pharmacy/history")}>
+                <Button
+                  variant="secondary"
+                  onClick={() => router.push("/pharmacy/history")}
+                >
                   View History
                 </Button>
               </div>
@@ -669,7 +688,10 @@ export default function PharmacyPage() {
                   Generate reports for sales, inventory, and dispensing
                   activities.
                 </p>
-                <Button onClick={() => router.push("/pharmacy/reports")}>
+                <Button
+                  variant="secondary"
+                  onClick={() => router.push("/pharmacy/reports")}
+                >
                   Generate Reports
                 </Button>
               </div>

@@ -6,8 +6,6 @@ export interface IMedicineStock {
   name: string;
   form: string;
   dosage: string;
-  frequency: string;
-  route: string;
   expiryDate: Date;
   currentQuantity: number;
   originalQuantity: number;
@@ -25,8 +23,6 @@ const medicineStockSchema = new Schema<IMedicineStock>(
     name: { type: String, required: true },
     form: { type: String, required: true },
     dosage: { type: String, required: true },
-    frequency: { type: String, required: true },
-    route: { type: String, required: true },
     expiryDate: { type: Date, required: true },
     currentQuantity: { type: Number, required: true, min: 0 },
     originalQuantity: { type: Number, required: true, min: 0 },

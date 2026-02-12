@@ -136,8 +136,6 @@ export async function POST(request: NextRequest) {
       description,
       form,
       dosage,
-      frequency,
-      route,
     } = body;
 
     // Validation
@@ -169,8 +167,6 @@ export async function POST(request: NextRequest) {
       description: description?.trim(),
       form: form?.trim(),
       dosage: dosage?.trim(),
-      frequency: frequency?.trim(),
-      route: route?.trim(),
     });
 
     await medicineStock.save();

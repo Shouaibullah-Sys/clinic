@@ -44,24 +44,17 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
-import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
 import {
   Search,
-  Filter,
   MoreVertical,
   Eye,
   Edit,
   Trash2,
   Plus,
-  Copy,
   TestTube,
   Clock,
   DollarSign,
@@ -81,6 +74,9 @@ import {
   Syringe,
 } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
+import { TemplateDetailsDialog } from "./components/TemplateDetailsDialog";
+import { TemplateEditDialog } from "./components/TemplateEditDialog";
+import { TemplateCreateDialog } from "./components/TemplateCreateDialog";
 
 interface LabTestTemplate {
   _id: string;
@@ -129,7 +125,9 @@ export default function LabTemplatesPage() {
   const [selectedTemplate, setSelectedTemplate] =
     useState<LabTestTemplate | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [showDeactivateDialog, setShowDeactivateDialog] = useState(false);
+  const [showDetailsDialog, setShowDetailsDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -375,11 +373,9 @@ export default function LabTemplatesPage() {
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh
           </Button>
-          <Button asChild>
-            <Link href="/laboratory/templates/new">
-              <Plus className="h-4 w-4 mr-2" />
-              New Template
-            </Link>
+          <Button onClick={() => setShowCreateDialog(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            New Template
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -566,11 +562,9 @@ export default function LabTemplatesPage() {
                   ? "No templates match your search criteria"
                   : "No test templates available yet"}
               </p>
-              <Button asChild>
-                <Link href="/laboratory/templates/new">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create First Template
-                </Link>
+              <Button onClick={() => setShowCreateDialog(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Create First Template
               </Button>
             </div>
           ) : (
@@ -679,21 +673,23 @@ export default function LabTemplatesPage() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem asChild>
-                              <Link
-                                href={`/laboratory/templates/${template._id}`}
-                              >
-                                <Eye className="h-4 w-4 mr-2" />
-                                View Details
-                              </Link>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setSelectedTemplate(template);
+                                setShowDetailsDialog(true);
+                              }}
+                            >
+                              <Eye className="h-4 w-4 mr-2" />
+                              View Details
                             </DropdownMenuItem>
-                            <DropdownMenuItem asChild>
-                              <Link
-                                href={`/laboratory/templates/${template._id}/edit`}
-                              >
-                                <Edit className="h-4 w-4 mr-2" />
-                                Edit Template
-                              </Link>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setSelectedTemplate(template);
+                                setShowEditDialog(true);
+                              }}
+                            >
+                              <Edit className="h-4 w-4 mr-2" />
+                              Edit Template
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
@@ -740,8 +736,8 @@ export default function LabTemplatesPage() {
           <DialogHeader>
             <DialogTitle>Delete Template</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete the template &quot;
-              {selectedTemplate?.testName}&quot;? This action cannot be undone.
+              Are you sure you want to delete the template "
+              {selectedTemplate?.testName}"? This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
@@ -774,6 +770,38 @@ export default function LabTemplatesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* View Details Dialog */}
+      <TemplateDetailsDialog
+        template={selectedTemplate}
+        open={showDetailsDialog}
+        onOpenChange={setShowDetailsDialog}
+        onEditClick={() => {
+          setShowDetailsDialog(false);
+          setShowEditDialog(true);
+        }}
+      />
+
+      {/* Edit Template Dialog */}
+      <TemplateEditDialog
+        template={selectedTemplate}
+        open={showEditDialog}
+        onOpenChange={setShowEditDialog}
+        onSuccess={() => {
+          fetchTemplates();
+          setSuccess("Template updated successfully");
+        }}
+      />
+
+      {/* Create Template Dialog */}
+      <TemplateCreateDialog
+        open={showCreateDialog}
+        onOpenChange={setShowCreateDialog}
+        onSuccess={() => {
+          fetchTemplates();
+          setSuccess("Template created successfully");
+        }}
+      />
 
       {/* Category Tabs (Alternative View) */}
       <Tabs defaultValue="all" className="w-full">
@@ -892,19 +920,25 @@ export default function LabTemplatesPage() {
                               {template.parameters?.length || 0} parameters
                             </Badge>
                             <div className="flex gap-2">
-                              <Button asChild size="sm" variant="ghost">
-                                <Link
-                                  href={`/laboratory/templates/${template._id}`}
-                                >
-                                  <Eye className="h-4 w-4" />
-                                </Link>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => {
+                                  setSelectedTemplate(template);
+                                  setShowDetailsDialog(true);
+                                }}
+                              >
+                                <Eye className="h-4 w-4" />
                               </Button>
-                              <Button asChild size="sm" variant="ghost">
-                                <Link
-                                  href={`/laboratory/templates/${template._id}/edit`}
-                                >
-                                  <Edit className="h-4 w-4" />
-                                </Link>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => {
+                                  setSelectedTemplate(template);
+                                  setShowEditDialog(true);
+                                }}
+                              >
+                                <Edit className="h-4 w-4" />
                               </Button>
                             </div>
                           </div>

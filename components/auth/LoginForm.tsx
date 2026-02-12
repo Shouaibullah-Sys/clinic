@@ -194,7 +194,13 @@ export default function LoginForm({ redirect = "/dashboard" }: LoginFormProps) {
           </a>
         </div>
 
-        <Button type="submit" className="w-full" disabled={loading} size="lg">
+        <Button
+          type="submit"
+          variant="outline"
+          className="w-full"
+          disabled={loading}
+          size="lg"
+        >
           {loading ? (
             <>
               <svg
