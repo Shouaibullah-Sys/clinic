@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import mongoose from "mongoose";
 import dbConnect from "@/lib/dbConnect";
 import { CashAtHand } from "@/lib/models/CashAtHand";
+import { DailyCashCollection } from "@/lib/models/DailyCashCollection";
 
 // GET: Get cash transactions for the current user
 export async function GET(request: NextRequest) {
@@ -108,24 +109,27 @@ export async function POST(request: NextRequest) {
       destination,
     } = body;
 
-    // Calculate total from denominations
+    // Calculate total from denominations (handle undefined values as 0)
     const calculatedTotal =
-      denominations.thousand * 1000 +
-      denominations.fiveHundred * 500 +
-      denominations.twoHundred * 200 +
-      denominations.oneHundred * 100 +
-      denominations.fifty * 50 +
-      denominations.twenty * 20 +
-      denominations.ten * 10 +
-      denominations.five * 5 +
-      denominations.two * 2 +
-      denominations.one * 1 +
-      denominations.half * 0.5 +
-      denominations.quarter * 0.25 +
-      denominations.tenCents * 0.1 +
-      denominations.fiveCents * 0.05;
+      (denominations.thousand || 0) * 1000 +
+      (denominations.fiveHundred || 0) * 500 +
+      (denominations.twoHundred || 0) * 200 +
+      (denominations.oneHundred || 0) * 100 +
+      (denominations.fifty || 0) * 50 +
+      (denominations.twenty || 0) * 20 +
+      (denominations.ten || 0) * 10 +
+      (denominations.five || 0) * 5 +
+      (denominations.two || 0) * 2 +
+      (denominations.one || 0) * 1 +
+      (denominations.half || 0) * 0.5 +
+      (denominations.quarter || 0) * 0.25 +
+      (denominations.tenCents || 0) * 0.1 +
+      (denominations.fiveCents || 0) * 0.05;
 
-    const variance = calculatedTotal - declaredAmount;
+    // Ensure calculatedTotal is a valid number (not NaN)
+    const validCalculatedTotal = isNaN(calculatedTotal) ? 0 : calculatedTotal;
+
+    const variance = validCalculatedTotal - (declaredAmount || 0);
 
     // Generate transaction ID
     const date = new Date();
@@ -144,10 +148,10 @@ export async function POST(request: NextRequest) {
       date: new Date(),
       transactionType,
       denominations,
-      calculatedTotal,
-      declaredAmount,
+      calculatedTotal: validCalculatedTotal,
+      declaredAmount: declaredAmount || 0,
       variance,
-      amount: declaredAmount,
+      amount: declaredAmount || 0,
       previousBalance: 0,
       newBalance: declaredAmount,
       source,

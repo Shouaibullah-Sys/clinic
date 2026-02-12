@@ -281,7 +281,7 @@ const CashAtHandSchema = new Schema<ICashAtHand>(
 );
 
 // Indexes for efficient querying
-CashAtHandSchema.index({ transactionId: 1 });
+// Note: transactionId has unique: true which creates an index automatically
 CashAtHandSchema.index({ staff: 1 });
 CashAtHandSchema.index({ date: -1 });
 CashAtHandSchema.index({ transactionType: 1 });

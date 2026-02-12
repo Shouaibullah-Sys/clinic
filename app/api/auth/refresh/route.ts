@@ -8,7 +8,7 @@ export async function POST(request: NextRequest) {
   if (!process.env.JWT_SECRET) {
     return NextResponse.json(
       { error: "Server configuration error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 
@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
     if (!refreshToken) {
       return NextResponse.json(
         { error: "No refresh token provided" },
-        { status: 401 }
+        { status: 401 },
       );
     }
 
@@ -34,28 +34,25 @@ export async function POST(request: NextRequest) {
 
     // Verify refresh token
     const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET) as any;
-    
+
     if (decoded.type !== "refresh") {
       return NextResponse.json(
         { error: "Invalid token type" },
-        { status: 401 }
+        { status: 401 },
       );
     }
 
     const user = await User.findById(decoded.id);
-    
+
     if (!user) {
-      return NextResponse.json(
-        { error: "User not found" },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: "User not found" }, { status: 401 });
     }
 
     // Check if refresh token exists in user's tokens
     if (!user.refreshTokens.includes(refreshToken)) {
       return NextResponse.json(
         { error: "Invalid refresh token" },
-        { status: 401 }
+        { status: 401 },
       );
     }
 
@@ -69,11 +66,17 @@ export async function POST(request: NextRequest) {
         name: user.name,
       },
       process.env.JWT_SECRET,
-      { expiresIn: "24h" }
+      { expiresIn: "24h" },
     );
 
     const response = NextResponse.json({
       accessToken: newAccessToken,
+      user: {
+        _id: user._id.toString(),
+        name: user.name,
+        role: user.role,
+        email: user.email,
+      },
     });
 
     // Set new access token cookie
@@ -88,24 +91,24 @@ export async function POST(request: NextRequest) {
     return response;
   } catch (error) {
     console.error("Token refresh error:", error);
-    
+
     if (error instanceof jwt.TokenExpiredError) {
       return NextResponse.json(
         { error: "Refresh token expired" },
-        { status: 401 }
+        { status: 401 },
       );
     }
-    
+
     if (error instanceof jwt.JsonWebTokenError) {
       return NextResponse.json(
         { error: "Invalid refresh token" },
-        { status: 401 }
+        { status: 401 },
       );
     }
 
     return NextResponse.json(
       { error: "Internal server error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

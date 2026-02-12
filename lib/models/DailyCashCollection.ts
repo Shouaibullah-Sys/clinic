@@ -50,6 +50,15 @@ const DailyCashCollectionSchema = new Schema<IDailyCashCollection>(
       required: true,
       unique: true,
       uppercase: true,
+      immutable: true,
+      default: () => {
+        const date = new Date();
+        const year = date.getFullYear().toString().slice(-2);
+        const month = (date.getMonth() + 1).toString().padStart(2, "0");
+        const day = date.getDate().toString().padStart(2, "0");
+        const random = Math.floor(1000 + Math.random() * 9000);
+        return `DCC${year}${month}${day}${random}`;
+      },
     },
     staff: {
       type: Schema.Types.ObjectId,
@@ -178,7 +187,6 @@ const DailyCashCollectionSchema = new Schema<IDailyCashCollection>(
 );
 
 // Indexes for efficient querying
-DailyCashCollectionSchema.index({ collectionId: 1 });
 DailyCashCollectionSchema.index({ staff: 1 });
 DailyCashCollectionSchema.index({ date: -1 });
 DailyCashCollectionSchema.index({ shift: 1 });
@@ -221,16 +229,6 @@ DailyCashCollectionSchema.virtual("discrepancyStatus").get(function () {
 
 // Pre-save hooks
 DailyCashCollectionSchema.pre("save", function (next) {
-  // Generate collection ID if not exists
-  if (!this.collectionId || this.isNew) {
-    const date = new Date();
-    const year = date.getFullYear().toString().slice(-2);
-    const month = (date.getMonth() + 1).toString().padStart(2, "0");
-    const day = date.getDate().toString().padStart(2, "0");
-    const random = Math.floor(1000 + Math.random() * 9000);
-    this.collectionId = `DCC${year}${month}${day}${random}`;
-  }
-
   // Calculate discrepancy
   this.discrepancy = this.totalDeclaredAmount - this.totalExpectedAmount;
 

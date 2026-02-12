@@ -650,7 +650,7 @@ export default function AdminCashCollectionPage() {
                       )}
 
                       {collection.reviewedByName && (
-                        <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+                        <div className="mt-4 p-3rounded-lg">
                           <p className="text-sm font-medium">Review Details:</p>
                           <p className="text-sm text-muted-foreground">
                             Reviewed by: {collection.reviewedByName}
@@ -837,7 +837,7 @@ export default function AdminCashCollectionPage() {
               )}
 
               {selectedCollection.reviewedByName && (
-                <div className="border-t pt-4 p-3 bg-blue-50 rounded-lg">
+                <div className="border-t pt-4 p-3 rounded-lg">
                   <Label>Review Information</Label>
                   <p className="text-sm text-muted-foreground mt-1">
                     Reviewed by: {selectedCollection.reviewedByName}

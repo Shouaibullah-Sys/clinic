@@ -4,6 +4,46 @@ import { User } from "@/lib/models/User";
 import dbConnect from "@/lib/dbConnect";
 import { CreateUserSchema } from "@/lib/schemas/userSchema";
 import bcrypt from "bcryptjs";
+import { jwtVerify } from "jose";
+
+const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-this";
+
+async function verifyToken(token: string) {
+  try {
+    const secret = new TextEncoder().encode(JWT_SECRET);
+    const { payload } = await jwtVerify(token, secret);
+    return payload;
+  } catch (error) {
+    return null;
+  }
+}
+
+// Helper to authenticate admin
+async function authenticateAdmin(request: NextRequest) {
+  const authHeader = request.headers.get("authorization");
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return { error: "Unauthorized. No token provided.", status: 401 };
+  }
+
+  const token = authHeader.split(" ")[1];
+  const payload = await verifyToken(token);
+
+  if (!payload) {
+    return { error: "Invalid or expired token.", status: 401 };
+  }
+
+  const userRole = payload.role as string;
+
+  // Only admin can access
+  if (userRole !== "admin") {
+    return { error: "Forbidden. Admin access required.", status: 403 };
+  }
+
+  return {
+    userId: payload.id as string,
+    userRole,
+  };
+}
 
 // Type for user data without sensitive information
 type SafeUserData = Omit<
@@ -11,30 +51,16 @@ type SafeUserData = Omit<
   "password" | "refreshTokens"
 >;
 
-export async function GET(req: NextRequest) {
+export async function GET(request: NextRequest) {
   console.log("GET /api/admin/users called");
   await dbConnect();
 
   try {
-    // Get user info from middleware headers
-    const userId = req.headers.get("x-user-id");
-    const userRole = req.headers.get("x-user-role");
-
-    console.log("User from middleware:", { userId, userRole });
-
-    if (!userId || !userRole) {
-      console.log("No user info from middleware, returning 401");
+    const auth = await authenticateAdmin(request);
+    if ("error" in auth) {
       return NextResponse.json(
-        { success: false, error: "Unauthorized" },
-        { status: 401 },
-      );
-    }
-
-    if (userRole !== "admin") {
-      console.log("User not admin, returning 403");
-      return NextResponse.json(
-        { success: false, error: "Forbidden" },
-        { status: 403 },
+        { success: false, error: auth.error },
+        { status: auth.status },
       );
     }
 
@@ -56,29 +82,19 @@ export async function GET(req: NextRequest) {
   }
 }
 
-export async function POST(req: NextRequest) {
+export async function POST(request: NextRequest) {
   await dbConnect();
 
   try {
-    // Get user info from middleware headers
-    const userId = req.headers.get("x-user-id");
-    const userRole = req.headers.get("x-user-role");
-
-    if (!userId || !userRole) {
+    const auth = await authenticateAdmin(request);
+    if ("error" in auth) {
       return NextResponse.json(
-        { success: false, error: "Unauthorized" },
-        { status: 401 },
+        { success: false, error: auth.error },
+        { status: auth.status },
       );
     }
 
-    if (userRole !== "admin") {
-      return NextResponse.json(
-        { success: false, error: "Forbidden" },
-        { status: 403 },
-      );
-    }
-
-    const body = await req.json();
+    const body = await request.json();
 
     // For POST (create), password is required
     const validation = CreateUserSchema.safeParse(body);

@@ -193,8 +193,8 @@ export default function CashPage() {
   // Calculated Total (from denominations)
   const calculatedTotal = calculateTotal();
 
-  // Variance = Calculated Total - Final Calculated Amount
-  const variance = calculatedTotal - finalCalculatedAmount;
+  // Variance = Declared Amount (finalCalculatedAmount) - Calculated Total (from denominations)
+  const variance = finalCalculatedAmount - calculatedTotal;
 
   const resetCollection = () => {
     setDenominations({
@@ -288,6 +288,52 @@ export default function CashPage() {
     }
   };
 
+  // Auto-submit collection for admin approval
+  const autoSubmitCollection = async () => {
+    try {
+      // Get today's date in YYYY-MM-DD format
+      const today = new Date().toISOString().split("T")[0];
+
+      // Get all transaction IDs
+      const transactionIds = transactions.map((tx) => tx.transactionId);
+
+      const response = await fetch("/api/dashboard/reception/cash/submit", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-id": user?._id || "",
+          "x-user-role": user?.role || "",
+          "x-user-name": user?.name || "",
+        },
+        body: JSON.stringify({
+          shift,
+          date: today,
+          totalExpectedAmount,
+          totalDeclaredAmount: finalCalculatedAmount,
+          cashFromAppointments: expectedFromAppointments,
+          cashFromLab: expectedFromLab,
+          cashFromRadiology: expectedFromRadiology,
+          cashFromDischarge: expectedFromDischarge,
+          cashFromPharmacy: expectedFromPharmacy,
+          totalDiscounts: approvedDiscounts,
+          totalExpenses: todaysExpenses,
+          transactionIds,
+        }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        alert("Collection submitted successfully for admin approval!");
+        fetchTransactions();
+        fetchDailyStats();
+      } else if (data.error && !data.error.includes("already submitted")) {
+        alert(data.error || "Failed to submit collection");
+      }
+    } catch (error) {
+      console.error("Error submitting collection:", error);
+    }
+  };
+
   const handleAddCollection = async () => {
     try {
       const response = await fetch("/api/dashboard/reception/cash", {
@@ -312,6 +358,9 @@ export default function CashPage() {
         setIsCollectionOpen(false);
         resetCollection();
         fetchTransactions();
+
+        // Auto-submit the collection for admin approval
+        await autoSubmitCollection();
       }
     } catch (error) {
       console.error("Error creating collection:", error);

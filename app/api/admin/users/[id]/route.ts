@@ -4,12 +4,45 @@ import { User } from "@/lib/models/User";
 import dbConnect from "@/lib/dbConnect";
 import { UpdateUserSchema } from "@/lib/schemas/userSchema";
 import bcrypt from "bcryptjs";
-import { cookies } from "next/headers";
-import { jwtDecode } from "jwt-decode";
+import { jwtVerify } from "jose";
 
-interface TokenPayload {
-  role: string;
-  key: string;
+const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-this";
+
+async function verifyToken(token: string) {
+  try {
+    const secret = new TextEncoder().encode(JWT_SECRET);
+    const { payload } = await jwtVerify(token, secret);
+    return payload;
+  } catch (error) {
+    return null;
+  }
+}
+
+// Helper to authenticate admin
+async function authenticateAdmin(request: NextRequest) {
+  const authHeader = request.headers.get("authorization");
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return { error: "Unauthorized. No token provided.", status: 401 };
+  }
+
+  const token = authHeader.split(" ")[1];
+  const payload = await verifyToken(token);
+
+  if (!payload) {
+    return { error: "Invalid or expired token.", status: 401 };
+  }
+
+  const userRole = payload.role as string;
+
+  // Only admin can access
+  if (userRole !== "admin") {
+    return { error: "Forbidden. Admin access required.", status: 403 };
+  }
+
+  return {
+    userId: payload.id as string,
+    userRole,
+  };
 }
 
 // Updated type definitions
@@ -18,68 +51,52 @@ type RouteContext = { params: RouteParams };
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<RouteParams> }
+  { params }: { params: Promise<RouteParams> },
 ): Promise<NextResponse> {
   await dbConnect();
   const { id } = await params;
 
   try {
-    // Verify authentication
-    const cookieStore = await cookies();
-    const accessToken = cookieStore.get("accessToken")?.value;
-
-    if (!accessToken) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    // Verify token is valid
-    try {
-      jwtDecode(accessToken);
-    } catch (error) {
-      return NextResponse.json({ error: "Invalid token" }, { status: 401 });
+    const auth = await authenticateAdmin(request);
+    if ("error" in auth) {
+      return NextResponse.json(
+        { success: false, error: auth.error },
+        { status: auth.status },
+      );
     }
 
     const user = await User.findById(id).select("-password -refreshTokens");
     if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      return NextResponse.json(
+        { success: false, error: "User not found" },
+        { status: 404 },
+      );
     }
 
-    return NextResponse.json(user);
+    return NextResponse.json({ success: true, data: user });
   } catch (error) {
     console.error("Failed to fetch user:", error);
     return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
+      { success: false, error: "Internal server error" },
+      { status: 500 },
     );
   }
 }
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: Promise<RouteParams> }
+  { params }: { params: Promise<RouteParams> },
 ): Promise<NextResponse> {
   await dbConnect();
   const { id } = await params;
 
   try {
-    // Get cookies synchronously
-    const cookieStore = await cookies();
-    const accessToken = cookieStore.get("accessToken")?.value;
-
-    if (!accessToken) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    // Verify token with error handling
-    let decoded: TokenPayload;
-    try {
-      decoded = jwtDecode(accessToken);
-    } catch (error) {
-      return NextResponse.json({ error: "Invalid token" }, { status: 401 });
-    }
-
-    if (decoded.role !== "admin") {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const auth = await authenticateAdmin(request);
+    if ("error" in auth) {
+      return NextResponse.json(
+        { success: false, error: auth.error },
+        { status: auth.status },
+      );
     }
 
     // Parse and validate request body
@@ -89,10 +106,11 @@ export async function PUT(
     if (!validation.success) {
       return NextResponse.json(
         {
+          success: false,
           error: "Validation failed",
           details: validation.error.flatten(),
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -113,60 +131,55 @@ export async function PUT(
     });
 
     if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      return NextResponse.json(
+        { success: false, error: "User not found" },
+        { status: 404 },
+      );
     }
 
-    return NextResponse.json(user);
+    return NextResponse.json({ success: true, data: user });
   } catch (error) {
     console.error("Failed to update user:", error);
     return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
+      { success: false, error: "Internal server error" },
+      { status: 500 },
     );
   }
 }
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<RouteParams> }
+  { params }: { params: Promise<RouteParams> },
 ): Promise<NextResponse> {
   await dbConnect();
   const { id } = await params;
 
   try {
-    // Verify admin role
-    const cookieStore = await cookies();
-    const accessToken = cookieStore.get("accessToken")?.value;
-
-    if (!accessToken) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    let decoded: TokenPayload;
-    try {
-      decoded = jwtDecode(accessToken);
-    } catch (error) {
-      return NextResponse.json({ error: "Invalid token" }, { status: 401 });
-    }
-
-    if (decoded.role !== "admin") {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const auth = await authenticateAdmin(request);
+    if ("error" in auth) {
+      return NextResponse.json(
+        { success: false, error: auth.error },
+        { status: auth.status },
+      );
     }
 
     const user = await User.findByIdAndDelete(id);
     if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      return NextResponse.json(
+        { success: false, error: "User not found" },
+        { status: 404 },
+      );
     }
 
     return NextResponse.json(
       { success: true, message: "User deleted successfully" },
-      { status: 200 }
+      { status: 200 },
     );
   } catch (error) {
     console.error("Failed to delete user:", error);
     return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
+      { success: false, error: "Internal server error" },
+      { status: 500 },
     );
   }
 }
