@@ -1893,6 +1893,7 @@ export default function AppointmentDetailPage() {
                           notes: "",
                           price:
                             unpaidTest.discountedPrice || unpaidTest.price || 0,
+                          discount: 0,
                         });
                         setPaymentDialogOpen(true);
                       } else if (unpaidImaging) {
@@ -1909,6 +1910,7 @@ export default function AppointmentDetailPage() {
                             unpaidImaging.charges?.transactionId || "",
                           notes: "",
                           price: 0,
+                          discount: 0,
                         });
                         setPaymentDialogOpen(true);
                       } else {
