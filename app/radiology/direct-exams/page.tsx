@@ -427,7 +427,7 @@ export default function DirectExamsPage() {
                 value={statusFilter}
                 onValueChange={(value) => setStatusFilter(value)}
               >
-                <SelectTrigger className="w-[150px]">
+                <SelectTrigger className="w-37.5">
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
@@ -442,7 +442,7 @@ export default function DirectExamsPage() {
                 value={paymentStatusFilter}
                 onValueChange={(value) => setPaymentStatusFilter(value)}
               >
-                <SelectTrigger className="w-[150px]">
+                <SelectTrigger className="w-37.5">
                   <SelectValue placeholder="Payment" />
                 </SelectTrigger>
                 <SelectContent>

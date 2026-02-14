@@ -21,7 +21,7 @@ import { toast } from "sonner";
 import { Loader2, FileText } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
 
-// Define validation schema with Zod
+// Define validation schema with Zod - use .optional() for booleans to handle unchecked checkboxes
 const resultsSchema = z.object({
   clinicalIndication: z.string().optional(),
   technique: z.string().optional(),
@@ -29,14 +29,15 @@ const resultsSchema = z.object({
   findings: z.string().min(1, "Findings are required"),
   impression: z.string().min(1, "Impression is required"),
   recommendations: z.string().optional(),
-  criticalFindings: z.boolean().default(false),
+  criticalFindings: z.boolean().optional(),
   criticalFindingsDetails: z.string().optional(),
-  criticalCommunicated: z.boolean().default(false),
+  criticalCommunicated: z.boolean().optional(),
   communicatedTo: z.string().optional(),
   communicationMethod: z.string().optional(),
   communicationNotes: z.string().optional(),
 });
 
+// Define form values type explicitly
 type ResultsFormValues = z.infer<typeof resultsSchema>;
 
 interface RadiologyRequest {
@@ -101,9 +102,12 @@ export function SubmitResultsDialog({
     register,
     handleSubmit,
     reset,
+    setValue,
+    watch,
     formState: { errors },
   } = useForm<ResultsFormValues>({
-    resolver: zodResolver(resultsSchema),
+    // Using type assertion to resolve zodResolver type mismatch
+    resolver: zodResolver(resultsSchema) as any,
     defaultValues: {
       findings: request.findings || "",
       impression: request.impression || "",
@@ -111,15 +115,20 @@ export function SubmitResultsDialog({
       clinicalIndication: request.report?.clinicalIndication || "",
       technique: request.report?.technique || "",
       comparison: request.report?.comparison || "",
-      criticalFindings: request.report?.criticalFindings || false,
+      criticalFindings: request.report?.criticalFindings ?? false,
       criticalFindingsDetails: request.report?.criticalFindingsDetails || "",
       criticalCommunicated:
-        request.report?.criticalCommunication?.communicated || false,
-      communicatedTo: request.report?.criticalCommunication?.communicatedTo || "",
+        request.report?.criticalCommunication?.communicated ?? false,
+      communicatedTo:
+        request.report?.criticalCommunication?.communicatedTo || "",
       communicationMethod: request.report?.criticalCommunication?.method || "",
       communicationNotes: request.report?.criticalCommunication?.notes || "",
     },
   });
+
+  // Watch checkbox values
+  const criticalFindingsValue = watch("criticalFindings");
+  const criticalCommunicatedValue = watch("criticalCommunicated");
 
   useEffect(() => {
     reset({
@@ -129,11 +138,12 @@ export function SubmitResultsDialog({
       clinicalIndication: request.report?.clinicalIndication || "",
       technique: request.report?.technique || "",
       comparison: request.report?.comparison || "",
-      criticalFindings: request.report?.criticalFindings || false,
+      criticalFindings: request.report?.criticalFindings ?? false,
       criticalFindingsDetails: request.report?.criticalFindingsDetails || "",
       criticalCommunicated:
-        request.report?.criticalCommunication?.communicated || false,
-      communicatedTo: request.report?.criticalCommunication?.communicatedTo || "",
+        request.report?.criticalCommunication?.communicated ?? false,
+      communicatedTo:
+        request.report?.criticalCommunication?.communicatedTo || "",
       communicationMethod: request.report?.criticalCommunication?.method || "",
       communicationNotes: request.report?.criticalCommunication?.notes || "",
     });
@@ -158,20 +168,25 @@ export function SubmitResultsDialog({
         criticalCommunication: {
           communicated: data.criticalCommunicated,
           communicatedTo: data.communicatedTo,
-          communicatedAt: data.criticalCommunicated ? new Date().toISOString() : undefined,
+          communicatedAt: data.criticalCommunicated
+            ? new Date().toISOString()
+            : undefined,
           method: data.communicationMethod,
           notes: data.communicationNotes,
         },
       };
 
-      const response = await fetch(`/api/radiologist/requests/${request._id}/results`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
+      const response = await fetch(
+        `/api/radiologist/requests/${request._id}/results`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify(requestData),
         },
-        body: JSON.stringify(requestData),
-      });
+      );
 
       const result = await response.json();
 
@@ -212,38 +227,52 @@ export function SubmitResultsDialog({
             Submit Radiology Results
           </DialogTitle>
           <DialogDescription>
-            Submit results for <span className="font-medium">{request.serviceId}</span>
+            Submit results for{" "}
+            <span className="font-medium">{request.serviceId}</span>
             <br />
             <span className="text-sm text-muted-foreground">
-              {request.patient.name} - {request.serviceType.toUpperCase()} - {request.bodyPart}
+              {request.patient.name} - {request.serviceType.toUpperCase()} -{" "}
+              {request.bodyPart}
             </span>
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+        <form onSubmit={handleSubmit(onSubmit) as any} className="space-y-6">
           {/* Request Details */}
           <div className="bg-muted/30 rounded-lg p-4 space-y-3">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div>
-                <p className="text-xs font-medium text-muted-foreground">Service Type</p>
-                <p className="font-medium">{request.serviceType.toUpperCase()}</p>
+                <p className="text-xs font-medium text-muted-foreground">
+                  Service Type
+                </p>
+                <p className="font-medium">
+                  {request.serviceType.toUpperCase()}
+                </p>
               </div>
               <div>
-                <p className="text-xs font-medium text-muted-foreground">Body Part</p>
+                <p className="text-xs font-medium text-muted-foreground">
+                  Body Part
+                </p>
                 <p className="font-medium">{request.bodyPart}</p>
               </div>
               <div>
-                <p className="text-xs font-medium text-muted-foreground">View</p>
+                <p className="text-xs font-medium text-muted-foreground">
+                  View
+                </p>
                 <p className="font-medium">{request.view}</p>
               </div>
               <div>
-                <p className="text-xs font-medium text-muted-foreground">Priority</p>
+                <p className="text-xs font-medium text-muted-foreground">
+                  Priority
+                </p>
                 <p className="font-medium capitalize">{request.priority}</p>
               </div>
             </div>
             {request.notes && (
               <div>
-                <p className="text-xs font-medium text-muted-foreground">Request Notes</p>
+                <p className="text-xs font-medium text-muted-foreground">
+                  Request Notes
+                </p>
                 <p className="text-sm">{request.notes}</p>
               </div>
             )}
@@ -304,7 +333,8 @@ export function SubmitResultsDialog({
               <p className="text-xs text-red-500">{errors.findings.message}</p>
             )}
             <p className="text-xs text-muted-foreground">
-              Describe what was observed in the images, including any abnormalities, measurements, or notable features.
+              Describe what was observed in the images, including any
+              abnormalities, measurements, or notable features.
             </p>
           </div>
 
@@ -321,10 +351,13 @@ export function SubmitResultsDialog({
               className={`resize-none ${errors.impression ? "border-red-500" : ""}`}
             />
             {errors.impression && (
-              <p className="text-xs text-red-500">{errors.impression.message}</p>
+              <p className="text-xs text-red-500">
+                {errors.impression.message}
+              </p>
             )}
             <p className="text-xs text-muted-foreground">
-              Provide your interpretation of the findings and any diagnosis or differential diagnosis.
+              Provide your interpretation of the findings and any diagnosis or
+              differential diagnosis.
             </p>
           </div>
 
@@ -341,12 +374,15 @@ export function SubmitResultsDialog({
               className="resize-none"
             />
             <p className="text-xs text-muted-foreground">
-              Suggest any follow-up actions, additional tests, or treatment recommendations.
+              Suggest any follow-up actions, additional tests, or treatment
+              recommendations.
             </p>
           </div>
 
           <div className="space-y-3 rounded-lg border p-4">
-            <Label className="text-sm font-medium">Critical Findings Communication</Label>
+            <Label className="text-sm font-medium">
+              Critical Findings Communication
+            </Label>
             <div className="flex items-center gap-2">
               <input
                 id="criticalFindings"
