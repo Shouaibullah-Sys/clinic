@@ -4,6 +4,7 @@ import dbConnect from "@/lib/dbConnect";
 import "@/lib/models"; // Import all models to ensure they are registered
 import { DischargeCard } from "@/lib/models/DischargeCard";
 import { getTokenPayload } from "@/lib/auth/jwt";
+import { buildMarkedOnlyQuery } from "@/lib/utils/markedTransactions";
 
 export async function GET(req: NextRequest) {
   await dbConnect();
@@ -46,8 +47,14 @@ export async function GET(req: NextRequest) {
 
     console.log("Query for pending discharge cards:", query);
 
+    const { query: finalQuery } = await buildMarkedOnlyQuery({
+      userId: payload.id,
+      module: "discharge",
+      baseQuery: query,
+    });
+
     // Fetch discharge cards with patient and doctor populated
-    const dischargeCards = await DischargeCard.find(query)
+    const dischargeCards = await DischargeCard.find(finalQuery)
       .populate({
         path: "patient",
         select: "name patientId phone",
@@ -154,7 +161,7 @@ export async function GET(req: NextRequest) {
       (card) => card.remainingMedicines > 0,
     );
 
-    const total = await DischargeCard.countDocuments(query);
+    const total = await DischargeCard.countDocuments(finalQuery);
 
     console.log(
       `Found ${pendingCards.length} discharge cards with medicines to dispense`,

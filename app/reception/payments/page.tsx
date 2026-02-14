@@ -49,6 +49,7 @@ import { toast } from "sonner";
 
 type PaymentStatus = "pending" | "partial" | "paid" | "cancelled";
 type PaymentKind = "lab" | "pharmacy" | "radiology";
+type MarkedModule = "lab" | "pharmacy" | "radiology";
 
 interface UnifiedPaymentRecord {
   id: string;
@@ -128,6 +129,7 @@ export default function ReceptionPaymentsPage() {
   const [selected, setSelected] = useState<UnifiedPaymentRecord | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [markedSet, setMarkedSet] = useState<Set<string>>(new Set());
 
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("");
@@ -140,6 +142,30 @@ export default function ReceptionPaymentsPage() {
       router.push("/unauthorized");
     }
   }, [user, router]);
+
+  const fetchMarked = useCallback(async () => {
+    try {
+      if (!accessToken) return;
+      const response = await fetch("/api/reception/marked-transactions", {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      });
+      const data = await response.json();
+      if (data.success && Array.isArray(data.data)) {
+        const nextSet = new Set<string>();
+        data.data.forEach((item: any) => {
+          if (item.module && item.transactionId) {
+            nextSet.add(`${item.module}:${item.transactionId}`);
+          }
+        });
+        setMarkedSet(nextSet);
+      }
+    } catch (error) {
+      console.error("Failed loading marked transactions", error);
+    }
+  }, [accessToken]);
 
   const fetchAllPayments = useCallback(async () => {
     try {
@@ -247,10 +273,64 @@ export default function ReceptionPaymentsPage() {
     const run = async () => {
       setLoading(true);
       await fetchAllPayments();
+      await fetchMarked();
       setLoading(false);
     };
     run();
-  }, [fetchAllPayments]);
+  }, [fetchAllPayments, fetchMarked]);
+
+  const isMarked = useCallback(
+    (module: MarkedModule, id: string) => markedSet.has(`${module}:${id}`),
+    [markedSet],
+  );
+
+  const toggleMarked = useCallback(
+    async (record: UnifiedPaymentRecord) => {
+      if (!accessToken) return;
+      const module: MarkedModule = record.kind;
+      const key = `${module}:${record.id}`;
+      const currentlyMarked = markedSet.has(key);
+
+      try {
+        if (currentlyMarked) {
+          await fetch("/api/reception/marked-transactions", {
+            method: "DELETE",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              module,
+              transactionId: record.id,
+            }),
+          });
+          setMarkedSet((prev) => {
+            const next = new Set(prev);
+            next.delete(key);
+            return next;
+          });
+        } else {
+          await fetch("/api/reception/marked-transactions", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              module,
+              transactionId: record.id,
+              transactionDate: record.createdAt,
+            }),
+          });
+          setMarkedSet((prev) => new Set(prev).add(key));
+        }
+      } catch (error) {
+        console.error("Failed to toggle mark", error);
+        toast.error("Failed to update mark");
+      }
+    },
+    [accessToken, markedSet],
+  );
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -476,17 +556,18 @@ export default function ReceptionPaymentsPage() {
                   <TableHead>Status</TableHead>
                   <TableHead>Due</TableHead>
                   <TableHead>Date</TableHead>
+                  <TableHead>Marked</TableHead>
                   <TableHead className="text-right">Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8">Loading records...</TableCell>
+                    <TableCell colSpan={9} className="text-center py-8">Loading records...</TableCell>
                   </TableRow>
                 ) : filtered.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8">No pending records found</TableCell>
+                    <TableCell colSpan={9} className="text-center py-8">No pending records found</TableCell>
                   </TableRow>
                 ) : (
                   filtered.map((rec) => (
@@ -506,6 +587,15 @@ export default function ReceptionPaymentsPage() {
                       <TableCell>{statusBadge(rec.paymentStatus)}</TableCell>
                       <TableCell className="font-semibold">{formatCurrency(rec.dueAmount)}</TableCell>
                       <TableCell>{rec.createdAt ? format(new Date(rec.createdAt), "MMM dd, yyyy HH:mm") : "-"}</TableCell>
+                      <TableCell>
+                        <Button
+                          variant={isMarked(rec.kind, rec.id) ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => toggleMarked(rec)}
+                        >
+                          {isMarked(rec.kind, rec.id) ? "Marked" : "Mark"}
+                        </Button>
+                      </TableCell>
                       <TableCell className="text-right">
                         <Button size="sm" onClick={() => openPaymentDialog(rec)}>
                           <CreditCard className="h-4 w-4 mr-1" />

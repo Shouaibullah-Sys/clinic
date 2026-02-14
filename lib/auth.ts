@@ -28,11 +28,12 @@ export interface UserSession {
     phone: string;
     avatar?: string;
     approved: boolean;
-    active: boolean;
-    department?: string;
-    specialization?: string;
-    licenseNumber?: string;
-  };
+      active: boolean;
+      department?: string;
+      specialization?: string;
+      licenseNumber?: string;
+      markedOnlyAccess?: boolean;
+    };
   expires?: Date;
 }
 

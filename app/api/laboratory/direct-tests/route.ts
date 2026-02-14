@@ -6,6 +6,7 @@ import { LabTest } from "@/lib/models/LabTest";
 import { LabTestTemplate } from "@/lib/models/LabTestTemplate";
 import { Patient } from "@/lib/models/Patient";
 import { authenticateRequest } from "@/lib/auth";
+import { buildMarkedOnlyQuery } from "@/lib/utils/markedTransactions";
 import mongoose from "mongoose";
 
 const normalizeDirectTestWorkflow = (test: any) => {
@@ -90,8 +91,14 @@ export async function GET(request: NextRequest) {
       sortObj[sort] = 1;
     }
 
+    const { query: finalQuery } = await buildMarkedOnlyQuery({
+      userId: auth.userId!,
+      module: "lab",
+      baseQuery: query,
+    });
+
     // Fetch direct tests with proper population
-    const tests = await LabTest.find(query)
+    const tests = await LabTest.find(finalQuery)
       .populate("patient", "name patientId phone email dateOfBirth gender")
       .populate("createdBy", "name")
       .populate("finalizedBy", "name")

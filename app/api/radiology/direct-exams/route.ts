@@ -5,6 +5,7 @@ import dbConnect from "@/lib/dbConnect";
 import { RadiologyExam } from "@/lib/models/RadiologyExam";
 import { Patient } from "@/lib/models/Patient";
 import { authenticateRequest } from "@/lib/auth";
+import { buildMarkedOnlyQuery } from "@/lib/utils/markedTransactions";
 import mongoose from "mongoose";
 
 const modalityAliasToCategory: Record<string, string> = {
@@ -91,8 +92,14 @@ export async function GET(request: NextRequest) {
       sortObj[sort] = 1;
     }
 
+    const { query: finalQuery } = await buildMarkedOnlyQuery({
+      userId: auth.userId!,
+      module: "radiology",
+      baseQuery: query,
+    });
+
     // Fetch direct exams with proper population
-    const exams = await RadiologyExam.find(query)
+    const exams = await RadiologyExam.find(finalQuery)
       .populate("patient", "name patientId phone email dateOfBirth gender")
       .populate("createdBy", "name")
       .populate("finalizedBy", "name")

@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
 import { Prescription } from "@/lib/models/Prescription";
 import { authenticateRequest } from "@/lib/auth";
+import { buildMarkedOnlyQuery } from "@/lib/utils/markedTransactions";
 
 // GET: Receptionist views all prescriptions with filters
 export async function GET(request: NextRequest) {
@@ -72,9 +73,15 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    const { query: finalQuery } = await buildMarkedOnlyQuery({
+      userId: auth.userId!,
+      module: "prescription",
+      baseQuery: query,
+    });
+
     // Get prescriptions
     const [prescriptions, total] = await Promise.all([
-      Prescription.find(query)
+      Prescription.find(finalQuery)
         .populate("patient", "name patientId phone")
         .populate("appointment", "appointmentId date")
         .populate("doctor", "name specialization")
@@ -84,21 +91,27 @@ export async function GET(request: NextRequest) {
         .skip(skip)
         .limit(limit)
         .lean(),
-      Prescription.countDocuments(query),
+      Prescription.countDocuments(finalQuery),
     ]);
 
     // Calculate summary statistics
     const unpaidPrescriptions = await Prescription.countDocuments({
+      ...finalQuery,
       "charges.paymentStatus": { $in: ["unpaid", "partial"] },
     });
 
     const totalRevenue = await Prescription.aggregate([
-      { $match: { "charges.paymentStatus": "paid" } },
+      { $match: { ...finalQuery, "charges.paymentStatus": "paid" } },
       { $group: { _id: null, total: { $sum: "$charges.totalAmount" } } },
     ]);
 
     const pendingCollection = await Prescription.aggregate([
-      { $match: { "charges.paymentStatus": { $in: ["unpaid", "partial"] } } },
+      {
+        $match: {
+          ...finalQuery,
+          "charges.paymentStatus": { $in: ["unpaid", "partial"] },
+        },
+      },
       { $group: { _id: null, total: { $sum: "$charges.due" } } },
     ]);
 

@@ -150,11 +150,13 @@ export async function GET(
     }, 0);
 
     const consultationFee =
-      appointment.appointmentType === "emergency"
+      (appointment as any).consultationFee ??
+      (appointment as any).doctorFee ??
+      (appointment.appointmentType === "emergency"
         ? 150
         : appointment.appointmentType === "procedure"
           ? 200
-          : 100;
+          : 100);
 
     const totalAmount = labTestsTotal + prescriptionsTotal + consultationFee;
 

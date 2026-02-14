@@ -47,6 +47,7 @@ const UserFormSchema = z.object({
   licenseNumber: z.string().optional(),
   approved: z.boolean().default(false),
   active: z.boolean().default(true),
+  markedOnlyAccess: z.boolean().default(false),
   address: z.string().optional(),
   gender: z.enum(["male", "female", "other"]).optional(),
   joiningDate: z.string().or(z.date()).optional(),
@@ -82,6 +83,7 @@ export default function UserForm({ user, onSuccess, accessToken }: UserFormProps
       licenseNumber: user?.licenseNumber || "",
       approved: user?.approved ?? false,
       active: user?.active ?? true,
+      markedOnlyAccess: user?.markedOnlyAccess ?? false,
       address: user?.address || "",
       gender: user?.gender || "male",
       joiningDate: user?.joiningDate 
@@ -106,6 +108,7 @@ export default function UserForm({ user, onSuccess, accessToken }: UserFormProps
         licenseNumber: user.licenseNumber || "",
         approved: user.approved ?? false,
         active: user.active ?? true,
+        markedOnlyAccess: user.markedOnlyAccess ?? false,
         address: user.address || "",
         gender: user.gender || "male",
         joiningDate: user.joiningDate 
@@ -231,7 +234,7 @@ export default function UserForm({ user, onSuccess, accessToken }: UserFormProps
           className="space-y-4"
         >
           {/* Basic Information */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <FormField
               control={form.control}
               name="name"
@@ -484,6 +487,27 @@ export default function UserForm({ user, onSuccess, accessToken }: UserFormProps
                     <FormLabel className="text-base">Active</FormLabel>
                     <FormDescription>
                       User account is active
+                    </FormDescription>
+                  </div>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="markedOnlyAccess"
+              render={({ field }: any) => (
+                <FormItem className="flex items-center justify-between rounded-lg border p-4">
+                  <div className="space-y-0.5">
+                    <FormLabel className="text-base">Marked Only</FormLabel>
+                    <FormDescription>
+                      Only show marked transactions
                     </FormDescription>
                   </div>
                   <FormControl>

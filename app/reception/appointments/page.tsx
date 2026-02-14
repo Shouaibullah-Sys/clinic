@@ -91,6 +91,7 @@ import {
   subDays,
 } from "date-fns";
 import { Skeleton } from "@/components/ui/skeleton";
+import { toast } from "sonner";
 
 interface Appointment {
   _id: string;
@@ -156,6 +157,7 @@ export default function AppointmentsPage() {
   const [selectedAppointment, setSelectedAppointment] =
     useState<Appointment | null>(null);
   const [cancelReason, setCancelReason] = useState("");
+  const [markedSet, setMarkedSet] = useState<Set<string>>(new Set());
 
   // Add time range filter state
   const [timeRange, setTimeRange] = useState<TimeRange>({
@@ -185,6 +187,80 @@ export default function AppointmentsPage() {
     fetchAppointments();
     fetchDoctors();
   }, [page, timeRange, selectedStatus, selectedDoctor, activeSearch]);
+
+  const fetchMarked = useCallback(async () => {
+    try {
+      if (!accessToken) return;
+      const response = await fetch("/api/reception/marked-transactions?module=appointment", {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      });
+      const data = await response.json();
+      if (data.success && Array.isArray(data.data)) {
+        const nextSet = new Set<string>();
+        data.data.forEach((item: any) => {
+          if (item.transactionId) {
+            nextSet.add(item.transactionId);
+          }
+        });
+        setMarkedSet(nextSet);
+      }
+    } catch (error) {
+      console.error("Failed loading marked appointments", error);
+    }
+  }, [accessToken]);
+
+  useEffect(() => {
+    fetchMarked();
+  }, [fetchMarked]);
+
+  const toggleMarked = useCallback(
+    async (appointment: Appointment) => {
+      if (!accessToken) return;
+      const currentlyMarked = markedSet.has(appointment._id);
+
+      try {
+        if (currentlyMarked) {
+          await fetch("/api/reception/marked-transactions", {
+            method: "DELETE",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              module: "appointment",
+              transactionId: appointment._id,
+            }),
+          });
+          setMarkedSet((prev) => {
+            const next = new Set(prev);
+            next.delete(appointment._id);
+            return next;
+          });
+        } else {
+          await fetch("/api/reception/marked-transactions", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              module: "appointment",
+              transactionId: appointment._id,
+              transactionDate: appointment.startTime || appointment.date || new Date().toISOString(),
+            }),
+          });
+          setMarkedSet((prev) => new Set(prev).add(appointment._id));
+        }
+      } catch (error) {
+        console.error("Failed to toggle mark", error);
+        toast.error("Failed to update mark");
+      }
+    },
+    [accessToken, markedSet],
+  );
 
   // Reset page to 1 when filters change (except page itself)
   useEffect(() => {
@@ -867,6 +943,7 @@ export default function AppointmentsPage() {
                   <TableHead>Type</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Priority</TableHead>
+                  <TableHead>Marked</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -874,7 +951,7 @@ export default function AppointmentsPage() {
                 {filteredAppointments.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={8}
+                      colSpan={9}
                       className="text-center py-12 text-gray-500"
                     >
                       <div className="flex flex-col items-center justify-center">
@@ -958,6 +1035,18 @@ export default function AppointmentsPage() {
                       </TableCell>
                       <TableCell>
                         {getPriorityBadge(appointment.priority)}
+                      </TableCell>
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        <Button
+                          variant={markedSet.has(appointment._id) ? "default" : "outline"}
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleMarked(appointment);
+                          }}
+                        >
+                          {markedSet.has(appointment._id) ? "Marked" : "Mark"}
+                        </Button>
                       </TableCell>
                       <TableCell className="text-right">
                         <DropdownMenu>

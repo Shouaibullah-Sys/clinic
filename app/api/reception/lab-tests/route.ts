@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
 import { LabTest } from "@/lib/models/LabTest";
 import { jwtVerify } from "jose";
+import { buildMarkedOnlyQuery } from "@/lib/utils/markedTransactions";
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-this";
 
@@ -95,9 +96,15 @@ export async function GET(request: NextRequest) {
       }
     }
     
+    const { query: finalQuery } = await buildMarkedOnlyQuery({
+      userId: payload.id as string,
+      module: "lab",
+      baseQuery: query,
+    });
+
     // Get lab tests
     const [labTests, total] = await Promise.all([
-      LabTest.find(query)
+      LabTest.find(finalQuery)
         .populate("patient", "name patientId phone")
         .populate("appointment", "appointmentId date")
         .populate("doctor", "name specialization")
@@ -106,21 +113,27 @@ export async function GET(request: NextRequest) {
         .skip(skip)
         .limit(limit)
         .lean(),
-      LabTest.countDocuments(query),
+      LabTest.countDocuments(finalQuery),
     ]);
     
     // Calculate summary statistics
     const unpaidTests = await LabTest.countDocuments({
+      ...finalQuery,
       "charges.paymentStatus": { $in: ["pending", "partial"] },
     });
     
     const totalRevenue = await LabTest.aggregate([
-      { $match: { "charges.paymentStatus": "paid" } },
+      { $match: { ...finalQuery, "charges.paymentStatus": "paid" } },
       { $group: { _id: null, total: { $sum: "$charges.totalAmount" } } },
     ]);
     
     const pendingCollection = await LabTest.aggregate([
-      { $match: { "charges.paymentStatus": { $in: ["pending", "partial"] } } },
+      {
+        $match: {
+          ...finalQuery,
+          "charges.paymentStatus": { $in: ["pending", "partial"] },
+        },
+      },
       { $group: { _id: null, total: { $sum: "$charges.due" } } },
     ]);
     

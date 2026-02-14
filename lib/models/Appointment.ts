@@ -19,6 +19,8 @@ export interface IAppointment extends mongoose.Document {
   symptoms?: string;
   priority: "low" | "medium" | "high" | "emergency";
   notes?: string;
+  consultationFee?: number;
+  doctorFee?: number;
   checkInTime?: Date;
   checkOutTime?: Date;
   waitingTime?: number;
@@ -156,6 +158,14 @@ const appointmentSchema = new Schema<IAppointment, IAppointmentModel>(
     notes: {
       type: String,
       trim: true,
+    },
+    consultationFee: {
+      type: Number,
+      min: 0,
+    },
+    doctorFee: {
+      type: Number,
+      min: 0,
     },
     checkInTime: {
       type: Date,

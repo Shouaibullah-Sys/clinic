@@ -133,6 +133,7 @@ interface Doctor {
   department: string;
   phone?: string;
   email?: string;
+  consultationFee?: number;
   availability?: {
     days: string[];
     startTime: string;
@@ -201,6 +202,7 @@ export default function NewAppointmentPage() {
   const [symptoms, setSymptoms] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
   const [autoNumber, setAutoNumber] = useState<string>("");
+  const [consultationFee, setConsultationFee] = useState<string>("");
 
   // New Patient Dialog
   const [showNewPatientDialog, setShowNewPatientDialog] = useState(false);
@@ -575,6 +577,15 @@ export default function NewAppointmentPage() {
         return;
       }
 
+      if (consultationFee !== "") {
+        const parsedFee = parseFloat(consultationFee);
+        if (isNaN(parsedFee) || parsedFee < 0) {
+          toast.error("Doctor fee must be a valid non-negative number");
+          setLoading(false);
+          return;
+        }
+      }
+
       // Calculate appointment time
       const now = new Date();
       const appointmentDateTime = new Date(appointmentDate);
@@ -607,6 +618,9 @@ export default function NewAppointmentPage() {
         priority: isEmergency ? "emergency" : priority,
         notes: notes.trim(),
         autoNumber,
+        ...(consultationFee !== ""
+          ? { consultationFee: parseFloat(consultationFee) }
+          : {}),
       };
 
       const response = await fetch("/api/appointments", {
@@ -665,6 +679,10 @@ export default function NewAppointmentPage() {
   const handleDoctorSelect = (doctorId: string) => {
     console.log("Doctor selected:", doctorId);
     setSelectedDoctor(doctorId);
+    const doctor = doctors.find((d) => d._id === doctorId);
+    if (doctor?.consultationFee !== undefined) {
+      setConsultationFee(String(doctor.consultationFee));
+    }
   };
 
   const handleSearchKeyDown = (e: React.KeyboardEvent) => {
@@ -715,6 +733,11 @@ export default function NewAppointmentPage() {
   };
 
   const selectedDoctorInfo = doctors.find((d) => d._id === selectedDoctor);
+  useEffect(() => {
+    if (selectedDoctorInfo?.consultationFee !== undefined) {
+      setConsultationFee(String(selectedDoctorInfo.consultationFee));
+    }
+  }, [selectedDoctorInfo?.consultationFee]);
   console.log(
     "Current state - selectedDoctor:",
     selectedDoctor,
@@ -1830,6 +1853,21 @@ export default function NewAppointmentPage() {
                             </div>
                           </div>
                         )}
+
+                        <div className="mt-4">
+                          <Label htmlFor="consultationFee" className="font-semibold">
+                            Doctor Fee
+                          </Label>
+                          <Input
+                            id="consultationFee"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={consultationFee}
+                            onChange={(e) => setConsultationFee(e.target.value)}
+                            placeholder="Enter consultation fee"
+                          />
+                        </div>
                       </div>
 
                       {/* Date Selection */}

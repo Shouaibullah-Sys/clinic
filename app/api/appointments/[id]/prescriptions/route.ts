@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
 import { Prescription } from "@/lib/models/Prescription";
 import { jwtVerify } from "jose";
+import { buildMarkedOnlyQuery } from "@/lib/utils/markedTransactions";
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-this";
 
@@ -55,10 +56,14 @@ export async function GET(
       );
     }
 
+    const { query: finalQuery } = await buildMarkedOnlyQuery({
+      userId: payload.id as string,
+      module: "prescription",
+      baseQuery: { appointment: appointmentId },
+    });
+
     // Get prescriptions for this specific appointment
-    const prescriptions = await Prescription.find({
-      appointment: appointmentId,
-    })
+    const prescriptions = await Prescription.find(finalQuery)
       .populate("patient", "name patientId")
       .populate("doctor", "name specialization")
       .select(

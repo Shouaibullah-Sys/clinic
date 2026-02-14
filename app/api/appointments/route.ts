@@ -6,6 +6,7 @@ import { Appointment } from "@/lib/models/Appointment";
 import { Patient } from "@/lib/models/Patient";
 import { User } from "@/lib/models/User";
 import { jwtVerify } from "jose";
+import { buildMarkedOnlyQuery } from "@/lib/utils/markedTransactions";
 import mongoose from "mongoose";
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-this";
@@ -71,6 +72,8 @@ export async function POST(request: NextRequest) {
       priority,
       notes,
       autoNumber,
+      consultationFee,
+      doctorFee,
     } = body;
 
     // Validation
@@ -157,6 +160,26 @@ export async function POST(request: NextRequest) {
       finalAutoNumber = (count + 1).toString().padStart(3, "0");
     }
 
+    // Resolve consultation fee override
+    let resolvedConsultationFee: number | undefined = undefined;
+    if (consultationFee !== undefined || doctorFee !== undefined) {
+      const rawFee =
+        consultationFee !== undefined ? consultationFee : doctorFee;
+      const parsedFee = parseFloat(rawFee);
+      if (isNaN(parsedFee) || parsedFee < 0) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Consultation fee must be a valid non-negative number",
+          },
+          { status: 400 },
+        );
+      }
+      resolvedConsultationFee = parsedFee;
+    } else if (doctor.consultationFee !== undefined) {
+      resolvedConsultationFee = doctor.consultationFee;
+    }
+
     // Create appointment
     const appointmentData = {
       appointmentId,
@@ -175,6 +198,10 @@ export async function POST(request: NextRequest) {
       priority: priority || "medium",
       notes: notes?.trim(),
       createdBy: new mongoose.Types.ObjectId(userId),
+      ...(resolvedConsultationFee !== undefined && {
+        consultationFee: resolvedConsultationFee,
+        doctorFee: resolvedConsultationFee,
+      }),
     };
 
     const appointment = new Appointment(appointmentData);
@@ -291,6 +318,12 @@ export async function GET(request: NextRequest) {
       query.status = status;
     }
 
+    const { query: finalQuery } = await buildMarkedOnlyQuery({
+      userId: payload.id as string,
+      module: "appointment",
+      baseQuery: query,
+    });
+
     // Get appointments
     let appointments;
     let total;
@@ -330,7 +363,7 @@ export async function GET(request: NextRequest) {
         {
           $match: {
             $and: [
-              query,
+              finalQuery,
               {
                 $or: [
                   { "patient.name": searchRegex },
@@ -420,7 +453,7 @@ export async function GET(request: NextRequest) {
         {
           $match: {
             $and: [
-              query,
+              finalQuery,
               {
                 $or: [
                   { "patient.name": searchRegex },
@@ -449,14 +482,14 @@ export async function GET(request: NextRequest) {
     } else {
       // Regular query without search
       const [appointmentsResult, totalResult] = await Promise.all([
-        Appointment.find(query)
+        Appointment.find(finalQuery)
           .populate("patient", "name phone patientId")
           .populate("doctor", "name specialization department")
           .sort({ startTime: 1 })
           .skip(skip)
           .limit(limit)
           .lean(),
-        Appointment.countDocuments(query),
+        Appointment.countDocuments(finalQuery),
       ]);
 
       appointments = appointmentsResult;

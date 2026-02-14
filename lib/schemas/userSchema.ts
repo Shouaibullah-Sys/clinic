@@ -31,6 +31,7 @@ export const BaseUserSchema = z.object({
   gender: z.enum(["male", "female", "other"]).optional(),
   joiningDate: z.string().or(z.date()).optional(),
   avatar: z.string().optional(),
+  markedOnlyAccess: z.boolean().default(false),
 });
 
 // Schema for creating a new user

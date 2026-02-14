@@ -5,6 +5,7 @@ import dbConnect from "@/lib/dbConnect";
 import { DischargeCard } from "@/lib/models/DischargeCard";
 import { Patient } from "@/lib/models/Patient";
 import { jwtVerify } from "jose";
+import { buildMarkedOnlyQuery } from "@/lib/utils/markedTransactions";
 import mongoose from "mongoose";
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-this";
@@ -92,7 +93,13 @@ export async function GET(
       query.doctor = new mongoose.Types.ObjectId(userId);
     }
 
-    const dischargeCards = await DischargeCard.find(query)
+    const { query: finalQuery } = await buildMarkedOnlyQuery({
+      userId: payload.id as string,
+      module: "discharge",
+      baseQuery: query,
+    });
+
+    const dischargeCards = await DischargeCard.find(finalQuery)
       .populate("doctor", "name specialization")
       .populate("createdBy", "name")
       .sort({ createdAt: -1 })

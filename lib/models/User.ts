@@ -42,6 +42,7 @@ export interface IUser extends mongoose.Document {
   gender?: "male" | "female" | "other";
   permissions: string[];
   refreshTokens?: string[]; // Add refresh tokens for JWT
+  markedOnlyAccess?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -183,6 +184,10 @@ const userSchema = new Schema<IUser>(
         type: String,
       },
     ],
+    markedOnlyAccess: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,

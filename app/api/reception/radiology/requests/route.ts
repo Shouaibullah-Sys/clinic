@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
 import { RadiologyService } from "@/lib/models/RadiologyService";
 import { authenticateRequest, hasRequiredRole } from "@/lib/auth";
+import { buildMarkedOnlyQuery } from "@/lib/utils/markedTransactions";
 import mongoose from "mongoose";
 
 // Type definitions for populated data
@@ -140,8 +141,14 @@ export async function GET(request: NextRequest) {
       sortObj[sort] = 1;
     }
     
+    const { query: finalQuery } = await buildMarkedOnlyQuery({
+      userId: auth.userId!,
+      module: "radiology",
+      baseQuery: query,
+    });
+
     // Fetch requests with proper population
-    const requests = await RadiologyService.find(query)
+    const requests = await RadiologyService.find(finalQuery)
       .populate<{ patient: PopulatedPatient }>("patient", "name patientId phone email dateOfBirth gender")
       .populate<{ referringDoctor: PopulatedDoctor }>("referringDoctor", "name specialization department")
       .populate<{ radiologist: PopulatedUser }>("radiologist", "name")

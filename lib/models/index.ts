@@ -11,6 +11,7 @@ export * from "./CashFloat";
 export * from "./CashReconciliation";
 export * from "./DailyExpense";
 export * from "./DailyRecord";
+export * from "./MarkedTransaction";
 export * from "./DiscountRequest";
 export * from "./Expense";
 export * from "./Invoice";

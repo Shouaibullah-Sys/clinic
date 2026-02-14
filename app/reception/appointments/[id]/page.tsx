@@ -92,6 +92,8 @@ interface Appointment {
   checkOutTime?: string;
   waitingTime?: number;
   consultationTime?: number;
+  consultationFee?: number;
+  doctorFee?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -285,6 +287,7 @@ type UnifiedRecord =
       label: string;
       item: DischargeCard;
     };
+type MarkedModule = "lab" | "prescription" | "radiology" | "discharge";
 
 export default function AppointmentDetailPage() {
   const router = useRouter();
@@ -298,6 +301,7 @@ export default function AppointmentDetailPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState("records");
+  const [markedSet, setMarkedSet] = useState<Set<string>>(new Set());
 
   // Role-based access control
   useEffect(() => {
@@ -321,6 +325,7 @@ export default function AppointmentDetailPage() {
     transactionId: "",
     notes: "",
     price: 0,
+    discount: 0,
   });
   const [processingPayment, setProcessingPayment] = useState(false);
   const [selectedPrescription, setSelectedPrescription] =
@@ -336,6 +341,30 @@ export default function AppointmentDetailPage() {
       fetchAppointmentWithAllData();
     }
   }, [params.id, accessToken]);
+
+  const fetchMarked = async () => {
+    try {
+      if (!accessToken) return;
+      const response = await fetch("/api/reception/marked-transactions", {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+      const data = await response.json();
+      if (data.success && Array.isArray(data.data)) {
+        const nextSet = new Set<string>();
+        data.data.forEach((item: any) => {
+          if (item.module && item.transactionId) {
+            nextSet.add(`${item.module}:${item.transactionId}`);
+          }
+        });
+        setMarkedSet(nextSet);
+      }
+    } catch (error) {
+      console.error("Error fetching marked records:", error);
+    }
+  };
 
   // Fetch discharge cards when appointment data is available
   useEffect(() => {
@@ -370,6 +399,7 @@ export default function AppointmentDetailPage() {
         setLabTests(data.data.labTests || []);
         setPrescriptions(data.data.prescriptions || []);
         setImagingServices(data.data.imagingServices || []);
+        await fetchMarked();
 
         if (isRefresh) {
           toast.success("Data refreshed successfully");
@@ -406,6 +436,7 @@ export default function AppointmentDetailPage() {
           fetchPrescriptions(data.data.patient._id),
           fetchImagingServices(),
         ]);
+        await fetchMarked();
       } else {
         toast.error(data.error || "Failed to fetch appointment details");
       }
@@ -568,6 +599,54 @@ export default function AppointmentDetailPage() {
     }
   };
 
+  const getMarkedModule = (record: UnifiedRecord): MarkedModule =>
+    record.type === "imaging" ? "radiology" : record.type;
+
+  const toggleMarked = async (record: UnifiedRecord) => {
+    if (!accessToken) return;
+    const module = getMarkedModule(record);
+    const key = `${module}:${record.id}`;
+    const currentlyMarked = markedSet.has(key);
+
+    try {
+      if (currentlyMarked) {
+        await fetch("/api/reception/marked-transactions", {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({
+            module,
+            transactionId: record.id,
+          }),
+        });
+        setMarkedSet((prev) => {
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
+        });
+      } else {
+        await fetch("/api/reception/marked-transactions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({
+            module,
+            transactionId: record.id,
+            transactionDate: record.createdAt,
+          }),
+        });
+        setMarkedSet((prev) => new Set(prev).add(key));
+      }
+    } catch (error) {
+      console.error("Failed to toggle mark", error);
+      toast.error("Failed to update mark");
+    }
+  };
+
   // Helper: Filter lab tests to show relevant ones
   const filterLabTestsByRelevance = (tests: LabTest[]) => {
     if (!tests || tests.length === 0) return [];
@@ -676,6 +755,10 @@ export default function AppointmentDetailPage() {
       setProcessingPayment(true);
 
       let url, body;
+      const discountValue =
+        typeof paymentForm.discount === "number" && paymentForm.discount > 0
+          ? paymentForm.discount
+          : 0;
 
       if (paymentType === "lab" && selectedLabTest) {
         url = `/api/reception/lab-tests/${selectedLabTest._id}/charges`;
@@ -685,6 +768,7 @@ export default function AppointmentDetailPage() {
           transactionId: paymentForm.transactionId,
           verifyPayment: true,
           price: paymentForm.price > 0 ? paymentForm.price : undefined,
+          ...(discountValue > 0 ? { discount: discountValue } : {}),
         };
       } else if (paymentType === "imaging" && selectedImagingService) {
         url = `/api/radiology/services/${selectedImagingService._id}/charges`;
@@ -693,6 +777,7 @@ export default function AppointmentDetailPage() {
           paidAmount: paymentForm.amount,
           transactionId: paymentForm.transactionId,
           verifyPayment: true,
+          ...(discountValue > 0 ? { discount: discountValue } : {}),
         };
       } else if (paymentType === "prescription" && selectedPrescription) {
         url = `/api/reception/prescriptions/${selectedPrescription._id}/payment`;
@@ -700,6 +785,7 @@ export default function AppointmentDetailPage() {
           paymentMethod: paymentForm.paymentMethod,
           amount: paymentForm.amount,
           transactionId: paymentForm.transactionId,
+          ...(discountValue > 0 ? { discount: discountValue } : {}),
         };
       } else if (paymentType === "discharge" && selectedDischargeCard) {
         url = `/api/doctor/patients/${appointment?.patient._id}/discharge-cards/${selectedDischargeCard._id}/payment`;
@@ -707,6 +793,7 @@ export default function AppointmentDetailPage() {
           paymentMethod: paymentForm.paymentMethod,
           paidAmount: paymentForm.amount,
           transactionId: paymentForm.transactionId,
+          ...(discountValue > 0 ? { discount: discountValue } : {}),
         };
       } else if (
         paymentType === "discharge-medicines" &&
@@ -718,6 +805,7 @@ export default function AppointmentDetailPage() {
           paidAmount: paymentForm.amount,
           transactionId: paymentForm.transactionId,
           paymentType: "medicines",
+          ...(discountValue > 0 ? { discount: discountValue } : {}),
         };
       } else {
         return;
@@ -1050,6 +1138,7 @@ export default function AppointmentDetailPage() {
       transactionId: test.charges?.transactionId || "",
       notes: "",
       price: test.discountedPrice || test.price || 0,
+      discount: 0,
     });
     setPaymentDialogOpen(true);
   };
@@ -1066,6 +1155,7 @@ export default function AppointmentDetailPage() {
       transactionId: prescription.charges?.transactionId || "",
       notes: "",
       price: 0,
+      discount: 0,
     });
     setPaymentDialogOpen(true);
   };
@@ -1079,6 +1169,7 @@ export default function AppointmentDetailPage() {
       transactionId: service.charges?.transactionId || "",
       notes: "",
       price: 0,
+      discount: 0,
     });
     setPaymentDialogOpen(true);
   };
@@ -1106,6 +1197,7 @@ export default function AppointmentDetailPage() {
           : card.billing.medicinesTransactionId || "",
       notes: "",
       price: 0,
+      discount: 0,
     });
     setPaymentDialogOpen(true);
   };
@@ -1151,11 +1243,13 @@ export default function AppointmentDetailPage() {
   // Calculate billing totals
   const calculateTotals = () => {
     const consultationFee =
-      appointment?.appointmentType === "emergency"
+      (appointment as any)?.consultationFee ??
+      (appointment as any)?.doctorFee ??
+      (appointment?.appointmentType === "emergency"
         ? 150
         : appointment?.appointmentType === "procedure"
           ? 200
-          : 100;
+          : 100);
 
     const labTestsTotal = labTests.reduce(
       (sum, test) => sum + calculateTestTotal(test),
@@ -1485,6 +1579,7 @@ export default function AppointmentDetailPage() {
                         <TableHead className="dark:text-gray-300">Status</TableHead>
                         <TableHead className="dark:text-gray-300">Payment</TableHead>
                         <TableHead className="dark:text-gray-300">Due</TableHead>
+                        <TableHead className="dark:text-gray-300">Marked</TableHead>
                         <TableHead className="dark:text-gray-300">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -1501,6 +1596,15 @@ export default function AppointmentDetailPage() {
                               <TableCell>{getLabStatusBadge(test.status)}</TableCell>
                               <TableCell>{getPaymentStatusBadge(test.charges?.paymentStatus || "pending")}</TableCell>
                               <TableCell className="font-bold text-red-600 dark:text-red-400">${(test.charges?.due || calculateTestTotal(test)).toFixed(2)}</TableCell>
+                              <TableCell>
+                                <Button
+                                  size="sm"
+                                  variant={markedSet.has(`lab:${record.id}`) ? "default" : "outline"}
+                                  onClick={() => toggleMarked(record)}
+                                >
+                                  {markedSet.has(`lab:${record.id}`) ? "Marked" : "Mark"}
+                                </Button>
+                              </TableCell>
                               <TableCell>
                                 <div className="flex gap-2">
                                   <Button
@@ -1540,6 +1644,15 @@ export default function AppointmentDetailPage() {
                               <TableCell>{getPaymentStatusBadge(prescription.charges?.paymentStatus || "pending")}</TableCell>
                               <TableCell className="font-bold text-red-600 dark:text-red-400">${due.toFixed(2)}</TableCell>
                               <TableCell>
+                                <Button
+                                  size="sm"
+                                  variant={markedSet.has(`prescription:${record.id}`) ? "default" : "outline"}
+                                  onClick={() => toggleMarked(record)}
+                                >
+                                  {markedSet.has(`prescription:${record.id}`) ? "Marked" : "Mark"}
+                                </Button>
+                              </TableCell>
+                              <TableCell>
                                 <div className="flex gap-2">
                                   <Button
                                     size="sm"
@@ -1576,6 +1689,15 @@ export default function AppointmentDetailPage() {
                               <TableCell>{getPaymentStatusBadge(service.charges?.paymentStatus || service.billingStatus || "pending")}</TableCell>
                               <TableCell className="font-bold text-red-600 dark:text-red-400">${due.toFixed(2)}</TableCell>
                               <TableCell>
+                                <Button
+                                  size="sm"
+                                  variant={markedSet.has(`radiology:${record.id}`) ? "default" : "outline"}
+                                  onClick={() => toggleMarked(record)}
+                                >
+                                  {markedSet.has(`radiology:${record.id}`) ? "Marked" : "Mark"}
+                                </Button>
+                              </TableCell>
+                              <TableCell>
                                 <div className="flex gap-2">
                                   <Button
                                     size="sm"
@@ -1606,6 +1728,15 @@ export default function AppointmentDetailPage() {
                             <TableCell>{getLabStatusBadge(card.status)}</TableCell>
                             <TableCell>{getPaymentStatusBadge(card.billing.paymentStatus || "pending")}</TableCell>
                             <TableCell className="font-bold text-red-600 dark:text-red-400">${card.billing.balance.toFixed(2)}</TableCell>
+                            <TableCell>
+                              <Button
+                                size="sm"
+                                variant={markedSet.has(`discharge:${record.id}`) ? "default" : "outline"}
+                                onClick={() => toggleMarked(record)}
+                              >
+                                {markedSet.has(`discharge:${record.id}`) ? "Marked" : "Mark"}
+                              </Button>
+                            </TableCell>
                             <TableCell>
                               <div className="flex gap-2">
                                 {medicinesTotal > 0 && !card.billing.medicinesPaid && (
@@ -1948,6 +2079,24 @@ export default function AppointmentDetailPage() {
                 </div>
 
                 <div>
+                  <Label className="dark:text-gray-300">Discount (optional)</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={paymentForm.discount}
+                    onChange={(e) =>
+                      setPaymentForm((prev) => ({
+                        ...prev,
+                        discount: parseFloat(e.target.value) || 0,
+                      }))
+                    }
+                    placeholder="Enter discount"
+                    className="dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                  />
+                </div>
+
+                <div>
                   <Label className="dark:text-gray-300">
                     Transaction/Reference ID
                   </Label>
@@ -2049,6 +2198,24 @@ export default function AppointmentDetailPage() {
                       }))
                     }
                     placeholder="Enter amount"
+                    className="dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                  />
+                </div>
+
+                <div>
+                  <Label className="dark:text-gray-300">Discount (optional)</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={paymentForm.discount}
+                    onChange={(e) =>
+                      setPaymentForm((prev) => ({
+                        ...prev,
+                        discount: parseFloat(e.target.value) || 0,
+                      }))
+                    }
+                    placeholder="Enter discount"
                     className="dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
                   />
                 </div>
@@ -2156,6 +2323,24 @@ export default function AppointmentDetailPage() {
                 </div>
 
                 <div>
+                  <Label className="dark:text-gray-300">Discount (optional)</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={paymentForm.discount}
+                    onChange={(e) =>
+                      setPaymentForm((prev) => ({
+                        ...prev,
+                        discount: parseFloat(e.target.value) || 0,
+                      }))
+                    }
+                    placeholder="Enter discount"
+                    className="dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                  />
+                </div>
+
+                <div>
                   <Label className="dark:text-gray-300">
                     Transaction/Reference ID
                   </Label>
@@ -2248,6 +2433,24 @@ export default function AppointmentDetailPage() {
                       }))
                     }
                     placeholder="Enter amount"
+                    className="dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                  />
+                </div>
+
+                <div>
+                  <Label className="dark:text-gray-300">Discount (optional)</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={paymentForm.discount}
+                    onChange={(e) =>
+                      setPaymentForm((prev) => ({
+                        ...prev,
+                        discount: parseFloat(e.target.value) || 0,
+                      }))
+                    }
+                    placeholder="Enter discount"
                     className="dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
                   />
                 </div>

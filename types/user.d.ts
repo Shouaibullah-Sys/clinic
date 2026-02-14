@@ -8,6 +8,7 @@ declare global {
     phone: string;
     role: UserRole;
     approved: boolean;
+    markedOnlyAccess?: boolean;
     createdAt?: string;
     updatedAt?: string;
   }

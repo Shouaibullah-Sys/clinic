@@ -68,8 +68,14 @@ export async function POST(
       );
     }
 
-    const { paymentMethod, transactionId, paidAmount, invoiceId, paymentType } =
-      body;
+    const {
+      paymentMethod,
+      transactionId,
+      paidAmount,
+      invoiceId,
+      paymentType,
+      discount,
+    } = body;
 
     // Find the discharge card
     const dischargeCard = await DischargeCard.findOne({
@@ -103,6 +109,25 @@ export async function POST(
       );
       return preOpTotal + postOpTotal + dischargeMedsTotal;
     };
+
+    // Apply discount if provided
+    if (discount !== undefined && discount !== null) {
+      const discountAmount = parseFloat(discount);
+      if (isNaN(discountAmount) || discountAmount < 0) {
+        return NextResponse.json(
+          { success: false, error: "Discount must be a non-negative number" },
+          { status: 400 },
+        );
+      }
+      dischargeCard.billing.discountAmount =
+        (dischargeCard.billing.discountAmount || 0) + discountAmount;
+      dischargeCard.billing.totalAmount = Math.max(
+        0,
+        dischargeCard.billing.totalAmount - discountAmount,
+      );
+      dischargeCard.billing.balance =
+        dischargeCard.billing.totalAmount - dischargeCard.billing.paidAmount;
+    }
 
     // Handle medicines-only payment
     if (paymentType === "medicines") {

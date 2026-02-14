@@ -7,6 +7,7 @@ import { Prescription } from "@/lib/models/Prescription";
 import { RadiologyService } from "@/lib/models/RadiologyService";
 import { Appointment } from "@/lib/models/Appointment";
 import { jwtVerify } from "jose";
+import { buildMarkedOnlyQuery } from "@/lib/utils/markedTransactions";
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-this";
 
@@ -58,6 +59,15 @@ export async function GET(
       );
     }
 
+    const buildQuery = async (module: "lab" | "prescription" | "radiology", baseQuery: any) => {
+      const { query: finalQuery } = await buildMarkedOnlyQuery({
+        userId: payload.id as string,
+        module,
+        baseQuery,
+      });
+      return finalQuery;
+    };
+
     // Get the appointment to access patient ID
     const appointment = await Appointment.findById(appointmentId)
       .select("-__v")
@@ -78,9 +88,10 @@ export async function GET(
     const appointmentDate = new Date(appointment.date);
 
     // Get appointment-specific lab tests
-    const appointmentLabTests = await LabTest.find({
+    const appointmentLabTestsQuery = await buildQuery("lab", {
       appointment: appointmentId,
-    })
+    });
+    const appointmentLabTests = await LabTest.find(appointmentLabTestsQuery)
       .select(
         "_id testId testName category price discountedPrice status priority charges orderedAt",
       )
@@ -94,11 +105,12 @@ export async function GET(
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-      patientLabTests = await LabTest.find({
+      const patientLabTestsQuery = await buildQuery("lab", {
         patient: patientId,
         orderedAt: { $gte: thirtyDaysAgo },
         status: { $ne: "cancelled" },
-      })
+      });
+      patientLabTests = await LabTest.find(patientLabTestsQuery)
         .select(
           "_id testId testName category price discountedPrice status priority charges orderedAt",
         )
@@ -113,12 +125,13 @@ export async function GET(
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-      patientLabTests = await LabTest.find({
+      const patientLabTestsQuery = await buildQuery("lab", {
         patient: patientId,
         appointment: { $ne: appointmentId }, // Exclude current appointment tests
         orderedAt: { $gte: thirtyDaysAgo },
         status: { $ne: "cancelled" },
-      })
+      });
+      patientLabTests = await LabTest.find(patientLabTestsQuery)
         .select(
           "_id testId testName category price discountedPrice status priority charges orderedAt",
         )
@@ -132,9 +145,10 @@ export async function GET(
     }
 
     // Get appointment-specific prescriptions
-    const appointmentPrescriptions = await Prescription.find({
+    const appointmentPrescriptionsQuery = await buildQuery("prescription", {
       appointment: appointmentId,
-    })
+    });
+    const appointmentPrescriptions = await Prescription.find(appointmentPrescriptionsQuery)
       .select(
         "_id prescriptionId prescribedDate medications diagnosis instructions notes status expiryDate charges paymentStatus paymentVerified",
       )
@@ -151,12 +165,13 @@ export async function GET(
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-      patientPrescriptions = await Prescription.find({
+      const patientPrescriptionsQuery = await buildQuery("prescription", {
         patient: patientId,
         prescribedDate: { $gte: thirtyDaysAgo },
         status: "active",
         expiryDate: { $gt: new Date() },
-      })
+      });
+      patientPrescriptions = await Prescription.find(patientPrescriptionsQuery)
         .select(
           "_id prescriptionId prescribedDate medications diagnosis instructions notes status expiryDate charges paymentStatus paymentVerified",
         )
@@ -173,13 +188,14 @@ export async function GET(
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-      patientPrescriptions = await Prescription.find({
+      const patientPrescriptionsQuery = await buildQuery("prescription", {
         patient: patientId,
         appointment: { $ne: appointmentId }, // Exclude current appointment prescriptions
         prescribedDate: { $gte: thirtyDaysAgo },
         status: "active",
         expiryDate: { $gt: new Date() },
-      })
+      });
+      patientPrescriptions = await Prescription.find(patientPrescriptionsQuery)
         .select(
           "_id prescriptionId prescribedDate medications diagnosis instructions notes status expiryDate charges paymentStatus paymentVerified",
         )
@@ -194,9 +210,10 @@ export async function GET(
     }
 
     // Get appointment-specific imaging services
-    const appointmentImagingServices = await RadiologyService.find({
+    const appointmentImagingQuery = await buildQuery("radiology", {
       appointment: appointmentId,
-    })
+    });
+    const appointmentImagingServices = await RadiologyService.find(appointmentImagingQuery)
       .select(
         "_id serviceId serviceType bodyPart view status priority reportStatus billingStatus charges paymentVerified requestDate scheduledDate performedDate",
       )
@@ -216,10 +233,11 @@ export async function GET(
     });
 
     // Also check if there are any imaging services for this patient without appointment link
-    const allPatientImagingServices = await RadiologyService.find({
+    const allPatientImagingQuery = await buildQuery("radiology", {
       patient: patientId,
       requestDate: { $gte: appointmentDate },
-    })
+    });
+    const allPatientImagingServices = await RadiologyService.find(allPatientImagingQuery)
       .select("_id serviceId appointment")
       .sort({ requestDate: -1 })
       .lean();
@@ -251,11 +269,12 @@ export async function GET(
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-      patientImagingServices = await RadiologyService.find({
+      const patientImagingQuery = await buildQuery("radiology", {
         patient: patientId,
         requestDate: { $gte: thirtyDaysAgo },
         status: { $ne: "cancelled" },
-      })
+      });
+      patientImagingServices = await RadiologyService.find(patientImagingQuery)
         .select(
           "_id serviceId serviceType bodyPart view status priority reportStatus billingStatus charges paymentVerified requestDate scheduledDate performedDate",
         )
@@ -273,12 +292,13 @@ export async function GET(
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-      patientImagingServices = await RadiologyService.find({
+      const patientImagingQuery = await buildQuery("radiology", {
         patient: patientId,
         appointment: { $ne: appointmentId }, // Exclude current appointment services
         requestDate: { $gte: thirtyDaysAgo },
         status: { $ne: "cancelled" },
-      })
+      });
+      patientImagingServices = await RadiologyService.find(patientImagingQuery)
         .select(
           "_id serviceId serviceType bodyPart view status priority reportStatus billingStatus charges paymentVerified requestDate scheduledDate performedDate",
         )

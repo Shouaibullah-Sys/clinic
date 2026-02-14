@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
 import PharmacySale from "@/lib/models/PharmacySale";
 import { authenticateRequest } from "@/lib/auth";
+import { buildMarkedOnlyQuery } from "@/lib/utils/markedTransactions";
 
 // GET: List pending pharmacy payments
 export async function GET(request: NextRequest) {
@@ -68,15 +69,21 @@ export async function GET(request: NextRequest) {
     // Calculate pagination
     const skip = (page - 1) * limit;
 
+    const { query: finalQuery } = await buildMarkedOnlyQuery({
+      userId: auth.userId!,
+      module: "pharmacy",
+      baseQuery: query,
+    });
+
     // Fetch pending sales
     const [sales, total] = await Promise.all([
-      PharmacySale.find(query)
+      PharmacySale.find(finalQuery)
         .populate("soldBy", "name")
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
         .lean(),
-      PharmacySale.countDocuments(query),
+      PharmacySale.countDocuments(finalQuery),
     ]);
 
     // Calculate pagination info

@@ -5,6 +5,7 @@ import dbConnect from "@/lib/dbConnect";
 import { RadiologyService } from "@/lib/models/RadiologyService";
 import { Appointment } from "@/lib/models/Appointment";
 import { authenticateRequest, hasRequiredRole } from "@/lib/auth";
+import { buildMarkedOnlyQuery } from "@/lib/utils/markedTransactions";
 import mongoose from "mongoose";
 
 // GET: Get imaging studies for an appointment
@@ -55,10 +56,14 @@ export async function GET(
       );
     }
 
+    const { query: finalQuery } = await buildMarkedOnlyQuery({
+      userId: auth.userId!,
+      module: "radiology",
+      baseQuery: { appointment: appointmentId },
+    });
+
     // Get imaging studies for this appointment
-    const imagingStudies = await RadiologyService.find({
-      appointment: appointmentId,
-    })
+    const imagingStudies = await RadiologyService.find(finalQuery)
       .select(
         "_id serviceId serviceType bodyPart view requestDate scheduledDate performedDate status priority reportStatus findings impression billingStatus charges paymentVerified",
       )

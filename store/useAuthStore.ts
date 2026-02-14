@@ -19,6 +19,7 @@ export interface User {
   licenseNumber?: string;
   joiningDate?: string;
   permissions: string[];
+  markedOnlyAccess?: boolean;
 }
 
 interface AuthState {

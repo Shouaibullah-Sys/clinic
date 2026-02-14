@@ -130,9 +130,14 @@ export async function GET(
     ]);
     
     // Calculate detailed billing
+    const resolvedConsultationFee =
+      (appointment as any).consultationFee ??
+      (appointment as any).doctorFee ??
+      (appointment.appointmentType === "emergency" ? 150 :
+       appointment.appointmentType === "procedure" ? 200 : 100);
+
     const billingDetails = {
-      consultationFee: appointment.appointmentType === "emergency" ? 150 :
-                       appointment.appointmentType === "procedure" ? 200 : 100,
+      consultationFee: resolvedConsultationFee,
       
       labTests: labTests.map(test => {
         const base = test.discountedPrice || test.price || 0;
@@ -185,8 +190,7 @@ export async function GET(
         
         prescriptionsTotal: 0, // No price in prescription model
         
-        consultationFee: appointment.appointmentType === "emergency" ? 150 :
-                        appointment.appointmentType === "procedure" ? 200 : 100,
+        consultationFee: resolvedConsultationFee,
         
         totalAmount: 0, // Will be calculated below
         totalPaid: labTests.reduce((sum, test) => sum + (test.charges?.paid || 0), 0),
