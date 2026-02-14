@@ -44,8 +44,8 @@ export function RadiologyTemplateTable({
   onSelectTemplate,
 }: RadiologyTemplateTableProps) {
   const [search, setSearch] = useState("");
-  const [serviceTypeFilter, setServiceTypeFilter] = useState<string>("");
-  const [categoryFilter, setCategoryFilter] = useState<string>("");
+  const [serviceTypeFilter, setServiceTypeFilter] = useState<string>("all");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [activeFilter, setActiveFilter] = useState<string>("true");
   const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -58,9 +58,9 @@ export function RadiologyTemplateTable({
     refetch,
   } = useRadiologyTemplates({
     search: search || undefined,
-    serviceType: serviceTypeFilter || undefined,
-    category: categoryFilter || undefined,
-    active: activeFilter !== "" ? activeFilter : undefined,
+    serviceType: serviceTypeFilter !== "all" ? serviceTypeFilter : undefined,
+    category: categoryFilter !== "all" ? categoryFilter : undefined,
+    active: activeFilter !== "all" ? activeFilter : undefined,
   });
 
   const deleteMutation = useDeleteRadiologyTemplate();
@@ -145,7 +145,7 @@ export function RadiologyTemplateTable({
               <SelectValue placeholder="Service Type" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All Service Types</SelectItem>
+              <SelectItem value="all">All Service Types</SelectItem>
               <SelectItem value="x-ray">X-Ray</SelectItem>
               <SelectItem value="ct-scan">CT Scan</SelectItem>
               <SelectItem value="mri">MRI</SelectItem>
@@ -163,7 +163,7 @@ export function RadiologyTemplateTable({
               <SelectValue placeholder="Category" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All Categories</SelectItem>
+              <SelectItem value="all">All Categories</SelectItem>
               <SelectItem value="diagnostic">Diagnostic</SelectItem>
               <SelectItem value="screening">Screening</SelectItem>
               <SelectItem value="interventional">Interventional</SelectItem>
@@ -179,7 +179,7 @@ export function RadiologyTemplateTable({
               <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All</SelectItem>
+              <SelectItem value="all">All</SelectItem>
               <SelectItem value="true">Active</SelectItem>
               <SelectItem value="false">Inactive</SelectItem>
             </SelectContent>

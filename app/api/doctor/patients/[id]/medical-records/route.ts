@@ -67,7 +67,9 @@ export async function GET(
       patient: patientId,
       doctor: doctorId,
     })
-      .select("recordId visitDate diagnosis symptoms notes vitalSigns doctor")
+      .select(
+        "recordId visitDate diagnosis symptoms notes vitalSigns doctor examinationNotes treatmentPlan followUpDate patientInstructions",
+      )
       .populate("doctor", "name specialization")
       .sort({ visitDate: -1 })
       .lean();
@@ -271,4 +273,3 @@ export async function POST(
     );
   }
 }
-

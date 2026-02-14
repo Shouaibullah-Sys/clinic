@@ -190,7 +190,9 @@ export default function MedicineStockTable({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              {(user?.role === "pharmacy" || user?.role === "admin") && (
+              {(["pharmacist", "pharmacy_head", "pharmacy", "admin"].includes(
+                user?.role || "",
+              )) && (
                 <DropdownMenuItem onClick={() => onEdit(stock)}>
                   Edit
                 </DropdownMenuItem>

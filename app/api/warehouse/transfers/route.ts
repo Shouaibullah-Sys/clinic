@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
     await dbConnect();
     const payload = await getTokenPayload(request);
 
-    if (!payload || !["admin", "pharmacist"].includes(payload.role)) {
+    if (!payload || !["admin", "pharmacy_head"].includes(payload.role)) {
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
         { status: 401 },
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
     await dbConnect();
     const payload = await getTokenPayload(request);
 
-    if (!payload || !["admin", "pharmacist"].includes(payload.role)) {
+    if (!payload || !["admin", "pharmacy_head"].includes(payload.role)) {
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
         { status: 401 },

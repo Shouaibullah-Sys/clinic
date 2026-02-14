@@ -121,6 +121,13 @@ export async function POST(request: NextRequest) {
       basePrice,
       active = true,
       parameters,
+      clinicalIndicationTemplate,
+      techniqueTemplate,
+      comparisonTemplate,
+      findingsTemplate,
+      impressionTemplate,
+      recommendationTemplate,
+      criticalFindingsChecklist,
     } = body;
 
     // Validate required fields
@@ -169,6 +176,13 @@ export async function POST(request: NextRequest) {
       basePrice,
       active,
       parameters: parameters || [],
+      clinicalIndicationTemplate,
+      techniqueTemplate,
+      comparisonTemplate,
+      findingsTemplate,
+      impressionTemplate,
+      recommendationTemplate,
+      criticalFindingsChecklist: criticalFindingsChecklist || [],
       createdBy: new mongoose.Types.ObjectId(auth.userId),
     });
 

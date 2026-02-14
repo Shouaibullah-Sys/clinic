@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useAuthStore } from "@/store/useAuthStore";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -47,19 +46,13 @@ import {
   User,
   Stethoscope,
   DollarSign,
-  FlaskConical,
-  Pill,
   Printer,
   ArrowLeft,
   CheckCircle,
-  CreditCard,
   RefreshCw,
   Loader2,
   Receipt,
-  Copy,
   AlertCircle,
-  Scan,
-  FileText,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { toast } from "sonner";
@@ -269,6 +262,30 @@ interface DischargeCard {
   createdAt: string;
 }
 
+type UnifiedRecord =
+  | { type: "lab"; id: string; createdAt: string; label: string; item: LabTest }
+  | {
+      type: "prescription";
+      id: string;
+      createdAt: string;
+      label: string;
+      item: Prescription;
+    }
+  | {
+      type: "imaging";
+      id: string;
+      createdAt: string;
+      label: string;
+      item: ImagingService;
+    }
+  | {
+      type: "discharge";
+      id: string;
+      createdAt: string;
+      label: string;
+      item: DischargeCard;
+    };
+
 export default function AppointmentDetailPage() {
   const router = useRouter();
   const params = useParams();
@@ -280,16 +297,7 @@ export default function AppointmentDetailPage() {
   const [dischargeCards, setDischargeCards] = useState<DischargeCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [activeTab, setActiveTab] = useState("overview");
-  const [dataSource, setDataSource] = useState<{
-    labTests: "appointment" | "patient" | "mixed";
-    prescriptions: "appointment" | "patient" | "mixed";
-    imaging: "appointment" | "patient" | "mixed";
-  }>({
-    labTests: "appointment",
-    prescriptions: "appointment",
-    imaging: "appointment",
-  });
+  const [activeTab, setActiveTab] = useState("records");
 
   // Role-based access control
   useEffect(() => {
@@ -362,13 +370,6 @@ export default function AppointmentDetailPage() {
         setLabTests(data.data.labTests || []);
         setPrescriptions(data.data.prescriptions || []);
         setImagingServices(data.data.imagingServices || []);
-        setDataSource(
-          data.data.source || {
-            labTests: "appointment",
-            prescriptions: "appointment",
-            imaging: "appointment",
-          },
-        );
 
         if (isRefresh) {
           toast.success("Data refreshed successfully");
@@ -428,7 +429,6 @@ export default function AppointmentDetailPage() {
 
       if (data.success && Array.isArray(data.data)) {
         setImagingServices(data.data);
-        setDataSource((prev) => ({ ...prev, imaging: "appointment" }));
       } else {
         setImagingServices([]);
       }
@@ -454,11 +454,9 @@ export default function AppointmentDetailPage() {
       const appointmentData = await appointmentResponse.json();
 
       let labTestsData = [];
-      let source: "appointment" | "patient" | "mixed" = "appointment";
 
       if (appointmentData.success && Array.isArray(appointmentData.data)) {
         labTestsData = appointmentData.data;
-        source = "appointment";
       }
 
       if (labTestsData.length === 0) {
@@ -478,13 +476,11 @@ export default function AppointmentDetailPage() {
 
         if (patientData.success && Array.isArray(patientData.data)) {
           labTestsData = patientData.data;
-          source = "patient";
         }
       }
 
       const filteredTests = filterLabTestsByRelevance(labTestsData);
       setLabTests(filteredTests);
-      setDataSource((prev) => ({ ...prev, labTests: source }));
     } catch (error) {
       console.error("Error fetching lab tests:", error);
       setLabTests([]);
@@ -507,11 +503,9 @@ export default function AppointmentDetailPage() {
       const appointmentData = await appointmentResponse.json();
 
       let prescriptionsData = [];
-      let source: "appointment" | "patient" | "mixed" = "appointment";
 
       if (appointmentData.success && Array.isArray(appointmentData.data)) {
         prescriptionsData = appointmentData.data;
-        source = "appointment";
       }
 
       if (prescriptionsData.length === 0) {
@@ -531,14 +525,12 @@ export default function AppointmentDetailPage() {
 
         if (patientData.success && Array.isArray(patientData.data)) {
           prescriptionsData = patientData.data;
-          source = "patient";
         }
       }
 
       const filteredPrescriptions =
         filterPrescriptionsByRelevance(prescriptionsData);
       setPrescriptions(filteredPrescriptions);
-      setDataSource((prev) => ({ ...prev, prescriptions: source }));
     } catch (error) {
       console.error("Error fetching prescriptions:", error);
       setPrescriptions([]);
@@ -991,6 +983,171 @@ export default function AppointmentDetailPage() {
     return preOpTotal + postOpTotal + dischargeMedsTotal;
   };
 
+  const handlePrintDischargeReceipt = (card: DischargeCard) => {
+    const receiptContent = `
+      HOSPITAL RECEIPT
+      =================
+      Receipt #: ${card.billing.transactionId || `TXN-${Date.now()}`}
+      Date: ${format(new Date(), "yyyy-MM-dd HH:mm")}
+      
+      Patient: ${appointment?.patient.name}
+      Patient ID: ${appointment?.patient.patientId}
+      
+      Discharge Card: ${card.dischargeId}
+      Operation: ${card.operationName}
+      
+      Charges:
+        Operation: ${card.operationCost.toFixed(2)}
+        Medicines: ${calculateDischargeMedicinesTotal(card).toFixed(2)}
+        Other: ${card.otherRequirements
+          .reduce((sum, r) => sum + r.totalPrice, 0)
+          .toFixed(2)}
+        -----------------
+        Total: ${card.billing.totalAmount.toFixed(2)}
+      
+      Payment:
+        Method: ${card.billing.paymentMethod || "cash"}
+        Amount Paid: ${card.billing.paidAmount.toFixed(2)}
+        Balance: ${card.billing.balance.toFixed(2)}
+      
+      Processed by: ${user?.name}
+      =================
+      Thank you for your payment!
+    `;
+    const printWindow = window.open("", "_blank");
+    printWindow?.document.write(`
+      <html>
+        <head>
+          <title>Receipt - ${card.dischargeId}</title>
+          <style>
+            body { font-family: monospace; padding: 20px; }
+            h1 { text-align: center; }
+            .receipt { max-width: 400px; margin: 0 auto; }
+            .total { font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <div class="receipt">
+            <pre>${receiptContent}</pre>
+          </div>
+          <script>
+            window.onload = function() {
+              window.print();
+              window.close();
+            }
+          </script>
+        </body>
+      </html>
+    `);
+  };
+
+  const openLabPaymentDialog = (test: LabTest) => {
+    setSelectedLabTest(test);
+    setPaymentType("lab");
+    setPaymentForm({
+      paymentMethod: test.charges?.paymentMethod || "cash",
+      amount: test.charges?.due || calculateTestTotal(test),
+      transactionId: test.charges?.transactionId || "",
+      notes: "",
+      price: test.discountedPrice || test.price || 0,
+    });
+    setPaymentDialogOpen(true);
+  };
+
+  const openPrescriptionPaymentDialog = (prescription: Prescription) => {
+    setSelectedPrescription(prescription);
+    setPaymentType("prescription");
+    setPaymentForm({
+      paymentMethod: prescription.charges?.paymentMethod || "cash",
+      amount:
+        prescription.charges?.due ||
+        prescription.charges?.totalAmount ||
+        calculatePrescriptionTotal(prescription),
+      transactionId: prescription.charges?.transactionId || "",
+      notes: "",
+      price: 0,
+    });
+    setPaymentDialogOpen(true);
+  };
+
+  const openImagingPaymentDialog = (service: ImagingService) => {
+    setSelectedImagingService(service);
+    setPaymentType("imaging");
+    setPaymentForm({
+      paymentMethod: service.charges?.paymentMethod || "cash",
+      amount: service.charges?.due || service.charges?.totalAmount || 0,
+      transactionId: service.charges?.transactionId || "",
+      notes: "",
+      price: 0,
+    });
+    setPaymentDialogOpen(true);
+  };
+
+  const openDischargePaymentDialog = (
+    card: DischargeCard,
+    paymentFor: "operation" | "medicines",
+  ) => {
+    setSelectedDischargeCard(card);
+    setPaymentType(
+      paymentFor === "operation" ? "discharge" : "discharge-medicines",
+    );
+    setPaymentForm({
+      paymentMethod:
+        paymentFor === "operation"
+          ? card.billing.paymentMethod || "cash"
+          : card.billing.medicinesPaymentMethod || "cash",
+      amount:
+        paymentFor === "operation"
+          ? card.billing.balance
+          : calculateDischargeMedicinesTotal(card),
+      transactionId:
+        paymentFor === "operation"
+          ? card.billing.transactionId || ""
+          : card.billing.medicinesTransactionId || "",
+      notes: "",
+      price: 0,
+    });
+    setPaymentDialogOpen(true);
+  };
+
+  const unifiedRecords = useMemo<UnifiedRecord[]>(() => {
+    const records: UnifiedRecord[] = [
+      ...labTests.map((test) => ({
+        type: "lab" as const,
+        id: test._id,
+        createdAt: test.orderedAt,
+        label: test.testName,
+        item: test,
+      })),
+      ...prescriptions.map((prescription) => ({
+        type: "prescription" as const,
+        id: prescription._id,
+        createdAt: prescription.prescribedDate,
+        label: prescription.prescriptionId,
+        item: prescription,
+      })),
+      ...imagingServices.map((service) => ({
+        type: "imaging" as const,
+        id: service._id,
+        createdAt: service.requestDate,
+        label: service.serviceId,
+        item: service,
+      })),
+      ...dischargeCards.map((card) => ({
+        type: "discharge" as const,
+        id: card._id,
+        createdAt: card.createdAt,
+        label: card.dischargeId,
+        item: card,
+      })),
+    ];
+
+    return records.sort(
+      (a, b) =>
+        new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime(),
+    );
+  }, [labTests, prescriptions, imagingServices, dischargeCards]);
+
   // Calculate billing totals
   const calculateTotals = () => {
     const consultationFee =
@@ -1180,8 +1337,8 @@ export default function AppointmentDetailPage() {
               Appointment Not Found
             </h2>
             <p className="text-gray-500 dark:text-gray-400 mb-4">
-              The appointment you're looking for doesn't exist or you don't have
-              permission to view it.
+              The appointment you&apos;re looking for doesn&apos;t exist or you don&apos;t
+              have permission to view it.
             </p>
             <Button onClick={() => router.push("/reception/appointments")}>
               Back to Appointments
@@ -1294,986 +1451,202 @@ export default function AppointmentDetailPage() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid grid-cols-6 dark:bg-gray-900">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="lab-tests">
-            Lab Tests {labTests.length > 0 && `(${labTests.length})`}
-          </TabsTrigger>
-          <TabsTrigger value="prescriptions">
-            Prescriptions{" "}
-            {prescriptions.length > 0 && `(${prescriptions.length})`}
-          </TabsTrigger>
-          <TabsTrigger value="imaging">
-            Imaging{" "}
-            {imagingServices.length > 0 && `(${imagingServices.length})`}
-          </TabsTrigger>
-          <TabsTrigger value="discharge">
-            <FileText className="h-4 w-4 mr-2" />
-            Discharge{" "}
-            {dischargeCards.length > 0 && `(${dischargeCards.length})`}
+        <TabsList className="grid grid-cols-2 dark:bg-gray-900">
+          <TabsTrigger value="records">
+            Records ({unifiedRecords.length})
           </TabsTrigger>
           <TabsTrigger value="billing">Billing</TabsTrigger>
         </TabsList>
 
-        {/* Overview Tab */}
-        <TabsContent value="overview" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card className="dark:bg-gray-900 dark:border-gray-800">
-              <CardHeader>
-                <CardTitle className="dark:text-gray-100">
-                  Appointment Summary
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label className="text-gray-500 dark:text-gray-400">
-                    Reason for Visit
-                  </Label>
-                  <p className="font-medium dark:text-gray-200">
-                    {appointment.reason}
-                  </p>
-                </div>
-                {appointment.notes && (
-                  <div className="space-y-2">
-                    <Label className="text-gray-500 dark:text-gray-400">
-                      Notes
-                    </Label>
-                    <p className="font-medium dark:text-gray-200">
-                      {appointment.notes}
-                    </p>
-                  </div>
-                )}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label className="text-gray-500 dark:text-gray-400">
-                      Start Time
-                    </Label>
-                    <p className="font-medium dark:text-gray-200">
-                      {format(parseISO(appointment.startTime), "h:mm a")}
-                    </p>
-                  </div>
-                  <div>
-                    <Label className="text-gray-500 dark:text-gray-400">
-                      Duration
-                    </Label>
-                    <p className="font-medium dark:text-gray-200">
-                      {appointment.duration} minutes
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="dark:bg-gray-900 dark:border-gray-800">
-              <CardHeader>
-                <CardTitle className="dark:text-gray-100">
-                  Quick Stats
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <span className="dark:text-gray-300">Lab Tests:</span>
-                  <Badge variant="outline">{labTests.length}</Badge>
-                </div>
-                <Separator className="dark:bg-gray-800" />
-                <div className="flex justify-between items-center">
-                  <span className="dark:text-gray-300">Prescriptions:</span>
-                  <Badge variant="outline">{prescriptions.length}</Badge>
-                </div>
-                <Separator className="dark:bg-gray-800" />
-                <div className="flex justify-between items-center">
-                  <span className="dark:text-gray-300">Total Amount:</span>
-                  <span className="font-bold dark:text-gray-100">
-                    ${totals.totalAmount.toFixed(2)}
-                  </span>
-                </div>
-                <Separator className="dark:bg-gray-800" />
-                <div className="flex justify-between items-center">
-                  <span className="dark:text-gray-300">Amount Due:</span>
-                  <span className="font-bold text-red-600 dark:text-red-400">
-                    ${totals.dueAmount.toFixed(2)}
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        {/* Lab Tests Tab */}
-        <TabsContent value="lab-tests" className="space-y-6">
+        <TabsContent value="records" className="space-y-6">
           <Card className="dark:bg-gray-900 dark:border-gray-800">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 dark:text-gray-100">
-                <FlaskConical className="h-5 w-5" />
-                Laboratory Tests
-              </CardTitle>
-              <CardDescription className="flex items-center gap-2 dark:text-gray-400">
-                Manage and process payments for laboratory tests
-                {labTests.length > 0 && (
-                  <Badge
-                    variant="outline"
-                    className="ml-2 dark:border-gray-700 dark:text-gray-300"
-                  >
-                    {dataSource.labTests === "appointment"
-                      ? "Appointment-specific"
-                      : dataSource.labTests === "patient"
-                        ? "Patient history"
-                        : "Mixed sources"}
-                  </Badge>
-                )}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {labTests.length === 0 ? (
-                <div className="text-center py-12">
-                  <FlaskConical className="h-12 w-12 text-gray-300 mx-auto mb-4 dark:text-gray-600" />
-                  <p className="text-gray-500 dark:text-gray-400">
-                    No lab tests ordered
-                  </p>
-                </div>
-              ) : (
-                <div className="rounded-md border dark:border-gray-800">
-                  <Table>
-                    <TableHeader className="dark:bg-gray-800">
-                      <TableRow className="dark:border-gray-800">
-                        <TableHead className="dark:text-gray-300">
-                          Test ID
-                        </TableHead>
-                        <TableHead className="dark:text-gray-300">
-                          Test Name
-                        </TableHead>
-                        <TableHead className="dark:text-gray-300">
-                          Price
-                        </TableHead>
-                        <TableHead className="dark:text-gray-300">
-                          Total
-                        </TableHead>
-                        <TableHead className="dark:text-gray-300">
-                          Payment Status
-                        </TableHead>
-                        <TableHead className="dark:text-gray-300">
-                          Due
-                        </TableHead>
-                        <TableHead className="dark:text-gray-300">
-                          Test Status
-                        </TableHead>
-                        <TableHead className="dark:text-gray-300">
-                          Actions
-                        </TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {labTests.map((test) => (
-                        <TableRow
-                          key={test._id}
-                          className={`dark:border-gray-800 ${
-                            isPaymentDisabled(test)
-                              ? "bg-green-50 dark:bg-green-900/10"
-                              : ""
-                          }`}
-                        >
-                          <TableCell className="font-medium dark:text-gray-200">
-                            {test.testId}
-                          </TableCell>
-                          <TableCell className="dark:text-gray-300">
-                            {test.testName}
-                          </TableCell>
-                          <TableCell className="dark:text-gray-300">
-                            $
-                            {(test.discountedPrice || test.price || 0).toFixed(
-                              2,
-                            )}
-                          </TableCell>
-                          <TableCell className="dark:text-gray-300">
-                            ${calculateTestTotal(test).toFixed(2)}
-                          </TableCell>
-                          <TableCell>
-                            {getPaymentStatusBadge(
-                              test.charges?.paymentStatus || "pending",
-                            )}
-                          </TableCell>
-                          <TableCell className="font-bold text-red-600 dark:text-red-400">
-                            $
-                            {test.charges?.due?.toFixed(2) ||
-                              calculateTestTotal(test).toFixed(2)}
-                          </TableCell>
-                          <TableCell>
-                            {getLabStatusBadge(test.status)}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex gap-2">
-                              <Button
-                                size="sm"
-                                variant={
-                                  isPaymentDisabled(test)
-                                    ? "secondary"
-                                    : "outline"
-                                }
-                                onClick={() => {
-                                  setSelectedLabTest(test);
-                                  setPaymentType("lab");
-                                  setPaymentForm({
-                                    paymentMethod:
-                                      test.charges?.paymentMethod || "cash",
-                                    amount:
-                                      test.charges?.due ||
-                                      calculateTestTotal(test),
-                                    transactionId:
-                                      test.charges?.transactionId || "",
-                                    notes: "",
-                                    price:
-                                      test.discountedPrice || test.price || 0,
-                                  });
-                                  setPaymentDialogOpen(true);
-                                }}
-                                disabled={isPaymentDisabled(test)}
-                                className={
-                                  isPaymentDisabled(test)
-                                    ? "opacity-50 cursor-not-allowed"
-                                    : ""
-                                }
-                              >
-                                {isPaymentDisabled(test) ? (
-                                  <>
-                                    <CheckCircle className="h-3 w-3 mr-1" />
-                                    Paid
-                                  </>
-                                ) : (
-                                  <>
-                                    <CreditCard className="h-3 w-3 mr-1" />
-                                    Pay
-                                  </>
-                                )}
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handlePrintReceipt(test)}
-                              >
-                                <Receipt className="h-3 w-3 mr-1" />
-                                Receipt
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Prescriptions Tab */}
-        <TabsContent value="prescriptions" className="space-y-6">
-          <Card className="dark:bg-gray-900 dark:border-gray-800">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 dark:text-gray-100">
-                <Pill className="h-5 w-5" />
-                Prescriptions
-              </CardTitle>
-              <CardDescription className="flex items-center gap-2 dark:text-gray-400">
-                Manage and process payments for prescriptions
-                {prescriptions.length > 0 && (
-                  <Badge
-                    variant="outline"
-                    className="ml-2 dark:border-gray-700 dark:text-gray-300"
-                  >
-                    {dataSource.prescriptions === "appointment"
-                      ? "Appointment-specific"
-                      : dataSource.prescriptions === "patient"
-                        ? "Patient history"
-                        : "Mixed sources"}
-                  </Badge>
-                )}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {prescriptions.length === 0 ? (
-                <div className="text-center py-12">
-                  <Pill className="h-12 w-12 text-gray-300 mx-auto mb-4 dark:text-gray-600" />
-                  <p className="text-gray-500 dark:text-gray-400">
-                    No prescriptions
-                  </p>
-                </div>
-              ) : (
-                <div className="rounded-md border dark:border-gray-800">
-                  <Table>
-                    <TableHeader className="dark:bg-gray-800">
-                      <TableRow className="dark:border-gray-800">
-                        <TableHead className="dark:text-gray-300">
-                          Prescription ID
-                        </TableHead>
-                        <TableHead className="dark:text-gray-300">
-                          Doctor
-                        </TableHead>
-                        <TableHead className="dark:text-gray-300">
-                          Date
-                        </TableHead>
-                        <TableHead className="dark:text-gray-300">
-                          Medications
-                        </TableHead>
-                        <TableHead className="dark:text-gray-300">
-                          Total
-                        </TableHead>
-                        <TableHead className="dark:text-gray-300">
-                          Payment Status
-                        </TableHead>
-                        <TableHead className="dark:text-gray-300">
-                          Due
-                        </TableHead>
-                        <TableHead className="dark:text-gray-300">
-                          Status
-                        </TableHead>
-                        <TableHead className="dark:text-gray-300">
-                          Actions
-                        </TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {prescriptions.map((prescription) => (
-                        <TableRow
-                          key={prescription._id}
-                          className={`dark:border-gray-800 ${
-                            isPaymentDisabled(prescription)
-                              ? "bg-green-50 dark:bg-green-900/10"
-                              : ""
-                          }`}
-                        >
-                          <TableCell className="font-medium dark:text-gray-200">
-                            {prescription.prescriptionId}
-                          </TableCell>
-                          <TableCell className="dark:text-gray-300">
-                            {prescription.doctor.name}
-                          </TableCell>
-                          <TableCell className="dark:text-gray-300">
-                            {format(
-                              parseISO(prescription.prescribedDate),
-                              "MMM d, yyyy",
-                            )}
-                          </TableCell>
-                          <TableCell className="dark:text-gray-300">
-                            <div className="max-w-xs truncate">
-                              {prescription.medications.map((med, idx) => (
-                                <div key={idx} className="text-sm">
-                                  {med.name} (×{med.quantity})
-                                </div>
-                              ))}
-                            </div>
-                          </TableCell>
-                          <TableCell className="dark:text-gray-300">
-                            $
-                            {(
-                              prescription.charges?.totalAmount ||
-                              calculatePrescriptionTotal(prescription)
-                            ).toFixed(2)}
-                          </TableCell>
-                          <TableCell>
-                            {getPaymentStatusBadge(
-                              prescription.charges?.paymentStatus || "unpaid",
-                            )}
-                          </TableCell>
-                          <TableCell className="font-bold text-red-600 dark:text-red-400">
-                            $
-                            {(
-                              prescription.charges?.due ||
-                              prescription.charges?.totalAmount ||
-                              calculatePrescriptionTotal(prescription)
-                            ).toFixed(2)}
-                          </TableCell>
-                          <TableCell>
-                            {getLabStatusBadge(prescription.status)}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex gap-2">
-                              <Button
-                                size="sm"
-                                variant={
-                                  isPaymentDisabled(prescription)
-                                    ? "secondary"
-                                    : "outline"
-                                }
-                                onClick={() => {
-                                  setSelectedPrescription(prescription);
-                                  setPaymentType("prescription");
-                                  setPaymentForm({
-                                    paymentMethod:
-                                      prescription.charges?.paymentMethod ||
-                                      "cash",
-                                    amount:
-                                      prescription.charges?.due ||
-                                      prescription.charges?.totalAmount ||
-                                      calculatePrescriptionTotal(prescription),
-                                    transactionId:
-                                      prescription.charges?.transactionId || "",
-                                    notes: "",
-                                    price: 0,
-                                  });
-                                  setPaymentDialogOpen(true);
-                                }}
-                                disabled={isPaymentDisabled(prescription)}
-                                className={
-                                  isPaymentDisabled(prescription)
-                                    ? "opacity-50 cursor-not-allowed"
-                                    : ""
-                                }
-                              >
-                                {isPaymentDisabled(prescription) ? (
-                                  <>
-                                    <CheckCircle className="h-3 w-3 mr-1" />
-                                    Paid
-                                  </>
-                                ) : (
-                                  <>
-                                    <CreditCard className="h-3 w-3 mr-1" />
-                                    Pay
-                                  </>
-                                )}
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() =>
-                                  handlePrintPrescriptionReceipt(prescription)
-                                }
-                              >
-                                <Receipt className="h-3 w-3 mr-1" />
-                                Receipt
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Imaging Tab */}
-        <TabsContent value="imaging" className="space-y-6">
-          <Card className="dark:bg-gray-900 dark:border-gray-800">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 dark:text-gray-100">
-                <Scan className="h-5 w-5" />
-                Imaging Services
-              </CardTitle>
-              <CardDescription className="flex items-center gap-2 dark:text-gray-400">
-                Manage and process payments for imaging services (X-Ray, CT
-                Scan, MRI, Ultrasound)
-                {imagingServices.length > 0 && (
-                  <Badge
-                    variant="outline"
-                    className="ml-2 dark:border-gray-700 dark:text-gray-300"
-                  >
-                    {dataSource.imaging === "appointment"
-                      ? "Appointment-specific"
-                      : dataSource.imaging === "patient"
-                        ? "Patient history"
-                        : "Mixed sources"}
-                  </Badge>
-                )}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {imagingServices.length === 0 ? (
-                <div className="text-center py-12">
-                  <Scan className="h-12 w-12 text-gray-300 mx-auto mb-4 dark:text-gray-600" />
-                  <p className="text-gray-500 dark:text-gray-400">
-                    No imaging services ordered
-                  </p>
-                </div>
-              ) : (
-                <div className="rounded-md border dark:border-gray-800">
-                  <Table>
-                    <TableHeader className="dark:bg-gray-800">
-                      <TableRow className="dark:border-gray-800">
-                        <TableHead className="dark:text-gray-300">
-                          Service ID
-                        </TableHead>
-                        <TableHead className="dark:text-gray-300">
-                          Type
-                        </TableHead>
-                        <TableHead className="dark:text-gray-300">
-                          Body Part
-                        </TableHead>
-                        <TableHead className="dark:text-gray-300">
-                          View
-                        </TableHead>
-                        <TableHead className="dark:text-gray-300">
-                          Total
-                        </TableHead>
-                        <TableHead className="dark:text-gray-300">
-                          Payment Status
-                        </TableHead>
-                        <TableHead className="dark:text-gray-300">
-                          Due
-                        </TableHead>
-                        <TableHead className="dark:text-gray-300">
-                          Service Status
-                        </TableHead>
-                        <TableHead className="dark:text-gray-300">
-                          Actions
-                        </TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {imagingServices.map((service) => (
-                        <TableRow
-                          key={service._id}
-                          className={`dark:border-gray-800 ${
-                            isPaymentDisabled(service)
-                              ? "bg-green-50 dark:bg-green-900/10"
-                              : ""
-                          }`}
-                        >
-                          <TableCell className="font-medium dark:text-gray-200">
-                            {service.serviceId}
-                          </TableCell>
-                          <TableCell>
-                            <Badge
-                              variant="outline"
-                              className="dark:border-gray-700 dark:text-gray-300"
-                            >
-                              {service.serviceType === "x-ray"
-                                ? "X-Ray"
-                                : service.serviceType === "ct-scan"
-                                  ? "CT Scan"
-                                  : service.serviceType === "mri"
-                                    ? "MRI"
-                                    : "Ultrasound"}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="dark:text-gray-300">
-                            {service.bodyPart}
-                          </TableCell>
-                          <TableCell className="dark:text-gray-300">
-                            {service.view}
-                          </TableCell>
-                          <TableCell className="dark:text-gray-300">
-                            ${(service.charges?.totalAmount || 0).toFixed(2)}
-                          </TableCell>
-                          <TableCell>
-                            {getPaymentStatusBadge(
-                              service.charges?.paymentStatus || "pending",
-                            )}
-                          </TableCell>
-                          <TableCell className="font-bold text-red-600 dark:text-red-400">
-                            $
-                            {service.charges?.due?.toFixed(2) ||
-                              (service.charges?.totalAmount || 0).toFixed(2)}
-                          </TableCell>
-                          <TableCell>
-                            {getLabStatusBadge(service.status)}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex gap-2">
-                              <Button
-                                size="sm"
-                                variant={
-                                  isPaymentDisabled(service)
-                                    ? "secondary"
-                                    : "outline"
-                                }
-                                onClick={() => {
-                                  setSelectedImagingService(service);
-                                  setPaymentType("imaging");
-                                  setPaymentForm({
-                                    paymentMethod:
-                                      service.charges?.paymentMethod || "cash",
-                                    amount:
-                                      service.charges?.due ||
-                                      service.charges?.totalAmount ||
-                                      0,
-                                    transactionId:
-                                      service.charges?.transactionId || "",
-                                    notes: "",
-                                    price: 0,
-                                  });
-                                  setPaymentDialogOpen(true);
-                                }}
-                                disabled={isPaymentDisabled(service)}
-                                className={
-                                  isPaymentDisabled(service)
-                                    ? "opacity-50 cursor-not-allowed"
-                                    : ""
-                                }
-                              >
-                                {isPaymentDisabled(service) ? (
-                                  <>
-                                    <CheckCircle className="h-3 w-3 mr-1" />
-                                    Paid
-                                  </>
-                                ) : (
-                                  <>
-                                    <CreditCard className="h-3 w-3 mr-1" />
-                                    Pay
-                                  </>
-                                )}
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() =>
-                                  handlePrintImagingReceipt(service)
-                                }
-                              >
-                                <Receipt className="h-3 w-3 mr-1" />
-                                Receipt
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Discharge Cards Tab */}
-        <TabsContent value="discharge" className="space-y-6">
-          <Card className="dark:bg-gray-900 dark:border-gray-800">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 dark:text-gray-100">
-                <FileText className="h-5 w-5" />
-                Discharge Cards
-              </CardTitle>
+              <CardTitle className="dark:text-gray-100">All Records</CardTitle>
               <CardDescription className="dark:text-gray-400">
-                Process payments for patient discharge cards (operations,
-                medicines, and other requirements)
+                Lab tests, prescriptions, imaging services, and discharge cards in one table.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {dischargeCards.length === 0 ? (
+              {unifiedRecords.length === 0 ? (
                 <div className="text-center py-12">
-                  <FileText className="h-12 w-12 text-gray-300 mx-auto mb-4 dark:text-gray-600" />
                   <p className="text-gray-500 dark:text-gray-400">
-                    No discharge cards found for this patient
+                    No records found for this appointment/patient.
                   </p>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {dischargeCards.map((card) => (
-                    <Card
-                      key={card._id}
-                      className="dark:bg-gray-800 dark:border-gray-700"
-                    >
-                      <CardContent className="pt-6">
-                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
-                          <div>
-                            <h3 className="font-semibold dark:text-gray-100">
-                              {card.operationName}
-                            </h3>
-                            <p className="text-sm text-gray-500 dark:text-gray-400">
-                              {card.dischargeId} • {card.operationType} •{" "}
-                              {format(
-                                parseISO(card.operationDate),
-                                "MMM d, yyyy",
-                              )}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {getPaymentStatusBadge(card.billing.paymentStatus)}
-                          </div>
-                        </div>
+                <div className="rounded-md border dark:border-gray-800">
+                  <Table>
+                    <TableHeader className="dark:bg-gray-800">
+                      <TableRow className="dark:border-gray-800">
+                        <TableHead className="dark:text-gray-300">Type</TableHead>
+                        <TableHead className="dark:text-gray-300">Reference</TableHead>
+                        <TableHead className="dark:text-gray-300">Details</TableHead>
+                        <TableHead className="dark:text-gray-300">Date</TableHead>
+                        <TableHead className="dark:text-gray-300">Status</TableHead>
+                        <TableHead className="dark:text-gray-300">Payment</TableHead>
+                        <TableHead className="dark:text-gray-300">Due</TableHead>
+                        <TableHead className="dark:text-gray-300">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {unifiedRecords.map((record) => {
+                        if (record.type === "lab") {
+                          const test = record.item;
+                          return (
+                            <TableRow key={`lab-${record.id}`} className="dark:border-gray-800">
+                              <TableCell><Badge variant="outline">Lab</Badge></TableCell>
+                              <TableCell className="font-medium dark:text-gray-200">{test.testId}</TableCell>
+                              <TableCell className="dark:text-gray-300">{test.testName}</TableCell>
+                              <TableCell className="dark:text-gray-300">{format(parseISO(test.orderedAt), "MMM d, yyyy")}</TableCell>
+                              <TableCell>{getLabStatusBadge(test.status)}</TableCell>
+                              <TableCell>{getPaymentStatusBadge(test.charges?.paymentStatus || "pending")}</TableCell>
+                              <TableCell className="font-bold text-red-600 dark:text-red-400">${(test.charges?.due || calculateTestTotal(test)).toFixed(2)}</TableCell>
+                              <TableCell>
+                                <div className="flex gap-2">
+                                  <Button
+                                    size="sm"
+                                    variant={isPaymentDisabled(test) ? "secondary" : "outline"}
+                                    disabled={isPaymentDisabled(test)}
+                                    onClick={() => openLabPaymentDialog(test)}
+                                  >
+                                    {isPaymentDisabled(test) ? "Paid" : "Pay"}
+                                  </Button>
+                                  <Button size="sm" variant="outline" onClick={() => handlePrintReceipt(test)}>
+                                    <Receipt className="h-3 w-3 mr-1" />
+                                    Receipt
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        }
 
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                          <div>
-                            <p className="text-xs text-gray-500 dark:text-gray-400">
-                              Operation Cost
-                            </p>
-                            <p className="font-medium dark:text-gray-200">
-                              ${card.operationCost.toFixed(2)}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-gray-500 dark:text-gray-400">
-                              Medicines
-                            </p>
-                            <p className="font-medium dark:text-gray-200">
-                              $
-                              {(
-                                card.preOpMedicines.reduce(
-                                  (sum, m) => sum + m.totalPrice,
-                                  0,
-                                ) +
-                                card.postOpMedicines.reduce(
-                                  (sum, m) => sum + m.totalPrice,
-                                  0,
-                                ) +
-                                card.dischargeMedicines.reduce(
-                                  (sum, m) => sum + m.totalPrice,
-                                  0,
-                                )
-                              ).toFixed(2)}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-gray-500 dark:text-gray-400">
-                              Other
-                            </p>
-                            <p className="font-medium dark:text-gray-200">
-                              $
-                              {card.otherRequirements
-                                .reduce((sum, r) => sum + r.totalPrice, 0)
-                                .toFixed(2)}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-gray-500 dark:text-gray-400">
-                              Total
-                            </p>
-                            <p className="font-bold dark:text-gray-100">
-                              ${card.billing.totalAmount.toFixed(2)}
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* Payment Status Indicators */}
-                        <div className="flex flex-wrap gap-2 mb-4">
-                          <span className="text-xs text-gray-500 dark:text-gray-400">
-                            Payment Status:
-                          </span>
-                          {/* Operation Payment Status */}
-                          {card.billing.paidAmount >= card.operationCost ||
-                          card.billing.paymentStatus === "paid" ? (
-                            <Badge
-                              variant="secondary"
-                              className="bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300"
+                        if (record.type === "prescription") {
+                          const prescription = record.item;
+                          const total =
+                            prescription.charges?.totalAmount ||
+                            calculatePrescriptionTotal(prescription);
+                          const due = prescription.charges?.due ?? total;
+                          return (
+                            <TableRow
+                              key={`prescription-${record.id}`}
+                              className="dark:border-gray-800"
                             >
-                              <CheckCircle className="h-3 w-3 mr-1" />
-                              Operation Paid
-                            </Badge>
-                          ) : card.billing.paidAmount > 0 ? (
-                            <Badge
-                              variant="secondary"
-                              className="bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-300"
-                            >
-                              Partial
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline">Operation Pending</Badge>
-                          )}
-                          {/* Medicines Payment Status */}
-                          {calculateDischargeMedicinesTotal(card) > 0 && (
-                            <>
-                              {card.billing.medicinesPaid ? (
-                                <Badge
-                                  variant="secondary"
-                                  className="bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300"
-                                >
-                                  <CheckCircle className="h-3 w-3 mr-1" />
-                                  Medicines Paid
-                                </Badge>
-                              ) : (
-                                <Badge variant="outline">
-                                  Medicines Pending
-                                </Badge>
-                              )}
-                            </>
-                          )}
-                          {/* Other Payment Status */}
-                          {card.otherRequirements.length > 0 && (
-                            <>
-                              {card.billing.paidAmount >=
-                                card.operationCost +
-                                  calculateDischargeMedicinesTotal(card) ||
-                              card.billing.paymentStatus === "paid" ? (
-                                <Badge
-                                  variant="secondary"
-                                  className="bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300"
-                                >
-                                  <CheckCircle className="h-3 w-3 mr-1" />
-                                  Other Paid
-                                </Badge>
-                              ) : card.billing.paidAmount > 0 ? (
-                                <Badge variant="outline">Other Partial</Badge>
-                              ) : (
-                                <Badge variant="outline">Other Pending</Badge>
-                              )}
-                            </>
-                          )}
-                        </div>
+                              <TableCell><Badge variant="outline">Prescription</Badge></TableCell>
+                              <TableCell className="font-medium dark:text-gray-200">{prescription.prescriptionId}</TableCell>
+                              <TableCell className="dark:text-gray-300">{prescription.doctor.name} ({prescription.medications.length} items)</TableCell>
+                              <TableCell className="dark:text-gray-300">{format(parseISO(prescription.prescribedDate), "MMM d, yyyy")}</TableCell>
+                              <TableCell>{getLabStatusBadge(prescription.status)}</TableCell>
+                              <TableCell>{getPaymentStatusBadge(prescription.charges?.paymentStatus || "pending")}</TableCell>
+                              <TableCell className="font-bold text-red-600 dark:text-red-400">${due.toFixed(2)}</TableCell>
+                              <TableCell>
+                                <div className="flex gap-2">
+                                  <Button
+                                    size="sm"
+                                    variant={isPaymentDisabled(prescription) ? "secondary" : "outline"}
+                                    disabled={isPaymentDisabled(prescription)}
+                                    onClick={() => openPrescriptionPaymentDialog(prescription)}
+                                  >
+                                    {isPaymentDisabled(prescription) ? "Paid" : "Pay"}
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handlePrintPrescriptionReceipt(prescription)}
+                                  >
+                                    <Receipt className="h-3 w-3 mr-1" />
+                                    Receipt
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        }
 
-                        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pt-4 border-t dark:border-gray-700">
-                          <div>
-                            <p className="text-sm text-gray-500 dark:text-gray-400">
-                              <span className="font-medium text-green-600 dark:text-green-400">
-                                Paid: ${card.billing.paidAmount.toFixed(2)}
-                              </span>
-                              <span className="mx-2">|</span>
-                              <span className="font-medium text-red-600 dark:text-red-400">
-                                Due: ${card.billing.balance.toFixed(2)}
-                              </span>
-                            </p>
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                              Doctor: Dr. {card.doctor.name} •{" "}
-                              {format(parseISO(card.createdAt), "MMM d, yyyy")}
-                            </p>
-                          </div>
-                          <div className="flex gap-2">
-                            {/* Pay Medicines Button */}
-                            {calculateDischargeMedicinesTotal(card) > 0 &&
-                              !card.billing.medicinesPaid && (
+                        if (record.type === "imaging") {
+                          const service = record.item;
+                          const due = service.charges?.due || service.charges?.totalAmount || 0;
+                          return (
+                            <TableRow key={`imaging-${record.id}`} className="dark:border-gray-800">
+                              <TableCell><Badge variant="outline">Imaging</Badge></TableCell>
+                              <TableCell className="font-medium dark:text-gray-200">{service.serviceId}</TableCell>
+                              <TableCell className="dark:text-gray-300">{service.serviceType.toUpperCase()} - {service.bodyPart}</TableCell>
+                              <TableCell className="dark:text-gray-300">{format(parseISO(service.requestDate), "MMM d, yyyy")}</TableCell>
+                              <TableCell>{getLabStatusBadge(service.status)}</TableCell>
+                              <TableCell>{getPaymentStatusBadge(service.charges?.paymentStatus || service.billingStatus || "pending")}</TableCell>
+                              <TableCell className="font-bold text-red-600 dark:text-red-400">${due.toFixed(2)}</TableCell>
+                              <TableCell>
+                                <div className="flex gap-2">
+                                  <Button
+                                    size="sm"
+                                    variant={isPaymentDisabled(service) ? "secondary" : "outline"}
+                                    disabled={isPaymentDisabled(service)}
+                                    onClick={() => openImagingPaymentDialog(service)}
+                                  >
+                                    {isPaymentDisabled(service) ? "Paid" : "Pay"}
+                                  </Button>
+                                  <Button size="sm" variant="outline" onClick={() => handlePrintImagingReceipt(service)}>
+                                    <Receipt className="h-3 w-3 mr-1" />
+                                    Receipt
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        }
+
+                        const card = record.item;
+                        const medicinesTotal = calculateDischargeMedicinesTotal(card);
+                        return (
+                          <TableRow key={`discharge-${record.id}`} className="dark:border-gray-800">
+                            <TableCell><Badge variant="outline">Discharge</Badge></TableCell>
+                            <TableCell className="font-medium dark:text-gray-200">{card.dischargeId}</TableCell>
+                            <TableCell className="dark:text-gray-300">{card.operationName}</TableCell>
+                            <TableCell className="dark:text-gray-300">{format(parseISO(card.createdAt), "MMM d, yyyy")}</TableCell>
+                            <TableCell>{getLabStatusBadge(card.status)}</TableCell>
+                            <TableCell>{getPaymentStatusBadge(card.billing.paymentStatus || "pending")}</TableCell>
+                            <TableCell className="font-bold text-red-600 dark:text-red-400">${card.billing.balance.toFixed(2)}</TableCell>
+                            <TableCell>
+                              <div className="flex gap-2">
+                                {medicinesTotal > 0 && !card.billing.medicinesPaid && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => openDischargePaymentDialog(card, "medicines")}
+                                  >
+                                    Pay Medicines
+                                  </Button>
+                                )}
                                 <Button
                                   size="sm"
-                                  variant="outline"
-                                  onClick={() => {
-                                    setSelectedDischargeCard(card);
-                                    setPaymentType("discharge-medicines");
-                                    setPaymentForm({
-                                      paymentMethod:
-                                        card.billing.medicinesPaymentMethod ||
-                                        "cash",
-                                      amount:
-                                        calculateDischargeMedicinesTotal(card),
-                                      transactionId:
-                                        card.billing.medicinesTransactionId ||
-                                        "",
-                                      notes: "",
-                                      price: 0,
-                                    });
-                                    setPaymentDialogOpen(true);
-                                  }}
+                                  variant={card.billing.paymentStatus === "paid" ? "secondary" : "outline"}
+                                  disabled={card.billing.paymentStatus === "paid"}
+                                  onClick={() => openDischargePaymentDialog(card, "operation")}
                                 >
-                                  <Pill className="h-3 w-3 mr-1" />
-                                  Pay Medicines
+                                  {card.billing.paymentStatus === "paid" ? "Paid" : "Pay"}
                                 </Button>
-                              )}
-                            <Button
-                              size="sm"
-                              variant={
-                                card.billing.paymentStatus === "paid"
-                                  ? "secondary"
-                                  : "outline"
-                              }
-                              onClick={() => {
-                                setSelectedDischargeCard(card);
-                                setPaymentType("discharge");
-                                setPaymentForm({
-                                  paymentMethod:
-                                    card.billing.paymentMethod || "cash",
-                                  amount: card.billing.balance,
-                                  transactionId:
-                                    card.billing.transactionId || "",
-                                  notes: "",
-                                  price: 0,
-                                });
-                                setPaymentDialogOpen(true);
-                              }}
-                              disabled={card.billing.paymentStatus === "paid"}
-                            >
-                              {card.billing.paymentStatus === "paid" ? (
-                                <>
-                                  <CheckCircle className="h-3 w-3 mr-1" />
-                                  Paid
-                                </>
-                              ) : (
-                                <>
-                                  <CreditCard className="h-3 w-3 mr-1" />
-                                  Pay ${card.billing.balance.toFixed(2)}
-                                </>
-                              )}
-                            </Button>
-                            {card.billing.paymentStatus === "paid" && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => {
-                                  const receiptContent = `
-                                    HOSPITAL RECEIPT
-                                    =================
-                                    Receipt #: ${card.billing.transactionId || `TXN-${Date.now()}`}
-                                    Date: ${format(new Date(), "yyyy-MM-dd HH:mm")}
-                                    
-                                    Patient: ${appointment?.patient.name}
-                                    Patient ID: ${appointment?.patient.patientId}
-                                    
-                                    Discharge Card: ${card.dischargeId}
-                                    Operation: ${card.operationName}
-                                    
-                                    Charges:
-                                      Operation: ${card.operationCost.toFixed(2)}
-                                      Medicines: ${(
-                                        card.preOpMedicines.reduce(
-                                          (sum, m) => sum + m.totalPrice,
-                                          0,
-                                        ) +
-                                        card.postOpMedicines.reduce(
-                                          (sum, m) => sum + m.totalPrice,
-                                          0,
-                                        ) +
-                                        card.dischargeMedicines.reduce(
-                                          (sum, m) => sum + m.totalPrice,
-                                          0,
-                                        )
-                                      ).toFixed(2)}
-                                      Other: ${card.otherRequirements
-                                        .reduce(
-                                          (sum, r) => sum + r.totalPrice,
-                                          0,
-                                        )
-                                        .toFixed(2)}
-                                      -----------------
-                                      Total: ${card.billing.totalAmount.toFixed(2)}
-                                    
-                                    Payment:
-                                      Method: ${card.billing.paymentMethod || "cash"}
-                                      Amount Paid: ${card.billing.paidAmount.toFixed(2)}
-                                      Balance: ${card.billing.balance.toFixed(2)}
-                                    
-                                    Processed by: ${user?.name}
-                                    =================
-                                    Thank you for your payment!
-                                  `;
-                                  const printWindow = window.open("", "_blank");
-                                  printWindow?.document.write(`
-                                    <html>
-                                      <head>
-                                        <title>Receipt - ${card.dischargeId}</title>
-                                        <style>
-                                          body { font-family: monospace; padding: 20px; }
-                                          h1 { text-align: center; }
-                                          .receipt { max-width: 400px; margin: 0 auto; }
-                                          .total { font-weight: bold; }
-                                        </style>
-                                      </head>
-                                      <body>
-                                        <div class="receipt">
-                                          <pre>${receiptContent}</pre>
-                                        </div>
-                                        <script>
-                                          window.onload = function() {
-                                            window.print();
-                                            window.close();
-                                          }
-                                        </script>
-                                      </body>
-                                    </html>
-                                  `);
-                                }}
-                              >
-                                <Receipt className="h-3 w-3 mr-1" />
-                                Receipt
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
+                                {card.billing.paymentStatus === "paid" && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handlePrintDischargeReceipt(card)}
+                                  >
+                                    <Receipt className="h-3 w-3 mr-1" />
+                                    Receipt
+                                  </Button>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
                 </div>
               )}
             </CardContent>
           </Card>
         </TabsContent>
-
         {/* Billing Tab */}
         <TabsContent value="billing" className="space-y-6">
           <Card className="dark:bg-gray-900 dark:border-gray-800">
@@ -2456,6 +1829,8 @@ export default function AppointmentDetailPage() {
                 ? `Process payment for ${selectedLabTest?.testName}`
                 : paymentType === "prescription"
                   ? `Process payment for prescription ${selectedPrescription?.prescriptionId}`
+                  : paymentType === "discharge-medicines"
+                    ? `Process medicines payment for discharge card ${selectedDischargeCard?.dischargeId}`
                   : paymentType === "discharge"
                     ? `Process payment for discharge card ${selectedDischargeCard?.dischargeId}`
                     : `Process payment for ${

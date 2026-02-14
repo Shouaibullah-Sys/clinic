@@ -38,7 +38,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import SessionChecker from "@/components/SessionChecker";
 
-const navLinks = [
+const pharmacyNavLinks = [
   { href: "/pharmacy/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/pharmacy/stock", label: "Stock Management", icon: Package },
   { href: "/pharmacy/issue", label: "Issue Medicine", icon: Pill },
@@ -48,6 +48,9 @@ const navLinks = [
     icon: HandCoins,
   },
   { href: "/pharmacy/inventory", label: "Inventory", icon: CheckCheck },
+];
+
+const warehouseNavLinks = [
   { href: "/warehouse", label: "Warehouse Management", icon: Warehouse },
   { href: "/warehouse/medicines", label: "Medicines", icon: Package },
   { href: "/warehouse/batches", label: "Batches", icon: Package },
@@ -63,6 +66,8 @@ export default function PharmacyLayout({
   const router = useRouter();
   const { user, logout, initialize, isLoading } = useAuthStore();
   const [initialized, setInitialized] = useState(false);
+  const canAccessWarehouse =
+    user?.role === "admin" || user?.role === "pharmacy_head";
 
   useEffect(() => {
     initialize();
@@ -72,7 +77,7 @@ export default function PharmacyLayout({
     if (!isLoading && !initialized) {
       if (!user) {
         router.push("/login");
-      } else if (user?.role !== "pharmacist" && user?.role !== "admin") {
+      } else if (user?.role !== "pharmacist" && user?.role !== "pharmacy_head" && user?.role !== "admin") {
         router.push("/unauthorized");
       }
       setInitialized(true);
@@ -104,7 +109,7 @@ export default function PharmacyLayout({
   }
 
   // Redirect non-pharmacy users
-  if (user && user.role !== "pharmacist" && user.role !== "admin") {
+  if (user && user.role !== "pharmacist" && user.role !== "pharmacy_head" && user.role !== "admin") {
     return null;
   }
 
@@ -138,7 +143,7 @@ export default function PharmacyLayout({
                   Pharmacy
                 </SidebarGroupLabel>
                 <SidebarMenu>
-                  {navLinks.slice(0, 5).map((link) => (
+                  {pharmacyNavLinks.map((link) => (
                     <SidebarMenuItem key={link.href}>
                       <SidebarMenuButton
                         asChild
@@ -156,27 +161,29 @@ export default function PharmacyLayout({
               </SidebarGroup>
 
               {/* Warehouse Navigation */}
-              <SidebarGroup>
-                <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden">
-                  Warehouse
-                </SidebarGroupLabel>
-                <SidebarMenu>
-                  {navLinks.slice(5).map((link) => (
-                    <SidebarMenuItem key={link.href}>
-                      <SidebarMenuButton
-                        asChild
-                        isActive={pathname === link.href}
-                        tooltip={link.label}
-                      >
-                        <Link href={link.href}>
-                          <link.icon className="h-4 w-4" />
-                          <span>{link.label}</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
-                </SidebarMenu>
-              </SidebarGroup>
+              {canAccessWarehouse && (
+                <SidebarGroup>
+                  <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden">
+                    Warehouse
+                  </SidebarGroupLabel>
+                  <SidebarMenu>
+                    {warehouseNavLinks.map((link) => (
+                      <SidebarMenuItem key={link.href}>
+                        <SidebarMenuButton
+                          asChild
+                          isActive={pathname === link.href}
+                          tooltip={link.label}
+                        >
+                          <Link href={link.href}>
+                            <link.icon className="h-4 w-4" />
+                            <span>{link.label}</span>
+                          </Link>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    ))}
+                  </SidebarMenu>
+                </SidebarGroup>
+              )}
 
               {/* Admin Navigation */}
               {user?.role === "admin" && (
@@ -274,7 +281,7 @@ export default function PharmacyLayout({
                       Pharmacy
                     </h3>
                     <nav className="grid gap-1">
-                      {navLinks.slice(0, 5).map((link) => (
+                      {pharmacyNavLinks.map((link) => (
                         <Link
                           key={link.href}
                           href={link.href}
@@ -294,29 +301,31 @@ export default function PharmacyLayout({
                   </div>
 
                   {/* Warehouse Navigation - Mobile */}
-                  <div className="px-4 mb-4">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 px-2">
-                      Warehouse
-                    </h3>
-                    <nav className="grid gap-1">
-                      {navLinks.slice(5).map((link) => (
-                        <Link
-                          key={link.href}
-                          href={link.href}
-                          className={cn(
-                            "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-all",
-                            pathname === link.href
-                              ? "bg-primary text-primary-foreground"
-                              : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-                          )}
-                          onClick={() => document.body.click()}
-                        >
-                          <link.icon className="h-4 w-4" />
-                          {link.label}
-                        </Link>
-                      ))}
-                    </nav>
-                  </div>
+                  {canAccessWarehouse && (
+                    <div className="px-4 mb-4">
+                      <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 px-2">
+                        Warehouse
+                      </h3>
+                      <nav className="grid gap-1">
+                        {warehouseNavLinks.map((link) => (
+                          <Link
+                            key={link.href}
+                            href={link.href}
+                            className={cn(
+                              "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-all",
+                              pathname === link.href
+                                ? "bg-primary text-primary-foreground"
+                                : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                            )}
+                            onClick={() => document.body.click()}
+                          >
+                            <link.icon className="h-4 w-4" />
+                            {link.label}
+                          </Link>
+                        ))}
+                      </nav>
+                    </div>
+                  )}
 
                   {/* Admin Navigation - Mobile */}
                   {user?.role === "admin" && (

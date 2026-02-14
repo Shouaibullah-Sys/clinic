@@ -112,7 +112,7 @@ export default function WarehouseBatchesPage() {
   });
 
   useEffect(() => {
-    if (user && !["admin", "pharmacist"].includes(user.role)) {
+    if (user && !["admin", "pharmacy_head"].includes(user.role)) {
       router.push("/unauthorized");
     }
   }, [user, router]);
@@ -164,7 +164,7 @@ export default function WarehouseBatchesPage() {
   };
 
   useEffect(() => {
-    if (user && ["admin", "pharmacist"].includes(user.role) && accessToken) {
+    if (user && ["admin", "pharmacy_head"].includes(user.role) && accessToken) {
       fetchBatches();
       fetchWarehouseMedicines();
     }
@@ -224,7 +224,7 @@ export default function WarehouseBatchesPage() {
     }
   };
 
-  if (!user || !["admin", "pharmacist"].includes(user.role)) {
+  if (!user || !["admin", "pharmacy_head"].includes(user.role)) {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">

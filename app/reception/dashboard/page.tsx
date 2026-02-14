@@ -229,12 +229,8 @@ export default function ReceptionDashboardPage() {
     }
   };
 
-  const handleProcessPayment = (type: "lab" | "radiology") => {
-    if (type === "lab") {
-      router.push("/reception/lab-test-payments");
-    } else {
-      router.push("/reception/radiology-exam-payments");
-    }
+  const handleProcessPayment = () => {
+    router.push("/reception/payments");
   };
 
   const getStatusColor = (status: string) => {
@@ -563,7 +559,7 @@ export default function ReceptionDashboardPage() {
                   <Button
                     variant="outline"
                     className="justify-start h-auto py-3 px-4 w-full"
-                    onClick={() => handleProcessPayment("lab")}
+                    onClick={handleProcessPayment}
                   >
                     <div className="flex items-center space-x-3">
                       <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
@@ -588,7 +584,7 @@ export default function ReceptionDashboardPage() {
                   <Button
                     variant="outline"
                     className="justify-start h-auto py-3 px-4 w-full"
-                    onClick={() => handleProcessPayment("radiology")}
+                    onClick={handleProcessPayment}
                   >
                     <div className="flex items-center space-x-3">
                       <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">

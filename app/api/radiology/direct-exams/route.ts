@@ -7,6 +7,21 @@ import { Patient } from "@/lib/models/Patient";
 import { authenticateRequest } from "@/lib/auth";
 import mongoose from "mongoose";
 
+const modalityAliasToCategory: Record<string, string> = {
+  "x-ray": "xray",
+  xray: "xray",
+  "ct-scan": "ct",
+  ct: "ct",
+  mri: "mri",
+  ultrasound: "ultrasound",
+  mammography: "mammography",
+  fluoroscopy: "fluoroscopy",
+  "pet-scan": "nuclear_medicine",
+  nuclear_medicine: "nuclear_medicine",
+  "bone-density": "other",
+  other: "other",
+};
+
 // GET: List all direct exams with optional filtering
 export async function GET(request: NextRequest) {
   try {
@@ -146,7 +161,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate modality
+    // Normalize and validate modality
+    const normalizedCategory = body.category
+      ? modalityAliasToCategory[String(body.category).toLowerCase()] ||
+        String(body.category).toLowerCase()
+      : undefined;
+
     const validModalities = [
       "xray",
       "ct",
@@ -157,7 +177,7 @@ export async function POST(request: NextRequest) {
       "nuclear_medicine",
       "other",
     ];
-    if (body.category && !validModalities.includes(body.category)) {
+    if (normalizedCategory && !validModalities.includes(normalizedCategory)) {
       return NextResponse.json(
         {
           success: false,
@@ -177,13 +197,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const modalityInput =
+      body.modality && typeof body.modality === "object" ? body.modality : {};
+
     // Determine exam details
     const examName = body.examName;
-    const category = body.category || "xray";
+    const category = normalizedCategory || "xray";
     const description = body.description;
     const basePrice = body.price;
-    const bodyPart = body.bodyPart || body.examName;
-    const view = body.view;
+    const bodyPart =
+      modalityInput.bodyPart || body.bodyPart || body.examName || "General";
+    const view = modalityInput.view || body.view;
 
     // Validate price
     if (!basePrice || isNaN(basePrice) || basePrice <= 0) {
@@ -209,8 +233,14 @@ export async function POST(request: NextRequest) {
     // Prepare exam findings
     let examFindings: any[] = [];
     let resultsFindings: any[] = [];
-    if (body.findings && Array.isArray(body.findings)) {
-      examFindings = body.findings.map((finding: any) => ({
+    const rawFindings = Array.isArray(body.findings)
+      ? body.findings
+      : Array.isArray(modalityInput.findings)
+        ? modalityInput.findings
+        : [];
+
+    if (rawFindings.length > 0) {
+      examFindings = rawFindings.map((finding: any) => ({
         name: finding.name || finding.parameterName,
         value: finding.value || "",
         unit: finding.unit || "",
@@ -255,18 +285,19 @@ export async function POST(request: NextRequest) {
       createdAtDirect: new Date(),
       finalized: false,
       readyForPrint: false,
-      // Store findings for custom exams
-      ...(examFindings.length > 0 && {
-        modality: {
-          type: category,
-          bodyPart,
-          view,
-          findings: examFindings,
-          contrastUsed: body.contrastUsed || false,
-          contrastType: body.contrastType,
-          remarks: body.modalityRemarks,
-        },
-      }),
+      modality: {
+        type: category,
+        bodyPart,
+        view,
+        findings: examFindings,
+        contrastUsed:
+          modalityInput.contrastUsed ??
+          modalityInput.contrastRequired ??
+          body.contrastUsed ??
+          false,
+        contrastType: modalityInput.contrastType || body.contrastType,
+        remarks: modalityInput.remarks || body.modalityRemarks,
+      },
       // Store results findings if provided (for direct exams with pre-entered results)
       ...(resultsFindings.length > 0 && {
         results: {

@@ -4,8 +4,6 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -52,31 +50,24 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 
-// Define validation schema with Zod
-const prescriptionSchema = z.object({
-  diagnosis: z.string().optional(),
-  notes: z.string().optional(),
-  medications: z
-    .array(
-      z.object({
-        name: z.string().min(1, "Medication name is required"),
-        form: z.string().min(1, "Form is required"),
-        dosage: z.string().min(1, "Dosage is required"),
-        frequency: z.string().min(1, "Frequency is required"),
-        duration: z.string().min(1, "Duration is required"),
-        instructions: z.string().optional(),
-        quantity: z.string().optional(),
-        route: z.string().optional(),
-        medicineId: z.string().optional(),
-      }),
-    )
-    .min(1, "At least one medication is required"),
-  patientInstructions: z.string().optional(),
-  followUpDate: z.string().optional(),
-  validityDays: z.string().regex(/^\d+$/, "Must be a number").optional(),
-});
+interface MedicationFormValue {
+  name: string;
+  form: string;
+  dosage: string;
+  frequency: string;
+  duration: string;
+  instructions?: string;
+  quantity?: string;
+  route?: string;
+  medicineId?: string;
+}
 
-type PrescriptionFormValues = z.infer<typeof prescriptionSchema>;
+interface PrescriptionFormValues {
+  notes?: string;
+  medications: MedicationFormValue[];
+  followUpDate?: string;
+  validityDays?: string;
+}
 
 interface Medicine {
   _id: string;
@@ -218,12 +209,9 @@ export function PrescriptionDialog({
     control,
     formState: { errors },
   } = useForm<PrescriptionFormValues>({
-    resolver: zodResolver(prescriptionSchema),
     defaultValues: {
-      diagnosis: "",
       notes: "",
       medications: [],
-      patientInstructions: "",
       followUpDate: "",
       validityDays: "7",
     },
@@ -331,21 +319,16 @@ export function PrescriptionDialog({
       return;
     }
 
-    // Normalize form to lowercase for matching FORM_OPTIONS
-    const normalizedForm = (medicine.form || "").toLowerCase().trim();
-
-    // Normalize dosage to lowercase for matching DOSAGE_OPTIONS
-    const normalizedDosage = (medicine.dosage || "").toLowerCase().trim();
-
-    // Normalize frequency to lowercase for matching FREQUENCY_OPTIONS
-    const normalizedFrequency = (medicine.frequency || "").toLowerCase().trim();
+    const normalizedForm = (medicine.form || "").trim();
+    const normalizedDosage = (medicine.dosage || "").trim();
+    const normalizedFrequency = (medicine.frequency || "").trim();
 
     // Add new medication row with auto-filled values from medicine
     const newMedication = {
       name: medicine.name,
-      form: normalizedForm,
+      form: normalizedForm || "Tablet",
       dosage: normalizedDosage,
-      frequency: normalizedFrequency || "twice daily",
+      frequency: normalizedFrequency || "Twice daily",
       duration: "7 days",
       instructions: `Take as prescribed`,
       quantity: "1",
@@ -409,10 +392,8 @@ export function PrescriptionDialog({
       }));
 
       const requestData = {
-        diagnosis: data.diagnosis,
         medications: medications,
         notes: data.notes || "",
-        patientInstructions: data.patientInstructions || "",
         followUpDate: data.followUpDate || undefined,
         validityDays: data.validityDays || "7",
         appointmentId,
@@ -524,56 +505,20 @@ export function PrescriptionDialog({
           {/* Main Content Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Left Column - Prescription Info */}
-            <div className="space-y-6">
+            <div className="space-y-6 lg:order-2">
               <Card>
                 <CardContent className="pt-6">
                   <div className="space-y-4">
-                    {/* Diagnosis */}
-                    <div className="space-y-2">
-                      <Label htmlFor="diagnosis" className="font-medium">
-                        Diagnosis
-                      </Label>
-                      <Textarea
-                        id="diagnosis"
-                        {...register("diagnosis")}
-                        placeholder="Enter the diagnosis for this prescription..."
-                        rows={2}
-                        className="resize-none"
-                      />
-                      {errors.diagnosis && (
-                        <p className="text-xs text-destructive">
-                          {errors.diagnosis.message}
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Clinical Notes */}
+                    {/* Advice */}
                     <div className="space-y-2">
                       <Label htmlFor="notes" className="font-medium">
-                        Clinical Notes
+                        Advice
                       </Label>
                       <Textarea
                         id="notes"
                         {...register("notes")}
-                        placeholder="Observations, treatment plan..."
+                        placeholder="Advice for the patient..."
                         rows={4}
-                        className="resize-none"
-                      />
-                    </div>
-
-                    {/* Patient Instructions */}
-                    <div className="space-y-2">
-                      <Label
-                        htmlFor="patientInstructions"
-                        className="font-medium"
-                      >
-                        Patient Instructions
-                      </Label>
-                      <Textarea
-                        id="patientInstructions"
-                        {...register("patientInstructions")}
-                        placeholder="General instructions for the patient..."
-                        rows={3}
                         className="resize-none"
                       />
                     </div>
@@ -630,7 +575,7 @@ export function PrescriptionDialog({
             </div>
 
             {/* Right Column - Medications & Search */}
-            <div className="lg:col-span-2 space-y-6">
+            <div className="lg:col-span-2 space-y-6 lg:order-1">
               {/* Medicine Search Section */}
               <Card>
                 <CardContent className="pt-6">
@@ -860,29 +805,13 @@ export function PrescriptionDialog({
                                     )}
                                   </TableCell>
                                   <TableCell>
-                                    <Select
-                                      onValueChange={(value) =>
-                                        setValue(
-                                          `medications.${index}.form`,
-                                          value,
-                                        )
-                                      }
-                                      value={watch(`medications.${index}.form`)}
-                                    >
-                                      <SelectTrigger className="border-none focus:ring-0 p-0 h-8">
-                                        <SelectValue placeholder="Select" />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        {FORM_OPTIONS.map((form, idx) => (
-                                          <SelectItem
-                                            key={idx}
-                                            value={form.value}
-                                          >
-                                            {form.label}
-                                          </SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
+                                    <Input
+                                      {...register(
+                                        `medications.${index}.form` as const,
+                                      )}
+                                      placeholder="e.g. Tablet, Syrup"
+                                      className="border-none focus:ring-0 p-0 h-8"
+                                    />
                                     {errors.medications?.[index]?.form && (
                                       <p className="text-xs text-destructive mt-1">
                                         {
@@ -925,33 +854,13 @@ export function PrescriptionDialog({
                                     )}
                                   </TableCell>
                                   <TableCell>
-                                    <Select
-                                      onValueChange={(value) =>
-                                        setValue(
-                                          `medications.${index}.frequency`,
-                                          value,
-                                        )
-                                      }
-                                      value={watch(
-                                        `medications.${index}.frequency`,
+                                    <Input
+                                      {...register(
+                                        `medications.${index}.frequency` as const,
                                       )}
-                                    >
-                                      <SelectTrigger className="border-none focus:ring-0 p-0 h-8">
-                                        <SelectValue placeholder="Select" />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        {FREQUENCY_OPTIONS.map(
-                                          (frequency, idx) => (
-                                            <SelectItem
-                                              key={idx}
-                                              value={frequency}
-                                            >
-                                              {frequency}
-                                            </SelectItem>
-                                          ),
-                                        )}
-                                      </SelectContent>
-                                    </Select>
+                                      placeholder="e.g. Twice daily"
+                                      className="border-none focus:ring-0 p-0 h-8"
+                                    />
                                     {errors.medications?.[index]?.frequency && (
                                       <p className="text-xs text-destructive mt-1">
                                         {

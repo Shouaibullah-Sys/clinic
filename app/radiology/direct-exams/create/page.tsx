@@ -103,6 +103,21 @@ const serviceTypeLabels: Record<string, string> = {
   other: "Other",
 };
 
+const modalityCategoryMap: Record<string, string> = {
+  "x-ray": "xray",
+  xray: "xray",
+  "ct-scan": "ct",
+  ct: "ct",
+  mri: "mri",
+  ultrasound: "ultrasound",
+  mammography: "mammography",
+  fluoroscopy: "fluoroscopy",
+  "pet-scan": "nuclear_medicine",
+  nuclear_medicine: "nuclear_medicine",
+  "bone-density": "other",
+  other: "other",
+};
+
 export default function CreateDirectExamPage() {
   const router = useRouter();
   const { accessToken, user } = useAuthStore();
@@ -450,13 +465,19 @@ export default function CreateDirectExamPage() {
         examName:
           examName ||
           `${serviceTypeLabels[selectedModalityType] || selectedModalityType} - ${selectedBodyPart}`,
-        category: selectedModalityType,
+        category:
+          modalityCategoryMap[selectedModalityType] ||
+          selectedModalityType ||
+          "other",
         price: parseFloat(price),
         priority,
         notes: notes || undefined,
         templateId: selectedTemplate?._id,
         modality: {
-          type: serviceTypeLabels[selectedModalityType] || selectedModalityType,
+          type:
+            modalityCategoryMap[selectedModalityType] ||
+            selectedModalityType ||
+            "other",
           bodyPart: selectedBodyPart,
           view: selectedView,
           findings: validExamFindings.map((f) => ({

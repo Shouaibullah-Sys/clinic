@@ -21,6 +21,7 @@ export interface IRadiologyService extends Document {
   serviceId: string;
   patient: mongoose.Types.ObjectId;
   department: mongoose.Types.ObjectId;
+  templateId?: mongoose.Types.ObjectId;
   serviceType: "x-ray" | "ct-scan" | "mri" | "ultrasound";
   bodyPart: string;
   view: string;
@@ -59,6 +60,28 @@ export interface IRadiologyService extends Document {
   paymentVerifiedBy?: mongoose.Types.ObjectId;
   paymentVerifiedAt?: Date;
   notes?: string;
+  report?: {
+    clinicalIndication?: string;
+    technique?: string;
+    comparison?: string;
+    findings?: string;
+    impression?: string;
+    recommendations?: string;
+    criticalFindings?: boolean;
+    criticalFindingsDetails?: string;
+    criticalCommunication?: {
+      communicated: boolean;
+      communicatedTo?: string;
+      communicatedAt?: Date;
+      method?: string;
+      notes?: string;
+    };
+    status: "draft" | "final" | "amended";
+    version: number;
+    amendmentReason?: string;
+    finalizedBy?: mongoose.Types.ObjectId;
+    finalizedAt?: Date;
+  };
   createdAt: Date;
   updatedAt: Date;
   
@@ -112,6 +135,10 @@ const RadiologyServiceSchema = new Schema<IRadiologyService, RadiologyServiceMod
     department: {
       type: Schema.Types.ObjectId,
       ref: "ServiceDepartment",
+    },
+    templateId: {
+      type: Schema.Types.ObjectId,
+      ref: "RadiologyTemplate",
     },
     serviceType: {
       type: String,
@@ -253,6 +280,32 @@ const RadiologyServiceSchema = new Schema<IRadiologyService, RadiologyServiceMod
     notes: {
       type: String,
       trim: true,
+    },
+    report: {
+      clinicalIndication: { type: String, trim: true },
+      technique: { type: String, trim: true },
+      comparison: { type: String, trim: true },
+      findings: { type: String, trim: true },
+      impression: { type: String, trim: true },
+      recommendations: { type: String, trim: true },
+      criticalFindings: { type: Boolean, default: false },
+      criticalFindingsDetails: { type: String, trim: true },
+      criticalCommunication: {
+        communicated: { type: Boolean, default: false },
+        communicatedTo: { type: String, trim: true },
+        communicatedAt: { type: Date },
+        method: { type: String, trim: true },
+        notes: { type: String, trim: true },
+      },
+      status: {
+        type: String,
+        enum: ["draft", "final", "amended"],
+        default: "draft",
+      },
+      version: { type: Number, default: 1, min: 1 },
+      amendmentReason: { type: String, trim: true },
+      finalizedBy: { type: Schema.Types.ObjectId, ref: "User" },
+      finalizedAt: { type: Date },
     },
   },
   {

@@ -56,6 +56,7 @@ interface NavItem {
     | "nurse"
     | "receptionist"
     | "pharmacist"
+    | "pharmacy_head"
     | "pharmacy"
     | "lab_technician"
     | "radiologist"

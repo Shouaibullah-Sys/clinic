@@ -627,69 +627,6 @@ export default function DirectExamsPage() {
             ),
           )}
         </Tabs>
-
-        {/* Additional Stats Section */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Card>
-            <CardContent className="pt-6">
-              <h3 className="font-semibold mb-4">Today's Direct Exams</h3>
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <span>Total Today</span>
-                  <span className="font-semibold">{todayExams.length}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span>Pending Today</span>
-                  <span className="font-semibold text-blue-600">
-                    {todayExams.filter((e) => e.status === "pending").length}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span>Completed Today</span>
-                  <span className="font-semibold text-green-600">
-                    {todayExams.filter((e) => e.status === "completed").length}
-                  </span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <h3 className="font-semibold mb-4">Payment Overview</h3>
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <span>Pending Payment</span>
-                  <span className="font-semibold">
-                    {
-                      exams.filter(
-                        (e) => e.charges?.paymentStatus === "pending",
-                      ).length
-                    }
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span>Partial Payments</span>
-                  <span className="font-semibold text-yellow-600">
-                    {
-                      exams.filter(
-                        (e) => e.charges?.paymentStatus === "partial",
-                      ).length
-                    }
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span>Fully Paid</span>
-                  <span className="font-semibold text-green-600">
-                    {
-                      exams.filter((e) => e.charges?.paymentStatus === "paid")
-                        .length
-                    }
-                  </span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
       </div>
     </DashboardLayout>
   );

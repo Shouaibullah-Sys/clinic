@@ -18,8 +18,11 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useAuthStore } from "@/store/useAuthStore";
 import { cn } from "@/lib/utils";
 
-const navLinks = [
+const baseNavLinks = [
   { href: "/pharmacy/dashboard", label: "Dashboard", icon: LayoutDashboard },
+];
+
+const warehouseNavLinks = [
   { href: "/warehouse", label: "Warehouse", icon: Warehouse },
   { href: "/warehouse/medicines", label: "Medicines", icon: Package },
   { href: "/warehouse/batches", label: "Batches", icon: Package },
@@ -30,6 +33,10 @@ export default function PharmacyNavbar() {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
   const { user, logout } = useAuthStore();
+  const navLinks =
+    user?.role === "admin" || user?.role === "pharmacy_head"
+      ? [...baseNavLinks, ...warehouseNavLinks]
+      : baseNavLinks;
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60">

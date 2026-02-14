@@ -82,6 +82,7 @@ export default function MedicineSearch({
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
+  const requestIdRef = useRef(0);
 
   const debouncedQuery = useDebounce(searchQuery, 300);
 
@@ -110,6 +111,7 @@ export default function MedicineSearch({
       return;
     }
 
+    const requestId = ++requestIdRef.current;
     setIsLoading(true);
     setError(null);
 
@@ -123,20 +125,26 @@ export default function MedicineSearch({
       }
 
       const data: SearchResponse = await response.json();
+      if (requestId !== requestIdRef.current) return;
 
       if (data.success && data.data) {
         setResults(data.data);
-        setIsOpen(data.data.length > 0);
+        setIsOpen(true);
       } else {
         setResults([]);
         setError(data.error || "No medicines found");
+        setIsOpen(true);
       }
     } catch (err) {
+      if (requestId !== requestIdRef.current) return;
       console.error("Error searching medicines:", err);
       setError("Failed to search medicines. Please try again.");
       setResults([]);
+      setIsOpen(true);
     } finally {
-      setIsLoading(false);
+      if (requestId === requestIdRef.current) {
+        setIsLoading(false);
+      }
     }
   }, []);
 
@@ -208,8 +216,12 @@ export default function MedicineSearch({
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchQuery(e.target.value);
-    setIsOpen(true);
+    const nextQuery = e.target.value;
+    setSearchQuery(nextQuery);
+    setError(null);
+    // Clear previous query results immediately to avoid selecting stale medicines.
+    setResults([]);
+    setIsOpen(Boolean(nextQuery.trim()));
     setSelectedIndex(-1);
   };
 
@@ -312,7 +324,11 @@ export default function MedicineSearch({
       )}
 
       {/* Autocomplete dropdown */}
-      {isOpen && (results.length > 0 || error) && (
+      {isOpen &&
+        (isLoading ||
+          results.length > 0 ||
+          error ||
+          Boolean(searchQuery.trim())) && (
         <div
           ref={resultsRef}
           className="absolute z-50 w-full mt-1 bg-background border rounded-lg shadow-lg max-h-80 overflow-auto"

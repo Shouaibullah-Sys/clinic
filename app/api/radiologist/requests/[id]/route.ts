@@ -3,6 +3,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
 import { RadiologyService } from "@/lib/models/RadiologyService";
+import "@/lib/models/Patient";
+import "@/lib/models/User";
+import "@/lib/models/RadiologyTemplate";
 import { authenticateRequest, hasRequiredRole } from "@/lib/auth";
 
 // GET: Get a single radiology request by ID
@@ -41,6 +44,7 @@ export async function GET(
       .populate("radiologist", "name")
       .populate("technician", "name")
       .populate("appointment", "appointmentId date")
+      .populate("templateId", "templateCode examName findingsTemplate impressionTemplate recommendationTemplate clinicalIndicationTemplate techniqueTemplate comparisonTemplate criticalFindingsChecklist")
       .populate("reportGeneratedBy", "name")
       .populate("reviewedBy", "name")
       .populate("approvedBy", "name")

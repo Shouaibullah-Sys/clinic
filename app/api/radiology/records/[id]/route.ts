@@ -52,7 +52,7 @@ export async function GET(
     );
 
     // Try to find in RadiologyExam collection first (direct exams)
-    let examResult = await RadiologyExam.findById(examId)
+    const examResult = await RadiologyExam.findById(examId)
       .populate("patient", "name patientId phone email dateOfBirth gender")
       .populate("doctor", "name specialization")
       .populate("createdBy", "name")
@@ -107,13 +107,24 @@ export async function GET(
             remarks: serviceResult.notes,
           },
           results: {
-            findings: [],
-            impression: serviceResult.impression,
+            findings: serviceResult.findings
+              ? [
+                  {
+                    name: "Narrative Findings",
+                    value: serviceResult.findings,
+                    unit: "",
+                    normalRange: "",
+                    remarks: "",
+                  },
+                ]
+              : [],
+            impression: serviceResult.report?.impression || serviceResult.impression,
             reportedBy: serviceResult.reportGeneratedBy,
             reportedAt: serviceResult.reportGeneratedAt,
             verifiedBy: serviceResult.reviewedBy,
             verifiedAt: serviceResult.reviewedAt,
           },
+          report: serviceResult.report || undefined,
         };
         console.log(`[DEBUG] Found record in RadiologyService collection`);
       }

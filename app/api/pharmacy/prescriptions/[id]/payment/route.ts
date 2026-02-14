@@ -25,14 +25,14 @@ export async function POST(
       );
     }
 
-    // Only receptionists, pharmacists, and admin can process payments
-    const allowedRoles = ["receptionist", "pharmacist", "admin"];
+    // Only receptionists, pharmacists, pharmacy heads, and admin can process payments
+    const allowedRoles = ["receptionist", "pharmacist", "pharmacy_head", "admin"];
     if (!auth.userRole || !allowedRoles.includes(auth.userRole)) {
       return NextResponse.json(
         {
           success: false,
           error:
-            "Forbidden. Only receptionists and pharmacists can process payments.",
+            "Forbidden. Only receptionists, pharmacists, and pharmacy heads can process payments.",
         },
         { status: 403 },
       );

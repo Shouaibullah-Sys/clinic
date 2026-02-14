@@ -130,6 +130,20 @@ export async function PUT(
     if (body.basePrice !== undefined) updateData.basePrice = body.basePrice;
     if (body.active !== undefined) updateData.active = body.active;
     if (body.parameters !== undefined) updateData.parameters = body.parameters;
+    if (body.clinicalIndicationTemplate !== undefined)
+      updateData.clinicalIndicationTemplate = body.clinicalIndicationTemplate;
+    if (body.techniqueTemplate !== undefined)
+      updateData.techniqueTemplate = body.techniqueTemplate;
+    if (body.comparisonTemplate !== undefined)
+      updateData.comparisonTemplate = body.comparisonTemplate;
+    if (body.findingsTemplate !== undefined)
+      updateData.findingsTemplate = body.findingsTemplate;
+    if (body.impressionTemplate !== undefined)
+      updateData.impressionTemplate = body.impressionTemplate;
+    if (body.recommendationTemplate !== undefined)
+      updateData.recommendationTemplate = body.recommendationTemplate;
+    if (body.criticalFindingsChecklist !== undefined)
+      updateData.criticalFindingsChecklist = body.criticalFindingsChecklist;
 
     const updatedTemplate = await RadiologyTemplate.findByIdAndUpdate(
       id,

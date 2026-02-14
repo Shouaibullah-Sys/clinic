@@ -60,7 +60,6 @@ import MedicineSearch, { MedicineStock } from "@/components/MedicineSearch";
 import PharmacyPatientSearch, {
   Patient,
 } from "@/components/PharmacyPatientSearch";
-import { generatePharmacyReceipt } from "@/utils/generatePharmacyReceipt";
 
 interface Medicine {
   _id: string;
@@ -311,9 +310,9 @@ export default function PharmacyPage() {
     useState<string>("");
 
   // Payment workflow state
-  const [paymentStatus, setPaymentStatus] = useState<
-    "pending" | "processing" | "paid" | "completed"
-  >("pending");
+  const [paymentStatus, setPaymentStatus] = useState<"pending" | "processing">(
+    "pending",
+  );
   const [currentPrescriptionId, setCurrentPrescriptionId] = useState<
     string | null
   >(null);
@@ -428,8 +427,6 @@ export default function PharmacyPage() {
         !medicine.name ||
         !medicine.form ||
         !medicine.dosage ||
-        !medicine.frequency ||
-        !medicine.route ||
         typeof medicine.sellingPrice !== "number"
       ) {
         toast.error("Invalid medicine selected");
@@ -461,8 +458,8 @@ export default function PharmacyPage() {
             name: medicine.name,
             form: medicine.form,
             dosage: medicine.dosage,
-            frequency: medicine.frequency,
-            route: medicine.route,
+            frequency: medicine.frequency || "-",
+            route: medicine.route || "-",
             quantity: 1,
             unitPrice: medicine.sellingPrice,
             discount: 0,
@@ -761,90 +758,71 @@ export default function PharmacyPage() {
     }
   };
 
-  // Finalize & Print Receipt - Step 2: Update prescription to completed and print
-  const handleFinalizeAndPrint = async () => {
-    if (!currentPrescriptionId) {
-      toast.error("No prescription to finalize");
+  const handlePrintSlip = () => {
+    if (
+      !selectedPatient ||
+      !selectedPatient.name?.trim() ||
+      !selectedPatient.phone?.trim() ||
+      !Array.isArray(items) ||
+      items.length === 0
+    ) {
+      toast.error("No prescription data to print");
       return;
     }
 
-    if (!accessToken) {
-      toast.error("Authentication required");
-      return;
-    }
+    // Small slip format (same simple style used in reception receipts)
+    const itemsText = items
+      .map(
+        (item, index) =>
+          `${index + 1}. ${item.name}\n   ${item.form} ${item.dosage} ${item.frequency} ${item.route}\n   Qty: ${item.quantity} x AFN ${item.unitPrice.toFixed(2)} = AFN ${item.total.toFixed(2)}`,
+      )
+      .join("\n");
 
-    try {
-      // Update prescription status to completed
-      const response = await fetch(
-        `/api/pharmacy/prescriptions/${currentPrescriptionId}`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${accessToken}`,
-          },
-          body: JSON.stringify({
-            status: "completed",
-            paymentStatus: "paid",
-            amountPaid: calculateTotal,
-          }),
-        },
-      );
+    const receiptContent = `
+      PHARMACY PAYMENT SLIP
+      =============================
+      Invoice #: ${invoiceNumber}
+      Date: ${new Date().toLocaleString()}
+      ${currentPrescriptionId ? `Prescription ID: ${currentPrescriptionId}` : ""}
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to finalize prescription");
-      }
+      Patient: ${selectedPatient.name}
+      Phone: ${selectedPatient.phone}
 
-      const data = await response.json();
+      Items:
+      ${itemsText}
 
-      // Generate and print receipt
-      const receiptData = {
-        patientName: selectedPatient?.name || "",
-        patientPhone: selectedPatient?.phone || "",
-        invoiceNumber,
-        items: items.map((item) => ({
-          medicine: {
-            name: item.name,
-            form: item.form,
-            dosage: item.dosage,
-            frequency: item.frequency,
-            route: item.route,
-          },
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          discount: item.discount,
-        })),
-        totalAmount: calculateTotal,
-        amountPaid: calculateTotal,
-        paymentMethod,
-        createdAt: new Date().toISOString(),
-        issuedBy: user ? { name: user.name } : undefined,
-      };
+      -----------------------------
+      Total: AFN ${calculateTotal.toFixed(2)}
+      Payment Method: ${paymentMethod.toUpperCase()}
+      Status: SENT TO RECEPTION
 
-      generatePharmacyReceipt(receiptData);
+      Processed by: ${user?.name || "System"}
+      =============================
+    `;
 
-      toast.success("Prescription finalized and receipt printed");
-      setPaymentStatus("completed");
-
-      // Reset form for next order
-      setTimeout(() => {
-        setSelectedPatient(null);
-        setItems([]);
-        setPaymentMethod("cash");
-        setInvoiceNumber(`INV-${Date.now()}`);
-        setCurrentPrescriptionId(null);
-        setPaymentStatus("pending");
-        mutatePrescriptions();
-        setActiveTab("history");
-      }, 1000);
-    } catch (error: unknown) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to finalize prescription",
-      );
-    }
+    const printWindow = window.open("", "_blank");
+    printWindow?.document.write(`
+      <html>
+        <head>
+          <title>Payment Slip - ${invoiceNumber}</title>
+          <style>
+            body { font-family: monospace; padding: 20px; }
+            .receipt { max-width: 400px; margin: 0 auto; }
+          </style>
+        </head>
+        <body>
+          <div class="receipt">
+            <pre>${receiptContent}</pre>
+          </div>
+          <script>
+            window.onload = function() {
+              window.print();
+              window.close();
+            }
+          </script>
+        </body>
+      </html>
+    `);
   };
 
   // Reset the form
@@ -883,20 +861,12 @@ export default function PharmacyPage() {
                       variant={
                         paymentStatus === "processing"
                           ? "secondary"
-                          : paymentStatus === "paid"
-                            ? "default"
-                            : "outline"
+                          : "outline"
                       }
                       className="flex items-center gap-1"
                     >
                       {paymentStatus === "processing" && (
                         <Clock className="h-3 w-3" />
-                      )}
-                      {paymentStatus === "paid" && (
-                        <DollarSign className="h-3 w-3" />
-                      )}
-                      {paymentStatus === "completed" && (
-                        <CheckCircle className="h-3 w-3" />
                       )}
                       {paymentStatus.charAt(0).toUpperCase() +
                         paymentStatus.slice(1)}
@@ -1069,8 +1039,8 @@ export default function PharmacyPage() {
                     </span>
                   </div>
                   <p className="text-sm text-blue-600 mt-1">
-                    Please wait for the receptionist to confirm payment before
-                    finalizing the order.
+                    Payment request is sent to receptionist. You can print a
+                    payment slip now.
                   </p>
                 </div>
               )}
@@ -1087,28 +1057,13 @@ export default function PharmacyPage() {
                 )}
 
                 {paymentStatus === "processing" && (
-                  <Button
-                    onClick={() => setPaymentStatus("paid")}
-                    variant="default"
-                  >
-                    <DollarSign className="mr-2 h-4 w-4" /> Confirm Payment
-                    Received
-                  </Button>
-                )}
-
-                {paymentStatus === "paid" && (
-                  <Button onClick={handleFinalizeAndPrint} variant="default">
-                    <Printer className="mr-2 h-4 w-4" /> Finalize & Print
-                    Receipt
+                  <Button onClick={handlePrintSlip} variant="default">
+                    <Printer className="mr-2 h-4 w-4" /> Print Slip
                   </Button>
                 )}
 
                 {paymentStatus !== "pending" && (
-                  <Button
-                    onClick={handleReset}
-                    variant="outline"
-                    disabled={paymentStatus === "completed"}
-                  >
+                  <Button onClick={handleReset} variant="outline">
                     Reset
                   </Button>
                 )}

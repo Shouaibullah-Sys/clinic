@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
     const userRole = payload.role as string;
 
     // Authorization
-    if (!["admin", "pharmacist", "receptionist"].includes(userRole)) {
+    if (!["admin", "pharmacist", "pharmacy_head", "receptionist"].includes(userRole)) {
       return NextResponse.json(
         {
           success: false,
@@ -114,7 +114,7 @@ export async function POST(request: NextRequest) {
     const userRole = payload.role as string;
 
     // Authorization
-    if (!["admin", "pharmacist"].includes(userRole)) {
+    if (!["admin", "pharmacist", "pharmacy_head"].includes(userRole)) {
       return NextResponse.json(
         {
           success: false,

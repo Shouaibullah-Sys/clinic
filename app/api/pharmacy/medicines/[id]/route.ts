@@ -8,7 +8,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   await dbConnect();
   const payload = await getTokenPayload(req);
 
-  if (!payload || !(payload.role === 'admin' || payload.role === 'pharmacist')) {
+  if (!payload || !(payload.role === 'admin' || payload.role === 'pharmacist' || payload.role === 'pharmacy_head')) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

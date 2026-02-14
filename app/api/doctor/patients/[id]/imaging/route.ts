@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
 import { RadiologyService } from "@/lib/models/RadiologyService";
+import { RadiologyTemplate } from "@/lib/models/RadiologyTemplate";
 import { Appointment } from "@/lib/models/Appointment";
 import { ServiceDepartment } from "@/lib/models/ServiceDepartment";
 import { authenticateRequest, hasRequiredRole } from "@/lib/auth";
@@ -118,6 +119,7 @@ export async function POST(
       priority = "routine",
       notes,
       scheduledDate,
+      templateId,
     } = body;
     
     // Validation
@@ -163,6 +165,17 @@ export async function POST(
     }
     
     const doctorId = new mongoose.Types.ObjectId(userId);
+
+    let selectedTemplate: any = null;
+    if (templateId && mongoose.Types.ObjectId.isValid(templateId)) {
+      selectedTemplate = await RadiologyTemplate.findById(templateId).lean();
+      if (!selectedTemplate) {
+        return NextResponse.json(
+          { success: false, error: "Selected template not found" },
+          { status: 404 }
+        );
+      }
+    }
     
     // Find appropriate department based on service type (optional)
     const department = await ServiceDepartment.findOne({
@@ -194,6 +207,25 @@ export async function POST(
       images: [],
       findings: "",
       impression: "",
+      templateId:
+        selectedTemplate && selectedTemplate._id
+          ? new mongoose.Types.ObjectId(selectedTemplate._id)
+          : undefined,
+      report: {
+        clinicalIndication: selectedTemplate?.clinicalIndicationTemplate || "",
+        technique: selectedTemplate?.techniqueTemplate || "",
+        comparison: selectedTemplate?.comparisonTemplate || "",
+        findings: selectedTemplate?.findingsTemplate || "",
+        impression: selectedTemplate?.impressionTemplate || "",
+        recommendations: selectedTemplate?.recommendationTemplate || "",
+        criticalFindings: false,
+        criticalFindingsDetails: "",
+        criticalCommunication: {
+          communicated: false,
+        },
+        status: "draft",
+        version: 1,
+      },
     };
     
     // Add department if found

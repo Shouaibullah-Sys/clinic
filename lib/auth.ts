@@ -288,7 +288,7 @@ export function canAccessLaboratory(userRole: string | undefined): boolean {
 export function getAllowedRolesForModule(module: string): string[] {
   const roleMap: Record<string, string[]> = {
     laboratory: ["lab_technician", "admin", "doctor", "receptionist"],
-    pharmacy: ["pharmacist", "admin", "doctor"],
+    pharmacy: ["pharmacist", "pharmacy_head", "admin", "doctor"],
     radiology: ["radiologist", "admin", "doctor"],
     reception: ["receptionist", "admin"],
     doctor: ["doctor", "admin"],

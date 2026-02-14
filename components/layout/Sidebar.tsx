@@ -89,6 +89,7 @@ export function Sidebar() {
           "nurse",
           "receptionist",
           "pharmacist",
+          "pharmacy_head",
           "lab_technician",
           "radiologist",
           "admission",
@@ -169,12 +170,12 @@ export function Sidebar() {
     }
 
     // Pharmacy items
-    if (["admin", "pharmacist"].includes(user?.role || "")) {
+    if (["admin", "pharmacist", "pharmacy_head"].includes(user?.role || "")) {
       baseItems.push({
         title: "Pharmacy",
         href: "/pharmacy",
         icon: <Pill className="h-5 w-5" />,
-        allowedRoles: ["admin", "pharmacist"],
+        allowedRoles: ["admin", "pharmacist", "pharmacy_head"],
       });
     }
 
@@ -294,6 +295,7 @@ export function Sidebar() {
         "nurse",
         "receptionist",
         "pharmacist",
+        "pharmacy_head",
         "lab_technician",
         "radiologist",
         "admission",
@@ -439,6 +441,8 @@ export function Sidebar() {
                           : user?.role === "receptionist"
                             ? "Reception"
                             : user?.role === "pharmacist"
+                              ? "Pharmacy"
+                              : user?.role === "pharmacy_head"
                               ? "Pharmacy"
                               : user?.role === "lab_technician"
                                 ? "Laboratory"

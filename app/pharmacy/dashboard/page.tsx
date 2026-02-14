@@ -119,7 +119,7 @@ export default function PharmacyPage() {
   );
 
   useEffect(() => {
-    if (user && ["admin", "pharmacist"].includes(user.role) && accessToken) {
+    if (user && ["admin", "pharmacist", "pharmacy_head"].includes(user.role) && accessToken) {
       fetchPendingPrescriptions();
     }
   }, [user, accessToken]);
@@ -129,7 +129,7 @@ export default function PharmacyPage() {
     if (
       activeTab === "discharge-cards" &&
       user &&
-      ["admin", "pharmacist"].includes(user.role) &&
+      ["admin", "pharmacist", "pharmacy_head"].includes(user.role) &&
       accessToken
     ) {
       fetchPendingDischargeCards();
@@ -138,7 +138,7 @@ export default function PharmacyPage() {
 
   useEffect(() => {
     // Check if user has pharmacy access
-    if (user && !["admin", "pharmacist"].includes(user.role)) {
+    if (user && !["admin", "pharmacist", "pharmacy_head"].includes(user.role)) {
       router.push("/unauthorized");
     }
   }, [user, router]);
@@ -250,7 +250,7 @@ export default function PharmacyPage() {
     );
   };
 
-  if (!user || !["admin", "pharmacist"].includes(user.role)) {
+  if (!user || !["admin", "pharmacist", "pharmacy_head"].includes(user.role)) {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">

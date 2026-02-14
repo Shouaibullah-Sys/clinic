@@ -3,6 +3,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
 import { RadiologyService } from "@/lib/models/RadiologyService";
+import "@/lib/models/Patient";
+import "@/lib/models/User";
+import "@/lib/models/RadiologyTemplate";
 import { authenticateRequest, hasRequiredRole } from "@/lib/auth";
 import mongoose from "mongoose";
 
@@ -168,6 +171,7 @@ export async function GET(request: NextRequest) {
       .populate<{ referringDoctor: PopulatedDoctor }>("referringDoctor", "name specialization department")
       .populate<{ radiologist: PopulatedUser }>("radiologist", "name")
       .populate<{ technician: PopulatedUser }>("technician", "name")
+      .populate("templateId", "templateCode examName findingsTemplate impressionTemplate recommendationTemplate clinicalIndicationTemplate techniqueTemplate comparisonTemplate criticalFindingsChecklist")
       .sort(sortObj)
       .limit(limit)
       .lean();

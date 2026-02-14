@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   Card,
@@ -27,6 +27,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   ArrowLeft,
   TestTube,
+  Search,
   AlertTriangle,
   CheckCircle,
   User,
@@ -36,10 +37,19 @@ import {
   Plus,
   Trash2,
   RefreshCw,
+  X,
 } from "lucide-react";
 import { format } from "date-fns";
 import { useAuthStore } from "@/store/useAuthStore";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 interface TestInfo {
   _id: string;
@@ -84,6 +94,7 @@ interface SampleParameter {
   unit: string;
   normalRange: string;
   result: string;
+  remarks?: string;
 }
 
 interface LabTest {
@@ -98,6 +109,20 @@ interface LabTestCategory {
   tests: LabTest[];
 }
 
+interface LabTestTemplate {
+  _id: string;
+  testName: string;
+  category: string;
+  basePrice: number;
+  specimenType?: string[];
+  parameters?: Array<{
+    parameterName?: string;
+    name?: string;
+    unit?: string;
+    normalRange?: string;
+  }>;
+}
+
 const SPECIMEN_TYPES = [
   "blood",
   "urine",
@@ -108,1694 +133,15 @@ const SPECIMEN_TYPES = [
 ] as const;
 
 // Comprehensive lab tests data structure with all categories
-const labTests: LabTestCategory[] = [
-  {
-    name: "Clinical Chemistry",
-    tests: [
-      {
-        id: "cc1",
-        name: "Blood Glucose (Fasting)",
-        price: 300,
-        parameters: [
-          {
-            id: "1",
-            name: "Glucose",
-            unit: "mg/dL",
-            normalRange: "70-100",
-            result: "",
-          },
-        ],
-      },
-      {
-        id: "cc2",
-        name: "Blood Glucose (Random)",
-        price: 250,
-        parameters: [
-          {
-            id: "1",
-            name: "Glucose",
-            unit: "mg/dL",
-            normalRange: "70-140",
-            result: "",
-          },
-        ],
-      },
-      {
-        id: "cc3",
-        name: "Blood Glucose (PP)",
-        price: 300,
-        parameters: [
-          {
-            id: "1",
-            name: "Glucose",
-            unit: "mg/dL",
-            normalRange: "<140",
-            result: "",
-          },
-        ],
-      },
-      {
-        id: "cc4",
-        name: "HbA1c",
-        price: 500,
-        parameters: [
-          {
-            id: "1",
-            name: "HbA1c",
-            unit: "%",
-            normalRange: "4.0-6.0",
-            result: "",
-          },
-        ],
-      },
-      {
-        id: "cc5",
-        name: "Lipid Profile",
-        price: 800,
-        parameters: [
-          {
-            id: "1",
-            name: "Total Cholesterol",
-            unit: "mg/dL",
-            normalRange: "<200",
-            result: "",
-          },
-          {
-            id: "2",
-            name: "HDL Cholesterol",
-            unit: "mg/dL",
-            normalRange: "40-60",
-            result: "",
-          },
-          {
-            id: "3",
-            name: "LDL Cholesterol",
-            unit: "mg/dL",
-            normalRange: "<100",
-            result: "",
-          },
-          {
-            id: "4",
-            name: "Triglycerides",
-            unit: "mg/dL",
-            normalRange: "<150",
-            result: "",
-          },
-          {
-            id: "5",
-            name: "VLDL Cholesterol",
-            unit: "mg/dL",
-            normalRange: "5-40",
-            result: "",
-          },
-        ],
-      },
-      {
-        id: "cc6",
-        name: "Liver Function Test (LFT)",
-        price: 1200,
-        parameters: [
-          {
-            id: "1",
-            name: "Total Bilirubin",
-            unit: "mg/dL",
-            normalRange: "0.3-1.2",
-            result: "",
-          },
-          {
-            id: "2",
-            name: "Direct Bilirubin",
-            unit: "mg/dL",
-            normalRange: "0.0-0.3",
-            result: "",
-          },
-          {
-            id: "3",
-            name: "Indirect Bilirubin",
-            unit: "mg/dL",
-            normalRange: "0.2-0.8",
-            result: "",
-          },
-          {
-            id: "4",
-            name: "SGOT/AST",
-            unit: "U/L",
-            normalRange: "10-40",
-            result: "",
-          },
-          {
-            id: "5",
-            name: "SGPT/ALT",
-            unit: "U/L",
-            normalRange: "7-56",
-            result: "",
-          },
-          {
-            id: "6",
-            name: "Alkaline Phosphatase",
-            unit: "U/L",
-            normalRange: "40-129",
-            result: "",
-          },
-          {
-            id: "7",
-            name: "GGT",
-            unit: "U/L",
-            normalRange: "8-61",
-            result: "",
-          },
-          {
-            id: "8",
-            name: "Total Protein",
-            unit: "g/dL",
-            normalRange: "6.0-8.3",
-            result: "",
-          },
-          {
-            id: "9",
-            name: "Albumin",
-            unit: "g/dL",
-            normalRange: "3.5-5.0",
-            result: "",
-          },
-          {
-            id: "10",
-            name: "Globulin",
-            unit: "g/dL",
-            normalRange: "2.0-3.5",
-            result: "",
-          },
-        ],
-      },
-      {
-        id: "cc7",
-        name: "Kidney Function Test (KFT)",
-        price: 1000,
-        parameters: [
-          {
-            id: "1",
-            name: "Blood Urea",
-            unit: "mg/dL",
-            normalRange: "10-50",
-            result: "",
-          },
-          {
-            id: "2",
-            name: "Serum Creatinine",
-            unit: "mg/dL",
-            normalRange: "0.6-1.2",
-            result: "",
-          },
-          {
-            id: "3",
-            name: "Uric Acid",
-            unit: "mg/dL",
-            normalRange: "3.4-7.0",
-            result: "",
-          },
-          {
-            id: "4",
-            name: "Sodium",
-            unit: "mmol/L",
-            normalRange: "136-145",
-            result: "",
-          },
-          {
-            id: "5",
-            name: "Potassium",
-            unit: "mmol/L",
-            normalRange: "3.5-5.1",
-            result: "",
-          },
-          {
-            id: "6",
-            name: "Chloride",
-            unit: "mmol/L",
-            normalRange: "98-107",
-            result: "",
-          },
-          {
-            id: "7",
-            name: "Calcium",
-            unit: "mg/dL",
-            normalRange: "8.5-10.5",
-            result: "",
-          },
-          {
-            id: "8",
-            name: "Phosphorus",
-            unit: "mg/dL",
-            normalRange: "2.5-4.5",
-            result: "",
-          },
-        ],
-      },
-      {
-        id: "cc8",
-        name: "Electrolytes",
-        price: 600,
-        parameters: [
-          {
-            id: "1",
-            name: "Sodium",
-            unit: "mmol/L",
-            normalRange: "136-145",
-            result: "",
-          },
-          {
-            id: "2",
-            name: "Potassium",
-            unit: "mmol/L",
-            normalRange: "3.5-5.1",
-            result: "",
-          },
-          {
-            id: "3",
-            name: "Chloride",
-            unit: "mmol/L",
-            normalRange: "98-107",
-            result: "",
-          },
-          {
-            id: "4",
-            name: "Bicarbonate",
-            unit: "mmol/L",
-            normalRange: "22-29",
-            result: "",
-          },
-        ],
-      },
-    ],
-  },
-  {
-    name: "Clinical Pathology",
-    tests: [
-      {
-        id: "cp1",
-        name: "Urine Routine Examination",
-        price: 400,
-        parameters: [
-          {
-            id: "1",
-            name: "Color",
-            unit: "",
-            normalRange: "Pale Yellow",
-            result: "",
-          },
-          {
-            id: "2",
-            name: "Appearance",
-            unit: "",
-            normalRange: "Clear",
-            result: "",
-          },
-          { id: "3", name: "pH", unit: "", normalRange: "4.5-8.0", result: "" },
-          {
-            id: "4",
-            name: "Specific Gravity",
-            unit: "",
-            normalRange: "1.003-1.035",
-            result: "",
-          },
-          {
-            id: "5",
-            name: "Protein",
-            unit: "",
-            normalRange: "Negative",
-            result: "",
-          },
-          {
-            id: "6",
-            name: "Glucose",
-            unit: "",
-            normalRange: "Negative",
-            result: "",
-          },
-          {
-            id: "7",
-            name: "Ketones",
-            unit: "",
-            normalRange: "Negative",
-            result: "",
-          },
-          {
-            id: "8",
-            name: "Blood",
-            unit: "",
-            normalRange: "Negative",
-            result: "",
-          },
-          {
-            id: "9",
-            name: "Bilirubin",
-            unit: "",
-            normalRange: "Negative",
-            result: "",
-          },
-          {
-            id: "10",
-            name: "Urobilinogen",
-            unit: "",
-            normalRange: "0.1-1.0",
-            result: "",
-          },
-          {
-            id: "11",
-            name: "Nitrite",
-            unit: "",
-            normalRange: "Negative",
-            result: "",
-          },
-          {
-            id: "12",
-            name: "Leucocytes",
-            unit: "",
-            normalRange: "Negative",
-            result: "",
-          },
-          {
-            id: "13",
-            name: "Pus Cells",
-            unit: "/HPF",
-            normalRange: "0-2",
-            result: "",
-          },
-          {
-            id: "14",
-            name: "RBCs",
-            unit: "/HPF",
-            normalRange: "0-1",
-            result: "",
-          },
-          {
-            id: "15",
-            name: "Epithelial Cells",
-            unit: "/HPF",
-            normalRange: "0-2",
-            result: "",
-          },
-          {
-            id: "16",
-            name: "Casts",
-            unit: "/LPF",
-            normalRange: "0-1",
-            result: "",
-          },
-          {
-            id: "17",
-            name: "Crystals",
-            unit: "",
-            normalRange: "None",
-            result: "",
-          },
-          {
-            id: "18",
-            name: "Bacteria",
-            unit: "",
-            normalRange: "None",
-            result: "",
-          },
-        ],
-      },
-      {
-        id: "cp2",
-        name: "Stool Examination",
-        price: 350,
-        parameters: [
-          {
-            id: "1",
-            name: "Color",
-            unit: "",
-            normalRange: "Brown",
-            result: "",
-          },
-          {
-            id: "2",
-            name: "Consistency",
-            unit: "",
-            normalRange: "Formed",
-            result: "",
-          },
-          {
-            id: "3",
-            name: "Mucus",
-            unit: "",
-            normalRange: "Absent",
-            result: "",
-          },
-          {
-            id: "4",
-            name: "Blood",
-            unit: "",
-            normalRange: "Absent",
-            result: "",
-          },
-          {
-            id: "5",
-            name: "Ova/Cysts",
-            unit: "",
-            normalRange: "Absent",
-            result: "",
-          },
-          {
-            id: "6",
-            name: "Occult Blood",
-            unit: "",
-            normalRange: "Negative",
-            result: "",
-          },
-          { id: "7", name: "pH", unit: "", normalRange: "6.5-7.5", result: "" },
-        ],
-      },
-      {
-        id: "cp3",
-        name: "Semen Analysis",
-        price: 800,
-        parameters: [
-          {
-            id: "1",
-            name: "Volume",
-            unit: "ml",
-            normalRange: "1.5-5.0",
-            result: "",
-          },
-          {
-            id: "2",
-            name: "Color",
-            unit: "",
-            normalRange: "White/Grey",
-            result: "",
-          },
-          { id: "3", name: "pH", unit: "", normalRange: "7.2-8.0", result: "" },
-          {
-            id: "4",
-            name: "Liquefaction Time",
-            unit: "min",
-            normalRange: "<60",
-            result: "",
-          },
-          {
-            id: "5",
-            name: "Sperm Count",
-            unit: "million/ml",
-            normalRange: "15-200",
-            result: "",
-          },
-          {
-            id: "6",
-            name: "Motility (Progressive)",
-            unit: "%",
-            normalRange: ">32",
-            result: "",
-          },
-          {
-            id: "7",
-            name: "Motility (Total)",
-            unit: "%",
-            normalRange: ">40",
-            result: "",
-          },
-          {
-            id: "8",
-            name: "Morphology",
-            unit: "%",
-            normalRange: ">4",
-            result: "",
-          },
-          {
-            id: "9",
-            name: "Pus Cells",
-            unit: "/HPF",
-            normalRange: "<5",
-            result: "",
-          },
-          {
-            id: "10",
-            name: "RBCs",
-            unit: "/HPF",
-            normalRange: "<2",
-            result: "",
-          },
-        ],
-      },
-    ],
-  },
-  {
-    name: "Hematology",
-    tests: [
-      {
-        id: "h1",
-        name: "Complete Blood Count (CBC)",
-        price: 500,
-        parameters: [
-          {
-            id: "1",
-            name: "Hemoglobin",
-            unit: "g/dL",
-            normalRange: "12-16",
-            result: "",
-          },
-          {
-            id: "2",
-            name: "RBC Count",
-            unit: "million/cmm",
-            normalRange: "4.0-5.5",
-            result: "",
-          },
-          {
-            id: "3",
-            name: "PCV/Hematocrit",
-            unit: "%",
-            normalRange: "36-48",
-            result: "",
-          },
-          {
-            id: "4",
-            name: "MCV",
-            unit: "fL",
-            normalRange: "80-100",
-            result: "",
-          },
-          {
-            id: "5",
-            name: "MCH",
-            unit: "pg",
-            normalRange: "27-32",
-            result: "",
-          },
-          {
-            id: "6",
-            name: "MCHC",
-            unit: "g/dL",
-            normalRange: "32-36",
-            result: "",
-          },
-          {
-            id: "7",
-            name: "RDW",
-            unit: "%",
-            normalRange: "11.5-14.5",
-            result: "",
-          },
-          {
-            id: "8",
-            name: "Total WBC Count",
-            unit: "/cmm",
-            normalRange: "4000-11000",
-            result: "",
-          },
-          {
-            id: "9",
-            name: "Neutrophils",
-            unit: "%",
-            normalRange: "40-75",
-            result: "",
-          },
-          {
-            id: "10",
-            name: "Lymphocytes",
-            unit: "%",
-            normalRange: "20-45",
-            result: "",
-          },
-          {
-            id: "11",
-            name: "Monocytes",
-            unit: "%",
-            normalRange: "2-10",
-            result: "",
-          },
-          {
-            id: "12",
-            name: "Eosinophils",
-            unit: "%",
-            normalRange: "0-6",
-            result: "",
-          },
-          {
-            id: "13",
-            name: "Basophils",
-            unit: "%",
-            normalRange: "0-1",
-            result: "",
-          },
-          {
-            id: "14",
-            name: "Platelet Count",
-            unit: "/cmm",
-            normalRange: "150000-400000",
-            result: "",
-          },
-          {
-            id: "15",
-            name: "MPV",
-            unit: "fL",
-            normalRange: "7.5-11.5",
-            result: "",
-          },
-        ],
-      },
-      {
-        id: "h2",
-        name: "ESR",
-        price: 200,
-        parameters: [
-          {
-            id: "1",
-            name: "ESR (Westergren)",
-            unit: "mm/hr",
-            normalRange: "0-15",
-            result: "",
-          },
-        ],
-      },
-      {
-        id: "h3",
-        name: "Peripheral Blood Smear",
-        price: 300,
-        parameters: [
-          {
-            id: "1",
-            name: "RBC Morphology",
-            unit: "",
-            normalRange: "Normocytic Normochromic",
-            result: "",
-          },
-          {
-            id: "2",
-            name: "WBC Morphology",
-            unit: "",
-            normalRange: "Normal",
-            result: "",
-          },
-          {
-            id: "3",
-            name: "Platelet Morphology",
-            unit: "",
-            normalRange: "Normal",
-            result: "",
-          },
-          {
-            id: "4",
-            name: "Malaria Parasite",
-            unit: "",
-            normalRange: "Not Seen",
-            result: "",
-          },
-          {
-            id: "5",
-            name: "Microfilaria",
-            unit: "",
-            normalRange: "Not Seen",
-            result: "",
-          },
-        ],
-      },
-      {
-        id: "h4",
-        name: "Reticulocyte Count",
-        price: 250,
-        parameters: [
-          {
-            id: "1",
-            name: "Reticulocyte Count",
-            unit: "%",
-            normalRange: "0.5-2.5",
-            result: "",
-          },
-        ],
-      },
-    ],
-  },
-  {
-    name: "ICT/ELISA/Rapid Tests",
-    tests: [
-      {
-        id: "ict1",
-        name: "HIV (1&2) Antibody",
-        price: 400,
-        parameters: [
-          {
-            id: "1",
-            name: "HIV 1&2 Antibody",
-            unit: "",
-            normalRange: "Non-Reactive",
-            result: "",
-          },
-        ],
-      },
-      {
-        id: "ict2",
-        name: "HBsAg",
-        price: 350,
-        parameters: [
-          {
-            id: "1",
-            name: "HBsAg",
-            unit: "",
-            normalRange: "Negative",
-            result: "",
-          },
-        ],
-      },
-      {
-        id: "ict3",
-        name: "Anti-HCV",
-        price: 400,
-        parameters: [
-          {
-            id: "1",
-            name: "Anti-HCV",
-            unit: "",
-            normalRange: "Negative",
-            result: "",
-          },
-        ],
-      },
-      {
-        id: "ict4",
-        name: "VDRL/RPR",
-        price: 300,
-        parameters: [
-          {
-            id: "1",
-            name: "VDRL/RPR",
-            unit: "",
-            normalRange: "Non-Reactive",
-            result: "",
-          },
-        ],
-      },
-      {
-        id: "ict5",
-        name: "Widal Test",
-        price: 250,
-        parameters: [
-          {
-            id: "1",
-            name: "TO Antigen",
-            unit: "",
-            normalRange: "<1:80",
-            result: "",
-          },
-          {
-            id: "2",
-            name: "TH Antigen",
-            unit: "",
-            normalRange: "<1:80",
-            result: "",
-          },
-          {
-            id: "3",
-            name: "AO Antigen",
-            unit: "",
-            normalRange: "<1:80",
-            result: "",
-          },
-          {
-            id: "4",
-            name: "AH Antigen",
-            unit: "",
-            normalRange: "<1:80",
-            result: "",
-          },
-          {
-            id: "5",
-            name: "BO Antigen",
-            unit: "",
-            normalRange: "<1:80",
-            result: "",
-          },
-          {
-            id: "6",
-            name: "BH Antigen",
-            unit: "",
-            normalRange: "<1:80",
-            result: "",
-          },
-        ],
-      },
-      {
-        id: "ict6",
-        name: "Typhoid IgM/IgG",
-        price: 400,
-        parameters: [
-          {
-            id: "1",
-            name: "Typhoid IgM",
-            unit: "",
-            normalRange: "Negative",
-            result: "",
-          },
-          {
-            id: "2",
-            name: "Typhoid IgG",
-            unit: "",
-            normalRange: "Negative",
-            result: "",
-          },
-        ],
-      },
-      {
-        id: "ict7",
-        name: "Dengue NS1 Antigen",
-        price: 500,
-        parameters: [
-          {
-            id: "1",
-            name: "Dengue NS1 Antigen",
-            unit: "",
-            normalRange: "Negative",
-            result: "",
-          },
-        ],
-      },
-      {
-        id: "ict8",
-        name: "Dengue IgM/IgG",
-        price: 500,
-        parameters: [
-          {
-            id: "1",
-            name: "Dengue IgM",
-            unit: "",
-            normalRange: "Negative",
-            result: "",
-          },
-          {
-            id: "2",
-            name: "Dengue IgG",
-            unit: "",
-            normalRange: "Negative",
-            result: "",
-          },
-        ],
-      },
-      {
-        id: "ict9",
-        name: "Chikungunya IgM",
-        price: 450,
-        parameters: [
-          {
-            id: "1",
-            name: "Chikungunya IgM",
-            unit: "",
-            normalRange: "Negative",
-            result: "",
-          },
-        ],
-      },
-      {
-        id: "ict10",
-        name: "Leptospira IgM",
-        price: 500,
-        parameters: [
-          {
-            id: "1",
-            name: "Leptospira IgM",
-            unit: "",
-            normalRange: "Negative",
-            result: "",
-          },
-        ],
-      },
-      {
-        id: "ict11",
-        name: "Malaria Antigen",
-        price: 300,
-        parameters: [
-          {
-            id: "1",
-            name: "P. falciparum",
-            unit: "",
-            normalRange: "Negative",
-            result: "",
-          },
-          {
-            id: "2",
-            name: "P. vivax",
-            unit: "",
-            normalRange: "Negative",
-            result: "",
-          },
-        ],
-      },
-      {
-        id: "ict12",
-        name: "H. pylori Antigen",
-        price: 400,
-        parameters: [
-          {
-            id: "1",
-            name: "H. pylori Antigen",
-            unit: "",
-            normalRange: "Negative",
-            result: "",
-          },
-        ],
-      },
-    ],
-  },
-  {
-    name: "Molecular Biology",
-    tests: [
-      {
-        id: "mb1",
-        name: "COVID-19 RT-PCR",
-        price: 1500,
-        parameters: [
-          {
-            id: "1",
-            name: "SARS-CoV-2 RNA",
-            unit: "",
-            normalRange: "Not Detected",
-            result: "",
-          },
-          {
-            id: "2",
-            name: "Ct Value (ORF1ab)",
-            unit: "",
-            normalRange: ">35",
-            result: "",
-          },
-          {
-            id: "3",
-            name: "Ct Value (N Gene)",
-            unit: "",
-            normalRange: ">35",
-            result: "",
-          },
-        ],
-      },
-      {
-        id: "mb2",
-        name: "Hepatitis B DNA PCR",
-        price: 2500,
-        parameters: [
-          {
-            id: "1",
-            name: "HBV DNA",
-            unit: "IU/mL",
-            normalRange: "<20",
-            result: "",
-          },
-        ],
-      },
-      {
-        id: "mb3",
-        name: "Hepatitis C RNA PCR",
-        price: 2500,
-        parameters: [
-          {
-            id: "1",
-            name: "HCV RNA",
-            unit: "IU/mL",
-            normalRange: "<15",
-            result: "",
-          },
-        ],
-      },
-      {
-        id: "mb4",
-        name: "HIV RNA PCR (Viral Load)",
-        price: 3000,
-        parameters: [
-          {
-            id: "1",
-            name: "HIV RNA",
-            unit: "copies/mL",
-            normalRange: "<50",
-            result: "",
-          },
-        ],
-      },
-      {
-        id: "mb5",
-        name: "TB PCR (GeneXpert)",
-        price: 2000,
-        parameters: [
-          {
-            id: "1",
-            name: "Mycobacterium tuberculosis",
-            unit: "",
-            normalRange: "Not Detected",
-            result: "",
-          },
-          {
-            id: "2",
-            name: "Rifampicin Resistance",
-            unit: "",
-            normalRange: "Not Detected",
-            result: "",
-          },
-        ],
-      },
-      {
-        id: "mb6",
-        name: "HPV DNA PCR",
-        price: 2000,
-        parameters: [
-          {
-            id: "1",
-            name: "High Risk HPV",
-            unit: "",
-            normalRange: "Negative",
-            result: "",
-          },
-          {
-            id: "2",
-            name: "HPV 16/18",
-            unit: "",
-            normalRange: "Negative",
-            result: "",
-          },
-        ],
-      },
-    ],
-  },
-  {
-    name: "Immunology & Tumor Markers",
-    tests: [
-      {
-        id: "it1",
-        name: "Thyroid Profile (T3, T4, TSH)",
-        price: 800,
-        parameters: [
-          {
-            id: "1",
-            name: "T3 (Total)",
-            unit: "ng/dL",
-            normalRange: "80-200",
-            result: "",
-          },
-          {
-            id: "2",
-            name: "T4 (Total)",
-            unit: "µg/dL",
-            normalRange: "4.5-12.5",
-            result: "",
-          },
-          {
-            id: "3",
-            name: "TSH",
-            unit: "µIU/mL",
-            normalRange: "0.4-4.0",
-            result: "",
-          },
-        ],
-      },
-      {
-        id: "it2",
-        name: "Free T3 & Free T4",
-        price: 600,
-        parameters: [
-          {
-            id: "1",
-            name: "Free T3",
-            unit: "pg/mL",
-            normalRange: "2.0-4.4",
-            result: "",
-          },
-          {
-            id: "2",
-            name: "Free T4",
-            unit: "ng/dL",
-            normalRange: "0.8-1.8",
-            result: "",
-          },
-        ],
-      },
-      {
-        id: "it3",
-        name: "Insulin (Fasting)",
-        price: 500,
-        parameters: [
-          {
-            id: "1",
-            name: "Insulin",
-            unit: "µIU/mL",
-            normalRange: "2.6-24.9",
-            result: "",
-          },
-        ],
-      },
-      {
-        id: "it4",
-        name: "C-Peptide",
-        price: 600,
-        parameters: [
-          {
-            id: "1",
-            name: "C-Peptide",
-            unit: "ng/mL",
-            normalRange: "0.5-2.0",
-            result: "",
-          },
-        ],
-      },
-      {
-        id: "it5",
-        name: "Cortisol",
-        price: 700,
-        parameters: [
-          {
-            id: "1",
-            name: "Cortisol (Morning)",
-            unit: "µg/dL",
-            normalRange: "6-23",
-            result: "",
-          },
-        ],
-      },
-      {
-        id: "it6",
-        name: "Testosterone",
-        price: 800,
-        parameters: [
-          {
-            id: "1",
-            name: "Testosterone (Male)",
-            unit: "ng/mL",
-            normalRange: "2.7-10.7",
-            result: "",
-          },
-          {
-            id: "2",
-            name: "Testosterone (Female)",
-            unit: "ng/mL",
-            normalRange: "0.1-0.8",
-            result: "",
-          },
-        ],
-      },
-      {
-        id: "it7",
-        name: "FSH",
-        price: 500,
-        parameters: [
-          {
-            id: "1",
-            name: "FSH (Male)",
-            unit: "mIU/mL",
-            normalRange: "1.5-12.4",
-            result: "",
-          },
-          {
-            id: "2",
-            name: "FSH (Female - Follicular)",
-            unit: "mIU/mL",
-            normalRange: "3.5-12.5",
-            result: "",
-          },
-          {
-            id: "3",
-            name: "FSH (Female - Midcycle)",
-            unit: "mIU/mL",
-            normalRange: "4.7-21.5",
-            result: "",
-          },
-          {
-            id: "4",
-            name: "FSH (Female - Luteal)",
-            unit: "mIU/mL",
-            normalRange: "1.7-7.7",
-            result: "",
-          },
-        ],
-      },
-      {
-        id: "it8",
-        name: "LH",
-        price: 500,
-        parameters: [
-          {
-            id: "1",
-            name: "LH (Male)",
-            unit: "mIU/mL",
-            normalRange: "1.7-8.6",
-            result: "",
-          },
-          {
-            id: "2",
-            name: "LH (Female - Follicular)",
-            unit: "mIU/mL",
-            normalRange: "2.4-12.6",
-            result: "",
-          },
-          {
-            id: "3",
-            name: "LH (Female - Midcycle)",
-            unit: "mIU/mL",
-            normalRange: "14.0-95.6",
-            result: "",
-          },
-          {
-            id: "4",
-            name: "LH (Female - Luteal)",
-            unit: "mIU/mL",
-            normalRange: "1.0-11.4",
-            result: "",
-          },
-        ],
-      },
-      {
-        id: "it9",
-        name: "Prolactin",
-        price: 500,
-        parameters: [
-          {
-            id: "1",
-            name: "Prolactin (Male)",
-            unit: "ng/mL",
-            normalRange: "2.0-18.0",
-            result: "",
-          },
-          {
-            id: "2",
-            name: "Prolactin (Female)",
-            unit: "ng/mL",
-            normalRange: "2.0-29.0",
-            result: "",
-          },
-        ],
-      },
-      {
-        id: "it10",
-        name: "CEA (Carcinoembryonic Antigen)",
-        price: 1000,
-        parameters: [
-          {
-            id: "1",
-            name: "CEA",
-            unit: "ng/mL",
-            normalRange: "<3.0",
-            result: "",
-          },
-        ],
-      },
-      {
-        id: "it11",
-        name: "CA-125",
-        price: 1000,
-        parameters: [
-          {
-            id: "1",
-            name: "CA-125",
-            unit: "U/mL",
-            normalRange: "<35",
-            result: "",
-          },
-        ],
-      },
-      {
-        id: "it12",
-        name: "CA-19.9",
-        price: 1000,
-        parameters: [
-          {
-            id: "1",
-            name: "CA-19.9",
-            unit: "U/mL",
-            normalRange: "<37",
-            result: "",
-          },
-        ],
-      },
-      {
-        id: "it13",
-        name: "PSA (Total)",
-        price: 800,
-        parameters: [
-          {
-            id: "1",
-            name: "PSA (Total)",
-            unit: "ng/mL",
-            normalRange: "<4.0",
-            result: "",
-          },
-        ],
-      },
-      {
-        id: "it14",
-        name: "AFP (Alpha-Fetoprotein)",
-        price: 800,
-        parameters: [
-          {
-            id: "1",
-            name: "AFP",
-            unit: "ng/mL",
-            normalRange: "<10",
-            result: "",
-          },
-        ],
-      },
-      {
-        id: "it15",
-        name: "Beta-hCG",
-        price: 500,
-        parameters: [
-          {
-            id: "1",
-            name: "Beta-hCG (Male)",
-            unit: "mIU/mL",
-            normalRange: "<5",
-            result: "",
-          },
-          {
-            id: "2",
-            name: "Beta-hCG (Female - Non-pregnant)",
-            unit: "mIU/mL",
-            normalRange: "<5",
-            result: "",
-          },
-        ],
-      },
-    ],
-  },
-  {
-    name: "Special Hematology",
-    tests: [
-      {
-        id: "sh1",
-        name: "Bleeding Time",
-        price: 200,
-        parameters: [
-          {
-            id: "1",
-            name: "Bleeding Time (Ivy Method)",
-            unit: "min",
-            normalRange: "1-6",
-            result: "",
-          },
-        ],
-      },
-      {
-        id: "sh2",
-        name: "Clotting Time",
-        price: 200,
-        parameters: [
-          {
-            id: "1",
-            name: "Clotting Time (Capillary)",
-            unit: "min",
-            normalRange: "3-8",
-            result: "",
-          },
-        ],
-      },
-      {
-        id: "sh3",
-        name: "PT (Prothrombin Time)",
-        price: 400,
-        parameters: [
-          {
-            id: "1",
-            name: "PT",
-            unit: "sec",
-            normalRange: "11-15",
-            result: "",
-          },
-          {
-            id: "2",
-            name: "INR",
-            unit: "",
-            normalRange: "0.9-1.1",
-            result: "",
-          },
-        ],
-      },
-      {
-        id: "sh4",
-        name: "APTT",
-        price: 500,
-        parameters: [
-          {
-            id: "1",
-            name: "APTT",
-            unit: "sec",
-            normalRange: "25-40",
-            result: "",
-          },
-        ],
-      },
-      {
-        id: "sh5",
-        name: "Fibrinogen",
-        price: 600,
-        parameters: [
-          {
-            id: "1",
-            name: "Fibrinogen",
-            unit: "mg/dL",
-            normalRange: "200-400",
-            result: "",
-          },
-        ],
-      },
-      {
-        id: "sh6",
-        name: "D-Dimer",
-        price: 800,
-        parameters: [
-          {
-            id: "1",
-            name: "D-Dimer",
-            unit: "ng/mL",
-            normalRange: "<500",
-            result: "",
-          },
-        ],
-      },
-      {
-        id: "sh7",
-        name: "Factor VIII Assay",
-        price: 1500,
-        parameters: [
-          {
-            id: "1",
-            name: "Factor VIII Activity",
-            unit: "%",
-            normalRange: "50-150",
-            result: "",
-          },
-        ],
-      },
-      {
-        id: "sh8",
-        name: "Factor IX Assay",
-        price: 1500,
-        parameters: [
-          {
-            id: "1",
-            name: "Factor IX Activity",
-            unit: "%",
-            normalRange: "50-150",
-            result: "",
-          },
-        ],
-      },
-      {
-        id: "sh9",
-        name: "G6PD Screening",
-        price: 500,
-        parameters: [
-          {
-            id: "1",
-            name: "G6PD Activity",
-            unit: "",
-            normalRange: "Normal",
-            result: "",
-          },
-        ],
-      },
-      {
-        id: "sh10",
-        name: "Sickle Cell Screening",
-        price: 400,
-        parameters: [
-          {
-            id: "1",
-            name: "Sickle Cell Test",
-            unit: "",
-            normalRange: "Negative",
-            result: "",
-          },
-        ],
-      },
-    ],
-  },
-];
+// Lab test options are now loaded from lab test templates API.
 
-// Default parameters for each specimen type
-const DEFAULT_PARAMETERS: Record<string, SampleParameter[]> = {
-  blood: [
-    {
-      id: "1",
-      name: "Volume",
-      unit: "ml",
-      normalRange: "",
-      result: "",
-    },
-    {
-      id: "2",
-      name: "Color",
-      unit: "",
-      normalRange: "",
-      result: "",
-    },
-    {
-      id: "3",
-      name: "Clotting",
-      unit: "",
-      normalRange: "",
-      result: "",
-    },
-    {
-      id: "4",
-      name: "Hemolysis",
-      unit: "",
-      normalRange: "",
-      result: "",
-    },
-  ],
-  urine: [
-    {
-      id: "1",
-      name: "Volume",
-      unit: "ml",
-      normalRange: "",
-      result: "",
-    },
-    {
-      id: "2",
-      name: "Color",
-      unit: "",
-      normalRange: "",
-      result: "",
-    },
-    {
-      id: "3",
-      name: "Clarity",
-      unit: "",
-      normalRange: "",
-      result: "",
-    },
-    {
-      id: "4",
-      name: "Specific Gravity",
-      unit: "",
-      normalRange: "",
-      result: "",
-    },
-  ],
-  stool: [
-    {
-      id: "1",
-      name: "Consistency",
-      unit: "",
-      normalRange: "",
-      result: "",
-    },
-    {
-      id: "2",
-      name: "Color",
-      unit: "",
-      normalRange: "",
-      result: "",
-    },
-    {
-      id: "3",
-      name: "Quantity",
-      unit: "g",
-      normalRange: "",
-      result: "",
-    },
-    {
-      id: "4",
-      name: "Mucus",
-      unit: "",
-      normalRange: "",
-      result: "",
-    },
-  ],
-  tissue: [
-    {
-      id: "1",
-      name: "Type",
-      unit: "",
-      normalRange: "",
-      result: "",
-    },
-    {
-      id: "2",
-      name: "Size",
-      unit: "cm",
-      normalRange: "",
-      result: "",
-    },
-    {
-      id: "3",
-      name: "Color",
-      unit: "",
-      normalRange: "",
-      result: "",
-    },
-    {
-      id: "4",
-      name: "Fixation",
-      unit: "",
-      normalRange: "",
-      result: "",
-    },
-  ],
-  saliva: [
-    {
-      id: "1",
-      name: "Volume",
-      unit: "ml",
-      normalRange: "",
-      result: "",
-    },
-    {
-      id: "2",
-      name: "Color",
-      unit: "",
-      normalRange: "",
-      result: "",
-    },
-    {
-      id: "3",
-      name: "Viscosity",
-      unit: "",
-      normalRange: "",
-      result: "",
-    },
-    { id: "4", name: "pH", unit: "", normalRange: "", result: "" },
-  ],
-  other: [
-    {
-      id: "1",
-      name: "Description",
-      unit: "",
-      normalRange: "",
-      result: "",
-    },
-    {
-      id: "2",
-      name: "Quantity",
-      unit: "",
-      normalRange: "",
-      result: "",
-    },
-    {
-      id: "3",
-      name: "Appearance",
-      unit: "",
-      normalRange: "",
-      result: "",
-    },
-  ],
-};
+const emptyParameter = (): SampleParameter => ({
+  id: "1",
+  name: "",
+  unit: "",
+  normalRange: "",
+  result: "",
+});
 
 // Helper function to calculate age
 const calculateAge = (dateOfBirth: string | Date): number => {
@@ -1860,6 +206,10 @@ export default function CollectSamplePage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadingTemplates, setLoadingTemplates] = useState(true);
+  const [labTests, setLabTests] = useState<LabTestCategory[]>([]);
+  const [initialSpecimenType, setInitialSpecimenType] = useState("");
+  const [initialOrderedTestName, setInitialOrderedTestName] = useState("");
 
   // Form state
   const [sampleId, setSampleId] = useState("");
@@ -1868,11 +218,16 @@ export default function CollectSamplePage() {
 
   // Dynamic parameters
   const [selectedTestId, setSelectedTestId] = useState<string>("");
+  const [testSearchQuery, setTestSearchQuery] = useState("");
+  const [testSearchResults, setTestSearchResults] = useState<LabTest[]>([]);
+  const [showTestDropdown, setShowTestDropdown] = useState(false);
+  const [activeTestIndex, setActiveTestIndex] = useState(-1);
+  const testSearchRef = useRef<HTMLDivElement | null>(null);
   const [specimenQuantity, setSpecimenQuantity] = useState("");
   const [specimenContainer, setSpecimenContainer] = useState("");
   const [specimenRemarks, setSpecimenRemarks] = useState("");
   const [parameters, setParameters] = useState<SampleParameter[]>([
-    { id: "1", name: "", unit: "", normalRange: "", result: "" },
+    emptyParameter(),
   ]);
 
   // Generate sample ID
@@ -1888,8 +243,66 @@ export default function CollectSamplePage() {
   }, [sampleId]);
 
   useEffect(() => {
+    fetchTemplates();
+  }, [accessToken]);
+
+  useEffect(() => {
     fetchTestInfo();
   }, [params.id]);
+
+  const fetchTemplates = async () => {
+    try {
+      setLoadingTemplates(true);
+      if (!accessToken) return;
+
+      const response = await fetch("/api/laboratory/templates?active=true", {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to load test templates");
+      }
+
+      const data = await response.json();
+      const templates: LabTestTemplate[] = data.data || [];
+
+      const grouped = new Map<string, LabTest[]>();
+      templates.forEach((template) => {
+        const categoryLabel = (template.category || "other")
+          .replace(/_/g, " ")
+          .replace(/\b\w/g, (l) => l.toUpperCase());
+
+        const current = grouped.get(categoryLabel) || [];
+        current.push({
+          id: template._id,
+          name: template.testName,
+          price: Number(template.basePrice) || 0,
+          parameters: (template.parameters || []).map((param, index) => ({
+            id: String(index + 1),
+            name: param.parameterName || param.name || "",
+            unit: param.unit || "",
+            normalRange: param.normalRange || "",
+            result: "",
+          })),
+        });
+        grouped.set(categoryLabel, current);
+      });
+
+      const mapped = Array.from(grouped.entries()).map(([name, tests]) => ({
+        name,
+        tests,
+      }));
+      setLabTests(mapped);
+    } catch (err: any) {
+      console.error("Error fetching templates:", err);
+      setError(err.message || "Failed to load test templates");
+    } finally {
+      setLoadingTemplates(false);
+    }
+  };
 
   const fetchTestInfo = async () => {
     try {
@@ -1960,32 +373,9 @@ export default function CollectSamplePage() {
       console.log("Processed test data:", processedData);
       setTest(processedData);
 
-      // Pre-fill selected test if exists
-      if (data.data.specimen?.type) {
-        setSelectedTestId(data.data.specimen.type);
-        // Find the test in labTests and populate its parameters
-        const test = labTests
-          .flatMap((category) => category.tests)
-          .find((t) => t.id === data.data.specimen.type);
-        if (test) {
-          setParameters(test.parameters);
-        } else {
-          setParameters([
-            { id: "1", name: "", unit: "", normalRange: "", result: "" },
-          ]);
-        }
-      }
-      // Pre-fill selected test from ordered test name when specimen type is not set
-      else if (data.data.testName) {
-        const normalizedName = String(data.data.testName).trim().toLowerCase();
-        const orderedTest = labTests
-          .flatMap((category) => category.tests)
-          .find((t) => t.name.trim().toLowerCase() === normalizedName);
-        if (orderedTest) {
-          setSelectedTestId(orderedTest.id);
-          setParameters(orderedTest.parameters);
-        }
-      }
+      // Keep hints; selection is resolved once templates are loaded.
+      setInitialSpecimenType(data.data.specimen?.type || "");
+      setInitialOrderedTestName(data.data.testName || "");
 
       // Pre-fill other specimen details
       if (data.data.specimen?.quantity) {
@@ -2007,36 +397,143 @@ export default function CollectSamplePage() {
 
   // Handle test selection change
   useEffect(() => {
+    if (!labTests.length) return;
+    if (selectedTestId) return;
+
+    const allTests = labTests.flatMap((category) => category.tests);
+
+    if (initialSpecimenType) {
+      const byId = allTests.find((t) => t.id === initialSpecimenType);
+      if (byId) {
+        setSelectedTestId(byId.id);
+        return;
+      }
+    }
+
+    if (initialOrderedTestName) {
+      const normalizedName = String(initialOrderedTestName).trim().toLowerCase();
+      const byName = allTests.find(
+        (t) => t.name.trim().toLowerCase() === normalizedName,
+      );
+      if (byName) {
+        setSelectedTestId(byName.id);
+      }
+    }
+  }, [labTests, initialSpecimenType, initialOrderedTestName, selectedTestId]);
+
+  useEffect(() => {
+    if (testSearchQuery.trim() === "") {
+      setTestSearchResults([]);
+      setShowTestDropdown(false);
+      setActiveTestIndex(-1);
+      return;
+    }
+
+    const query = testSearchQuery.toLowerCase().trim();
+    const results: LabTest[] = [];
+
+    labTests.forEach((category) => {
+      category.tests.forEach((test) => {
+        const testName = test.name.toLowerCase();
+        const categoryName = category.name.toLowerCase();
+        const words = testName.split(/\s+/);
+        const acronym = words.map((w) => w[0]).join("");
+
+        if (
+          testName.includes(query) ||
+          categoryName.includes(query) ||
+          acronym.includes(query) ||
+          words.some((word) => word.startsWith(query)) ||
+          testName
+            .replace(/[^a-z0-9]/g, "")
+            .includes(query.replace(/[^a-z0-9]/g, ""))
+        ) {
+          results.push(test);
+        }
+      });
+    });
+
+    setTestSearchResults(results.slice(0, 10));
+    setShowTestDropdown(true);
+    setActiveTestIndex(results.length > 0 ? 0 : -1);
+  }, [testSearchQuery, labTests]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        testSearchRef.current &&
+        !testSearchRef.current.contains(event.target as Node)
+      ) {
+        setShowTestDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Handle test selection change
+  useEffect(() => {
     if (selectedTestId) {
       // Find the test in labTests and populate its parameters
       const test = labTests
         .flatMap((category) => category.tests)
         .find((t) => t.id === selectedTestId);
       if (test) {
-        setParameters(test.parameters);
+        setParameters(
+          test.parameters.length ? test.parameters : [emptyParameter()],
+        );
       } else {
-        setParameters([
-          {
-            id: "1",
-            name: "",
-            unit: "",
-            normalRange: "",
-            result: "",
-          },
-        ]);
+        setParameters([emptyParameter()]);
       }
     } else {
-      setParameters([
-        {
-          id: "1",
-          name: "",
-          unit: "",
-          normalRange: "",
-          result: "",
-        },
-      ]);
+      setParameters([emptyParameter()]);
     }
-  }, [selectedTestId]);
+  }, [selectedTestId, labTests]);
+
+  const handleSelectTest = (testId: string) => {
+    setSelectedTestId(testId);
+    setTestSearchQuery("");
+    setTestSearchResults([]);
+    setShowTestDropdown(false);
+    setActiveTestIndex(-1);
+  };
+
+  const handleTestSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!showTestDropdown && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+      setShowTestDropdown(true);
+    }
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      if (testSearchResults.length === 0) return;
+      setActiveTestIndex((prev) =>
+        prev < testSearchResults.length - 1 ? prev + 1 : 0,
+      );
+      return;
+    }
+
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      if (testSearchResults.length === 0) return;
+      setActiveTestIndex((prev) =>
+        prev > 0 ? prev - 1 : testSearchResults.length - 1,
+      );
+      return;
+    }
+
+    if (e.key === "Enter" && showTestDropdown) {
+      e.preventDefault();
+      if (activeTestIndex >= 0 && testSearchResults[activeTestIndex]) {
+        handleSelectTest(testSearchResults[activeTestIndex].id);
+      }
+      return;
+    }
+
+    if (e.key === "Escape") {
+      setShowTestDropdown(false);
+      setActiveTestIndex(-1);
+    }
+  };
 
   const addParameter = () => {
     const newId = (parameters.length + 1).toString();
@@ -2102,6 +599,7 @@ export default function CollectSamplePage() {
           value: p.result,
           unit: p.unit,
           normalRange: p.normalRange,
+          remarks: p.remarks || "",
         })),
         results: {
           parameters: validParameters.map((p) => ({
@@ -2109,7 +607,7 @@ export default function CollectSamplePage() {
             value: p.result,
             unit: p.unit,
             normalRange: p.normalRange,
-            remarks: "",
+            remarks: p.remarks || "",
           })),
         },
       };
@@ -2157,7 +655,7 @@ export default function CollectSamplePage() {
   const requiresPaymentVerification =
     test?.priority === "routine" && !test?.paymentVerified;
 
-  if (loading) {
+  if (loading || loadingTemplates) {
     return (
       <div className="container mx-auto p-6">
         <Skeleton className="h-8 w-64 mb-6" />
@@ -2211,9 +709,9 @@ export default function CollectSamplePage() {
           </p>
         </div>
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Main Form */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="lg:col-span-3 space-y-6">
           {/* Show warnings but don't hide form */}
           {requiresPaymentVerification && (
             <Alert className="border border-yellow-200 dark:border-yellow-800 bg-card">
@@ -2392,29 +890,88 @@ export default function CollectSamplePage() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="specimenType">Test Type *</Label>
-                    <Select
-                      value={selectedTestId}
-                      onValueChange={setSelectedTestId}
-                      disabled={!canCollectSample}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select test type" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {labTests.map((category) => (
-                          <div key={category.name}>
-                            <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/50">
-                              {category.name}
+                    <div className="relative" ref={testSearchRef}>
+                      <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="specimenType"
+                        placeholder={
+                          labTests.length
+                            ? "Search test type (e.g. cbc, liver, urine)..."
+                            : "No templates available"
+                        }
+                        className="pl-9 pr-9"
+                        value={testSearchQuery}
+                        onChange={(e) => setTestSearchQuery(e.target.value)}
+                        onFocus={() =>
+                          testSearchQuery && setShowTestDropdown(true)
+                        }
+                        onKeyDown={handleTestSearchKeyDown}
+                        disabled={
+                          !canCollectSample || loadingTemplates || !labTests.length
+                        }
+                      />
+                      {testSearchQuery && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="absolute right-2 top-2 h-6 w-6"
+                          onClick={() => {
+                            setTestSearchQuery("");
+                            setShowTestDropdown(false);
+                            setTestSearchResults([]);
+                            setActiveTestIndex(-1);
+                          }}
+                          disabled={!canCollectSample}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      )}
+
+                      {showTestDropdown && (
+                        <div className="absolute z-50 w-full mt-1 border rounded-md shadow-lg bg-popover max-h-80 overflow-y-auto">
+                          {testSearchResults.length > 0 ? (
+                            testSearchResults.map((foundTest, index) => {
+                              const category = labTests.find((cat) =>
+                                cat.tests.some((t) => t.id === foundTest.id),
+                              )?.name;
+                              return (
+                                <button
+                                  key={foundTest.id}
+                                  type="button"
+                                  className={`w-full text-left px-4 py-3 transition-colors border-b last:border-b-0 ${
+                                    activeTestIndex === index
+                                      ? "bg-accent"
+                                      : "hover:bg-accent"
+                                  }`}
+                                  onMouseEnter={() => setActiveTestIndex(index)}
+                                  onClick={() => handleSelectTest(foundTest.id)}
+                                >
+                                  <div className="flex items-center justify-between gap-3">
+                                    <div className="min-w-0">
+                                      <div className="font-medium truncate">
+                                        {foundTest.name}
+                                      </div>
+                                      <div className="text-xs text-muted-foreground">
+                                        {category} • {foundTest.parameters.length}{" "}
+                                        parameters
+                                      </div>
+                                    </div>
+                                    <Badge variant="secondary" className="text-xs">
+                                      ₹{foundTest.price}
+                                    </Badge>
+                                  </div>
+                                </button>
+                              );
+                            })
+                          ) : (
+                            <div className="p-4 text-sm text-muted-foreground text-center">
+                              No matching test found
                             </div>
-                            {category.tests.map((test) => (
-                              <SelectItem key={test.id} value={test.id}>
-                                {test.name}
-                              </SelectItem>
-                            ))}
-                          </div>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <div className="space-y-2">
@@ -2471,100 +1028,95 @@ export default function CollectSamplePage() {
                   </Button>
                 </CardTitle>
                 <CardDescription>
-                  Record test parameters with name, unit, normal range, and
-                  result
+                  Record parameter result values in a single-row table layout
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {parameters.map((param) => (
-                    <div
-                      key={param.id}
-                      className="p-4 border rounded-lg space-y-3"
-                    >
-                      <div className="flex items-center justify-between">
-                        <h3 className="font-medium">Parameter</h3>
-                        {parameters.length > 1 && (
-                          <Button
-                            type="button"
-                            onClick={() => removeParameter(param.id)}
-                            variant="ghost"
-                            size="sm"
-                            className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
-                            disabled={!canCollectSample}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        )}
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                        <div className="space-y-2">
-                          <Label>Parameter Name</Label>
-                          <Input
-                            value={param.name}
-                            onChange={(e) =>
-                              updateParameter(param.id, "name", e.target.value)
-                            }
-                            placeholder="e.g., Volume, Color, pH"
-                            disabled={!canCollectSample}
-                          />
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label>Result</Label>
-                          <Input
-                            value={param.result}
-                            onChange={(e) =>
-                              updateParameter(
-                                param.id,
-                                "result",
-                                e.target.value,
-                              )
-                            }
-                            placeholder="Enter result"
-                            disabled={!canCollectSample}
-                          />
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label>Unit</Label>
-                          <Input
-                            value={param.unit}
-                            onChange={(e) =>
-                              updateParameter(param.id, "unit", e.target.value)
-                            }
-                            placeholder="e.g., ml, g, pH"
-                            disabled={!canCollectSample}
-                          />
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label>Normal Range</Label>
-                          <Input
-                            value={param.normalRange}
-                            onChange={(e) =>
-                              updateParameter(
-                                param.id,
-                                "normalRange",
-                                e.target.value,
-                              )
-                            }
-                            placeholder="e.g., 4.5-11.0"
-                            disabled={!canCollectSample}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="mt-4 text-sm text-muted-foreground">
-                  <p>
-                    Parameters include name, unit, normal range, and result
-                    fields. Default parameters are pre-filled based on the
-                    selected test type. You can add, remove, or modify them.
-                  </p>
+                <div className="rounded-md border overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Parameter Name</TableHead>
+                        <TableHead>Result</TableHead>
+                        <TableHead>Unit</TableHead>
+                        <TableHead>Normal Range</TableHead>
+                        <TableHead>Remarks</TableHead>
+                        <TableHead className="w-[70px]">Action</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {parameters.map((param) => (
+                        <TableRow key={param.id}>
+                          <TableCell>
+                            <Input
+                              value={param.name}
+                              onChange={(e) =>
+                                updateParameter(param.id, "name", e.target.value)
+                              }
+                              placeholder="e.g., Hemoglobin"
+                              disabled={!canCollectSample}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              value={param.result}
+                              onChange={(e) =>
+                                updateParameter(param.id, "result", e.target.value)
+                              }
+                              placeholder="Enter result"
+                              disabled={!canCollectSample}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              value={param.unit}
+                              onChange={(e) =>
+                                updateParameter(param.id, "unit", e.target.value)
+                              }
+                              placeholder="Unit"
+                              disabled={!canCollectSample}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              value={param.normalRange}
+                              onChange={(e) =>
+                                updateParameter(
+                                  param.id,
+                                  "normalRange",
+                                  e.target.value,
+                                )
+                              }
+                              placeholder="Normal range"
+                              disabled={!canCollectSample}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              value={param.remarks || ""}
+                              onChange={(e) =>
+                                updateParameter(param.id, "remarks", e.target.value)
+                              }
+                              placeholder="Remarks"
+                              disabled={!canCollectSample}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              type="button"
+                              onClick={() => removeParameter(param.id)}
+                              variant="ghost"
+                              size="sm"
+                              className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
+                              disabled={!canCollectSample || parameters.length === 1}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
                 </div>
               </CardContent>
             </Card>

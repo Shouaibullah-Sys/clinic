@@ -122,7 +122,7 @@ export default function PharmacyStockPage() {
 
   // Check if user has pharmacy access
   useEffect(() => {
-    if (user && !["admin", "pharmacist"].includes(user.role)) {
+    if (user && !["admin", "pharmacist", "pharmacy_head"].includes(user.role)) {
       router.push("/unauthorized");
     }
   }, [user, router]);
@@ -161,7 +161,7 @@ export default function PharmacyStockPage() {
   };
 
   useEffect(() => {
-    if (user && ["admin", "pharmacist"].includes(user.role) && accessToken) {
+    if (user && ["admin", "pharmacist", "pharmacy_head"].includes(user.role) && accessToken) {
       fetchMedicines();
     }
   }, [user, accessToken, searchQuery]);
@@ -408,7 +408,7 @@ export default function PharmacyStockPage() {
     }).format(amount);
   };
 
-  if (!user || !["admin", "pharmacist"].includes(user.role)) {
+  if (!user || !["admin", "pharmacist", "pharmacy_head"].includes(user.role)) {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">

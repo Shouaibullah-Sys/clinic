@@ -30,7 +30,7 @@ export async function GET(
     // Check authorization - only pharmacist or admin
     if (
       !payload ||
-      !(payload.role === "pharmacist" || payload.role === "admin")
+      !((payload.role === "pharmacist" || payload.role === "pharmacy_head") || payload.role === "admin")
     ) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -87,7 +87,7 @@ export async function PUT(
     // Check authorization - only pharmacist or admin
     if (
       !payload ||
-      !(payload.role === "pharmacist" || payload.role === "admin")
+      !((payload.role === "pharmacist" || payload.role === "pharmacy_head") || payload.role === "admin")
     ) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

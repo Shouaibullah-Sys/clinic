@@ -10,6 +10,7 @@ export const getDashboardPath = (role: string): string => {
     case "receptionist":
       return "/reception/dashboard";
     case "pharmacist":
+    case "pharmacy_head":
       return "/pharmacy/dashboard";
     case "lab_technician":
       return "/laboratory/dashboard";
@@ -35,6 +36,8 @@ export const getRoleDisplayName = (role: string): string => {
       return "Receptionist";
     case "pharmacist":
       return "Pharmacist";
+    case "pharmacy_head":
+      return "Pharmacy Head";
     case "lab_technician":
       return "Lab Technician";
     case "radiologist":
@@ -54,7 +57,8 @@ export const hasPermission = (userRole: string, requiredRole: string): boolean =
     doctor: ["admin", "doctor"],
     nurse: ["admin", "doctor", "nurse"],
     receptionist: ["admin", "receptionist"],
-    pharmacist: ["admin", "pharmacist"],
+    pharmacist: ["admin", "pharmacist", "pharmacy_head"],
+    pharmacy_head: ["admin", "pharmacy_head"],
     lab_technician: ["admin", "lab_technician"],
     radiologist: ["admin", "radiologist"],
     admission: ["admin", "admission"],

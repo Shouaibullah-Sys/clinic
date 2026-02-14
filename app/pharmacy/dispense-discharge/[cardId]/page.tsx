@@ -513,7 +513,7 @@ export default function DispenseDischargePage() {
 
   // Auth check
   useEffect(() => {
-    if (!authLoading && user && !["admin", "pharmacist"].includes(user.role)) {
+    if (!authLoading && user && !["admin", "pharmacist", "pharmacy_head"].includes(user.role)) {
       router.push("/unauthorized");
     }
   }, [user, authLoading, router]);

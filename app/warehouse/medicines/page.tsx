@@ -101,7 +101,7 @@ export default function WarehouseMedicinesPage() {
 
   // Check if user has access
   useEffect(() => {
-    if (user && !["admin", "pharmacist"].includes(user.role)) {
+    if (user && !["admin", "pharmacy_head"].includes(user.role)) {
       router.push("/unauthorized");
     }
   }, [user, router]);
@@ -137,7 +137,7 @@ export default function WarehouseMedicinesPage() {
   };
 
   useEffect(() => {
-    if (user && ["admin", "pharmacist"].includes(user.role) && accessToken) {
+    if (user && ["admin", "pharmacy_head"].includes(user.role) && accessToken) {
       fetchMedicines();
     }
   }, [user, accessToken, searchQuery]);
@@ -255,7 +255,7 @@ export default function WarehouseMedicinesPage() {
     setDeleteDialogOpen(true);
   };
 
-  if (!user || !["admin", "pharmacist"].includes(user.role)) {
+  if (!user || !["admin", "pharmacy_head"].includes(user.role)) {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">

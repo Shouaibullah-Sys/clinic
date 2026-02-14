@@ -79,7 +79,7 @@ export default function WarehouseTransferPage() {
 
   // Check if user has access
   useEffect(() => {
-    if (user && !["admin", "pharmacist"].includes(user.role)) {
+    if (user && !["admin", "pharmacy_head"].includes(user.role)) {
       router.push("/unauthorized");
     }
   }, [user, router]);
@@ -231,7 +231,7 @@ export default function WarehouseTransferPage() {
     0,
   );
 
-  if (!user || !["admin", "pharmacist"].includes(user.role)) {
+  if (!user || !["admin", "pharmacy_head"].includes(user.role)) {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">

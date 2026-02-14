@@ -89,13 +89,13 @@ export default function SelectPrescriptionPage() {
 
   // Role check
   useEffect(() => {
-    if (!authLoading && user && !["admin", "pharmacist"].includes(user.role)) {
+    if (!authLoading && user && !["admin", "pharmacist", "pharmacy_head"].includes(user.role)) {
       router.push("/unauthorized");
     }
   }, [user, authLoading, router]);
 
   useEffect(() => {
-    if (user && ["admin", "pharmacist"].includes(user.role) && accessToken) {
+    if (user && ["admin", "pharmacist", "pharmacy_head"].includes(user.role) && accessToken) {
       fetchPrescriptions();
     }
   }, [user, accessToken]);
@@ -245,7 +245,7 @@ export default function SelectPrescriptionPage() {
     );
   }
 
-  if (!user || !["admin", "pharmacist"].includes(user.role)) {
+  if (!user || !["admin", "pharmacist", "pharmacy_head"].includes(user.role)) {
     return null; // Already redirected by useEffect
   }
 

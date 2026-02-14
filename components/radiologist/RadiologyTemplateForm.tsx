@@ -94,6 +94,13 @@ interface FormValues {
   basePrice: number;
   active: boolean;
   parameters: ParameterField[];
+  clinicalIndicationTemplate?: string;
+  techniqueTemplate?: string;
+  comparisonTemplate?: string;
+  findingsTemplate?: string;
+  impressionTemplate?: string;
+  recommendationTemplate?: string;
+  criticalFindingsChecklist?: string[];
 }
 
 interface RadiologyTemplateFormProps {
@@ -134,6 +141,13 @@ export function RadiologyTemplateForm({
       basePrice: template?.basePrice || 0,
       active: template?.active ?? true,
       parameters: parameters,
+      clinicalIndicationTemplate: template?.clinicalIndicationTemplate || "",
+      techniqueTemplate: template?.techniqueTemplate || "",
+      comparisonTemplate: template?.comparisonTemplate || "",
+      findingsTemplate: template?.findingsTemplate || "",
+      impressionTemplate: template?.impressionTemplate || "",
+      recommendationTemplate: template?.recommendationTemplate || "",
+      criticalFindingsChecklist: template?.criticalFindingsChecklist || [],
     },
   });
 
@@ -173,6 +187,15 @@ export function RadiologyTemplateForm({
         parameters: parameters.filter(
           (p) => p.parameterCode.trim() !== "" && p.parameterName.trim() !== "",
         ),
+        clinicalIndicationTemplate: data.clinicalIndicationTemplate?.trim() || "",
+        techniqueTemplate: data.techniqueTemplate?.trim() || "",
+        comparisonTemplate: data.comparisonTemplate?.trim() || "",
+        findingsTemplate: data.findingsTemplate?.trim() || "",
+        impressionTemplate: data.impressionTemplate?.trim() || "",
+        recommendationTemplate: data.recommendationTemplate?.trim() || "",
+        criticalFindingsChecklist: (data.criticalFindingsChecklist || [])
+          .map((item) => item.trim())
+          .filter(Boolean),
       };
 
       if (isEditing) {
@@ -401,6 +424,153 @@ export function RadiologyTemplateForm({
             </FormItem>
           )}
         />
+
+        {/* Comprehensive Report Templates */}
+        <div className="space-y-4 rounded-md border p-4">
+          <h3 className="font-medium">Comprehensive Report Templates</h3>
+          <p className="text-sm text-muted-foreground">
+            These fields prefill report drafting for radiologists.
+          </p>
+
+          <FormField
+            control={form.control}
+            name="clinicalIndicationTemplate"
+            render={({ field }: { field: any }) => (
+              <FormItem>
+                <FormLabel>Clinical Indication Template</FormLabel>
+                <FormControl>
+                  <Textarea
+                    placeholder="Default clinical indication text..."
+                    rows={2}
+                    className="resize-none"
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="techniqueTemplate"
+            render={({ field }: { field: any }) => (
+              <FormItem>
+                <FormLabel>Technique Template</FormLabel>
+                <FormControl>
+                  <Textarea
+                    placeholder="Default technique/protocol text..."
+                    rows={2}
+                    className="resize-none"
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="comparisonTemplate"
+            render={({ field }: { field: any }) => (
+              <FormItem>
+                <FormLabel>Comparison Template</FormLabel>
+                <FormControl>
+                  <Textarea
+                    placeholder="Comparison with previous study..."
+                    rows={2}
+                    className="resize-none"
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="findingsTemplate"
+            render={({ field }: { field: any }) => (
+              <FormItem>
+                <FormLabel>Findings Template</FormLabel>
+                <FormControl>
+                  <Textarea
+                    placeholder="Structured findings template..."
+                    rows={4}
+                    className="resize-none"
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="impressionTemplate"
+            render={({ field }: { field: any }) => (
+              <FormItem>
+                <FormLabel>Impression Template</FormLabel>
+                <FormControl>
+                  <Textarea
+                    placeholder="Standard impression template..."
+                    rows={3}
+                    className="resize-none"
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="recommendationTemplate"
+            render={({ field }: { field: any }) => (
+              <FormItem>
+                <FormLabel>Recommendation Template</FormLabel>
+                <FormControl>
+                  <Textarea
+                    placeholder="Follow-up recommendations..."
+                    rows={3}
+                    className="resize-none"
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="criticalFindingsChecklist"
+            render={({ field }: { field: any }) => (
+              <FormItem>
+                <FormLabel>Critical Findings Checklist</FormLabel>
+                <FormControl>
+                  <Input
+                    placeholder="Comma-separated e.g. pneumothorax, acute bleed"
+                    value={(field.value || []).join(", ")}
+                    onChange={(e) =>
+                      field.onChange(
+                        e.target.value
+                          .split(",")
+                          .map((item) => item.trim())
+                          .filter(Boolean),
+                      )
+                    }
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
 
         {/* Contrast Information */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

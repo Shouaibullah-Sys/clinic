@@ -23,13 +23,14 @@ export async function PATCH(
       );
     }
 
-    // Only pharmacists and admin can finalize sales
-    const allowedRoles = ["pharmacist", "admin"];
+    // Only pharmacists, pharmacy heads, and admin can finalize sales
+    const allowedRoles = ["pharmacist", "pharmacy_head", "admin"];
     if (!auth.userRole || !allowedRoles.includes(auth.userRole)) {
       return NextResponse.json(
         {
           success: false,
-          error: "Forbidden. Only pharmacists can finalize sales.",
+          error:
+            "Forbidden. Only pharmacists and pharmacy heads can finalize sales.",
         },
         { status: 403 },
       );

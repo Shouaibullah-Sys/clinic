@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
       !payload ||
       !(
         payload.role === "admin" ||
-        payload.role === "pharmacist" ||
+        (payload.role === "pharmacist" || payload.role === "pharmacy_head") ||
         payload.role === "doctor"
       )
     ) {

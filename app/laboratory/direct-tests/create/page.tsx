@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   Card,
@@ -34,6 +34,14 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
   ArrowLeft,
   Search,
   User,
@@ -45,9 +53,6 @@ import {
   Plus,
   Trash2,
   X,
-  ChevronDown,
-  ChevronUp,
-  Filter,
   Sparkles,
 } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -1653,7 +1658,8 @@ export default function CreateDirectTestPage() {
   );
   const [searchingPatients, setSearchingPatients] = useState(false);
   const [showPatientDropdown, setShowPatientDropdown] = useState(false);
-  const [recentPatients, setRecentPatients] = useState<Patient[]>([]);
+  const [activePatientIndex, setActivePatientIndex] = useState(-1);
+  const patientSearchRef = useRef<HTMLDivElement | null>(null);
   const [debounceTimer, setDebounceTimer] = useState<NodeJS.Timeout | null>(
     null,
   );
@@ -1662,10 +1668,8 @@ export default function CreateDirectTestPage() {
   const [testSearchQuery, setTestSearchQuery] = useState("");
   const [testSearchResults, setTestSearchResults] = useState<LabTest[]>([]);
   const [showTestDropdown, setShowTestDropdown] = useState(false);
-  const [popularTests, setPopularTests] = useState<LabTest[]>([]);
-  const [expandedCategories, setExpandedCategories] = useState<{
-    [key: string]: boolean;
-  }>({});
+  const [activeSearchIndex, setActiveSearchIndex] = useState(-1);
+  const testSearchRef = useRef<HTMLDivElement | null>(null);
 
   // New patient creation state
   const [showCreatePatientDialog, setShowCreatePatientDialog] = useState(false);
@@ -1683,10 +1687,7 @@ export default function CreateDirectTestPage() {
     [],
   );
 
-  const activeLabTests = useMemo(
-    () => (templateLabTests.length > 0 ? templateLabTests : labTests),
-    [templateLabTests],
-  );
+  const activeLabTests = useMemo(() => templateLabTests, [templateLabTests]);
 
   const loadTemplateTests = async () => {
     try {
@@ -1737,43 +1738,8 @@ export default function CreateDirectTestPage() {
 
   // Load recent patients on component mount
   useEffect(() => {
-    loadRecentPatients();
     loadTemplateTests();
   }, [accessToken]);
-
-  useEffect(() => {
-    loadPopularTests();
-    // Initialize all categories as expanded by default
-    const initialExpanded: { [key: string]: boolean } = {};
-    activeLabTests.forEach((category) => {
-      initialExpanded[category.name] = true;
-    });
-    setExpandedCategories(initialExpanded);
-  }, [activeLabTests]);
-
-  const loadRecentPatients = async () => {
-    try {
-      if (!accessToken) return;
-
-      const response = await fetch("/api/patients/recent?limit=5", {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setRecentPatients(data.data || []);
-      }
-    } catch (err) {
-      console.error("Error loading recent patients:", err);
-    }
-  };
-
-  const loadPopularTests = () => {
-    const popular = activeLabTests.flatMap((c) => c.tests).slice(0, 5);
-    setPopularTests(popular);
-  };
 
   // Smart patient search with debounce
   useEffect(() => {
@@ -1850,8 +1816,28 @@ export default function CreateDirectTestPage() {
     });
 
     setTestSearchResults(results.slice(0, 10));
-    setShowTestDropdown(results.length > 0);
+    setShowTestDropdown(true);
+    setActiveSearchIndex(results.length > 0 ? 0 : -1);
   }, [testSearchQuery, activeLabTests]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        patientSearchRef.current &&
+        !patientSearchRef.current.contains(event.target as Node)
+      ) {
+        setShowPatientDropdown(false);
+      }
+      if (
+        testSearchRef.current &&
+        !testSearchRef.current.contains(event.target as Node)
+      ) {
+        setShowTestDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   // Handle test selection change - populate test parameters
   useEffect(() => {
@@ -1931,9 +1917,52 @@ export default function CreateDirectTestPage() {
 
   const handleSelectPatient = (patient: Patient) => {
     setSelectedPatient(patient);
-    setPatientSearchQuery(patient.name);
+    setPatientSearchQuery("");
     setShowPatientDropdown(false);
     setPatientSearchResults([]);
+    setActivePatientIndex(-1);
+  };
+
+  const handlePatientSearchKeyDown = (
+    e: React.KeyboardEvent<HTMLInputElement>,
+  ) => {
+    if (
+      !showPatientDropdown &&
+      (e.key === "ArrowDown" || e.key === "ArrowUp")
+    ) {
+      setShowPatientDropdown(true);
+    }
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      if (patientSearchResults.length === 0) return;
+      setActivePatientIndex((prev) =>
+        prev < patientSearchResults.length - 1 ? prev + 1 : 0,
+      );
+      return;
+    }
+
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      if (patientSearchResults.length === 0) return;
+      setActivePatientIndex((prev) =>
+        prev > 0 ? prev - 1 : patientSearchResults.length - 1,
+      );
+      return;
+    }
+
+    if (e.key === "Enter" && showPatientDropdown) {
+      e.preventDefault();
+      if (activePatientIndex >= 0 && patientSearchResults[activePatientIndex]) {
+        handleSelectPatient(patientSearchResults[activePatientIndex]);
+      }
+      return;
+    }
+
+    if (e.key === "Escape") {
+      setShowPatientDropdown(false);
+      setActivePatientIndex(-1);
+    }
   };
 
   const handleCreatePatient = async (e: React.FormEvent) => {
@@ -1972,9 +2001,11 @@ export default function CreateDirectTestPage() {
       toast.success("Patient created successfully");
 
       setSelectedPatient(data.data);
-      setPatientSearchQuery(data.data.name);
+      setPatientSearchQuery("");
+      setShowPatientDropdown(false);
+      setPatientSearchResults([]);
+      setActivePatientIndex(-1);
       setShowCreatePatientDialog(false);
-      loadRecentPatients();
 
       setNewPatient({
         name: "",
@@ -1994,20 +2025,55 @@ export default function CreateDirectTestPage() {
   const handleSelectTest = (testId: string) => {
     setSelectedTestId(testId);
     setTestSearchQuery("");
+    setTestSearchResults([]);
     setShowTestDropdown(false);
-  };
-
-  const toggleCategory = (categoryName: string) => {
-    setExpandedCategories((prev) => ({
-      ...prev,
-      [categoryName]: !prev[categoryName],
-    }));
+    setActiveSearchIndex(-1);
   };
 
   const handleClearSearch = () => {
     setTestSearchQuery("");
     setTestSearchResults([]);
     setShowTestDropdown(false);
+    setActiveSearchIndex(-1);
+  };
+
+  const handleTestSearchKeyDown = (
+    e: React.KeyboardEvent<HTMLInputElement>,
+  ) => {
+    if (!showTestDropdown && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+      setShowTestDropdown(true);
+    }
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      if (testSearchResults.length === 0) return;
+      setActiveSearchIndex((prev) =>
+        prev < testSearchResults.length - 1 ? prev + 1 : 0,
+      );
+      return;
+    }
+
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      if (testSearchResults.length === 0) return;
+      setActiveSearchIndex((prev) =>
+        prev > 0 ? prev - 1 : testSearchResults.length - 1,
+      );
+      return;
+    }
+
+    if (e.key === "Enter" && showTestDropdown) {
+      e.preventDefault();
+      if (activeSearchIndex >= 0 && testSearchResults[activeSearchIndex]) {
+        handleSelectTest(testSearchResults[activeSearchIndex].id);
+      }
+      return;
+    }
+
+    if (e.key === "Escape") {
+      setShowTestDropdown(false);
+      setActiveSearchIndex(-1);
+    }
   };
 
   const addTestParameter = () => {
@@ -2069,8 +2135,7 @@ export default function CreateDirectTestPage() {
         testName: selectedTest?.name,
         category: activeLabTests
           .find((cat) => cat.tests.some((t) => t.id === selectedTestId))
-          ?.tests.find((t) => t.id === selectedTestId)
-          ?.category,
+          ?.tests.find((t) => t.id === selectedTestId)?.category,
         price: selectedTest?.price,
         priority,
         notes: notes || undefined,
@@ -2111,31 +2176,6 @@ export default function CreateDirectTestPage() {
     }
   };
 
-  // FIX 1: Show all tests by default
-  // FIX 2: When searching, filter tests but still show them
-  const filteredTests = activeLabTests.map((category) => {
-    if (!testSearchQuery) {
-      // When no search query, show all tests
-      return {
-        ...category,
-        tests: category.tests,
-      };
-    }
-
-    const query = testSearchQuery.toLowerCase();
-    const filteredCategoryTests = category.tests.filter(
-      (test) =>
-        test.name.toLowerCase().includes(query) ||
-        test.id.toLowerCase().includes(query) ||
-        category.name.toLowerCase().includes(query),
-    );
-
-    return {
-      ...category,
-      tests: filteredCategoryTests,
-    };
-  });
-
   if (loading) {
     return (
       <div className="container mx-auto p-6">
@@ -2175,9 +2215,9 @@ export default function CreateDirectTestPage() {
       )}
 
       <form onSubmit={handleSubmit}>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           {/* Left Column - Patient and Test Selection */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className="lg:col-span-3 space-y-6">
             {/* Patient Selection */}
             <Card>
               <CardHeader>
@@ -2191,7 +2231,7 @@ export default function CreateDirectTestPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 {/* Smart Patient Search */}
-                <div className="relative">
+                <div className="relative" ref={patientSearchRef}>
                   <div className="relative">
                     <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                     <Input
@@ -2200,13 +2240,14 @@ export default function CreateDirectTestPage() {
                       value={patientSearchQuery}
                       onChange={(e) => setPatientSearchQuery(e.target.value)}
                       onFocus={() => {
-                        if (
-                          patientSearchQuery.length >= 2 ||
-                          recentPatients.length > 0
-                        ) {
+                        if (patientSearchQuery.length >= 2) {
                           setShowPatientDropdown(true);
+                          setActivePatientIndex(
+                            patientSearchResults.length > 0 ? 0 : -1,
+                          );
                         }
                       }}
+                      onKeyDown={handlePatientSearchKeyDown}
                     />
                     {patientSearchQuery && (
                       <Button
@@ -2217,7 +2258,8 @@ export default function CreateDirectTestPage() {
                         onClick={() => {
                           setPatientSearchQuery("");
                           setShowPatientDropdown(false);
-                          setSelectedPatient(null);
+                          setPatientSearchResults([]);
+                          setActivePatientIndex(-1);
                         }}
                       >
                         <X className="h-3 w-3" />
@@ -2229,89 +2271,67 @@ export default function CreateDirectTestPage() {
                       <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                     </div>
                   )}
+                  {/* Patient Smart Dropdown */}
+                  {showPatientDropdown && (
+                    <div className="absolute z-50 w-full mt-1 border rounded-md shadow-lg bg-popover max-h-80 overflow-y-auto">
+                      {patientSearchResults.length > 0
+                        ? patientSearchResults.map((patient, index) => (
+                            <button
+                              key={patient._id}
+                              type="button"
+                              className={`w-full text-left px-3 py-3 transition-colors border-b last:border-b-0 ${
+                                activePatientIndex === index
+                                  ? "bg-accent"
+                                  : "hover:bg-accent"
+                              }`}
+                              onMouseEnter={() => setActivePatientIndex(index)}
+                              onClick={() => handleSelectPatient(patient)}
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                  <User className="h-4 w-4 text-muted-foreground" />
+                                  <div>
+                                    <div className="font-medium">
+                                      {patient.name}
+                                    </div>
+                                    <div className="text-xs text-muted-foreground">
+                                      {patient.patientId}
+                                      {patient.phone
+                                        ? ` • ${patient.phone}`
+                                        : ""}
+                                    </div>
+                                  </div>
+                                </div>
+                                <Badge variant="outline" className="text-xs">
+                                  Select
+                                </Badge>
+                              </div>
+                            </button>
+                          ))
+                        : patientSearchQuery &&
+                          !searchingPatients && (
+                            <div className="p-4 text-center">
+                              <p className="text-sm text-muted-foreground mb-3">
+                                No patients found matching "{patientSearchQuery}
+                                "
+                              </p>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="w-full"
+                                onClick={() => {
+                                  setShowPatientDropdown(false);
+                                  setShowCreatePatientDialog(true);
+                                }}
+                              >
+                                <Plus className="h-4 w-4 mr-2" />
+                                Create New Patient
+                              </Button>
+                            </div>
+                          )}
+                    </div>
+                  )}
                 </div>
-
-                {/* Patient Dropdown with Smart Features */}
-                {showPatientDropdown && (
-                  <div className="border rounded-md shadow-sm bg-background overflow-hidden">
-                    {/* Recent Patients */}
-                    {!patientSearchQuery && recentPatients.length > 0 && (
-                      <div className="border-b">
-                        <div className="px-3 py-2 bg-muted/50 text-xs font-medium text-muted-foreground">
-                          Recent Patients
-                        </div>
-                        {recentPatients.map((patient) => (
-                          <button
-                            key={patient._id}
-                            type="button"
-                            className="w-full text-left px-3 py-2 hover:bg-accent transition-colors flex items-center gap-3"
-                            onClick={() => handleSelectPatient(patient)}
-                          >
-                            <User className="h-4 w-4 text-muted-foreground" />
-                            <div>
-                              <div className="font-medium">{patient.name}</div>
-                              <div className="text-xs text-muted-foreground">
-                                {patient.patientId}
-                              </div>
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Search Results */}
-                    {patientSearchResults.length > 0 && (
-                      <div>
-                        <div className="px-3 py-2 bg-muted/50 text-xs font-medium text-muted-foreground">
-                          Search Results
-                        </div>
-                        {patientSearchResults.map((patient) => (
-                          <button
-                            key={patient._id}
-                            type="button"
-                            className="w-full text-left px-3 py-2 hover:bg-accent transition-colors flex items-center justify-between"
-                            onClick={() => handleSelectPatient(patient)}
-                          >
-                            <div className="flex items-center gap-3">
-                              <User className="h-4 w-4 text-muted-foreground" />
-                              <div>
-                                <div className="font-medium">
-                                  {patient.name}
-                                </div>
-                                <div className="text-xs text-muted-foreground">
-                                  {patient.patientId} • {patient.phone}
-                                </div>
-                              </div>
-                            </div>
-                            <Badge variant="outline" className="text-xs">
-                              Select
-                            </Badge>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* No Results */}
-                    {patientSearchQuery &&
-                      patientSearchResults.length === 0 &&
-                      !searchingPatients && (
-                        <div className="p-4 text-center">
-                          <p className="text-sm text-muted-foreground mb-3">
-                            No patients found matching "{patientSearchQuery}"
-                          </p>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="w-full"
-                            onClick={() => setShowCreatePatientDialog(true)}
-                          >
-                            <Plus className="h-4 w-4 mr-2" />
-                            Create New Patient
-                          </Button>
-                        </div>
-                      )}
-                  </div>
-                )}
 
                 {/* Selected Patient */}
                 {selectedPatient && (
@@ -2363,307 +2383,87 @@ export default function CreateDirectTestPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {/* Smart Test Search */}
-                <div className="relative">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Search tests (e.g., 'cbc', 'liver', 'urine routine')..."
-                      className="pl-9 pr-9"
-                      value={testSearchQuery}
-                      onChange={(e) => setTestSearchQuery(e.target.value)}
-                      onFocus={() => setShowTestDropdown(true)}
-                    />
-                    {testSearchQuery && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="absolute right-2 top-2 h-6 w-6"
-                        onClick={handleClearSearch}
-                      >
-                        <X className="h-3 w-3" />
-                      </Button>
-                    )}
-                  </div>
-
-                  {/* Smart Test Search Dropdown */}
-                  {showTestDropdown && testSearchResults.length > 0 && (
-                    <div className="absolute z-50 w-full mt-1 border rounded-md shadow-lg bg-background max-h-80 overflow-y-auto">
-                      <div className="p-2 border-b">
-                        <div className="text-xs font-medium text-muted-foreground px-2">
-                          Quick Results ({testSearchResults.length})
-                        </div>
-                      </div>
-                      {testSearchResults.map((test) => {
-                        const category = activeLabTests.find((cat) =>
-                          cat.tests.some((t) => t.id === test.id),
-                        )?.name;
-
-                        return (
-                          <button
-                            key={test.id}
-                            type="button"
-                            className="w-full text-left px-4 py-3 hover:bg-accent transition-colors border-b last:border-b-0"
-                            onClick={() => handleSelectTest(test.id)}
-                          >
-                            <div className="flex items-center justify-between gap-4">
-                              <div className="flex-1">
-                                <div className="font-medium">{test.name}</div>
-                                <div className="text-sm text-muted-foreground">
-                                  {category} • {test.parameters.length}{" "}
-                                  parameters
-                                </div>
-                              </div>
-                              <Badge variant="secondary" className="text-xs">
-                                ₹{test.price}
-                              </Badge>
-                            </div>
-                          </button>
+                <div className="relative" ref={testSearchRef}>
+                  <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Type to search tests (e.g. cbc, liver, urine)..."
+                    className="pl-9 pr-9"
+                    value={testSearchQuery}
+                    onChange={(e) => setTestSearchQuery(e.target.value)}
+                    onFocus={() => {
+                      if (testSearchQuery) {
+                        setShowTestDropdown(true);
+                        setActiveSearchIndex(
+                          testSearchResults.length > 0 ? 0 : -1,
                         );
-                      })}
+                      }
+                    }}
+                    onKeyDown={handleTestSearchKeyDown}
+                  />
+                  {testSearchQuery && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-2 top-2 h-6 w-6"
+                      onClick={handleClearSearch}
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  )}
+
+                  {showTestDropdown && (
+                    <div className="absolute z-50 w-full mt-1 border rounded-md shadow-lg bg-popover max-h-80 overflow-y-auto">
+                      {testSearchResults.length > 0 ? (
+                        testSearchResults.map((test, index) => {
+                          const category = activeLabTests.find((cat) =>
+                            cat.tests.some((t) => t.id === test.id),
+                          )?.name;
+
+                          return (
+                            <button
+                              key={test.id}
+                              type="button"
+                              className={`w-full text-left px-4 py-3 transition-colors border-b last:border-b-0 ${
+                                activeSearchIndex === index
+                                  ? "bg-accent"
+                                  : "hover:bg-accent"
+                              }`}
+                              onMouseEnter={() => setActiveSearchIndex(index)}
+                              onClick={() => handleSelectTest(test.id)}
+                            >
+                              <div className="flex items-center justify-between gap-4">
+                                <div className="flex-1 min-w-0">
+                                  <div className="font-medium truncate">
+                                    {test.name}
+                                  </div>
+                                  <div className="text-sm text-muted-foreground">
+                                    {category} • {test.parameters.length}{" "}
+                                    parameters
+                                  </div>
+                                </div>
+                                <Badge variant="secondary" className="text-xs">
+                                  ₹{test.price}
+                                </Badge>
+                              </div>
+                            </button>
+                          );
+                        })
+                      ) : (
+                        <div className="p-4 text-sm text-muted-foreground text-center">
+                          No matching test found
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
 
-                {/* Popular Tests */}
-                {!testSearchQuery && popularTests.length > 0 && (
-                  <div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <Filter className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm font-medium">Popular Tests</span>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {popularTests.map((test) => (
-                        <Badge
-                          key={test.id}
-                          variant="outline"
-                          className="cursor-pointer hover:bg-accent transition-colors"
-                          onClick={() => handleSelectTest(test.id)}
-                        >
-                          {test.name}
-                        </Badge>
-                      ))}
-                    </div>
+                {!activeLabTests.length && (
+                  <div className="p-4 text-sm rounded-md border text-muted-foreground">
+                    No active lab templates found. Please add templates in
+                    `laboratory/templates`.
                   </div>
                 )}
-
-                {/* Test Categories - FIXED: Show all tests by default, filter when searching */}
-                <div className="border rounded-md overflow-hidden">
-                  {filteredTests.map((category) => {
-                    const isExpanded =
-                      expandedCategories[category.name] !== false;
-
-                    // Show category only if it has tests or if we're not searching
-                    if (category.tests.length === 0 && testSearchQuery)
-                      return null;
-
-                    return (
-                      <div key={category.name}>
-                        <button
-                          type="button"
-                          className="w-full px-4 py-3 flex items-center justify-between hover:bg-accent transition-colors border-b bg-muted/30"
-                          onClick={() => toggleCategory(category.name)}
-                        >
-                          <div className="flex items-center gap-3">
-                            {isExpanded ? (
-                              <ChevronUp className="h-4 w-4 text-muted-foreground" />
-                            ) : (
-                              <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                            )}
-                            <span className="font-medium">{category.name}</span>
-                            <Badge variant="secondary" className="text-xs">
-                              {category.tests.length}
-                            </Badge>
-                          </div>
-                          <span className="text-sm text-muted-foreground">
-                            {isExpanded
-                              ? "Click to collapse"
-                              : "Click to expand"}
-                          </span>
-                        </button>
-
-                        {isExpanded && (
-                          <div className="bg-background">
-                            {category.tests.map((test) => (
-                              <button
-                                key={test.id}
-                                type="button"
-                                className={`w-full text-left px-4 py-3 hover:bg-accent transition-colors border-b last:border-b-0 flex items-center justify-between ${
-                                  selectedTestId === test.id ? "bg-accent" : ""
-                                }`}
-                                onClick={() => handleSelectTest(test.id)}
-                              >
-                                <div className="flex-1">
-                                  <div className="font-medium">{test.name}</div>
-                                  <div className="text-sm text-muted-foreground">
-                                    {test.parameters.length} parameters
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-4">
-                                  <Badge variant="outline" className="text-xs">
-                                    ₹{test.price}
-                                  </Badge>
-                                  {selectedTestId === test.id && (
-                                    <CheckCircle className="h-4 w-4 text-green-600" />
-                                  )}
-                                </div>
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-
-                  {/* Show message when no tests match search */}
-                  {testSearchQuery &&
-                    filteredTests.every((cat) => cat.tests.length === 0) && (
-                      <div className="p-8 text-center text-muted-foreground">
-                        <Search className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                        <p>No tests found matching "{testSearchQuery}"</p>
-                        <p className="text-sm mt-1">
-                          Try a different search term
-                        </p>
-                      </div>
-                    )}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Test Parameters (Results) */}
-            <Card className="border-blue-200 dark:border-blue-800">
-              <CardHeader>
-                <CardTitle className="flex items-center justify-between">
-                  <span className="flex items-center gap-2">
-                    <TestTube className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                    Test Parameters (Results)
-                  </span>
-                  <Button
-                    type="button"
-                    onClick={addTestParameter}
-                    variant="outline"
-                    size="sm"
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Parameter
-                  </Button>
-                </CardTitle>
-                <CardDescription>
-                  Enter test result values with parameter name, value, unit,
-                  normal range, and remarks
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {testParameters.map((param, index) => (
-                    <div
-                      key={param.id}
-                      className="p-4 border rounded-lg space-y-4 bg-blue-50/50 dark:bg-blue-950/20"
-                    >
-                      <div className="flex items-center justify-between">
-                        <h3 className="font-medium">Parameter #{index + 1}</h3>
-                        {testParameters.length > 1 && (
-                          <Button
-                            type="button"
-                            onClick={() => removeTestParameter(param.id)}
-                            variant="ghost"
-                            size="sm"
-                            className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        )}
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label>Parameter Name *</Label>
-                          <Input
-                            value={param.name}
-                            onChange={(e) =>
-                              updateTestParameter(
-                                param.id,
-                                "name",
-                                e.target.value,
-                              )
-                            }
-                            placeholder="e.g., Hemoglobin, WBC Count"
-                          />
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label>Value *</Label>
-                          <Input
-                            value={param.value}
-                            onChange={(e) =>
-                              updateTestParameter(
-                                param.id,
-                                "value",
-                                e.target.value,
-                              )
-                            }
-                            placeholder="Enter test result value"
-                          />
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label>Unit</Label>
-                          <Input
-                            value={param.unit}
-                            onChange={(e) =>
-                              updateTestParameter(
-                                param.id,
-                                "unit",
-                                e.target.value,
-                              )
-                            }
-                            placeholder="e.g., g/dL, cells/μL"
-                          />
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label>Normal Range</Label>
-                          <Input
-                            value={param.normalRange}
-                            onChange={(e) =>
-                              updateTestParameter(
-                                param.id,
-                                "normalRange",
-                                e.target.value,
-                              )
-                            }
-                            placeholder="e.g., 13.5-17.5 g/dL"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Remarks</Label>
-                        <Textarea
-                          value={param.remarks}
-                          onChange={(e) =>
-                            updateTestParameter(
-                              param.id,
-                              "remarks",
-                              e.target.value,
-                            )
-                          }
-                          placeholder="Any additional remarks or notes..."
-                          rows={2}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="mt-4 text-sm text-muted-foreground">
-                  <p>
-                    Test parameters include the actual test results. Parameter
-                    Name and Value are required. Unit, Normal Range, and Remarks
-                    are optional.
-                  </p>
-                </div>
               </CardContent>
             </Card>
           </div>
@@ -2708,110 +2508,168 @@ export default function CreateDirectTestPage() {
                       </p>
                     </div>
                   </div>
-                </CardContent>
-              </Card>
-            )}
 
-            {/* Test Options */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Test Options</CardTitle>
-                <CardDescription>
-                  Configure additional test settings
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <Label htmlFor="priority">Priority</Label>
-                  <Select
-                    value={priority}
-                    onValueChange={(value: any) => setPriority(value)}
-                  >
-                    <SelectTrigger id="priority">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="routine">
-                        <div className="flex items-center gap-2">
-                          <Clock className="h-4 w-4" />
-                          Routine
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="urgent">
-                        <div className="flex items-center gap-2">
-                          <AlertTriangle className="h-4 w-4 text-orange-500" />
-                          Urgent
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="emergency">
-                        <div className="flex items-center gap-2">
-                          <AlertTriangle className="h-4 w-4 text-red-500" />
-                          Emergency
-                        </div>
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Higher priority tests may be processed faster
-                  </p>
-                </div>
-
-                <div>
-                  <Label htmlFor="notes">Notes (Optional)</Label>
-                  <Textarea
-                    id="notes"
-                    placeholder="Add any additional notes or instructions..."
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    rows={4}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Summary */}
-            {selectedPatient && selectedTest && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Summary</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="flex justify-between">
-                    <span className="text-sm text-muted-foreground">
-                      Patient
-                    </span>
-                    <span className="font-medium">{selectedPatient.name}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-muted-foreground">Test</span>
-                    <span className="font-medium">{selectedTest.name}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-muted-foreground">Price</span>
-                    <span className="font-medium">₹{selectedTest.price}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-muted-foreground">
-                      Priority
-                    </span>
-                    <Badge
-                      variant="outline"
-                      className={
-                        priority === "emergency"
-                          ? "border-red-300 text-red-700 bg-red-50 dark:bg-red-950/20 dark:text-red-400"
-                          : priority === "urgent"
-                            ? "border-orange-300 text-orange-700 bg-orange-50 dark:bg-orange-950/20 dark:text-orange-400"
-                            : "border-green-300 text-green-700 bg-green-50 dark:bg-green-950/20 dark:text-green-400"
-                      }
-                    >
-                      {priority.charAt(0).toUpperCase() + priority.slice(1)}
-                    </Badge>
+                  <div className="pt-3 border-t space-y-4">
+                    <div>
+                      <Label htmlFor="priority">Priority</Label>
+                      <Select
+                        value={priority}
+                        onValueChange={(value: any) => setPriority(value)}
+                      >
+                        <SelectTrigger id="priority">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="routine">
+                            <div className="flex items-center gap-2">
+                              <Clock className="h-4 w-4" />
+                              Routine
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="urgent">
+                            <div className="flex items-center gap-2">
+                              <AlertTriangle className="h-4 w-4 text-orange-500" />
+                              Urgent
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="emergency">
+                            <div className="flex items-center gap-2">
+                              <AlertTriangle className="h-4 w-4 text-red-500" />
+                              Emergency
+                            </div>
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
             )}
           </div>
         </div>
+
+        {/* Full Width Parameters Table */}
+        <Card className="mt-6 border-blue-200 dark:border-blue-800">
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <TestTube className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                Test Parameters (Results)
+              </span>
+              <Button
+                type="button"
+                onClick={addTestParameter}
+                variant="outline"
+                size="sm"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add Parameter
+              </Button>
+            </CardTitle>
+            <CardDescription>
+              Enter parameter result values in a single-row table layout
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-md border overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Parameter Name *</TableHead>
+                    <TableHead>Value *</TableHead>
+                    <TableHead>Unit</TableHead>
+                    <TableHead>Normal Range</TableHead>
+                    <TableHead>Remarks</TableHead>
+                    <TableHead className="w-[70px]">Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {testParameters.map((param) => (
+                    <TableRow key={param.id}>
+                      <TableCell>
+                        <Input
+                          value={param.name}
+                          onChange={(e) =>
+                            updateTestParameter(
+                              param.id,
+                              "name",
+                              e.target.value,
+                            )
+                          }
+                          placeholder="e.g. Hemoglobin"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          value={param.value}
+                          onChange={(e) =>
+                            updateTestParameter(
+                              param.id,
+                              "value",
+                              e.target.value,
+                            )
+                          }
+                          placeholder="Result"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          value={param.unit}
+                          onChange={(e) =>
+                            updateTestParameter(
+                              param.id,
+                              "unit",
+                              e.target.value,
+                            )
+                          }
+                          placeholder="Unit"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          value={param.normalRange}
+                          onChange={(e) =>
+                            updateTestParameter(
+                              param.id,
+                              "normalRange",
+                              e.target.value,
+                            )
+                          }
+                          placeholder="Normal range"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          value={param.remarks}
+                          onChange={(e) =>
+                            updateTestParameter(
+                              param.id,
+                              "remarks",
+                              e.target.value,
+                            )
+                          }
+                          placeholder="Remarks"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          type="button"
+                          onClick={() => removeTestParameter(param.id)}
+                          variant="ghost"
+                          size="sm"
+                          className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
+                          disabled={testParameters.length === 1}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Submit Button */}
         <div className="mt-6 flex justify-end gap-4">

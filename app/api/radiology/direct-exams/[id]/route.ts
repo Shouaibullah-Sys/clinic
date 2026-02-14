@@ -73,6 +73,24 @@ export async function GET(
       );
     }
 
+    const fallbackBodyPart =
+      typeof radiologyExam.examName === "string" &&
+      radiologyExam.examName.includes(" - ")
+        ? radiologyExam.examName.split(" - ").slice(1).join(" - ").trim()
+        : undefined;
+
+    if (!radiologyExam.modality) {
+      radiologyExam.modality = {};
+    }
+
+    if (!radiologyExam.modality.type && radiologyExam.category) {
+      radiologyExam.modality.type = radiologyExam.category;
+    }
+
+    if (!radiologyExam.modality.bodyPart && fallbackBodyPart) {
+      radiologyExam.modality.bodyPart = fallbackBodyPart;
+    }
+
     return NextResponse.json({
       success: true,
       data: radiologyExam,

@@ -58,6 +58,7 @@ import { LabTestResultsDialog } from "@/components/doctor/LabTestResultsDialog";
 import { DischargeCardDialog } from "@/components/doctor/DischargeCardDialog";
 import { DischargeCardPrintButton } from "@/components/doctor/DischargeCardPrintButton";
 import { PatientVisitsOverview } from "@/components/doctor/PatientVisitsOverview";
+import { generateDoctorPrescriptionPDF } from "@/lib/doctor/prescription-pdf";
 
 interface Patient {
   _id: string;
@@ -82,35 +83,55 @@ interface Patient {
 interface MedicalRecord {
   _id: string;
   recordId: string;
-  date: string;
+  visitDate?: string;
+  date?: string;
   diagnosis: string;
   symptoms: string[];
   notes: string;
+  examinationNotes?: string;
+  treatmentPlan?: string;
+  patientInstructions?: string;
+  followUpDate?: string;
   doctor: {
     name: string;
     specialization: string;
   };
   vitals?: {
-    bloodPressure: string;
-    heartRate: number;
-    temperature: number;
-    weight: number;
-    height: number;
-    bmi: number;
+    bloodPressure?: string;
+    heartRate?: number;
+    temperature?: number;
+    weight?: number;
+    height?: number;
+    bmi?: number;
+  };
+  vitalSigns?: {
+    bloodPressure?: {
+      systolic?: number;
+      diastolic?: number;
+    };
+    heartRate?: number;
+    temperature?: number;
+    weight?: number;
+    height?: number;
+    bmi?: number;
   };
 }
 
 interface Prescription {
   _id: string;
   prescriptionId: string;
-  date: string;
+  prescribedDate?: string;
+  date?: string;
   medications: {
     name: string;
     dosage: string;
     frequency: string;
     duration: string;
+    quantity?: number;
     instructions?: string;
   }[];
+  diagnosis?: string;
+  instructions?: string;
   notes?: string;
   status: string;
 }
@@ -539,6 +560,162 @@ export default function DoctorPatientDetailPage() {
     return Boolean(test.results?.reportedAt || hasValues);
   };
 
+  const handlePrintPrescription = (prescription: Prescription) => {
+    if (!patient) return;
+    const prescriptionDate = prescription.prescribedDate || prescription.date;
+    generateDoctorPrescriptionPDF(
+      {
+        prescriptionId: prescription.prescriptionId,
+        date: prescriptionDate || new Date().toISOString(),
+        status: prescription.status,
+        notes: prescription.notes,
+        patient: {
+          name: patient.name,
+          patientId: patient.patientId,
+          gender: patient.gender,
+          dateOfBirth: patient.dateOfBirth,
+          phone: patient.phone,
+        },
+        medications: prescription.medications,
+        doctorName: user?.name,
+      },
+      "print",
+    );
+  };
+
+  const handleDownloadPrescription = (prescription: Prescription) => {
+    if (!patient) return;
+    const prescriptionDate = prescription.prescribedDate || prescription.date;
+    generateDoctorPrescriptionPDF(
+      {
+        prescriptionId: prescription.prescriptionId,
+        date: prescriptionDate || new Date().toISOString(),
+        status: prescription.status,
+        notes: prescription.notes,
+        patient: {
+          name: patient.name,
+          patientId: patient.patientId,
+          gender: patient.gender,
+          dateOfBirth: patient.dateOfBirth,
+          phone: patient.phone,
+        },
+        medications: prescription.medications,
+        doctorName: user?.name,
+      },
+      "download",
+    );
+  };
+
+  const handlePrintCompletePrescription = async () => {
+    if (!patient || prescriptions.length === 0) return;
+
+    const latestPrescription = [...prescriptions].sort((a, b) => {
+      const aTs = new Date(a.prescribedDate || a.date || 0).getTime();
+      const bTs = new Date(b.prescribedDate || b.date || 0).getTime();
+      return bTs - aTs;
+    })[0];
+
+    const latestMedicalRecord = [...medicalRecords].sort((a, b) => {
+      const aTs = new Date(a.visitDate || a.date || 0).getTime();
+      const bTs = new Date(b.visitDate || b.date || 0).getTime();
+      return bTs - aTs;
+    })[0];
+
+    const toCommaList = (items: Array<string | undefined>) =>
+      items
+        .map((item) => (item || "").trim())
+        .filter(Boolean)
+        .join(", ");
+
+    const vitalsLine = (() => {
+      if (!latestMedicalRecord) return "";
+
+      const bpObject = latestMedicalRecord.vitalSigns?.bloodPressure;
+      const bloodPressure =
+        latestMedicalRecord.vitals?.bloodPressure ||
+        (bpObject?.systolic && bpObject?.diastolic
+          ? `${bpObject.systolic}/${bpObject.diastolic}`
+          : "");
+
+      const parts = [
+        bloodPressure ? `BP ${bloodPressure}` : "",
+        latestMedicalRecord.vitalSigns?.heartRate
+          ? `HR ${latestMedicalRecord.vitalSigns.heartRate} bpm`
+          : "",
+        latestMedicalRecord.vitalSigns?.temperature
+          ? `Temp ${latestMedicalRecord.vitalSigns.temperature} C`
+          : "",
+      ].filter(Boolean);
+
+      return parts.join(", ");
+    })();
+
+    const laboratory = toCommaList(
+      labTests.map((test) =>
+        test.results?.reportedAt
+          ? `${test.testName} (reported)`
+          : `${test.testName} (${test.status})`,
+      ),
+    );
+
+    const radiology = toCommaList(
+      imagingStudies.map((study) => {
+        const resultText = study.impression || study.findings;
+        const base = `${study.serviceType.toUpperCase()} ${study.bodyPart} (${study.reportStatus})`;
+        return resultText ? `${base}: ${resultText}` : base;
+      }),
+    );
+
+    const additionalAdvice = toCommaList([
+      latestMedicalRecord?.patientInstructions,
+      latestMedicalRecord?.treatmentPlan,
+      latestPrescription.instructions,
+      latestPrescription.notes,
+    ]);
+
+    const { generatePrescriptionPDF } = await import(
+      "@/lib/doctor/Prescription_Generator"
+    );
+
+    await generatePrescriptionPDF(
+      {
+        patientName: patient.name,
+        patientGender: patient.gender || "N/A",
+        patientAge:
+          typeof age === "number" && !Number.isNaN(age) ? `${age}` : "N/A",
+        date:
+          latestPrescription.prescribedDate ||
+          latestPrescription.date ||
+          new Date().toISOString(),
+        doctorName: user?.name || latestMedicalRecord?.doctor?.name || "Doctor",
+        chiefComplaints: latestMedicalRecord?.symptoms?.join(", ") || "N/A",
+        investigations: toCommaList([
+          latestMedicalRecord?.examinationNotes,
+          vitalsLine,
+        ]) || "N/A",
+        diagnosis:
+          latestMedicalRecord?.diagnosis ||
+          latestPrescription.diagnosis ||
+          "N/A",
+        laboratory: laboratory || "N/A",
+        radiology: radiology || "N/A",
+        additionalAdvice: additionalAdvice || "N/A",
+        medicines: (latestPrescription.medications || []).map((med) => ({
+          medicine: med.name,
+          dosage: med.dosage,
+          frequency: med.frequency,
+          quantity:
+            med.quantity !== undefined
+              ? String(med.quantity)
+              : med.duration || "N/A",
+          instructions: med.instructions || "N/A",
+        })),
+      },
+      {},
+      "print",
+    );
+  };
+
   if (loading) {
     return (
       <div className="container mx-auto p-6">
@@ -603,7 +780,11 @@ export default function DoctorPatientDetailPage() {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <Button variant="outline" onClick={() => window.print()}>
+          <Button
+            variant="outline"
+            onClick={() => void handlePrintCompletePrescription()}
+            disabled={prescriptions.length === 0}
+          >
             <Printer className="h-4 w-4 mr-2" />
             Print
           </Button>
@@ -901,7 +1082,7 @@ export default function DoctorPatientDetailPage() {
                           <div className="space-y-2">
                             <div>
                               <p className="text-sm text-muted-foreground">
-                                {formatDate(record.date)} • Dr.{" "}
+                                {formatDate(record.visitDate || record.date || "")} • Dr.{" "}
                                 {record.doctor.name}
                               </p>
                             </div>
@@ -948,7 +1129,7 @@ export default function DoctorPatientDetailPage() {
                             </Button>
                           </div>
                         </div>
-                        {record.vitals && (
+                        {(record.vitalSigns || record.vitals) && (
                           <div className="mt-4 pt-4 border-t">
                             <h4 className="text-sm font-medium mb-2">
                               Vital Signs
@@ -959,7 +1140,11 @@ export default function DoctorPatientDetailPage() {
                                   Blood Pressure
                                 </p>
                                 <p className="font-medium">
-                                  {record.vitals.bloodPressure}
+                                  {record.vitals?.bloodPressure ||
+                                    (record.vitalSigns?.bloodPressure?.systolic &&
+                                    record.vitalSigns?.bloodPressure?.diastolic
+                                      ? `${record.vitalSigns.bloodPressure.systolic}/${record.vitalSigns.bloodPressure.diastolic}`
+                                      : "-")}
                                 </p>
                               </div>
                               <div className="text-center">
@@ -967,7 +1152,10 @@ export default function DoctorPatientDetailPage() {
                                   Heart Rate
                                 </p>
                                 <p className="font-medium">
-                                  {record.vitals.heartRate} bpm
+                                  {record.vitals?.heartRate ??
+                                    record.vitalSigns?.heartRate ??
+                                    "-"}{" "}
+                                  bpm
                                 </p>
                               </div>
                               <div className="text-center">
@@ -975,7 +1163,10 @@ export default function DoctorPatientDetailPage() {
                                   Temperature
                                 </p>
                                 <p className="font-medium">
-                                  {record.vitals.temperature}°C
+                                  {record.vitals?.temperature ??
+                                    record.vitalSigns?.temperature ??
+                                    "-"}
+                                  °C
                                 </p>
                               </div>
                               <div className="text-center">
@@ -983,7 +1174,10 @@ export default function DoctorPatientDetailPage() {
                                   Weight
                                 </p>
                                 <p className="font-medium">
-                                  {record.vitals.weight} kg
+                                  {record.vitals?.weight ??
+                                    record.vitalSigns?.weight ??
+                                    "-"}{" "}
+                                  kg
                                 </p>
                               </div>
                               <div className="text-center">
@@ -991,7 +1185,11 @@ export default function DoctorPatientDetailPage() {
                                   BMI
                                 </p>
                                 <p className="font-medium">
-                                  {record.vitals.bmi.toFixed(1)}
+                                  {(
+                                    record.vitals?.bmi ??
+                                    record.vitalSigns?.bmi ??
+                                    0
+                                  ).toFixed(1)}
                                 </p>
                               </div>
                             </div>
@@ -1053,60 +1251,85 @@ export default function DoctorPatientDetailPage() {
                   />
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {prescriptions.map((prescription) => (
-                    <Card key={prescription._id}>
-                      <CardContent className="pt-6">
-                        <div className="flex justify-between items-start mb-4">
-                          <div>
-                            <h3 className="font-semibold">
-                              {prescription.prescriptionId}
-                            </h3>
-                            <p className="text-sm text-muted-foreground">
-                              {formatDate(prescription.date)} •{" "}
-                              {getStatusBadge(prescription.status)}
-                            </p>
-                          </div>
-                          <div className="flex gap-2">
-                            <Button variant="outline" size="sm">
-                              <Download className="h-4 w-4" />
-                            </Button>
-                            <Button variant="outline" size="sm">
-                              <Printer className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </div>
-
-                        <div className="space-y-3">
-                          <h4 className="font-medium">Medications:</h4>
-                          {prescription.medications.map((med, index) => (
-                            <div
-                              key={index}
-                              className="pl-4 border-l-2 border-blue-200"
-                            >
-                              <div className="flex justify-between">
-                                <span className="font-medium">{med.name}</span>
-                                <Badge variant="outline">{med.dosage}</Badge>
-                              </div>
-                              <div className="text-sm text-muted-foreground mt-1">
-                                <p>Frequency: {med.frequency}</p>
-                                <p>Duration: {med.duration}</p>
-                                {med.instructions && (
-                                  <p>Instructions: {med.instructions}</p>
-                                )}
-                              </div>
+                <div className="rounded-md border overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Prescription ID</TableHead>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Medications</TableHead>
+                        <TableHead>Notes</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {prescriptions.map((prescription) => (
+                        <TableRow key={prescription._id}>
+                          <TableCell className="font-medium">
+                            {prescription.prescriptionId}
+                          </TableCell>
+                          <TableCell>
+                            {formatDate(
+                              prescription.prescribedDate ||
+                                prescription.date ||
+                                "",
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {getStatusBadge(prescription.status)}
+                          </TableCell>
+                          <TableCell>
+                            <div className="space-y-1 min-w-[260px]">
+                              {prescription.medications.map((med, index) => (
+                                <div key={index} className="text-sm">
+                                  <span className="font-medium">{med.name}</span>
+                                  <span className="text-muted-foreground">
+                                    {" "}
+                                    • {med.dosage} • {med.frequency} •{" "}
+                                    {med.duration}
+                                  </span>
+                                  {med.instructions && (
+                                    <span className="text-muted-foreground">
+                                      {" "}
+                                      • {med.instructions}
+                                    </span>
+                                  )}
+                                </div>
+                              ))}
                             </div>
-                          ))}
-                        </div>
-
-                        {prescription.notes && (
-                          <div className="mt-4 pt-4 border-t">
-                            <p className="text-sm">{prescription.notes}</p>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  ))}
+                          </TableCell>
+                          <TableCell className="max-w-[280px]">
+                            <p className="text-sm truncate">
+                              {prescription.notes || "-"}
+                            </p>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex justify-end gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() =>
+                                  handleDownloadPrescription(prescription)
+                                }
+                              >
+                                <Download className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() =>
+                                  handlePrintPrescription(prescription)
+                                }
+                              >
+                                <Printer className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
                 </div>
               )}
             </CardContent>

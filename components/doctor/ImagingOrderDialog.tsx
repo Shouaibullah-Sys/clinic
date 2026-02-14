@@ -27,9 +27,10 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Loader2, Plus, Scan, FileText } from "lucide-react";
+import { Loader2, Plus, Scan, FileText, Search, X } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useRadiologyTemplates } from "@/lib/hooks/use-services";
+import levenshtein from "fast-levenshtein";
 
 // Define validation schema with Zod
 const imagingSchema = z.object({
@@ -114,6 +115,47 @@ const CONTRAST_TYPES = [
   { value: "other", label: "Other" },
 ];
 
+const DEFAULT_SERVICE_TYPES = [
+  "x-ray",
+  "ct-scan",
+  "mri",
+  "ultrasound",
+  "mammography",
+  "fluoroscopy",
+  "pet-scan",
+  "bone-density",
+  "other",
+];
+
+const DEFAULT_BODY_PARTS = [
+  "Head",
+  "Neck",
+  "Chest",
+  "Abdomen",
+  "Pelvis",
+  "Spine",
+  "Extremities",
+  "Brain",
+  "Knee",
+  "Shoulder",
+  "Hip",
+  "Thyroid",
+  "Obstetric",
+  "Other",
+];
+
+const DEFAULT_VIEWS = [
+  "PA View",
+  "AP View",
+  "Lateral View",
+  "Oblique View",
+  "AP & Lateral",
+  "Plain",
+  "Contrast",
+  "Complete",
+  "Other",
+];
+
 export function ImagingOrderDialog({
   patientId,
   patientName,
@@ -124,6 +166,14 @@ export function ImagingOrderDialog({
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+  const [templateQuery, setTemplateQuery] = useState("");
+  const [showTemplateResults, setShowTemplateResults] = useState(false);
+  const [serviceTypeQuery, setServiceTypeQuery] = useState("ct-scan");
+  const [showServiceTypeResults, setShowServiceTypeResults] = useState(false);
+  const [bodyPartQuery, setBodyPartQuery] = useState("");
+  const [showBodyPartResults, setShowBodyPartResults] = useState(false);
+  const [viewQuery, setViewQuery] = useState("");
+  const [showViewResults, setShowViewResults] = useState(false);
   const { accessToken } = useAuthStore();
 
   // Fetch radiology templates
@@ -138,17 +188,6 @@ export function ImagingOrderDialog({
     if (!templatesData?.data) return [];
     return templatesData.data.filter((t: RadiologyTemplate) => t.active);
   }, [templatesData]);
-
-  const templatesByServiceType = useMemo(() => {
-    const grouped: Record<string, RadiologyTemplate[]> = {};
-    templates.forEach((template: RadiologyTemplate) => {
-      if (!grouped[template.serviceType]) {
-        grouped[template.serviceType] = [];
-      }
-      grouped[template.serviceType].push(template);
-    });
-    return grouped;
-  }, [templates]);
 
   // Get unique service types from templates
   const serviceTypesFromTemplates = useMemo(() => {
@@ -176,6 +215,94 @@ export function ImagingOrderDialog({
     });
     return Array.from(views);
   }, [templates]);
+  const serviceTypeOptions = useMemo(
+    () =>
+      (serviceTypesFromTemplates.length > 0
+        ? serviceTypesFromTemplates
+        : DEFAULT_SERVICE_TYPES) as string[],
+    [serviceTypesFromTemplates],
+  );
+
+  const bodyPartOptions = useMemo(
+    () =>
+      (bodyPartsFromTemplates.length > 0
+        ? bodyPartsFromTemplates.filter(Boolean)
+        : DEFAULT_BODY_PARTS) as string[],
+    [bodyPartsFromTemplates],
+  );
+
+  const viewOptions = useMemo(
+    () =>
+      (viewsFromTemplates.length > 0
+        ? viewsFromTemplates
+        : DEFAULT_VIEWS) as string[],
+    [viewsFromTemplates],
+  );
+
+  const scoreMatch = (query: string, candidate: string) => {
+    const q = query.trim().toLowerCase();
+    const c = candidate.trim().toLowerCase();
+    if (!q) return 1;
+    if (c === q) return 1;
+    if (c.startsWith(q)) return 0.95;
+    if (c.includes(q)) return 0.85;
+    const distance = levenshtein.get(q, c);
+    const similarity = 1 - distance / Math.max(q.length, c.length);
+    return similarity * 0.75;
+  };
+
+  const rankedTemplateResults = useMemo(() => {
+    const q = templateQuery.trim();
+    const source = templates.map((template) => {
+      const searchable = [
+        template.examName,
+        template.templateCode,
+        template.serviceType,
+        template.bodyPart || "",
+        ...(template.views || []),
+      ].join(" ");
+      return { template, score: scoreMatch(q, searchable) };
+    });
+    return source
+      .filter((entry) => (!q ? true : entry.score >= 0.35))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 12)
+      .map((entry) => entry.template);
+  }, [templates, templateQuery]);
+
+  const rankedServiceTypeResults = useMemo(() => {
+    return serviceTypeOptions
+      .map((option) => ({ option, score: scoreMatch(serviceTypeQuery, option) }))
+      .filter((entry) =>
+        serviceTypeQuery.trim() ? entry.score >= 0.35 : true,
+      )
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 10)
+      .map((entry) => entry.option);
+  }, [serviceTypeOptions, serviceTypeQuery]);
+
+  const rankedBodyPartResults = useMemo(() => {
+    return bodyPartOptions
+      .map((option) => ({ option, score: scoreMatch(bodyPartQuery, option) }))
+      .filter((entry) => (bodyPartQuery.trim() ? entry.score >= 0.35 : true))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 10)
+      .map((entry) => entry.option);
+  }, [bodyPartOptions, bodyPartQuery]);
+
+  const rankedViewResults = useMemo(() => {
+    return viewOptions
+      .map((option) => ({ option, score: scoreMatch(viewQuery, option) }))
+      .filter((entry) => (viewQuery.trim() ? entry.score >= 0.35 : true))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 10)
+      .map((entry) => entry.option);
+  }, [viewOptions, viewQuery]);
+
+  const selectedTemplate = useMemo(
+    () => templates.find((t) => t._id === selectedTemplateId),
+    [templates, selectedTemplateId],
+  );
 
   const {
     register,
@@ -226,6 +353,11 @@ export function ImagingOrderDialog({
       );
       setValue("duration", template.duration);
       setValue("basePrice", template.basePrice);
+      setTemplateQuery(`${template.examName} (${template.templateCode})`);
+      setServiceTypeQuery(template.serviceType);
+      setBodyPartQuery(template.bodyPart || "");
+      setViewQuery(template.views?.[0] || "");
+      setShowTemplateResults(false);
 
       toast.info("Template Selected", {
         description: `${template.examName} has been loaded. You can modify values as needed.`,
@@ -241,6 +373,7 @@ export function ImagingOrderDialog({
     setValue("preparationInstructions", "");
     setValue("duration", 30);
     setValue("basePrice", 0);
+    setTemplateQuery("");
     toast.info("Custom Mode", {
       description: "Template cleared. You can create a custom imaging order.",
     });
@@ -315,6 +448,14 @@ export function ImagingOrderDialog({
     if (!isOpen) {
       reset();
       setSelectedTemplateId("");
+      setTemplateQuery("");
+      setServiceTypeQuery("ct-scan");
+      setBodyPartQuery("");
+      setViewQuery("");
+      setShowTemplateResults(false);
+      setShowServiceTypeResults(false);
+      setShowBodyPartResults(false);
+      setShowViewResults(false);
     }
     setOpen(isOpen);
   };
@@ -357,67 +498,89 @@ export function ImagingOrderDialog({
               <FileText className="h-4 w-4" />
               Select Template (Optional)
             </Label>
-            <div className="flex gap-2">
-              <Select
-                value={selectedTemplateId}
-                onValueChange={handleSelectTemplate}
-                disabled={templatesLoading}
-              >
-                <SelectTrigger className="flex-1">
-                  <SelectValue
-                    placeholder={
-                      templatesLoading
-                        ? "Loading templates..."
-                        : "Choose a template"
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {templatesLoading ? (
-                    <SelectItem value="loading" disabled>
-                      Loading templates...
-                    </SelectItem>
-                  ) : templates.length === 0 ? (
-                    <SelectItem value="none" disabled>
-                      No templates available
-                    </SelectItem>
-                  ) : (
-                    serviceTypesFromTemplates.map((serviceType) => (
-                      <div key={serviceType}>
-                        <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground uppercase">
-                          {serviceType.replace("-", " ")}
+            <div className="space-y-2">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  value={templateQuery}
+                  onChange={(e) => {
+                    setTemplateQuery(e.target.value);
+                    setShowTemplateResults(true);
+                  }}
+                  onFocus={() => setShowTemplateResults(true)}
+                  onBlur={() => {
+                    setTimeout(() => setShowTemplateResults(false), 150);
+                  }}
+                  placeholder={
+                    templatesLoading
+                      ? "Loading templates..."
+                      : "Search template by exam/code/type..."
+                  }
+                  className="pl-10 pr-10"
+                  disabled={templatesLoading}
+                />
+                {templateQuery && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setTemplateQuery("");
+                      if (selectedTemplateId) handleClearTemplate();
+                    }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 h-7 w-7 p-0"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+
+              {showTemplateResults && !templatesLoading && (
+                <div className="border rounded-md max-h-52 overflow-y-auto bg-background">
+                  {rankedTemplateResults.length > 0 ? (
+                    rankedTemplateResults.map((template) => (
+                      <button
+                        key={template._id}
+                        type="button"
+                        className="w-full text-left px-3 py-2 border-b last:border-b-0 hover:bg-muted/60"
+                        onClick={() => handleSelectTemplate(template._id)}
+                      >
+                        <div className="font-medium">{template.examName}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {template.templateCode} • {template.serviceType.toUpperCase()}
+                          {template.bodyPart ? ` • ${template.bodyPart}` : ""}
                         </div>
-                        {templatesByServiceType[serviceType]?.map(
-                          (template: RadiologyTemplate) => (
-                            <SelectItem key={template._id} value={template._id}>
-                              <div className="flex flex-col">
-                                <span>{template.examName}</span>
-                                {template.bodyPart && (
-                                  <span className="text-xs text-muted-foreground">
-                                    {template.bodyPart} - {template.views?.[0]}
-                                  </span>
-                                )}
-                              </div>
-                            </SelectItem>
-                          ),
-                        )}
-                      </div>
+                      </button>
                     ))
+                  ) : (
+                    <p className="px-3 py-4 text-sm text-muted-foreground">
+                      No templates found
+                    </p>
                   )}
-                </SelectContent>
-              </Select>
-              {selectedTemplateId && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleClearTemplate}
-                >
-                  Clear
-                </Button>
+                </div>
+              )}
+
+              {selectedTemplateId && selectedTemplate && (
+                <div className="flex items-center justify-between rounded-md border px-3 py-2 bg-background">
+                  <p className="text-sm">
+                    Selected:{" "}
+                    <span className="font-medium">
+                      {selectedTemplate.examName}
+                    </span>
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleClearTemplate}
+                  >
+                    Clear
+                  </Button>
+                </div>
               )}
             </div>
             <p className="text-xs text-muted-foreground">
-              Select a template to auto-populate fields, or create a custom
+              Search and pick a template to auto-populate fields, or create a custom
               order
             </p>
           </div>
@@ -443,41 +606,55 @@ export function ImagingOrderDialog({
                 <Label htmlFor="serviceType" className="text-sm font-medium">
                   Service Type *
                 </Label>
-                <Select
-                  onValueChange={(value: ImagingFormValues["serviceType"]) =>
-                    setValue("serviceType", value)
-                  }
-                  value={watch("serviceType")}
-                >
-                  <SelectTrigger
-                    className={errors.serviceType ? "border-red-500" : ""}
-                  >
-                    <SelectValue placeholder="Select service type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {serviceTypesFromTemplates.length > 0 ? (
-                      serviceTypesFromTemplates.map((type) => (
-                        <SelectItem key={type} value={type}>
-                          {type.replace("-", " ").toUpperCase()}
-                        </SelectItem>
-                      ))
-                    ) : (
-                      <>
-                        <SelectItem value="x-ray">X-Ray</SelectItem>
-                        <SelectItem value="ct-scan">CT Scan</SelectItem>
-                        <SelectItem value="mri">MRI</SelectItem>
-                        <SelectItem value="ultrasound">Ultrasound</SelectItem>
-                        <SelectItem value="mammography">Mammography</SelectItem>
-                        <SelectItem value="fluoroscopy">Fluoroscopy</SelectItem>
-                        <SelectItem value="pet-scan">PET Scan</SelectItem>
-                        <SelectItem value="bone-density">
-                          Bone Density
-                        </SelectItem>
-                        <SelectItem value="other">Other</SelectItem>
-                      </>
-                    )}
-                  </SelectContent>
-                </Select>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    value={serviceTypeQuery}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setServiceTypeQuery(value);
+                      setShowServiceTypeResults(true);
+                      const exact = serviceTypeOptions.find(
+                        (option) => option.toLowerCase() === value.toLowerCase(),
+                      );
+                      if (exact) {
+                        setValue(
+                          "serviceType",
+                          exact as ImagingFormValues["serviceType"],
+                          { shouldValidate: true },
+                        );
+                      }
+                    }}
+                    onFocus={() => setShowServiceTypeResults(true)}
+                    onBlur={() => {
+                      setTimeout(() => setShowServiceTypeResults(false), 150);
+                    }}
+                    placeholder="Search service type..."
+                    className={`pl-10 ${errors.serviceType ? "border-red-500" : ""}`}
+                  />
+                </div>
+                {showServiceTypeResults && (
+                  <div className="border rounded-md max-h-44 overflow-y-auto bg-background">
+                    {rankedServiceTypeResults.map((type) => (
+                      <button
+                        key={type}
+                        type="button"
+                        className="w-full text-left px-3 py-2 border-b last:border-b-0 hover:bg-muted/60"
+                        onClick={() => {
+                          setValue(
+                            "serviceType",
+                            type as ImagingFormValues["serviceType"],
+                            { shouldValidate: true },
+                          );
+                          setServiceTypeQuery(type);
+                          setShowServiceTypeResults(false);
+                        }}
+                      >
+                        {type.replace("-", " ").toUpperCase()}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {errors.serviceType && (
                   <p className="text-xs text-red-500">
                     {errors.serviceType.message}
@@ -490,42 +667,42 @@ export function ImagingOrderDialog({
                 <Label htmlFor="bodyPart" className="text-sm font-medium">
                   Body Part *
                 </Label>
-                <Select
-                  onValueChange={(value) => setValue("bodyPart", value)}
-                  value={watch("bodyPart")}
-                >
-                  <SelectTrigger
-                    className={errors.bodyPart ? "border-red-500" : ""}
-                  >
-                    <SelectValue placeholder="Select body part" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {bodyPartsFromTemplates.length > 0 ? (
-                      bodyPartsFromTemplates.filter(Boolean).map((part) => (
-                        <SelectItem key={part} value={part}>
-                          {part}
-                        </SelectItem>
-                      ))
-                    ) : (
-                      <>
-                        <SelectItem value="Head">Head</SelectItem>
-                        <SelectItem value="Neck">Neck</SelectItem>
-                        <SelectItem value="Chest">Chest</SelectItem>
-                        <SelectItem value="Abdomen">Abdomen</SelectItem>
-                        <SelectItem value="Pelvis">Pelvis</SelectItem>
-                        <SelectItem value="Spine">Spine</SelectItem>
-                        <SelectItem value="Extremities">Extremities</SelectItem>
-                        <SelectItem value="Brain">Brain</SelectItem>
-                        <SelectItem value="Knee">Knee</SelectItem>
-                        <SelectItem value="Shoulder">Shoulder</SelectItem>
-                        <SelectItem value="Hip">Hip</SelectItem>
-                        <SelectItem value="Thyroid">Thyroid</SelectItem>
-                        <SelectItem value="Obstetric">Obstetric</SelectItem>
-                        <SelectItem value="Other">Other</SelectItem>
-                      </>
-                    )}
-                  </SelectContent>
-                </Select>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    value={bodyPartQuery}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setBodyPartQuery(value);
+                      setValue("bodyPart", value, { shouldValidate: true });
+                      setShowBodyPartResults(true);
+                    }}
+                    onFocus={() => setShowBodyPartResults(true)}
+                    onBlur={() => {
+                      setTimeout(() => setShowBodyPartResults(false), 150);
+                    }}
+                    placeholder="Search body part..."
+                    className={`pl-10 ${errors.bodyPart ? "border-red-500" : ""}`}
+                  />
+                </div>
+                {showBodyPartResults && (
+                  <div className="border rounded-md max-h-44 overflow-y-auto bg-background">
+                    {rankedBodyPartResults.map((part) => (
+                      <button
+                        key={part}
+                        type="button"
+                        className="w-full text-left px-3 py-2 border-b last:border-b-0 hover:bg-muted/60"
+                        onClick={() => {
+                          setValue("bodyPart", part, { shouldValidate: true });
+                          setBodyPartQuery(part);
+                          setShowBodyPartResults(false);
+                        }}
+                      >
+                        {part}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {errors.bodyPart && (
                   <p className="text-xs text-red-500">
                     {errors.bodyPart.message}
@@ -538,43 +715,42 @@ export function ImagingOrderDialog({
                 <Label htmlFor="view" className="text-sm font-medium">
                   View *
                 </Label>
-                <Select
-                  onValueChange={(value) => setValue("view", value)}
-                  value={watch("view")}
-                >
-                  <SelectTrigger
-                    className={errors.view ? "border-red-500" : ""}
-                  >
-                    <SelectValue placeholder="Select view" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {viewsFromTemplates.length > 0 ? (
-                      viewsFromTemplates.map((view) => (
-                        <SelectItem key={view} value={view}>
-                          {view}
-                        </SelectItem>
-                      ))
-                    ) : (
-                      <>
-                        <SelectItem value="PA View">PA View</SelectItem>
-                        <SelectItem value="AP View">AP View</SelectItem>
-                        <SelectItem value="Lateral View">
-                          Lateral View
-                        </SelectItem>
-                        <SelectItem value="Oblique View">
-                          Oblique View
-                        </SelectItem>
-                        <SelectItem value="AP & Lateral">
-                          AP & Lateral
-                        </SelectItem>
-                        <SelectItem value="Plain">Plain</SelectItem>
-                        <SelectItem value="Contrast">Contrast</SelectItem>
-                        <SelectItem value="Complete">Complete</SelectItem>
-                        <SelectItem value="Other">Other</SelectItem>
-                      </>
-                    )}
-                  </SelectContent>
-                </Select>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    value={viewQuery}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setViewQuery(value);
+                      setValue("view", value, { shouldValidate: true });
+                      setShowViewResults(true);
+                    }}
+                    onFocus={() => setShowViewResults(true)}
+                    onBlur={() => {
+                      setTimeout(() => setShowViewResults(false), 150);
+                    }}
+                    placeholder="Search view..."
+                    className={`pl-10 ${errors.view ? "border-red-500" : ""}`}
+                  />
+                </div>
+                {showViewResults && (
+                  <div className="border rounded-md max-h-44 overflow-y-auto bg-background">
+                    {rankedViewResults.map((view) => (
+                      <button
+                        key={view}
+                        type="button"
+                        className="w-full text-left px-3 py-2 border-b last:border-b-0 hover:bg-muted/60"
+                        onClick={() => {
+                          setValue("view", view, { shouldValidate: true });
+                          setViewQuery(view);
+                          setShowViewResults(false);
+                        }}
+                      >
+                        {view}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {errors.view && (
                   <p className="text-xs text-red-500">{errors.view.message}</p>
                 )}

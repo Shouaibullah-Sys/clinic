@@ -15,7 +15,7 @@ export async function GET(
 
     if (
       !payload ||
-      !(payload.role === "pharmacist" || payload.role === "admin")
+      !((payload.role === "pharmacist" || payload.role === "pharmacy_head") || payload.role === "admin")
     ) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

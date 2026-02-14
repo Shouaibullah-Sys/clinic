@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
 
   if (
     !payload ||
-    !(payload.role === "pharmacist" || payload.role === "admin")
+    !((payload.role === "pharmacist" || payload.role === "pharmacy_head") || payload.role === "admin")
   ) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -101,7 +101,7 @@ export async function POST(req: NextRequest) {
 
   if (
     !payload ||
-    !(payload.role === "pharmacist" || payload.role === "admin")
+    !((payload.role === "pharmacist" || payload.role === "pharmacy_head") || payload.role === "admin")
   ) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

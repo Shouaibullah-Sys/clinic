@@ -3,7 +3,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
 // ADD "pharmacy" to the UserRole type
-export type UserRole = "admin" | "staff" | "doctor" | "nurse" | "receptionist" | "pharmacist" | "lab_technician" | "radiologist" | "admission" | "pharmacy"; // Added "pharmacy"
+export type UserRole = "admin" | "staff" | "doctor" | "nurse" | "receptionist" | "pharmacist" | "pharmacy_head" | "lab_technician" | "radiologist" | "admission" | "pharmacy"; // Added "pharmacy"
 
 export interface User {
   _id: string;

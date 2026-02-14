@@ -3,6 +3,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
 import { RadiologyService } from "@/lib/models/RadiologyService";
+import "@/lib/models/Patient";
+import "@/lib/models/User";
 import { authenticateRequest, hasRequiredRole } from "@/lib/auth";
 import mongoose from "mongoose";
 

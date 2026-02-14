@@ -32,6 +32,13 @@ export interface IRadiologyTemplate extends mongoose.Document {
     normalFindings?: string;
     unit?: string;
   }>;
+  clinicalIndicationTemplate?: string;
+  techniqueTemplate?: string;
+  comparisonTemplate?: string;
+  findingsTemplate?: string;
+  impressionTemplate?: string;
+  recommendationTemplate?: string;
+  criticalFindingsChecklist?: string[];
   createdBy: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -136,6 +143,36 @@ const radiologyTemplateSchema = new Schema<IRadiologyTemplate>(
           type: String,
           trim: true,
         },
+      },
+    ],
+    clinicalIndicationTemplate: {
+      type: String,
+      trim: true,
+    },
+    techniqueTemplate: {
+      type: String,
+      trim: true,
+    },
+    comparisonTemplate: {
+      type: String,
+      trim: true,
+    },
+    findingsTemplate: {
+      type: String,
+      trim: true,
+    },
+    impressionTemplate: {
+      type: String,
+      trim: true,
+    },
+    recommendationTemplate: {
+      type: String,
+      trim: true,
+    },
+    criticalFindingsChecklist: [
+      {
+        type: String,
+        trim: true,
       },
     ],
     createdBy: {

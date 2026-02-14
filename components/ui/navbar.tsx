@@ -86,7 +86,9 @@ export default function Navbar({
                     ? "Nurse"
                     : user?.role === "receptionist"
                       ? "Receptionist"
-                      : user?.role === "pharmacist" || user?.role === "pharmacy"
+                      : user?.role === "pharmacist" ||
+                          user?.role === "pharmacy_head" ||
+                          user?.role === "pharmacy"
                         ? "Pharmacy Staff"
                         : user?.role === "lab_technician"
                           ? "Laboratory Staff"

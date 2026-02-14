@@ -13,6 +13,7 @@ export interface IUser extends mongoose.Document {
     | "nurse"
     | "receptionist"
     | "pharmacist"
+    | "pharmacy_head"
     | "lab_technician"
     | "radiologist"
     | "admission";
@@ -72,6 +73,7 @@ const userSchema = new Schema<IUser>(
         "nurse",
         "receptionist",
         "pharmacist",
+        "pharmacy_head",
         "lab_technician",
         "radiologist",
         "admission",
@@ -383,5 +385,15 @@ userSchema.methods.removeRefreshToken = function (token: string) {
   }
   return this.save();
 };
+
+// In development, Next.js hot reload can keep an older compiled model in memory.
+// Ensure new enum values (like "pharmacy_head") are picked up without a manual restart.
+if (models.User && process.env.NODE_ENV === "development") {
+  const rolePath = models.User.schema.path("role") as any;
+  const enumValues: string[] = rolePath?.enumValues || [];
+  if (!enumValues.includes("pharmacy_head")) {
+    rolePath.enumValues = [...enumValues, "pharmacy_head"];
+  }
+}
 
 export const User = models.User || model<IUser>("User", userSchema);

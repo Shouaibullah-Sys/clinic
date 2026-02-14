@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Only receptionists, pharmacists, and admin can view pending payments
-    const allowedRoles = ["receptionist", "pharmacist", "admin"];
+    const allowedRoles = ["receptionist", "pharmacist", "pharmacy_head", "admin"];
     if (!auth.userRole || !allowedRoles.includes(auth.userRole)) {
       return NextResponse.json(
         {
@@ -37,12 +37,23 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "20");
     const search = searchParams.get("search") || "";
+    const paymentStatus = searchParams.get("paymentStatus") || "pending";
+    const status = searchParams.get("status") || "pending";
 
     // Build query
-    const query: any = {
-      paymentStatus: "pending",
-      status: "pending",
+    const query: Record<string, unknown> = {
+      status,
     };
+
+    if (status === "all") {
+      delete query.status;
+    }
+
+    if (paymentStatus === "unpaid") {
+      query.paymentStatus = { $in: ["pending", "partial"] };
+    } else if (paymentStatus !== "all") {
+      query.paymentStatus = paymentStatus;
+    }
 
     // Add search filter if provided
     if (search) {
@@ -81,12 +92,14 @@ export async function GET(request: NextRequest) {
         pages,
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage =
+      error instanceof Error ? error.message : "Failed to fetch pending payments";
     console.error("Error fetching pending pharmacy payments:", error);
     return NextResponse.json(
       {
         success: false,
-        error: error.message || "Failed to fetch pending payments",
+        error: errorMessage,
       },
       { status: 500 },
     );

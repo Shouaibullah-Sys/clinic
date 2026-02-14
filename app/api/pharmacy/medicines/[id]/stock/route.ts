@@ -17,7 +17,7 @@ export async function GET(
     if (
       !payload ||
       !(
-        payload.role === "pharmacist" ||
+        (payload.role === "pharmacist" || payload.role === "pharmacy_head") ||
         payload.role === "admin" ||
         payload.role === "doctor"
       )

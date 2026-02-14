@@ -52,19 +52,9 @@ const navLinks = [
     icon: DollarSign,
   },
   {
-    href: "/reception/lab-test-payments",
-    label: "Lab Test Payments",
-    icon: Users,
-  },
-  {
-    href: "/reception/pharmacy-payments",
-    label: "Pharmacy Payments",
-    icon: Pill,
-  },
-  {
-    href: "/reception/radiology-exam-payments",
-    label: "Radiology Payments",
-    icon: Users,
+    href: "/reception/payments",
+    label: "Payments",
+    icon: DollarSign,
   },
   { href: "/reception/expenses", label: "Expenses", icon: Receipt },
   { href: "/reception/cash", label: "Cash at Hand", icon: DollarSign },

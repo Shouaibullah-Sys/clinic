@@ -410,10 +410,15 @@ export default function DirectExamDetailPage() {
         });
       };
 
+      const fallbackBodyPart =
+        exam.examName?.includes(" - ")
+          ? exam.examName.split(" - ").slice(1).join(" - ").trim()
+          : undefined;
+
       const examDetails = [
         ["Ordered Date:", formatDate(exam.createdAtDirect)],
-        ["Modality:", exam.modality?.type || "N/A"],
-        ["Body Part:", exam.modality?.bodyPart || "N/A"],
+        ["Modality:", exam.modality?.type || exam.category || "N/A"],
+        ["Body Part:", exam.modality?.bodyPart || fallbackBodyPart || "N/A"],
         ["View:", exam.modality?.view || "N/A"],
         ["Exam Status:", exam.examStatus?.toUpperCase() || "N/A"],
         ["Priority:", exam.priority?.toUpperCase() || "N/A"],
@@ -433,12 +438,30 @@ export default function DirectExamDetailPage() {
 
       yPos = (doc as any).lastAutoTable.finalY + 4;
 
+      const findingsForReport =
+        exam.results?.findings && exam.results.findings.length > 0
+          ? exam.results.findings.map((f) => ({
+              name: f.name || "-",
+              value:
+                f.value !== undefined && f.value !== null
+                  ? String(f.value)
+                  : "-",
+              unit: f.unit || "-",
+              remarks: f.remarks || f.normalRange || "-",
+            }))
+          : (exam.modality?.findings || []).map((f) => ({
+              name: f.name || "-",
+              value: f.value || "-",
+              unit: f.unit || "-",
+              remarks: f.remarks || "-",
+            }));
+
       // Findings
-      if (exam.modality?.findings && exam.modality.findings.length > 0) {
+      if (findingsForReport.length > 0) {
         yPos = addText("FINDINGS", margin, yPos, 11, "bold");
         yPos += 2;
 
-        const findingsTableData = exam.modality.findings.map((f) => [
+        const findingsTableData = findingsForReport.map((f) => [
           f.name || "-",
           f.value || "-",
           f.unit || "-",

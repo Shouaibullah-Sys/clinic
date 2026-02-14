@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -23,9 +23,18 @@ import { useAuthStore } from "@/store/useAuthStore";
 
 // Define validation schema with Zod
 const resultsSchema = z.object({
+  clinicalIndication: z.string().optional(),
+  technique: z.string().optional(),
+  comparison: z.string().optional(),
   findings: z.string().min(1, "Findings are required"),
   impression: z.string().min(1, "Impression is required"),
   recommendations: z.string().optional(),
+  criticalFindings: z.boolean().default(false),
+  criticalFindingsDetails: z.string().optional(),
+  criticalCommunicated: z.boolean().default(false),
+  communicatedTo: z.string().optional(),
+  communicationMethod: z.string().optional(),
+  communicationNotes: z.string().optional(),
 });
 
 type ResultsFormValues = z.infer<typeof resultsSchema>;
@@ -51,6 +60,25 @@ interface RadiologyRequest {
   findings?: string;
   impression?: string;
   recommendations?: string;
+  report?: {
+    clinicalIndication?: string;
+    technique?: string;
+    comparison?: string;
+    findings?: string;
+    impression?: string;
+    recommendations?: string;
+    criticalFindings?: boolean;
+    criticalFindingsDetails?: string;
+    criticalCommunication?: {
+      communicated?: boolean;
+      communicatedTo?: string;
+      communicatedAt?: string;
+      method?: string;
+      notes?: string;
+    };
+    status?: "draft" | "final" | "amended";
+    version?: number;
+  };
 }
 
 interface SubmitResultsDialogProps {
@@ -80,8 +108,36 @@ export function SubmitResultsDialog({
       findings: request.findings || "",
       impression: request.impression || "",
       recommendations: request.recommendations || "",
+      clinicalIndication: request.report?.clinicalIndication || "",
+      technique: request.report?.technique || "",
+      comparison: request.report?.comparison || "",
+      criticalFindings: request.report?.criticalFindings || false,
+      criticalFindingsDetails: request.report?.criticalFindingsDetails || "",
+      criticalCommunicated:
+        request.report?.criticalCommunication?.communicated || false,
+      communicatedTo: request.report?.criticalCommunication?.communicatedTo || "",
+      communicationMethod: request.report?.criticalCommunication?.method || "",
+      communicationNotes: request.report?.criticalCommunication?.notes || "",
     },
   });
+
+  useEffect(() => {
+    reset({
+      findings: request.findings || "",
+      impression: request.impression || "",
+      recommendations: request.recommendations || "",
+      clinicalIndication: request.report?.clinicalIndication || "",
+      technique: request.report?.technique || "",
+      comparison: request.report?.comparison || "",
+      criticalFindings: request.report?.criticalFindings || false,
+      criticalFindingsDetails: request.report?.criticalFindingsDetails || "",
+      criticalCommunicated:
+        request.report?.criticalCommunication?.communicated || false,
+      communicatedTo: request.report?.criticalCommunication?.communicatedTo || "",
+      communicationMethod: request.report?.criticalCommunication?.method || "",
+      communicationNotes: request.report?.criticalCommunication?.notes || "",
+    });
+  }, [request, reset]);
 
   const onSubmit = async (data: ResultsFormValues) => {
     try {
@@ -93,6 +149,19 @@ export function SubmitResultsDialog({
         recommendations: data.recommendations,
         status: "completed",
         reportStatus: "completed",
+        reportAction: "finalize",
+        clinicalIndication: data.clinicalIndication,
+        technique: data.technique,
+        comparison: data.comparison,
+        criticalFindings: data.criticalFindings,
+        criticalFindingsDetails: data.criticalFindingsDetails,
+        criticalCommunication: {
+          communicated: data.criticalCommunicated,
+          communicatedTo: data.communicatedTo,
+          communicatedAt: data.criticalCommunicated ? new Date().toISOString() : undefined,
+          method: data.communicationMethod,
+          notes: data.communicationNotes,
+        },
       };
 
       const response = await fetch(`/api/radiologist/requests/${request._id}/results`, {
@@ -114,10 +183,13 @@ export function SubmitResultsDialog({
         onResultsSubmitted();
         reset();
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error submitting results:", error);
       toast.error("Failed to Submit Results", {
-        description: error.message || "An error occurred while submitting results",
+        description:
+          error instanceof Error
+            ? error.message
+            : "An error occurred while submitting results",
       });
     } finally {
       setLoading(false);
@@ -179,6 +251,45 @@ export function SubmitResultsDialog({
 
           {/* Findings */}
           <div className="space-y-2">
+            <Label htmlFor="clinicalIndication" className="text-sm font-medium">
+              Clinical Indication
+            </Label>
+            <Textarea
+              id="clinicalIndication"
+              {...register("clinicalIndication")}
+              placeholder="Reason for exam / clinical question..."
+              rows={2}
+              className="resize-none"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="technique" className="text-sm font-medium">
+              Technique
+            </Label>
+            <Textarea
+              id="technique"
+              {...register("technique")}
+              placeholder="Protocol and technique details..."
+              rows={2}
+              className="resize-none"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="comparison" className="text-sm font-medium">
+              Comparison
+            </Label>
+            <Textarea
+              id="comparison"
+              {...register("comparison")}
+              placeholder="Comparison with prior imaging..."
+              rows={2}
+              className="resize-none"
+            />
+          </div>
+
+          <div className="space-y-2">
             <Label htmlFor="findings" className="text-sm font-medium">
               Findings *
             </Label>
@@ -232,6 +343,60 @@ export function SubmitResultsDialog({
             <p className="text-xs text-muted-foreground">
               Suggest any follow-up actions, additional tests, or treatment recommendations.
             </p>
+          </div>
+
+          <div className="space-y-3 rounded-lg border p-4">
+            <Label className="text-sm font-medium">Critical Findings Communication</Label>
+            <div className="flex items-center gap-2">
+              <input
+                id="criticalFindings"
+                type="checkbox"
+                {...register("criticalFindings")}
+              />
+              <Label htmlFor="criticalFindings" className="text-sm">
+                Critical / urgent finding present
+              </Label>
+            </div>
+            <Textarea
+              id="criticalFindingsDetails"
+              {...register("criticalFindingsDetails")}
+              placeholder="Critical finding details..."
+              rows={2}
+              className="resize-none"
+            />
+            <div className="flex items-center gap-2">
+              <input
+                id="criticalCommunicated"
+                type="checkbox"
+                {...register("criticalCommunicated")}
+              />
+              <Label htmlFor="criticalCommunicated" className="text-sm">
+                Communicated to treating team
+              </Label>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <Textarea
+                id="communicatedTo"
+                {...register("communicatedTo")}
+                placeholder="Communicated to (name/role)"
+                rows={2}
+                className="resize-none"
+              />
+              <Textarea
+                id="communicationMethod"
+                {...register("communicationMethod")}
+                placeholder="Communication method (phone/face-to-face)"
+                rows={2}
+                className="resize-none"
+              />
+            </div>
+            <Textarea
+              id="communicationNotes"
+              {...register("communicationNotes")}
+              placeholder="Communication notes..."
+              rows={2}
+              className="resize-none"
+            />
           </div>
 
           <DialogFooter className="pt-4 border-t">

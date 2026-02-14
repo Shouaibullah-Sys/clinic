@@ -1,3 +1,5 @@
+// components/kibo-ui/editor/index.tsx
+
 "use client";
 
 import type { Editor, Range } from "@tiptap/core";
@@ -379,7 +381,7 @@ const Slash = Node.create<SlashOptions>({
     mergedOptions.HTMLAttributes = mergeAttributes(
       { "data-type": this.name },
       this.options.HTMLAttributes,
-      HTMLAttributes
+      HTMLAttributes,
     );
     const html = this.options.renderHTML({
       options: mergedOptions,
@@ -392,7 +394,7 @@ const Slash = Node.create<SlashOptions>({
         mergeAttributes(
           { "data-type": this.name },
           this.options.HTMLAttributes,
-          HTMLAttributes
+          HTMLAttributes,
         ),
         html,
       ];
@@ -427,7 +429,7 @@ const Slash = Node.create<SlashOptions>({
                   ? ""
                   : this.options.suggestion.char || "",
                 pos,
-                pos + node.nodeSize
+                pos + node.nodeSize,
               );
 
               return false;
@@ -504,7 +506,7 @@ const handleCommandNavigation = (event: KeyboardEvent) => {
           key: event.key,
           cancelable: true,
           bubbles: true,
-        })
+        }),
       );
 
       return true;
@@ -592,7 +594,7 @@ export const EditorProvider = ({
           "[&_.hljs-emphasis]:text-[#24292e] [&_.hljs-emphasis]:italic",
           "[&_.hljs-strong]:font-bold [&_.hljs-strong]:text-[#24292e]",
           "[&_.hljs-addition]:bg-[#f0fff4] [&_.hljs-addition]:text-[#22863a]",
-          "[&_.hljs-deletion]:bg-[#ffeef0] [&_.hljs-deletion]:text-[#b31d28]"
+          "[&_.hljs-deletion]:bg-[#ffeef0] [&_.hljs-deletion]:text-[#b31d28]",
         ),
       },
     }),
@@ -672,7 +674,7 @@ export const EditorProvider = ({
     Table.configure({
       HTMLAttributes: {
         class: cn(
-          "relative m-0 mx-auto my-3 w-full table-fixed border-collapse overflow-hidden rounded-none text-sm"
+          "relative m-0 mx-auto my-3 w-full table-fixed border-collapse overflow-hidden rounded-none text-sm",
         ),
       },
       allowTableNodeSelection: true,
@@ -680,21 +682,21 @@ export const EditorProvider = ({
     TableRow.configure({
       HTMLAttributes: {
         class: cn(
-          "relative box-border min-w-[1em] border p-1 text-start align-top"
+          "relative box-border min-w-[1em] border p-1 text-start align-top",
         ),
       },
     }),
     TableCell.configure({
       HTMLAttributes: {
         class: cn(
-          "relative box-border min-w-[1em] border p-1 text-start align-top"
+          "relative box-border min-w-[1em] border p-1 text-start align-top",
         ),
       },
     }),
     TableHeader.configure({
       HTMLAttributes: {
         class: cn(
-          "relative box-border min-w-[1em] border bg-secondary p-1 text-start align-top font-medium font-semibold text-muted-foreground"
+          "relative box-border min-w-[1em] border bg-secondary p-1 text-start align-top font-medium font-semibold text-muted-foreground",
         ),
       },
     }),
@@ -763,7 +765,7 @@ export const EditorBubbleMenu = ({
         "flex rounded-xl border bg-background p-0.5 shadow",
         "[&>*:first-child]:rounded-l-[9px]",
         "[&>*:last-child]:rounded-r-[9px]",
-        className
+        className,
       )}
       editor={editor ?? undefined}
       {...props}
@@ -1349,7 +1351,7 @@ export const EditorLinkSelector = ({
               "text-xs underline decoration-text-muted underline-offset-4",
               {
                 "text-primary": editor.isActive("link"),
-              }
+              },
             )}
           >
             Link
@@ -1469,7 +1471,7 @@ export const EditorTableGlobalMenu = ({
         "-translate-x-1/2 absolute flex translate-y-1/2 items-center rounded-full border bg-background shadow-xl",
         {
           hidden: !(left || top),
-        }
+        },
       )}
       style={{ top, left }}
     >
@@ -1534,7 +1536,7 @@ export const EditorTableColumnMenu = ({
           "-translate-x-1/2 -translate-y-1/2 absolute flex h-4 w-7 overflow-hidden rounded-md border bg-background shadow-xl",
           {
             hidden: !(left || top),
-          }
+          },
         )}
         style={{ top, left }}
       >
@@ -1600,7 +1602,7 @@ export const EditorTableRowMenu = ({ children }: EditorTableRowMenuProps) => {
             "-translate-x-1/2 -translate-y-1/2 absolute flex h-7 w-4 overflow-hidden rounded-md border bg-background shadow-xl",
             {
               hidden: !(left || top),
-            }
+            },
           )}
           size="icon"
           style={{ top, left }}
@@ -1949,7 +1951,7 @@ export const EditorCharacterCount = {
       <div
         className={cn(
           "absolute right-4 bottom-4 rounded-md border bg-background p-2 text-muted-foreground text-sm shadow",
-          className
+          className,
         )}
       >
         {children}
@@ -1969,7 +1971,7 @@ export const EditorCharacterCount = {
       <div
         className={cn(
           "absolute right-4 bottom-4 rounded-md border bg-background p-2 text-muted-foreground text-sm shadow",
-          className
+          className,
         )}
       >
         {children}

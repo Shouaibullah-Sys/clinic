@@ -47,7 +47,7 @@ export async function GET(
     const userRole = payload.role as string;
 
     // Authorization
-    if (!["admin", "pharmacist", "receptionist"].includes(userRole)) {
+    if (!["admin", "pharmacist", "pharmacy_head", "receptionist"].includes(userRole)) {
       return NextResponse.json(
         {
           success: false,
@@ -114,7 +114,7 @@ export async function PUT(
     const userRole = payload.role as string;
 
     // Authorization
-    if (!["admin", "pharmacist"].includes(userRole)) {
+    if (!["admin", "pharmacist", "pharmacy_head"].includes(userRole)) {
       return NextResponse.json(
         {
           success: false,
@@ -215,7 +215,7 @@ export async function DELETE(
     const userRole = payload.role as string;
 
     // Authorization
-    if (!["admin", "pharmacist"].includes(userRole)) {
+    if (!["admin", "pharmacist", "pharmacy_head"].includes(userRole)) {
       return NextResponse.json(
         {
           success: false,

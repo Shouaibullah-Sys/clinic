@@ -3,6 +3,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
 import { RadiologyService } from "@/lib/models/RadiologyService";
+import "@/lib/models/Patient";
+import "@/lib/models/User";
 import { authenticateRequest, hasRequiredRole } from "@/lib/auth";
 import mongoose from "mongoose";
 
@@ -33,7 +35,22 @@ export async function PUT(
 
     const { id: requestId } = await params;
     const body = await request.json();
-    const { findings, impression, recommendations, status, reportStatus, images } = body;
+    const {
+      findings,
+      impression,
+      recommendations,
+      status,
+      reportStatus,
+      images,
+      clinicalIndication,
+      technique,
+      comparison,
+      criticalFindings,
+      criticalFindingsDetails,
+      criticalCommunication,
+      reportAction,
+      amendmentReason,
+    } = body;
 
     console.log(`Submitting results for radiology request ${requestId} by ${auth.userName}`);
 
@@ -60,7 +77,7 @@ export async function PUT(
     }
 
     // Check if report is already completed
-    if (requestDoc.reportStatus === "completed") {
+    if (requestDoc.reportStatus === "completed" && reportAction !== "amend") {
       return NextResponse.json(
         { success: false, error: "Report has already been completed" },
         { status: 400 }
@@ -75,7 +92,14 @@ export async function PUT(
       );
     }
 
-    // Update the request with results
+    const nextReportStatus =
+      reportAction === "amend"
+        ? "amended"
+        : reportAction === "finalize"
+          ? "final"
+          : "draft";
+
+    // Update legacy fields for backward compatibility
     requestDoc.findings = findings;
     requestDoc.impression = impression;
     
@@ -107,9 +131,69 @@ export async function PUT(
     // Update status if provided
     if (status) {
       requestDoc.status = status;
-    } else if (requestDoc.status === "scheduled") {
-      requestDoc.status = "in-progress";
+    } else {
+      requestDoc.status = "completed";
     }
+
+    const previousVersion = requestDoc.report?.version || 1;
+    requestDoc.report = {
+      clinicalIndication:
+        clinicalIndication ??
+        requestDoc.report?.clinicalIndication ??
+        "",
+      technique: technique ?? requestDoc.report?.technique ?? "",
+      comparison: comparison ?? requestDoc.report?.comparison ?? "",
+      findings: findings ?? requestDoc.report?.findings ?? "",
+      impression: impression ?? requestDoc.report?.impression ?? "",
+      recommendations:
+        recommendations ??
+        requestDoc.report?.recommendations ??
+        "",
+      criticalFindings:
+        typeof criticalFindings === "boolean"
+          ? criticalFindings
+          : (requestDoc.report?.criticalFindings ?? false),
+      criticalFindingsDetails:
+        criticalFindingsDetails ??
+        requestDoc.report?.criticalFindingsDetails ??
+        "",
+      criticalCommunication: {
+        communicated:
+          criticalCommunication?.communicated ??
+          requestDoc.report?.criticalCommunication?.communicated ??
+          false,
+        communicatedTo:
+          criticalCommunication?.communicatedTo ??
+          requestDoc.report?.criticalCommunication?.communicatedTo ??
+          "",
+        communicatedAt:
+          criticalCommunication?.communicatedAt
+            ? new Date(criticalCommunication.communicatedAt)
+            : requestDoc.report?.criticalCommunication?.communicatedAt,
+        method:
+          criticalCommunication?.method ??
+          requestDoc.report?.criticalCommunication?.method ??
+          "",
+        notes:
+          criticalCommunication?.notes ??
+          requestDoc.report?.criticalCommunication?.notes ??
+          "",
+      },
+      status: nextReportStatus as "draft" | "final" | "amended",
+      version: reportAction === "amend" ? previousVersion + 1 : previousVersion,
+      amendmentReason:
+        reportAction === "amend"
+          ? amendmentReason || "Report amendment"
+          : requestDoc.report?.amendmentReason || "",
+      finalizedBy:
+        reportAction === "finalize"
+          ? new mongoose.Types.ObjectId(auth.userId)
+          : requestDoc.report?.finalizedBy,
+      finalizedAt:
+        reportAction === "finalize"
+          ? new Date()
+          : requestDoc.report?.finalizedAt,
+    };
 
     // Set report generation details
     requestDoc.reportGeneratedBy = new mongoose.Types.ObjectId(auth.userId);
