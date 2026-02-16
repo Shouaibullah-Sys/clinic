@@ -128,11 +128,37 @@ export interface LabTest {
 
 // lib/pdf-generator.ts - Updated generateLabTestPDF fu
 
+const normalizeDirectToLabTest = (
+  input: DirectLabTest | LabTest,
+): LabTest => {
+  if ("orderedAt" in input) return input;
+
+  return {
+    _id: input._id,
+    testId: input.testId,
+    testName: input.testName,
+    category: input.category,
+    patient: input.patient,
+    doctor: (input as any).doctor,
+    status: input.status,
+    collectionStatus: input.collectionStatus,
+    processingStatus: input.processingStatus,
+    orderedAt: input.createdAtDirect,
+    completedAt: (input as any).finalizedAt ?? (input as any).completedAt,
+    specimen: input.specimen,
+    results: input.results,
+    priority: input.priority,
+    labReferenceId: input.testId,
+  };
+};
+
 export const generateDirectTestPDF = async (
-  test: LabTest,
+  input: DirectLabTest | LabTest,
   mode: "print" | "download" = "print",
 ) => {
-  if (!test) return;
+  if (!input) return;
+
+  const test = normalizeDirectToLabTest(input);
 
   // Fallback for records where values were stored in specimen parameters.
   if (
