@@ -9,7 +9,7 @@ import {
   hasRequiredRole,
 } from "@/lib/auth";
 import mongoose from "mongoose";
-import { AppSetting } from "@/lib/models/AppSetting";
+import { AppSetting, IAppSetting } from "@/lib/models/AppSetting";
 
 const SETTING_KEY = "directLabTestPaymentRequired";
 
@@ -83,7 +83,9 @@ export async function POST(
       );
     }
 
-    const setting = await AppSetting.findOne({ key: SETTING_KEY }).lean();
+    const setting = (await AppSetting.findOne({
+      key: SETTING_KEY,
+    }).lean()) as IAppSetting | null;
     const paymentRequired = setting?.value ?? true;
 
     // Check if payment is verified (if required)
@@ -196,24 +198,26 @@ export async function POST(
     }
 
     const resolvedResults =
-      (testParameters && testParameters.length > 0 && {
-        parameters: testParameters.map((p: any) => ({
-          name: p.name,
-          value: p.value,
-          unit: p.unit || "",
-          normalRange: p.normalRange || "",
-          remarks: p.remarks || "",
-        })),
-      }) ||
-      (results?.parameters && results.parameters.length > 0 && {
-        parameters: results.parameters.map((p: any) => ({
-          name: p.name,
-          value: p.value ?? p.result ?? "",
-          unit: p.unit || "",
-          normalRange: p.normalRange || "",
-          remarks: p.remarks || "",
-        })),
-      }) ||
+      (testParameters &&
+        testParameters.length > 0 && {
+          parameters: testParameters.map((p: any) => ({
+            name: p.name,
+            value: p.value,
+            unit: p.unit || "",
+            normalRange: p.normalRange || "",
+            remarks: p.remarks || "",
+          })),
+        }) ||
+      (results?.parameters &&
+        results.parameters.length > 0 && {
+          parameters: results.parameters.map((p: any) => ({
+            name: p.name,
+            value: p.value ?? p.result ?? "",
+            unit: p.unit || "",
+            normalRange: p.normalRange || "",
+            remarks: p.remarks || "",
+          })),
+        }) ||
       (specimen?.parameters &&
         specimen.parameters.length > 0 && {
           parameters: specimen.parameters.map((p: any) => ({

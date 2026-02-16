@@ -2,7 +2,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
-import { AppSetting } from "@/lib/models/AppSetting";
+import { AppSetting, IAppSetting } from "@/lib/models/AppSetting";
 import { authenticateRequest } from "@/lib/auth";
 
 const SETTING_KEY = "directLabTestPaymentRequired";
@@ -26,7 +26,9 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const setting = await AppSetting.findOne({ key: SETTING_KEY }).lean();
+    const setting = (await AppSetting.findOne({
+      key: SETTING_KEY,
+    }).lean()) as IAppSetting | null;
     const paymentRequired = setting?.value ?? true;
 
     return NextResponse.json({
@@ -38,8 +40,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error:
-          error.message || "Failed to fetch direct lab payment setting",
+        error: error.message || "Failed to fetch direct lab payment setting",
       },
       { status: 500 },
     );
@@ -68,7 +69,7 @@ export async function PUT(request: NextRequest) {
     const body = await request.json();
     const paymentRequired = !!body.paymentRequired;
 
-    const updated = await AppSetting.findOneAndUpdate(
+    const updated = (await AppSetting.findOneAndUpdate(
       { key: SETTING_KEY },
       {
         $set: {
@@ -77,7 +78,7 @@ export async function PUT(request: NextRequest) {
         },
       },
       { new: true, upsert: true },
-    ).lean();
+    ).lean()) as IAppSetting | null;
 
     return NextResponse.json({
       success: true,
@@ -88,8 +89,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error:
-          error.message || "Failed to update direct lab payment setting",
+        error: error.message || "Failed to update direct lab payment setting",
       },
       { status: 500 },
     );

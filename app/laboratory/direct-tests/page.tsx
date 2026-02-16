@@ -41,6 +41,7 @@ import {
   DollarSign,
   FileText,
   Printer,
+  Receipt,
   Filter,
   Calendar,
   Hash,
@@ -51,7 +52,10 @@ import { useAuthStore } from "@/store/useAuthStore";
 import { format, parseISO } from "date-fns";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { generateDirectTestPDF } from "@/lib/pdf-generator";
+import {
+  generateDirectTestPDF,
+  generateDirectTestPaymentSlip,
+} from "@/lib/pdf-generator";
 import {
   Pagination,
   PaginationContent,
@@ -115,6 +119,7 @@ export default function DirectTestsPage() {
   const [paymentStatusFilter, setPaymentStatusFilter] = useState("all");
   const [activeTab, setActiveTab] = useState("all");
   const [printingId, setPrintingId] = useState<string | null>(null);
+  const [printingSlipId, setPrintingSlipId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
 
@@ -354,6 +359,10 @@ export default function DirectTestsPage() {
     );
   };
 
+  const canPrintPaymentSlip = (test: DirectLabTest) => {
+    return !!test.charges;
+  };
+
   const handlePrintPDF = async (test: DirectLabTest) => {
     setPrintingId(test._id);
 
@@ -404,6 +413,41 @@ export default function DirectTestsPage() {
       toast.error(err.message || "Failed to generate print job");
     } finally {
       setPrintingId(null);
+    }
+  };
+
+  const handlePrintPaymentSlip = async (test: DirectLabTest) => {
+    setPrintingSlipId(test._id);
+
+    try {
+      const response = await fetch(`/api/laboratory/direct-tests/${test._id}`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(
+          errorData.error || "Failed to fetch test data for payment slip",
+        );
+      }
+
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(
+          data.error || "Failed to fetch test data for payment slip",
+        );
+      }
+
+      await generateDirectTestPaymentSlip(data.data, "print");
+    } catch (err: any) {
+      console.error("Error printing payment slip:", err);
+      toast.error(err.message || "Failed to generate payment slip");
+    } finally {
+      setPrintingSlipId(null);
     }
   };
 
@@ -753,6 +797,24 @@ export default function DirectTestsPage() {
                               View
                             </Link>
                           </Button>
+                          {canPrintPaymentSlip(test) && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handlePrintPaymentSlip(test)}
+                              disabled={printingSlipId === test._id}
+                              className="h-8 px-3"
+                            >
+                              {printingSlipId === test._id ? (
+                                <>Printing...</>
+                              ) : (
+                                <>
+                                  <Receipt className="h-3 w-3 mr-1" />
+                                  Slip
+                                </>
+                              )}
+                            </Button>
+                          )}
                           {canPrintTest(test) && (
                             <Button
                               size="sm"
@@ -910,7 +972,7 @@ export default function DirectTestsPage() {
                 )}
 
                 {/* Actions */}
-                <div className="flex items-center gap-2 pt-2 border-t">
+                <div className="flex flex-wrap items-center gap-2 pt-2 border-t">
                   <Button
                     variant="outline"
                     size="sm"
@@ -922,6 +984,24 @@ export default function DirectTestsPage() {
                       View Details
                     </Link>
                   </Button>
+                  {canPrintPaymentSlip(test) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePrintPaymentSlip(test)}
+                      disabled={printingSlipId === test._id}
+                      className="flex-1"
+                    >
+                      {printingSlipId === test._id ? (
+                        <>Printing...</>
+                      ) : (
+                        <>
+                          <Receipt className="h-4 w-4 mr-1" />
+                          Slip
+                        </>
+                      )}
+                    </Button>
+                  )}
                   {canPrintTest(test) && (
                     <Button
                       size="sm"
@@ -956,7 +1036,9 @@ export default function DirectTestsPage() {
                   e.preventDefault();
                   setCurrentPage((p) => Math.max(1, p - 1));
                 }}
-                className={currentPage === 1 ? "pointer-events-none opacity-50" : ""}
+                className={
+                  currentPage === 1 ? "pointer-events-none opacity-50" : ""
+                }
               />
             </PaginationItem>
             {currentPage > 2 && (
@@ -1010,7 +1092,11 @@ export default function DirectTestsPage() {
                   e.preventDefault();
                   setCurrentPage((p) => Math.min(totalPages, p + 1));
                 }}
-                className={currentPage === totalPages ? "pointer-events-none opacity-50" : ""}
+                className={
+                  currentPage === totalPages
+                    ? "pointer-events-none opacity-50"
+                    : ""
+                }
               />
             </PaginationItem>
           </PaginationContent>

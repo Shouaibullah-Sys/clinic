@@ -1,6 +1,9 @@
 import mongoose from "mongoose";
-import { MarkedTransaction, MarkedModule } from "@/lib/models/MarkedTransaction";
-import { User } from "@/lib/models/User";
+import {
+  MarkedTransaction,
+  MarkedModule,
+} from "@/lib/models/MarkedTransaction";
+import { User, IUser } from "@/lib/models/User";
 
 type MarkedFilterInput = {
   userId: string;
@@ -16,10 +19,13 @@ export async function buildMarkedOnlyQuery({
   baseQuery,
   dateFrom,
   dateTo,
-}: MarkedFilterInput): Promise<{ query: Record<string, any>; restricted: boolean }> {
-  const user = await User.findById(userId)
+}: MarkedFilterInput): Promise<{
+  query: Record<string, any>;
+  restricted: boolean;
+}> {
+  const user = (await User.findById(userId)
     .select("markedOnlyAccess")
-    .lean();
+    .lean()) as IUser | null;
 
   if (!user?.markedOnlyAccess) {
     return { query: baseQuery, restricted: false };

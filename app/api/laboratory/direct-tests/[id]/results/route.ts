@@ -5,7 +5,7 @@ import dbConnect from "@/lib/dbConnect";
 import { LabTest } from "@/lib/models/LabTest";
 import { authenticateRequest } from "@/lib/auth";
 import mongoose from "mongoose";
-import { AppSetting } from "@/lib/models/AppSetting";
+import { AppSetting, IAppSetting } from "@/lib/models/AppSetting";
 
 const SETTING_KEY = "directLabTestPaymentRequired";
 
@@ -66,7 +66,9 @@ export async function PUT(
       );
     }
 
-    const setting = await AppSetting.findOne({ key: SETTING_KEY }).lean();
+    const setting = (await AppSetting.findOne({
+      key: SETTING_KEY,
+    }).lean()) as IAppSetting | null;
     const paymentRequired = setting?.value ?? true;
 
     // Check payment verification (if required)
