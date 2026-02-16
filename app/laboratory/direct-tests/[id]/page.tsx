@@ -116,10 +116,15 @@ export default function DirectTestDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [printing, setPrinting] = useState(false);
+  const [paymentRequired, setPaymentRequired] = useState(true);
 
   useEffect(() => {
     fetchTestDetails();
   }, [params.id]);
+
+  useEffect(() => {
+    fetchPaymentSetting();
+  }, []);
 
   const fetchTestDetails = async () => {
     try {
@@ -153,6 +158,23 @@ export default function DirectTestDetailPage() {
       );
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchPaymentSetting = async () => {
+    try {
+      const response = await fetch("/api/settings/direct-lab-payment", {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+      if (!response.ok) return;
+      const data = await response.json();
+      if (data?.success && typeof data.data?.paymentRequired === "boolean") {
+        setPaymentRequired(data.data.paymentRequired);
+      }
+    } catch (err) {
+      console.error("Failed to fetch payment setting:", err);
     }
   };
 
@@ -207,7 +229,12 @@ export default function DirectTestDetailPage() {
     }
   };
 
-  const canPrint = test?.collectionStatus === "collected";
+  const canPrint =
+    test?.collectionStatus === "collected" ||
+    test?.readyForPrint ||
+    test?.status === "completed" ||
+    test?.status === "reported" ||
+    (test?.results?.parameters?.length || 0) > 0;
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat("en-IN", {
@@ -306,7 +333,7 @@ export default function DirectTestDetailPage() {
       </div>
 
       {/* Status Alert */}
-      {!test.paymentVerified ? (
+      {paymentRequired && !test.paymentVerified ? (
         <Alert variant="destructive" className="mb-6">
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>Payment Verification Required</AlertTitle>
@@ -320,6 +347,16 @@ export default function DirectTestDetailPage() {
           <AlertTitle className="text-green-800">Sample Collected</AlertTitle>
           <AlertDescription className="text-green-700">
             Collection is completed for this direct test.
+          </AlertDescription>
+        </Alert>
+      ) : !paymentRequired ? (
+        <Alert className="bg-blue-50 border-blue-200 mb-6">
+          <CheckCircle className="h-4 w-4 text-blue-600" />
+          <AlertTitle className="text-blue-800">
+            Payment Not Required
+          </AlertTitle>
+          <AlertDescription className="text-blue-700">
+            Admin has disabled payment requirement for direct lab tests.
           </AlertDescription>
         </Alert>
       ) : (

@@ -5,6 +5,9 @@ import dbConnect from "@/lib/dbConnect";
 import { LabTest } from "@/lib/models/LabTest";
 import { authenticateRequest } from "@/lib/auth";
 import mongoose from "mongoose";
+import { AppSetting } from "@/lib/models/AppSetting";
+
+const SETTING_KEY = "directLabTestPaymentRequired";
 
 // PUT: Add results to a direct lab test
 export async function PUT(
@@ -63,8 +66,11 @@ export async function PUT(
       );
     }
 
-    // Check payment verification
-    if (!test.paymentVerified) {
+    const setting = await AppSetting.findOne({ key: SETTING_KEY }).lean();
+    const paymentRequired = setting?.value ?? true;
+
+    // Check payment verification (if required)
+    if (paymentRequired && !test.paymentVerified) {
       return NextResponse.json(
         {
           success: false,
@@ -102,6 +108,7 @@ export async function PUT(
     test.status = "completed";
     test.processingStatus = "completed";
     test.completedAt = new Date();
+    test.readyForPrint = true;
 
     await test.save();
 

@@ -67,6 +67,9 @@ export default function UserForm({ user, onSuccess, accessToken }: UserFormProps
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const isEditMode = !!user?._id;
+  const [directLabPaymentRequired, setDirectLabPaymentRequired] = useState(true);
+  const [loadingDirectLabSetting, setLoadingDirectLabSetting] = useState(false);
+  const [directLabSettingLoaded, setDirectLabSettingLoaded] = useState(false);
 
   // Initialize form with the unified schema
   const form = useForm({
@@ -119,6 +122,32 @@ export default function UserForm({ user, onSuccess, accessToken }: UserFormProps
     }
   }, [user, form]);
 
+  useEffect(() => {
+    const loadSetting = async () => {
+      if (!accessToken || !isEditMode) return;
+      try {
+        setLoadingDirectLabSetting(true);
+        const response = await fetch("/api/admin/settings/direct-lab-payment", {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        });
+        if (!response.ok) return;
+        const data = await response.json();
+        if (data?.success && typeof data.data?.paymentRequired === "boolean") {
+          setDirectLabPaymentRequired(data.data.paymentRequired);
+          setDirectLabSettingLoaded(true);
+        }
+      } catch (err) {
+        console.error("Failed to load direct lab payment setting:", err);
+      } finally {
+        setLoadingDirectLabSetting(false);
+      }
+    };
+
+    loadSetting();
+  }, [accessToken, isEditMode]);
+
   const onSubmit = async (data: any) => {
     if (!accessToken) {
       toast.error("Authentication required. Please login again.");
@@ -165,6 +194,29 @@ export default function UserForm({ user, onSuccess, accessToken }: UserFormProps
           responseData.message || 
           `Failed to ${isEditMode ? "update" : "create"} user`
         );
+      }
+
+      if (isEditMode && accessToken && directLabSettingLoaded) {
+        const settingsResponse = await fetch(
+          "/api/admin/settings/direct-lab-payment",
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${accessToken}`,
+            },
+            body: JSON.stringify({
+              paymentRequired: directLabPaymentRequired,
+            }),
+          },
+        );
+
+        if (!settingsResponse.ok) {
+          const settingsData = await settingsResponse.json();
+          throw new Error(
+            settingsData.error || "Failed to update direct lab payment setting",
+          );
+        }
       }
 
       toast.success(
@@ -519,6 +571,25 @@ export default function UserForm({ user, onSuccess, accessToken }: UserFormProps
                 </FormItem>
               )}
             />
+            {isEditMode && (
+              <FormItem className="flex items-center justify-between rounded-lg border p-4">
+                <div className="space-y-0.5">
+                  <FormLabel className="text-base">
+                    Direct Lab Payment Required
+                  </FormLabel>
+                  <FormDescription>
+                    Toggle payment requirement for all direct lab tests
+                  </FormDescription>
+                </div>
+                <FormControl>
+                  <Switch
+                    checked={directLabPaymentRequired}
+                    onCheckedChange={setDirectLabPaymentRequired}
+                    disabled={loadingDirectLabSetting}
+                  />
+                </FormControl>
+              </FormItem>
+            )}
           </div>
 
           <div className="flex justify-end gap-4 pt-4">

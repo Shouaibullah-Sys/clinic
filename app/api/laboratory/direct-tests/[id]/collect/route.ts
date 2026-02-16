@@ -9,6 +9,9 @@ import {
   hasRequiredRole,
 } from "@/lib/auth";
 import mongoose from "mongoose";
+import { AppSetting } from "@/lib/models/AppSetting";
+
+const SETTING_KEY = "directLabTestPaymentRequired";
 
 export async function POST(
   request: NextRequest,
@@ -80,8 +83,11 @@ export async function POST(
       );
     }
 
-    // Check if payment is verified
-    if (!test.paymentVerified) {
+    const setting = await AppSetting.findOne({ key: SETTING_KEY }).lean();
+    const paymentRequired = setting?.value ?? true;
+
+    // Check if payment is verified (if required)
+    if (paymentRequired && !test.paymentVerified) {
       console.log(
         "Cannot collect sample. Payment not verified yet. Conditions:",
         {

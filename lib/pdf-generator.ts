@@ -184,7 +184,7 @@ export const generateLabTestPDF = async (
 
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
-  let y = 120;
+  let y = 170;
 
   // --- HOSPITAL BRAND COLOR SCHEME ---
   const primary = [0, 92, 169]; // Hospital blue
@@ -194,7 +194,7 @@ export const generateLabTestPDF = async (
   const normalGreen = [56, 161, 105]; // Normal range indicator
   const alertOrange = [245, 159, 0]; // Borderline indicator
   const logoDataUrl = await loadLogoDataUrl("/logo2.png");
-  const hasPersianFont = await ensurePersianFont(doc);
+  await ensurePersianFont(doc);
 
   const drawLogoWatermark = () => {
     if (!logoDataUrl) return;
@@ -210,179 +210,137 @@ export const generateLabTestPDF = async (
     (doc as any).setGState(new (doc as any).GState({ opacity: 1 }));
   };
 
-  // --- HEADER WITH HOSPITAL BRANDING ---
-  doc.setFillColor(primary[0], primary[1], primary[2]);
-  doc.rect(0, 0, pageWidth, 120, "F");
+  // --- EMPTY HEADER SPACE (KEEP HEIGHT) ---
+  // Intentionally left blank to preserve header height.
 
-  // Accent line
-  doc.setDrawColor(accent[0], accent[1], accent[2]);
-  doc.setLineWidth(2);
-  doc.line(0, 120, pageWidth, 120);
+  // No background watermark
 
-  // Security watermark
-  (doc as any).setGState(new (doc as any).GState({ opacity: 0.03 }));
-  doc.setTextColor(100, 100, 100);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(36);
-  doc.text("CONFIDENTIAL MEDICAL REPORT", pageWidth / 2, pageHeight / 2, {
-    align: "center",
-    angle: 45,
-  });
-  (doc as any).setGState(new (doc as any).GState({ opacity: 1 }));
+  const drawTwoColumnTable = (
+    rows: Array<[string, string, string, string]>,
+  ) => {
+    // Use the same margins as patient information table will use
+    const tableX = 40; // Match the test results table margin
+    const tableWidth = pageWidth - 80; // Match the test results table width
+    const colWidth = tableWidth / 2;
+    const rowHeight = 18;
+    const startY = y;
 
-  // Header side information
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
-  doc.setTextColor(230, 240, 255);
-  doc.text(
-    [
-      "Sajed Barakzi Specialty Hospital",
-      "Chaharahi Sedarat, Opp. Jamhuriat Hospital, Kabul",
-    ],
-    24,
-    40,
-  );
-  if (hasPersianFont) {
-    doc.setFont("vazirmatn", "normal");
-  }
-  doc.text(
-    [
-      shapePersian(doc, "شفاخانه اختصاصی ساجد بارکزی"),
-      shapePersian(doc, "چهاراهی صدارت، مقابل شفاخانه جمهوریت، کابل"),
-    ],
-    pageWidth - 24,
-    40,
-    { align: "right" },
-  );
-  doc.setFont("helvetica", "normal");
+    doc.setDrawColor(200, 200, 200);
+    doc.setLineWidth(0.6);
+    doc.rect(tableX, startY - 12, tableWidth, rows.length * rowHeight, "S");
+    doc.line(
+      tableX + colWidth,
+      startY - 12,
+      tableX + colWidth,
+      startY - 12 + rows.length * rowHeight,
+    );
 
-  // Header title
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(16);
-  doc.setTextColor(255, 255, 255);
-  doc.text("Sajed Barakzi Specialty Hospital", pageWidth / 2, 94, {
-    align: "center",
-  });
-  if (logoDataUrl) {
-    doc.addImage(logoDataUrl, "PNG", pageWidth / 2 - 40, 12, 80, 80);
-  }
+    rows.forEach(([lLabel, lValue, rLabel, rValue], index) => {
+      const rowY = startY - 12 + index * rowHeight;
+      if (index > 0) {
+        doc.line(tableX, rowY, tableX + tableWidth, rowY);
+      }
 
-  // Header document info
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  doc.setTextColor(230, 230, 230);
-  doc.text(`Report ID: LAB-${test.labReferenceId || test.testId}`, 40, 108);
-  doc.text(
-    `Date: ${format(new Date(test.orderedAt), "PPP")}`,
-    pageWidth - 40,
-    108,
-    {
-      align: "right",
-    },
-  );
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.setTextColor(textDark[0], textDark[1], textDark[2]);
 
-  // Background logo watermark
-  drawLogoWatermark();
+      const leftText = `${lLabel}: ${lValue || "N/A"}`;
+      const rightText = `${rLabel}: ${rValue || "N/A"}`;
+      doc.text(leftText, tableX + 6, rowY + 12);
+      doc.text(rightText, tableX + colWidth + 6, rowY + 12);
+    });
 
-  // === PROFESSIONAL SECTION DESIGN ===
-  const drawSectionHeader = (title: string) => {
-    y += 25;
-    // Medical accent indicator
-    doc.setFillColor(accent[0], accent[1], accent[2]);
-    doc.rect(40, y - 16, 5, 20, "F");
-
-    // Professional section background
-    doc.setFillColor(bgLight[0], bgLight[1], bgLight[2]);
-    doc.roundedRect(40, y - 16, pageWidth - 80, 20, 3, 3, "FD");
-
-    // Section title
-    doc.setTextColor(primary[0], primary[1], primary[2]);
-    doc.setFontSize(12);
-    doc.setFont("helvetica", "bold");
-    doc.text(title, 55, y);
-    y += 12;
+    y = startY - 12 + rows.length * rowHeight + 14;
   };
 
-  const addSectionSeparator = () => {
-    doc.setDrawColor(220, 220, 220);
-    doc.setLineWidth(0.3);
-    y += 12;
-    doc.line(50, y, pageWidth - 50, y);
-    y += 12;
-  };
-
-  // --- PATIENT & TEST INFORMATION ---
-  drawSectionHeader("Patient & Test Information");
-  y += 8;
-
+  // --- PATIENT INFORMATION TABLE (NO TITLE) ---
   doc.setFont("helvetica", "normal");
   doc.setTextColor(textDark[0], textDark[1], textDark[2]);
   doc.setFontSize(10);
 
-  // Single line patient info
-  const patientInfo = `Patient: ${test.patient?.name || "N/A"} | ID: ${test.patient?.patientId || "N/A"} | Gender: ${test.patient?.gender || "N/A"} | Phone: ${test.patient?.phone || "Not provided"}`;
-  doc.text(patientInfo, 55, y);
+  const doctorName = test.doctor?.name ? `Dr. ${test.doctor.name}` : "N/A";
+  const formatReportId = (id: string) => {
+    if (/-\d{3}$/.test(id)) return id;
+    const match = id.match(/^(.*?)(\d+)$/);
+    if (!match) return id;
+    const prefix = match[1];
+    const digits = match[2];
+    const tail = digits.slice(-3).padStart(3, "0");
+    const head = digits.slice(0, -3);
+    return `${prefix}${head}-${tail}`;
+  };
+  const rawReportId = `LAB-${test.labReferenceId || test.testId}`;
+  const reportId = formatReportId(rawReportId);
+  const reportDate = format(new Date(test.orderedAt), "PPP");
 
-  y += 8;
-  addSectionSeparator();
+  drawTwoColumnTable([
+    [
+      "Patient",
+      test.patient?.name || "N/A",
+      "Patient ID",
+      test.patient?.patientId || "N/A",
+    ],
+    [
+      "Gender",
+      test.patient?.gender || "N/A",
+      "Phone",
+      test.patient?.phone || "Not provided",
+    ],
+    ["Test ID", test.testId, "Report ID", reportId],
+    ["Date", reportDate, "Doctor", doctorName],
+    [
+      "Category",
+      test.category?.replace(/_/g, " ") || "General",
+      "Priority",
+      test.priority || "N/A",
+    ],
+  ]);
 
-  // --- DOCTOR INFORMATION ---
-  // Handle doctor - can be object with name or undefined
-  const doctorName = test.doctor?.name;
-  if (doctorName) {
-    drawSectionHeader("Doctor Information");
-    y += 8;
+  // --- TEST TITLE ---
+  // Add more space above the test title (increased from 6 to 15)
+  y += 15;
 
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(textDark[0], textDark[1], textDark[2]);
-    doc.setFontSize(10);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(12);
+  doc.setTextColor(textDark[0], textDark[1], textDark[2]);
+  const testTitle = test.testName || "Test";
+  doc.text(testTitle, pageWidth / 2, y, { align: "center" });
+  const titleWidth = doc.getTextWidth(testTitle);
+  doc.setDrawColor(60, 60, 60);
+  doc.setLineWidth(0.6);
+  doc.line(120, y + 4, pageWidth - 120, y + 4);
 
-    const doctorLine = [
-      `Doctor: Dr. ${doctorName}`,
-      test.doctor?.specialization
-        ? `Specialization: ${test.doctor.specialization}`
-        : null,
-      test.doctor?.department ? `Department: ${test.doctor.department}` : null,
-    ]
-      .filter(Boolean)
-      .join(" | ");
-    doc.text(doctorLine, 55, y);
-
-    y += 20;
-  }
+  // Add more space below the test title (increased from 18 to 25)
+  y += 25;
 
   // --- TEST RESULTS ---
   if (test.results?.parameters && test.results.parameters.length > 0) {
-    drawSectionHeader("Laboratory Findings");
-    y += 10;
+    // Parameters table header - adjusted margins to match patient table
+    const tableX = 40; // Changed from 55 to 40 to match patient table
+    const tableWidth = pageWidth - 80; // Changed from pageWidth - 110 to pageWidth - 80 to match patient table
+    const headerHeight = 20;
+    const rowHeight = 22;
 
-    // Test header
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(10);
-    doc.setTextColor(primary[0], primary[1], primary[2]);
-    doc.text(
-      `${test.testName} | Test ID: ${test.testId} | Category: ${test.category?.replace(/_/g, " ") || "General"}`,
-      55,
-      y,
-    );
-    doc.setFontSize(10);
-    doc.setTextColor(100, 100, 100);
-    y += 18;
+    // Adjusted column positions to maintain proper spacing with new margins
+    const col1X = tableX + 10;
+    const col2X = tableX + tableWidth * 0.46;
+    const col3X = tableX + tableWidth * 0.62;
+    const col4X = tableX + tableWidth * 0.74;
 
-    // Parameters table header
     doc.setFillColor(primary[0], primary[1], primary[2]);
-    doc.rect(55, y, pageWidth - 110, 20, "F");
+    doc.rect(tableX, y, tableWidth, headerHeight, "F");
 
     doc.setTextColor(255, 255, 255);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(9);
-    doc.text("Parameter", 65, y + 12);
-    doc.text("Value", 250, y + 12);
-    doc.text("Unit", 350, y + 12);
-    doc.text("Reference Range", 420, y + 12);
+    doc.text("Parameter", col1X, y + 12);
+    doc.text("Value", col2X, y + 12);
+    doc.text("Unit", col3X, y + 12);
+    doc.text("Reference Range", col4X, y + 12);
     doc.text("Status", pageWidth - 65, y + 12, { align: "right" });
 
-    y += 20;
+    y += headerHeight;
 
     // Helper function to check if value is abnormal
     const isAbnormal = (
@@ -423,12 +381,15 @@ export const generateLabTestPDF = async (
       return { status: "Normal", color: normalGreen };
     };
 
+    // Table border
+    const tableStartY = y;
+
     // Test parameters
     test.results.parameters.forEach((param, paramIndex) => {
       // Alternate row background for readability
       if (paramIndex % 2 === 0) {
-        doc.setFillColor(248, 249, 250);
-        doc.rect(55, y, pageWidth - 110, 18, "F");
+        doc.setFillColor(240, 244, 248);
+        doc.rect(tableX, y, tableWidth, rowHeight, "F");
       }
 
       const { status, color } = isAbnormal(param);
@@ -438,85 +399,63 @@ export const generateLabTestPDF = async (
       doc.setFontSize(9);
 
       // Parameter data
-      doc.text(param.name, 65, y + 10);
-      doc.text(param.value.toString(), 250, y + 10);
-      doc.text(param.unit || "-", 350, y + 10);
-      doc.text(param.normalRange || "-", 420, y + 10);
+      doc.text(param.name, col1X, y + 13);
+      doc.text(param.value.toString(), col2X, y + 13);
+      doc.text(param.unit || "-", col3X, y + 13);
+      doc.text(param.normalRange || "-", col4X, y + 13);
 
       // Status with color coding
       doc.setTextColor(color[0], color[1], color[2]);
-      doc.text(status, pageWidth - 65, y + 10, { align: "right" });
+      doc.text(status, pageWidth - 65, y + 13, { align: "right" });
 
-      y += 18;
+      y += rowHeight;
 
       // Page break check
       if (y > pageHeight - 100) {
         doc.addPage();
         y = 50;
-        drawLogoWatermark();
         // Recreate table header on new page
         doc.setFillColor(primary[0], primary[1], primary[2]);
-        doc.rect(55, y, pageWidth - 110, 20, "F");
+        doc.rect(tableX, y, tableWidth, headerHeight, "F");
         doc.setTextColor(255, 255, 255);
         doc.setFont("helvetica", "bold");
-        doc.text("Parameter", 65, y + 12);
-        doc.text("Value", 250, y + 12);
-        doc.text("Unit", 350, y + 12);
-        doc.text("Reference Range", 420, y + 12);
+        doc.text("Parameter", col1X, y + 12);
+        doc.text("Value", col2X, y + 12);
+        doc.text("Unit", col3X, y + 12);
+        doc.text("Reference Range", col4X, y + 12);
         doc.text("Status", pageWidth - 65, y + 12, { align: "right" });
-        y += 20;
+        y += headerHeight;
       }
     });
 
-    y += 15;
-    addSectionSeparator();
+    // Table border enclosing rows
+    doc.setDrawColor(200, 200, 200);
+    doc.setLineWidth(0.6);
+    doc.rect(tableX, tableStartY, tableWidth, y - tableStartY, "S");
 
-    // --- REPORTING INFORMATION ---
-    drawSectionHeader("Reporting Information");
-    y += 8;
+    // Add more space before Reported By (increased from 20 to 30)
+    y += 30;
 
+    // --- REPORTED BY ---
     doc.setFont("helvetica", "normal");
     doc.setTextColor(textDark[0], textDark[1], textDark[2]);
     doc.setFontSize(10);
-
     const reportedByName =
       test.results?.reportedBy?.name ||
       (test as any)?.collectionDetails?.collectedBy?.name ||
       "Laboratory Staff";
     doc.text(`Reported By: ${reportedByName}`, 55, y);
 
-    y += 20;
-    addSectionSeparator();
+    // Add more space after Reported By (increased from 24 to 30)
+    y += 30;
   } else {
-    drawSectionHeader("Laboratory Findings");
-    y += 10;
     doc.setFont("helvetica", "normal");
     doc.setTextColor(textDark[0], textDark[1], textDark[2]);
     doc.setFontSize(10);
-    doc.text(`Test ID: ${test.testId}`, 55, y);
-    y += 14;
     doc.setFont("helvetica", "italic");
     doc.setTextColor(150, 150, 150);
     doc.text("No test results available.", 55, y);
-    addSectionSeparator();
   }
-
-  // --- ADDRESS FOOTER ---
-  const footerY = pageHeight - 34;
-  doc.setFillColor(primary[0], primary[1], primary[2]);
-  doc.rect(0, pageHeight - 48, pageWidth, 48, "F");
-  doc.setFontSize(10);
-  doc.setTextColor(255, 255, 255);
-  doc.setFont(hasPersianFont ? "vazirmatn" : "helvetica", "normal");
-  doc.text(
-    shapePersian(
-      doc,
-      "آدرس: چهاراهی صدارت، مقابل شفاخانه جمهوریت، کابل، افغانستان",
-    ),
-    pageWidth / 2,
-    footerY,
-    { align: "center" },
-  );
 
   // --- OUTPUT ---
   if (mode === "print") {

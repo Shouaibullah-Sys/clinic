@@ -332,7 +332,11 @@ export default function DirectTestsPage() {
     ).length;
     const finalized = tests.filter((t) => t.finalized).length;
     const readyForPrint = tests.filter(
-      (t) => t.collectionStatus === "collected",
+      (t) =>
+        t.collectionStatus === "collected" ||
+        t.readyForPrint ||
+        t.status === "completed" ||
+        t.status === "reported",
     ).length;
 
     return { all, pending, collected, completed, finalized, readyForPrint };
@@ -341,7 +345,13 @@ export default function DirectTestsPage() {
   const counts = getTestCounts();
 
   const canPrintTest = (test: DirectLabTest) => {
-    return test.collectionStatus === "collected";
+    return (
+      test.collectionStatus === "collected" ||
+      test.readyForPrint ||
+      test.status === "completed" ||
+      test.status === "reported" ||
+      (test.results?.parameters?.length || 0) > 0
+    );
   };
 
   const handlePrintPDF = async (test: DirectLabTest) => {

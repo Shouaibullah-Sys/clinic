@@ -1633,6 +1633,7 @@ const labTests: LabTestCategory[] = [
 export default function CreateDirectTestPage() {
   const router = useRouter();
   const { accessToken, user } = useAuthStore();
+  const isLabRole = user?.role === "lab_technician";
 
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -1646,6 +1647,9 @@ export default function CreateDirectTestPage() {
     "routine",
   );
   const [notes, setNotes] = useState("");
+  const [doctorName, setDoctorName] = useState("");
+  const [receiptNo, setReceiptNo] = useState("");
+  const receiptCounterRef = useRef(1);
 
   const [testParameters, setTestParameters] = useState<TestParameter[]>([
     { id: "1", name: "", value: "", unit: "", normalRange: "", remarks: "" },
@@ -1678,16 +1682,47 @@ export default function CreateDirectTestPage() {
     name: "",
     phone: "",
     email: "",
-    dateOfBirth: "",
     gender: "",
     address: "",
+    doctorName: "",
+    receiptNo: "",
   });
+  const [newPatientAge, setNewPatientAge] = useState("");
 
   const [templateLabTests, setTemplateLabTests] = useState<LabTestCategory[]>(
     [],
   );
 
   const activeLabTests = useMemo(() => templateLabTests, [templateLabTests]);
+
+  const formatPatientId = (id?: string) => {
+    if (!id) return "";
+    if (/-\d{3}$/.test(id)) return id;
+    const match = id.match(/^(.*?)(\d+)$/);
+    if (!match) return id;
+    const prefix = match[1];
+    const digits = match[2];
+    const tail = digits.slice(-3).padStart(3, "0");
+    const head = digits.slice(0, -3);
+    return `${prefix}${head}-${tail}`;
+  };
+
+  const generateReceiptNo = () => {
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, "0");
+    const dd = String(now.getDate()).padStart(2, "0");
+    const seq = String(receiptCounterRef.current++).padStart(3, "0");
+    return `REC${yyyy}${mm}${dd}-${seq}`;
+  };
+
+  const incompletePatientFields = useMemo(() => {
+    if (!selectedPatient) return [];
+    const missing: string[] = [];
+    if (!selectedPatient.phone) missing.push("Phone");
+    if (!selectedPatient.email) missing.push("Email");
+    return missing;
+  }, [selectedPatient]);
 
   const loadTemplateTests = async () => {
     try {
@@ -1763,6 +1798,15 @@ export default function CreateDirectTestPage() {
       }
     };
   }, [patientSearchQuery]);
+
+  useEffect(() => {
+    if (showCreatePatientDialog) {
+      setNewPatient((prev) => ({
+        ...prev,
+        receiptNo: prev.receiptNo || generateReceiptNo(),
+      }));
+    }
+  }, [showCreatePatientDialog]);
 
   // Smart test search - update testSearchResults for dropdown
   useEffect(() => {
@@ -1921,6 +1965,19 @@ export default function CreateDirectTestPage() {
     setShowPatientDropdown(false);
     setPatientSearchResults([]);
     setActivePatientIndex(-1);
+    if (!receiptNo) {
+      setReceiptNo(generateReceiptNo());
+    }
+    if (isLabRole) {
+      const missing: string[] = [];
+      if (!patient.phone) missing.push("Phone");
+      if (!patient.email) missing.push("Email");
+      if (missing.length > 0) {
+        toast.warning("Patient info is incomplete", {
+          description: `Missing: ${missing.join(", ")}. You can continue or ignore.`,
+        });
+      }
+    }
   };
 
   const handlePatientSearchKeyDown = (
@@ -1976,6 +2033,14 @@ export default function CreateDirectTestPage() {
     try {
       setCreatingPatient(true);
 
+      let derivedDateOfBirth: string | undefined = undefined;
+      const ageValue = Number(newPatientAge);
+      if (!Number.isNaN(ageValue) && ageValue > 0 && ageValue < 130) {
+        const today = new Date();
+        const dob = new Date(today.getFullYear() - ageValue, 0, 1);
+        derivedDateOfBirth = dob.toISOString().slice(0, 10);
+      }
+
       const response = await fetch("/api/patients", {
         method: "POST",
         headers: {
@@ -1986,7 +2051,7 @@ export default function CreateDirectTestPage() {
           name: newPatient.name,
           phone: newPatient.phone,
           email: newPatient.email || undefined,
-          dateOfBirth: newPatient.dateOfBirth || undefined,
+          dateOfBirth: derivedDateOfBirth,
           gender: newPatient.gender || undefined,
           address: newPatient.address || undefined,
         }),
@@ -2011,10 +2076,12 @@ export default function CreateDirectTestPage() {
         name: "",
         phone: "",
         email: "",
-        dateOfBirth: "",
         gender: "",
         address: "",
+        doctorName: "",
+        receiptNo: "",
       });
+      setNewPatientAge("");
     } catch (err: any) {
       toast.error(err.message || "Failed to create patient");
     } finally {
@@ -2294,12 +2361,12 @@ export default function CreateDirectTestPage() {
                                     <div className="font-medium">
                                       {patient.name}
                                     </div>
-                                    <div className="text-xs text-muted-foreground">
-                                      {patient.patientId}
-                                      {patient.phone
-                                        ? ` • ${patient.phone}`
-                                        : ""}
-                                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {formatPatientId(patient.patientId)}
+                      {patient.phone
+                        ? ` • ${patient.phone}`
+                        : ""}
+                    </div>
                                   </div>
                                 </div>
                                 <Badge variant="outline" className="text-xs">
@@ -2335,21 +2402,22 @@ export default function CreateDirectTestPage() {
 
                 {/* Selected Patient */}
                 {selectedPatient && (
-                  <div className="p-4 bg-green-50 dark:bg-green-950/20 rounded-md border border-green-200 dark:border-green-800">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-3">
-                        <CheckCircle className="h-5 w-5 text-green-600" />
-                        <div>
-                          <div className="font-medium">
-                            {selectedPatient.name}
-                          </div>
-                          <div className="text-sm text-muted-foreground">
-                            Patient ID: {selectedPatient.patientId}
+                    <div className="p-4 bg-green-50 dark:bg-green-950/20 rounded-md border border-green-200 dark:border-green-800 space-y-3">
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center gap-3">
+                          <CheckCircle className="h-5 w-5 text-green-600" />
+                          <div>
+                            <div className="font-medium">
+                              {selectedPatient.name}
+                            </div>
+                            <div className="text-sm text-muted-foreground">
+                            Lab Test ID:{" "}
+                            {formatPatientId(selectedPatient.patientId)}
                             {selectedPatient.phone &&
                               ` • Phone: ${selectedPatient.phone}`}
+                            </div>
                           </div>
                         </div>
-                      </div>
                       <Button
                         type="button"
                         variant="ghost"
@@ -2360,10 +2428,48 @@ export default function CreateDirectTestPage() {
                         }}
                       >
                         Change
-                      </Button>
+                        </Button>
+                      </div>
+                      {isLabRole && incompletePatientFields.length > 0 && (
+                        <Alert variant="destructive" className="mt-2">
+                          <AlertTriangle className="h-4 w-4" />
+                          <AlertTitle>Incomplete patient info</AlertTitle>
+                          <AlertDescription>
+                            Missing: {incompletePatientFields.join(", ")}. You
+                            can continue or ignore.
+                          </AlertDescription>
+                        </Alert>
+                      )}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div className="space-y-1">
+                          <Label htmlFor="doctorName">Doctor Name</Label>
+                          <Input
+                            id="doctorName"
+                            value={doctorName}
+                            onChange={(e) => setDoctorName(e.target.value)}
+                            placeholder="Optional"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label htmlFor="receiptNo">Receipt No (Auto)</Label>
+                          <Input
+                            id="receiptNo"
+                            value={receiptNo}
+                            onChange={(e) => setReceiptNo(e.target.value)}
+                            placeholder="Auto generated"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label htmlFor="labTestId">Lab Test ID</Label>
+                          <Input
+                            id="labTestId"
+                            value={formatPatientId(selectedPatient.patientId)}
+                            readOnly
+                          />
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
               </CardContent>
             </Card>
 
@@ -2776,17 +2882,48 @@ export default function CreateDirectTestPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="patientDateOfBirth">Date of Birth</Label>
+                <Label htmlFor="patientAge">Age</Label>
                 <Input
-                  id="patientDateOfBirth"
-                  type="date"
-                  value={newPatient.dateOfBirth}
+                  id="patientAge"
+                  type="number"
+                  min="0"
+                  max="130"
+                  value={newPatientAge}
+                  onChange={(e) => setNewPatientAge(e.target.value)}
+                  placeholder="Enter age in years"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="patientDoctorName">Doctor Name</Label>
+                <Input
+                  id="patientDoctorName"
+                  value={newPatient.doctorName}
                   onChange={(e) =>
-                    setNewPatient({
-                      ...newPatient,
-                      dateOfBirth: e.target.value,
-                    })
+                    setNewPatient({ ...newPatient, doctorName: e.target.value })
                   }
+                  placeholder="Optional"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="patientReceiptNo">Receipt No (Auto)</Label>
+                <Input
+                  id="patientReceiptNo"
+                  value={newPatient.receiptNo}
+                  onChange={(e) =>
+                    setNewPatient({ ...newPatient, receiptNo: e.target.value })
+                  }
+                  placeholder="Auto generated"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="patientLabTestId">Lab Test ID</Label>
+                <Input
+                  id="patientLabTestId"
+                  value="Auto generated after save"
+                  readOnly
                 />
               </div>
 
