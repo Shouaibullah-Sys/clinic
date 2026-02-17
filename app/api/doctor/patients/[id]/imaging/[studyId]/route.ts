@@ -48,7 +48,7 @@ export async function GET(
       patient: patientId,
       referringDoctor: doctorId,
     })
-      .populate("patient", "name patientId phone email dateOfBirth gender")
+      .populate("patient", "name patientId phone guardian dateOfBirth gender")
       .populate("referringDoctor", "name specialization department licenseNumber")
       .populate("radiologist", "name")
       .populate("technician", "name")

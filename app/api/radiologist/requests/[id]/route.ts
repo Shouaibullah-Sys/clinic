@@ -39,7 +39,7 @@ export async function GET(
 
     // Find the request by ID
     const requestDoc = await RadiologyService.findById(requestId)
-      .populate("patient", "name patientId phone email dateOfBirth gender")
+      .populate("patient", "name patientId phone guardian dateOfBirth gender")
       .populate("referringDoctor", "name specialization department licenseNumber")
       .populate("radiologist", "name")
       .populate("technician", "name")

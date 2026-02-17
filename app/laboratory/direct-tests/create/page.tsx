@@ -63,7 +63,14 @@ interface Patient {
   name: string;
   patientId: string;
   phone?: string;
-  email?: string;
+  guardian?: string;
+  refPerson?: string;
+  passTskNo?: string;
+  registrationNo?: string;
+  address?: string;
+  gender?: string;
+  dateOfBirth?: string;
+  doctorName?: string;
 }
 
 interface SampleParameter {
@@ -1641,8 +1648,7 @@ export default function CreateDirectTestPage() {
 
   // Form state
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
-  const [selectedTestId, setSelectedTestId] = useState<string>("");
-  const [selectedTest, setSelectedTest] = useState<LabTest | null>(null);
+  const [selectedTests, setSelectedTests] = useState<LabTest[]>([]);
   const [priority, setPriority] = useState<"routine" | "urgent" | "emergency">(
     "routine",
   );
@@ -1651,9 +1657,9 @@ export default function CreateDirectTestPage() {
   const [receiptNo, setReceiptNo] = useState("");
   const receiptCounterRef = useRef(1);
 
-  const [testParameters, setTestParameters] = useState<TestParameter[]>([
-    { id: "1", name: "", value: "", unit: "", normalRange: "", remarks: "" },
-  ]);
+  const [testParameters, setTestParameters] = useState<
+    Record<string, TestParameter[]>
+  >({});
 
   // Smart Search states
   const [patientSearchQuery, setPatientSearchQuery] = useState("");
@@ -1681,11 +1687,14 @@ export default function CreateDirectTestPage() {
   const [newPatient, setNewPatient] = useState({
     name: "",
     phone: "",
-    email: "",
+    guardian: "",
     gender: "",
     address: "",
     doctorName: "",
     receiptNo: "",
+    refPerson: "",
+    passTskNo: "",
+    registrationNo: "",
   });
   const [newPatientAge, setNewPatientAge] = useState("");
 
@@ -1720,7 +1729,7 @@ export default function CreateDirectTestPage() {
     if (!selectedPatient) return [];
     const missing: string[] = [];
     if (!selectedPatient.phone) missing.push("Phone");
-    if (!selectedPatient.email) missing.push("Email");
+    if (!selectedPatient.guardian?.trim()) missing.push("Guardian");
     return missing;
   }, [selectedPatient]);
 
@@ -1883,52 +1892,6 @@ export default function CreateDirectTestPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Handle test selection change - populate test parameters
-  useEffect(() => {
-    if (selectedTestId) {
-      const test = activeLabTests
-        .flatMap((category) => category.tests)
-        .find((t) => t.id === selectedTestId);
-      if (test) {
-        setSelectedTest(test);
-        setTestParameters(
-          test.parameters.map((p) => ({
-            id: p.id,
-            name: p.name,
-            value: "",
-            unit: p.unit,
-            normalRange: p.normalRange,
-            remarks: "",
-          })),
-        );
-      } else {
-        setSelectedTest(null);
-        setTestParameters([
-          {
-            id: "1",
-            name: "",
-            value: "",
-            unit: "",
-            normalRange: "",
-            remarks: "",
-          },
-        ]);
-      }
-    } else {
-      setSelectedTest(null);
-      setTestParameters([
-        {
-          id: "1",
-          name: "",
-          value: "",
-          unit: "",
-          normalRange: "",
-          remarks: "",
-        },
-      ]);
-    }
-  }, [selectedTestId, activeLabTests]);
-
   const searchPatients = async () => {
     try {
       setSearchingPatients(true);
@@ -1971,7 +1934,7 @@ export default function CreateDirectTestPage() {
     if (isLabRole) {
       const missing: string[] = [];
       if (!patient.phone) missing.push("Phone");
-      if (!patient.email) missing.push("Email");
+      if (!patient.guardian?.trim()) missing.push("Guardian");
       if (missing.length > 0) {
         toast.warning("Patient info is incomplete", {
           description: `Missing: ${missing.join(", ")}. You can continue or ignore.`,
@@ -2025,8 +1988,8 @@ export default function CreateDirectTestPage() {
   const handleCreatePatient = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!newPatient.name || !newPatient.phone) {
-      toast.error("Name and phone are required");
+    if (!newPatient.name || !newPatient.phone || !newPatient.gender || !newPatientAge) {
+      toast.error("Name, phone, gender, and age are required");
       return;
     }
 
@@ -2035,11 +1998,13 @@ export default function CreateDirectTestPage() {
 
       let derivedDateOfBirth: string | undefined = undefined;
       const ageValue = Number(newPatientAge);
-      if (!Number.isNaN(ageValue) && ageValue > 0 && ageValue < 130) {
-        const today = new Date();
-        const dob = new Date(today.getFullYear() - ageValue, 0, 1);
-        derivedDateOfBirth = dob.toISOString().slice(0, 10);
+      if (Number.isNaN(ageValue) || ageValue <= 0 || ageValue >= 130) {
+        toast.error("Please enter a valid age");
+        return;
       }
+      const today = new Date();
+      const dob = new Date(today.getFullYear() - ageValue, 0, 1);
+      derivedDateOfBirth = dob.toISOString().slice(0, 10);
 
       const response = await fetch("/api/patients", {
         method: "POST",
@@ -2048,12 +2013,15 @@ export default function CreateDirectTestPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          name: newPatient.name,
-          phone: newPatient.phone,
-          email: newPatient.email || undefined,
+          name: newPatient.name.trim(),
+          phone: newPatient.phone.trim(),
+          guardian: newPatient.guardian.trim() || undefined,
           dateOfBirth: derivedDateOfBirth,
-          gender: newPatient.gender || undefined,
-          address: newPatient.address || undefined,
+          gender: newPatient.gender,
+          address: newPatient.address.trim() || undefined,
+          refPerson: newPatient.refPerson.trim() || undefined,
+          passTskNo: newPatient.passTskNo.trim() || undefined,
+          registrationNo: newPatient.registrationNo.trim() || undefined,
         }),
       });
 
@@ -2065,7 +2033,25 @@ export default function CreateDirectTestPage() {
       const data = await response.json();
       toast.success("Patient created successfully");
 
-      setSelectedPatient(data.data);
+      setSelectedPatient({
+        ...data.data,
+        guardian:
+          data.data?.guardian || newPatient.guardian?.trim() || undefined,
+        refPerson:
+          data.data?.refPerson || newPatient.refPerson?.trim() || undefined,
+        passTskNo:
+          data.data?.passTskNo || newPatient.passTskNo?.trim() || undefined,
+        registrationNo:
+          data.data?.registrationNo ||
+          newPatient.registrationNo?.trim() ||
+          undefined,
+        address:
+          data.data?.address || newPatient.address?.trim() || undefined,
+        doctorName: newPatient.doctorName.trim() || undefined,
+      });
+      if (!doctorName.trim() && newPatient.doctorName.trim()) {
+        setDoctorName(newPatient.doctorName.trim());
+      }
       setPatientSearchQuery("");
       setShowPatientDropdown(false);
       setPatientSearchResults([]);
@@ -2075,11 +2061,14 @@ export default function CreateDirectTestPage() {
       setNewPatient({
         name: "",
         phone: "",
-        email: "",
+        guardian: "",
         gender: "",
         address: "",
         doctorName: "",
         receiptNo: "",
+        refPerson: "",
+        passTskNo: "",
+        registrationNo: "",
       });
       setNewPatientAge("");
     } catch (err: any) {
@@ -2089,12 +2078,58 @@ export default function CreateDirectTestPage() {
     }
   };
 
-  const handleSelectTest = (testId: string) => {
-    setSelectedTestId(testId);
+  const ensureTestParameters = (test: LabTest) => {
+    setTestParameters((prev) => {
+      if (prev[test.id]) return prev;
+      return {
+        ...prev,
+        [test.id]:
+          test.parameters.length > 0
+            ? test.parameters.map((p) => ({
+                id: p.id,
+                name: p.name,
+                value: "",
+                unit: p.unit,
+                normalRange: p.normalRange,
+                remarks: "",
+              }))
+            : [
+                {
+                  id: "1",
+                  name: "",
+                  value: "",
+                  unit: "",
+                  normalRange: "",
+                  remarks: "",
+                },
+              ],
+      };
+    });
+  };
+
+  const handleAddTest = (testId: string) => {
+    const test = activeLabTests
+      .flatMap((category) => category.tests)
+      .find((t) => t.id === testId);
+    if (!test) return;
+    setSelectedTests((prev) => {
+      if (prev.some((t) => t.id === test.id)) return prev;
+      return [...prev, test];
+    });
+    ensureTestParameters(test);
     setTestSearchQuery("");
     setTestSearchResults([]);
     setShowTestDropdown(false);
     setActiveSearchIndex(-1);
+  };
+
+  const handleRemoveTest = (testId: string) => {
+    setSelectedTests((prev) => prev.filter((t) => t.id !== testId));
+    setTestParameters((prev) => {
+      const next = { ...prev };
+      delete next[testId];
+      return next;
+    });
   };
 
   const handleClearSearch = () => {
@@ -2132,7 +2167,7 @@ export default function CreateDirectTestPage() {
     if (e.key === "Enter" && showTestDropdown) {
       e.preventDefault();
       if (activeSearchIndex >= 0 && testSearchResults[activeSearchIndex]) {
-        handleSelectTest(testSearchResults[activeSearchIndex].id);
+        handleAddTest(testSearchResults[activeSearchIndex].id);
       }
       return;
     }
@@ -2143,37 +2178,50 @@ export default function CreateDirectTestPage() {
     }
   };
 
-  const addTestParameter = () => {
-    const newId = (testParameters.length + 1).toString();
-    setTestParameters([
-      ...testParameters,
-      {
-        id: newId,
-        name: "",
-        value: "",
-        unit: "",
-        normalRange: "",
-        remarks: "",
-      },
-    ]);
+  const addTestParameter = (testId: string) => {
+    setTestParameters((prev) => {
+      const current = prev[testId] || [];
+      const newId = (current.length + 1).toString();
+      return {
+        ...prev,
+        [testId]: [
+          ...current,
+          {
+            id: newId,
+            name: "",
+            value: "",
+            unit: "",
+            normalRange: "",
+            remarks: "",
+          },
+        ],
+      };
+    });
   };
 
-  const removeTestParameter = (id: string) => {
-    if (testParameters.length > 1) {
-      setTestParameters(testParameters.filter((p) => p.id !== id));
-    }
+  const removeTestParameter = (testId: string, id: string) => {
+    setTestParameters((prev) => {
+      const current = prev[testId] || [];
+      if (current.length <= 1) return prev;
+      return {
+        ...prev,
+        [testId]: current.filter((p) => p.id !== id),
+      };
+    });
   };
 
   const updateTestParameter = (
+    testId: string,
     id: string,
     field: keyof TestParameter,
     value: string,
   ) => {
-    setTestParameters(
-      testParameters.map((param) =>
+    setTestParameters((prev) => ({
+      ...prev,
+      [testId]: (prev[testId] || []).map((param) =>
         param.id === id ? { ...param, [field]: value } : param,
       ),
-    );
+    }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -2184,8 +2232,8 @@ export default function CreateDirectTestPage() {
       return;
     }
 
-    if (!selectedTestId) {
-      toast.error("Please select a test type");
+    if (selectedTests.length === 0) {
+      toast.error("Please add at least one test");
       return;
     }
 
@@ -2193,48 +2241,72 @@ export default function CreateDirectTestPage() {
       setSubmitting(true);
       setError(null);
 
-      const validTestParameters = testParameters.filter(
-        (p) => p.name.trim() && p.value.trim(),
-      );
+      const batchId = `DTB${Date.now()}${Math.floor(Math.random() * 1000)}`;
+      const createRequests = selectedTests.map((test) => {
+        const params = (testParameters[test.id] || []).filter(
+          (p) => p.name.trim() && p.value.trim(),
+        );
+        const snapshot = {
+          name: selectedPatient.name,
+          patientId: selectedPatient.patientId,
+          phone: selectedPatient.phone,
+          gender: selectedPatient.gender,
+          guardian: selectedPatient.guardian,
+          address: selectedPatient.address,
+          refPerson: selectedPatient.refPerson,
+          passTskNo: selectedPatient.passTskNo,
+          registrationNo: selectedPatient.registrationNo,
+        };
+        const resolvedDoctorName =
+          doctorName.trim() || selectedPatient.doctorName?.trim() || undefined;
+        const payload = {
+          patientId: selectedPatient._id,
+          testName: test.name,
+          category: activeLabTests
+            .find((cat) => cat.tests.some((t) => t.id === test.id))
+            ?.tests.find((t) => t.id === test.id)?.category,
+          price: test.price,
+          priority,
+          notes: notes || undefined,
+          specimenType: test.specimenType || "blood",
+          doctorName: resolvedDoctorName,
+          results: {
+            parameters: params.map((p) => ({
+              name: p.name,
+              value: p.value,
+              unit: p.unit,
+              normalRange: p.normalRange,
+              remarks: p.remarks,
+            })),
+          },
+          batchId,
+          patientSnapshot: snapshot,
+        };
 
-      const payload = {
-        patientId: selectedPatient._id,
-        testName: selectedTest?.name,
-        category: activeLabTests
-          .find((cat) => cat.tests.some((t) => t.id === selectedTestId))
-          ?.tests.find((t) => t.id === selectedTestId)?.category,
-        price: selectedTest?.price,
-        priority,
-        notes: notes || undefined,
-        specimenType: selectedTest?.specimenType || "blood",
-        results: {
-          parameters: validTestParameters.map((p) => ({
-            name: p.name,
-            value: p.value,
-            unit: p.unit,
-            normalRange: p.normalRange,
-            remarks: p.remarks,
-          })),
-        },
-      };
-
-      const response = await fetch("/api/laboratory/direct-tests", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
+        return fetch("/api/laboratory/direct-tests", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        }).then(async (res) => {
+          if (!res.ok) {
+            const errorData = await res.json();
+            throw new Error(errorData.error || "Failed to create direct lab test");
+          }
+          return res.json();
+        });
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to create direct lab test");
+      const results = await Promise.all(createRequests);
+      toast.success("Direct lab tests created successfully");
+      const firstId = results[0]?.data?._id;
+      if (firstId) {
+        router.push(`/laboratory/direct-tests/${firstId}`);
+      } else {
+        router.push(`/laboratory/direct-tests`);
       }
-
-      const data = await response.json();
-      toast.success("Direct lab test created successfully");
-      router.push(`/laboratory/direct-tests/${data.data._id}`);
     } catch (err: any) {
       setError(err.message || "Failed to create direct lab test");
       toast.error(err.message || "Failed to create direct lab test");
@@ -2520,12 +2592,15 @@ export default function CreateDirectTestPage() {
 
                   {showTestDropdown && (
                     <div className="absolute z-50 w-full mt-1 border rounded-md shadow-lg bg-popover max-h-80 overflow-y-auto">
-                      {testSearchResults.length > 0 ? (
-                        testSearchResults.map((test, index) => {
+                  {testSearchResults.length > 0 ? (
+                    testSearchResults.map((test, index) => {
                           const category = activeLabTests.find((cat) =>
                             cat.tests.some((t) => t.id === test.id),
                           )?.name;
 
+                          const isSelected = selectedTests.some(
+                            (selected) => selected.id === test.id,
+                          );
                           return (
                             <button
                               key={test.id}
@@ -2536,7 +2611,7 @@ export default function CreateDirectTestPage() {
                                   : "hover:bg-accent"
                               }`}
                               onMouseEnter={() => setActiveSearchIndex(index)}
-                              onClick={() => handleSelectTest(test.id)}
+                              onClick={() => handleAddTest(test.id)}
                             >
                               <div className="flex items-center justify-between gap-4">
                                 <div className="flex-1 min-w-0">
@@ -2548,9 +2623,16 @@ export default function CreateDirectTestPage() {
                                     parameters
                                   </div>
                                 </div>
-                                <Badge variant="secondary" className="text-xs">
-                                  ₹{test.price}
-                                </Badge>
+                                <div className="flex items-center gap-2">
+                                  {isSelected && (
+                                    <Badge variant="outline" className="text-xs">
+                                      Added
+                                    </Badge>
+                                  )}
+                                  <Badge variant="secondary" className="text-xs">
+                                    ₹{test.price}
+                                  </Badge>
+                                </div>
                               </div>
                             </button>
                           );
@@ -2577,42 +2659,48 @@ export default function CreateDirectTestPage() {
           {/* Right Column - Test Details and Options */}
           <div className="space-y-6">
             {/* Selected Test Details */}
-            {selectedTest && (
+            {selectedTests.length > 0 && (
               <Card>
                 <CardHeader>
-                  <CardTitle>Test Details</CardTitle>
+                  <CardTitle>Selected Tests</CardTitle>
                   <CardDescription>
                     Review selected test details
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div>
-                    <Label>Test Name</Label>
-                    <p className="font-medium mt-1">{selectedTest.name}</p>
-                  </div>
-
-                  <div>
-                    <Label>Category</Label>
-                    <div className="mt-1">
-                      <Badge variant="outline">
-                        {activeLabTests.find((cat) =>
-                          cat.tests.some((t) => t.id === selectedTestId),
-                        )?.name || "General"}
-                      </Badge>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label>Price</Label>
-                      <p className="font-medium mt-1">₹{selectedTest.price}</p>
-                    </div>
-                    <div>
-                      <Label>Parameters</Label>
-                      <p className="font-medium mt-1 text-center">
-                        {selectedTest.parameters.length}
-                      </p>
-                    </div>
+                  <div className="space-y-3">
+                    {selectedTests.map((test) => {
+                      const category = activeLabTests.find((cat) =>
+                        cat.tests.some((t) => t.id === test.id),
+                      )?.name;
+                      return (
+                        <div
+                          key={test.id}
+                          className="flex items-center justify-between border rounded-md p-3"
+                        >
+                          <div>
+                            <div className="font-medium">{test.name}</div>
+                            <div className="text-sm text-muted-foreground">
+                              {category || "General"} • {test.parameters.length}{" "}
+                              parameters
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <Badge variant="secondary" className="text-xs">
+                              ₹{test.price}
+                            </Badge>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleRemoveTest(test.id)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
 
                   <div className="pt-3 border-t space-y-4">
@@ -2654,128 +2742,147 @@ export default function CreateDirectTestPage() {
           </div>
         </div>
 
-        {/* Full Width Parameters Table */}
-        <Card className="mt-6 border-blue-200 dark:border-blue-800">
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              <span className="flex items-center gap-2">
-                <TestTube className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                Test Parameters (Results)
-              </span>
-              <Button
-                type="button"
-                onClick={addTestParameter}
-                variant="outline"
-                size="sm"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Add Parameter
-              </Button>
-            </CardTitle>
-            <CardDescription>
-              Enter parameter result values in a single-row table layout
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="rounded-md border overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Parameter Name *</TableHead>
-                    <TableHead>Value *</TableHead>
-                    <TableHead>Unit</TableHead>
-                    <TableHead>Normal Range</TableHead>
-                    <TableHead>Remarks</TableHead>
-                    <TableHead className="w-[70px]">Action</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {testParameters.map((param) => (
-                    <TableRow key={param.id}>
-                      <TableCell>
-                        <Input
-                          value={param.name}
-                          onChange={(e) =>
-                            updateTestParameter(
-                              param.id,
-                              "name",
-                              e.target.value,
-                            )
-                          }
-                          placeholder="e.g. Hemoglobin"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          value={param.value}
-                          onChange={(e) =>
-                            updateTestParameter(
-                              param.id,
-                              "value",
-                              e.target.value,
-                            )
-                          }
-                          placeholder="Result"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          value={param.unit}
-                          onChange={(e) =>
-                            updateTestParameter(
-                              param.id,
-                              "unit",
-                              e.target.value,
-                            )
-                          }
-                          placeholder="Unit"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          value={param.normalRange}
-                          onChange={(e) =>
-                            updateTestParameter(
-                              param.id,
-                              "normalRange",
-                              e.target.value,
-                            )
-                          }
-                          placeholder="Normal range"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          value={param.remarks}
-                          onChange={(e) =>
-                            updateTestParameter(
-                              param.id,
-                              "remarks",
-                              e.target.value,
-                            )
-                          }
-                          placeholder="Remarks"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          type="button"
-                          onClick={() => removeTestParameter(param.id)}
-                          variant="ghost"
-                          size="sm"
-                          className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
-                          disabled={testParameters.length === 1}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
+        {/* Full Width Parameters Tables */}
+        {selectedTests.length > 0 && (
+          <div className="mt-6 space-y-6">
+            {selectedTests.map((test) => {
+              const params = testParameters[test.id] || [];
+              return (
+                <Card
+                  key={test.id}
+                  className="border-blue-200 dark:border-blue-800"
+                >
+                  <CardHeader>
+                    <CardTitle className="flex items-center justify-between">
+                      <span className="flex items-center gap-2">
+                        <TestTube className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                        {test.name} (Results)
+                      </span>
+                      <Button
+                        type="button"
+                        onClick={() => addTestParameter(test.id)}
+                        variant="outline"
+                        size="sm"
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add Parameter
+                      </Button>
+                    </CardTitle>
+                    <CardDescription>
+                      Enter parameter result values in a single-row table layout
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="rounded-md border overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Parameter Name *</TableHead>
+                            <TableHead>Value *</TableHead>
+                            <TableHead>Unit</TableHead>
+                            <TableHead>Normal Range</TableHead>
+                            <TableHead>Remarks</TableHead>
+                            <TableHead className="w-[70px]">Action</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {params.map((param) => (
+                            <TableRow key={param.id}>
+                              <TableCell>
+                                <Input
+                                  value={param.name}
+                                  onChange={(e) =>
+                                    updateTestParameter(
+                                      test.id,
+                                      param.id,
+                                      "name",
+                                      e.target.value,
+                                    )
+                                  }
+                                  placeholder="e.g. Hemoglobin"
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <Input
+                                  value={param.value}
+                                  onChange={(e) =>
+                                    updateTestParameter(
+                                      test.id,
+                                      param.id,
+                                      "value",
+                                      e.target.value,
+                                    )
+                                  }
+                                  placeholder="Result"
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <Input
+                                  value={param.unit}
+                                  onChange={(e) =>
+                                    updateTestParameter(
+                                      test.id,
+                                      param.id,
+                                      "unit",
+                                      e.target.value,
+                                    )
+                                  }
+                                  placeholder="Unit"
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <Input
+                                  value={param.normalRange}
+                                  onChange={(e) =>
+                                    updateTestParameter(
+                                      test.id,
+                                      param.id,
+                                      "normalRange",
+                                      e.target.value,
+                                    )
+                                  }
+                                  placeholder="Normal range"
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <Input
+                                  value={param.remarks}
+                                  onChange={(e) =>
+                                    updateTestParameter(
+                                      test.id,
+                                      param.id,
+                                      "remarks",
+                                      e.target.value,
+                                    )
+                                  }
+                                  placeholder="Remarks"
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <Button
+                                  type="button"
+                                  onClick={() =>
+                                    removeTestParameter(test.id, param.id)
+                                  }
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
+                                  disabled={params.length === 1}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
 
         {/* Submit Button */}
         <div className="mt-6 flex justify-end gap-4">
@@ -2789,7 +2896,7 @@ export default function CreateDirectTestPage() {
           </Button>
           <Button
             type="submit"
-            disabled={submitting || !selectedPatient || !selectedTestId}
+            disabled={submitting || !selectedPatient || selectedTests.length === 0}
             className="min-w-[200px]"
           >
             {submitting ? (
@@ -2850,20 +2957,22 @@ export default function CreateDirectTestPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="patientEmail">Email</Label>
+                <Label htmlFor="patientGuardian">Guardian</Label>
                 <Input
-                  id="patientEmail"
-                  type="email"
-                  value={newPatient.email}
+                  id="patientGuardian"
+                  type="text"
+                  value={newPatient.guardian}
                   onChange={(e) =>
-                    setNewPatient({ ...newPatient, email: e.target.value })
+                    setNewPatient({ ...newPatient, guardian: e.target.value })
                   }
-                  placeholder="Enter email address"
+                  placeholder="Enter guardian name"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="patientGender">Gender</Label>
+                <Label htmlFor="patientGender">
+                  Gender <span className="text-red-500">*</span>
+                </Label>
                 <Select
                   value={newPatient.gender}
                   onValueChange={(value) =>
@@ -2882,7 +2991,9 @@ export default function CreateDirectTestPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="patientAge">Age</Label>
+                <Label htmlFor="patientAge">
+                  Age <span className="text-red-500">*</span>
+                </Label>
                 <Input
                   id="patientAge"
                   type="number"
@@ -2891,6 +3002,7 @@ export default function CreateDirectTestPage() {
                   value={newPatientAge}
                   onChange={(e) => setNewPatientAge(e.target.value)}
                   placeholder="Enter age in years"
+                  required
                 />
               </div>
 
@@ -2927,18 +3039,70 @@ export default function CreateDirectTestPage() {
                 />
               </div>
 
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="patientAddress">Address</Label>
-                <Textarea
-                  id="patientAddress"
-                  value={newPatient.address}
-                  onChange={(e) =>
-                    setNewPatient({ ...newPatient, address: e.target.value })
-                  }
-                  placeholder="Enter patient address"
-                  rows={3}
-                />
-              </div>
+              {isLabRole && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="patientRefPerson">Ref Person</Label>
+                    <Input
+                      id="patientRefPerson"
+                      type="text"
+                      value={newPatient.refPerson}
+                      onChange={(e) =>
+                        setNewPatient({
+                          ...newPatient,
+                          refPerson: e.target.value,
+                        })
+                      }
+                      placeholder="Optional"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="patientPassTskNo">Pass/Tsk #</Label>
+                    <Input
+                      id="patientPassTskNo"
+                      type="text"
+                      value={newPatient.passTskNo}
+                      onChange={(e) =>
+                        setNewPatient({
+                          ...newPatient,
+                          passTskNo: e.target.value,
+                        })
+                      }
+                      placeholder="Optional"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="patientRegistrationNo">Regn No</Label>
+                    <Input
+                      id="patientRegistrationNo"
+                      type="text"
+                      value={newPatient.registrationNo}
+                      onChange={(e) =>
+                        setNewPatient({
+                          ...newPatient,
+                          registrationNo: e.target.value,
+                        })
+                      }
+                      placeholder="Optional"
+                    />
+                  </div>
+
+                  <div className="space-y-2 md:col-span-2">
+                    <Label htmlFor="patientAddress">Address</Label>
+                    <Textarea
+                      id="patientAddress"
+                      value={newPatient.address}
+                      onChange={(e) =>
+                        setNewPatient({ ...newPatient, address: e.target.value })
+                      }
+                      placeholder="Enter patient address"
+                      rows={3}
+                    />
+                  </div>
+                </>
+              )}
             </div>
 
             <DialogFooter>

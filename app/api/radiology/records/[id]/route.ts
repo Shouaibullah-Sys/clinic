@@ -53,7 +53,7 @@ export async function GET(
 
     // Try to find in RadiologyExam collection first (direct exams)
     const examResult = await RadiologyExam.findById(examId)
-      .populate("patient", "name patientId phone email dateOfBirth gender")
+      .populate("patient", "name patientId phone guardian dateOfBirth gender")
       .populate("doctor", "name specialization")
       .populate("createdBy", "name")
       .populate("finalizedBy", "name")
@@ -72,7 +72,7 @@ export async function GET(
         `[DEBUG] Not found in RadiologyExam, checking RadiologyService...`,
       );
       const serviceResult = await RadiologyService.findById(examId)
-        .populate("patient", "name patientId phone email dateOfBirth gender")
+        .populate("patient", "name patientId phone guardian dateOfBirth gender")
         .populate("referringDoctor", "name specialization")
         .populate("radiologist", "name")
         .populate("technician", "name")

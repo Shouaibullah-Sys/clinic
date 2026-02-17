@@ -104,7 +104,7 @@ export async function GET(request: NextRequest) {
 
     // Get appointments for this doctor
     const appointments = await Appointment.find(query)
-      .populate("patient", "name phone email patientId dateOfBirth gender")
+      .populate("patient", "name phone guardian patientId dateOfBirth gender")
       .sort({ startTime: 1 })
       .lean();
 

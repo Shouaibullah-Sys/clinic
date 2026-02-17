@@ -5,7 +5,12 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Printer, Download, Eye, Settings } from "lucide-react";
-import { generateLabTestPDF, LabTest } from "@/lib/pdf-generator";
+import {
+  generateLabTestPDF,
+  generateDirectTestPDF,
+  LabTest,
+  DirectLabTest,
+} from "@/lib/pdf-generator";
 import {
   Dialog,
   DialogContent,
@@ -15,11 +20,12 @@ import {
 } from "@/components/ui/dialog";
 
 interface LabTestPDFGeneratorProps {
-  test: LabTest;
+  test: LabTest | LabTest[] | DirectLabTest | DirectLabTest[];
   mode?: "print" | "download" | "preview";
   buttonLabel?: string;
   buttonVariant?: "default" | "outline" | "ghost" | "destructive" | "secondary";
   buttonSize?: "default" | "sm" | "lg" | "icon";
+  generator?: "standard" | "direct";
 }
 
 const LabTestPDFGenerator = ({
@@ -28,9 +34,12 @@ const LabTestPDFGenerator = ({
   buttonLabel,
   buttonVariant = "default",
   buttonSize = "default",
+  generator = "standard",
 }: LabTestPDFGeneratorProps) => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+
+  const primaryTest = Array.isArray(test) ? test[0] : test;
 
   const handleGeneratePDF = async () => {
     if (mode === "preview") {
@@ -40,7 +49,11 @@ const LabTestPDFGenerator = ({
 
     try {
       setIsGenerating(true);
-      await generateLabTestPDF(test, mode);
+      if (generator === "direct") {
+        await generateDirectTestPDF(test as any, mode);
+      } else {
+        await generateLabTestPDF(test as any, mode);
+      }
     } catch (error) {
       console.error("Failed to generate PDF:", error);
       alert("Failed to generate PDF. Please try again.");
@@ -70,7 +83,7 @@ const LabTestPDFGenerator = ({
         },
         body: JSON.stringify({
           html,
-          testId: test.testId,
+          testId: (primaryTest as any)?.testId || "test",
         }),
       });
 
@@ -83,7 +96,7 @@ const LabTestPDFGenerator = ({
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `lab-report-${test.testId}.pdf`;
+      a.download = `lab-report-${(primaryTest as any)?.testId || "test"}.pdf`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);

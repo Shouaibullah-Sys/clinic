@@ -7,7 +7,7 @@ import { generateDirectTestPDF } from "@/lib/pdf-generator";
 import { DirectLabTest } from "@/lib/pdf-generator";
 
 interface DirectTestPDFGeneratorProps {
-  test: DirectLabTest;
+  test: DirectLabTest | DirectLabTest[];
   mode?: "print" | "download";
   buttonLabel?: string;
   buttonVariant?: "default" | "outline" | "ghost" | "destructive" | "secondary";

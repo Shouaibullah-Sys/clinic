@@ -65,7 +65,7 @@ interface Appointment {
     _id: string;
     name: string;
     phone: string;
-    email?: string;
+    guardian?: string;
     patientId: string;
     dateOfBirth?: string;
     gender?: string;

@@ -59,7 +59,10 @@ export async function GET(
 
     // Find the lab test
     const labTest = await LabTest.findById(testId)
-      .populate("patient", "name patientId phone email dateOfBirth gender")
+      .populate(
+        "patient",
+        "name patientId phone guardian dateOfBirth gender address refPerson passTskNo registrationNo",
+      )
       .populate("doctor", "name specialization")
       .populate("createdBy", "name")
       .populate("finalizedBy", "name")

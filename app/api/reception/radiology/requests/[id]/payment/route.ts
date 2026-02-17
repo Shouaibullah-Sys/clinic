@@ -179,7 +179,7 @@ export async function GET(
     
     // Find radiology request with all details
     const radiologyRequest = await RadiologyService.findById(requestId)
-      .populate("patient", "name patientId phone email dateOfBirth gender")
+      .populate("patient", "name patientId phone guardian dateOfBirth gender")
       .populate("referringDoctor", "name specialization department")
       .populate("radiologist", "name")
       .populate("technician", "name")

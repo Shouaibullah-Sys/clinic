@@ -32,7 +32,6 @@ import {
   TestTube,
   Pill,
   Phone,
-  Mail,
   CalendarDays,
   Heart,
   Plus,
@@ -64,7 +63,7 @@ interface Patient {
   _id: string;
   name: string;
   phone: string;
-  email?: string;
+  guardian?: string;
   patientId: string;
   dateOfBirth: string;
   gender: string;
@@ -844,10 +843,10 @@ export default function DoctorPatientDetailPage() {
                     <Phone className="h-4 w-4 text-gray-400" />
                     <span>{patient?.phone}</span>
                   </div>
-                  {patient?.email && (
+                  {patient?.guardian && (
                     <div className="flex items-center gap-2">
-                      <Mail className="h-4 w-4 text-gray-400" />
-                      <span>{patient.email}</span>
+                      <User className="h-4 w-4 text-gray-400" />
+                      <span>{patient.guardian}</span>
                     </div>
                   )}
                   {patient?.address && (

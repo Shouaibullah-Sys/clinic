@@ -69,7 +69,7 @@ interface Appointment {
     _id: string;
     name: string;
     phone: string;
-    email: string;
+    guardian?: string;
     patientId: string;
     dateOfBirth: string;
     gender: string;
@@ -89,7 +89,7 @@ interface Patient {
   _id: string;
   name: string;
   phone: string;
-  email?: string;
+  guardian?: string;
   patientId: string;
   dateOfBirth: string;
   gender: string;
@@ -810,9 +810,9 @@ export default function DoctorDashboardPage() {
                           <TableCell>
                             <div>
                               <p className="font-medium">{patient.name}</p>
-                              {patient.email && (
+                              {patient.guardian && (
                                 <p className="text-sm text-gray-500">
-                                  {patient.email}
+                                  {patient.guardian}
                                 </p>
                               )}
                             </div>

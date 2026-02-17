@@ -17,12 +17,17 @@ interface DirectLabTest {
   testId: string;
   testName: string;
   category: string;
+  directBatchId?: string;
   patient: {
     _id: string;
     name: string;
     patientId: string;
     phone?: string;
-    email?: string;
+    guardian?: string;
+    address?: string;
+    refPerson?: string;
+    passTskNo?: string;
+    registrationNo?: string;
     dateOfBirth?: string;
     gender?: string;
     age?: number;
@@ -98,6 +103,7 @@ export default function DirectTestPrintPage() {
   const router = useRouter();
   const { accessToken } = useAuthStore();
   const [test, setTest] = useState<DirectLabTest | null>(null);
+  const [batchTests, setBatchTests] = useState<DirectLabTest[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [markingPrinted, setMarkingPrinted] = useState(false);
@@ -131,6 +137,25 @@ export default function DirectTestPrintPage() {
       }
 
       setTest(data.data);
+
+      if (data.data?.directBatchId) {
+        const batchResponse = await fetch(
+          `/api/laboratory/direct-tests?batchId=${encodeURIComponent(
+            data.data.directBatchId,
+          )}&limit=200`,
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+            },
+          },
+        );
+        if (batchResponse.ok) {
+          const batchData = await batchResponse.json();
+          setBatchTests(batchData?.data || []);
+        }
+      } else {
+        setBatchTests(null);
+      }
     } catch (error: any) {
       console.error("Error fetching test:", error);
       setError(error.message || "Failed to load test details");
@@ -279,23 +304,12 @@ export default function DirectTestPrintPage() {
       {test.collectionStatus === "collected" && (
         <div className="bg-white p-6 rounded-lg shadow-lg">
           <LabTestPDFGenerator
-            test={{
-              _id: test._id,
-              testId: test.testId,
-              testName: test.testName,
-              category: test.category,
-              patient: test.patient,
-              doctor: test.doctor,
-              status: test.status,
-              collectionStatus: test.collectionStatus,
-              processingStatus: test.processingStatus,
-              orderedAt: test.createdAtDirect,
-              completedAt: test.finalizedAt,
-              specimen: test.specimen,
-              results: test.results,
-              priority: test.priority,
-              labReferenceId: test.testId,
-            }}
+            test={
+              batchTests && batchTests.length > 0
+                ? batchTests
+                : [test]
+            }
+            generator="direct"
             mode="print"
             buttonVariant="default"
             buttonSize="lg"

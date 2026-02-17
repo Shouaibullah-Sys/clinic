@@ -26,7 +26,7 @@ export async function GET(
 
     // Find discharge card with patient and doctor populated
     const dischargeCard = await DischargeCard.findById(cardId)
-      .populate("patient", "name patientId phone email dateOfBirth gender")
+      .populate("patient", "name patientId phone guardian dateOfBirth gender")
       .populate("doctor", "name specialization")
       .populate(
         "preOpMedicines.medicine",

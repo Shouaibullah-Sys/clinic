@@ -301,7 +301,7 @@ export async function GET(
 
     // Find the prescription with populated fields
     const prescription = await Prescription.findById(prescriptionId)
-      .populate("patient", "name patientId phone email dateOfBirth gender")
+      .populate("patient", "name patientId phone guardian dateOfBirth gender")
       .populate("doctor", "name specialization")
       .populate("charges.collectedBy", "name")
       .populate("paymentVerifiedBy", "name")

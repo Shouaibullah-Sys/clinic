@@ -46,7 +46,7 @@ export async function GET(
 
     // Find the radiology exam
     const examResult = await RadiologyExam.findById(examId)
-      .populate("patient", "name patientId phone email dateOfBirth gender")
+      .populate("patient", "name patientId phone guardian dateOfBirth gender")
       .populate("doctor", "name specialization")
       .populate("createdBy", "name")
       .populate("finalizedBy", "name")

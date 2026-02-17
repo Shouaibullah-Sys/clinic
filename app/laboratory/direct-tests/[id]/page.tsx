@@ -34,12 +34,29 @@ interface DirectLabTest {
   testName: string;
   category: string;
   description?: string;
+  directBatchId?: string;
   patient: {
     _id: string;
     name: string;
     patientId: string;
     phone?: string;
-    email?: string;
+    guardian?: string;
+    address?: string;
+    refPerson?: string;
+    passTskNo?: string;
+    registrationNo?: string;
+    dateOfBirth?: string;
+    gender?: string;
+  };
+  patientSnapshot?: {
+    name?: string;
+    patientId?: string;
+    phone?: string;
+    guardian?: string;
+    address?: string;
+    refPerson?: string;
+    passTskNo?: string;
+    registrationNo?: string;
     dateOfBirth?: string;
     gender?: string;
   };
@@ -113,6 +130,19 @@ export default function DirectTestDetailPage() {
   const router = useRouter();
   const { accessToken } = useAuthStore();
   const [test, setTest] = useState<DirectLabTest | null>(null);
+
+  const readPatientField = (
+    record: DirectLabTest | null,
+    field: keyof DirectLabTest["patient"],
+    fallback = "N/A",
+  ) => {
+    if (!record) return fallback;
+    const value =
+      record.patient?.[field] ?? record.patientSnapshot?.[field as any];
+    if (value === undefined || value === null) return fallback;
+    if (typeof value === "string" && value.trim() === "") return fallback;
+    return value as string;
+  };
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [printing, setPrinting] = useState(false);
@@ -205,8 +235,32 @@ export default function DirectTestDetailPage() {
         throw new Error(data.error || "Failed to fetch test for printing");
       }
 
+      let reportData = data.data as DirectLabTest | DirectLabTest[];
+      if (data.data?.directBatchId) {
+        const batchResponse = await fetch(
+          `/api/laboratory/direct-tests?batchId=${encodeURIComponent(
+            data.data.directBatchId,
+          )}&limit=200`,
+          {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+            },
+          },
+        );
+
+        if (batchResponse.ok) {
+          const batchData = await batchResponse.json();
+          const batchTests: DirectLabTest[] = batchData?.data || [];
+          if (batchTests.length > 0) {
+            reportData = batchTests;
+          }
+        }
+      }
+
       // Generate PDF
-      await generateDirectTestPDF(data.data, "print");
+      await generateDirectTestPDF(reportData, "print");
 
       // Mark as printed only once after successful PDF generation
       if (!test.printedAt) {
@@ -385,7 +439,7 @@ export default function DirectTestDetailPage() {
                   Name
                 </TableCell>
                 <TableCell className="font-medium">
-                  {test.patient.name}
+                  {readPatientField(test, "name")}
                 </TableCell>
               </TableRow>
               <TableRow>
@@ -393,35 +447,43 @@ export default function DirectTestDetailPage() {
                   Patient ID
                 </TableCell>
                 <TableCell className="font-mono">
-                  <Badge variant="outline">{test.patient.patientId}</Badge>
+                  <Badge variant="outline">
+                    {readPatientField(test, "patientId")}
+                  </Badge>
                 </TableCell>
               </TableRow>
               <TableRow>
                 <TableCell className="font-medium text-muted-foreground">
                   Phone
                 </TableCell>
-                <TableCell>{test.patient.phone || "N/A"}</TableCell>
+                <TableCell>{readPatientField(test, "phone")}</TableCell>
               </TableRow>
               <TableRow>
                 <TableCell className="font-medium text-muted-foreground">
-                  Email
+                  Guardian
                 </TableCell>
-                <TableCell>{test.patient.email || "N/A"}</TableCell>
+                <TableCell>{readPatientField(test, "guardian")}</TableCell>
               </TableRow>
               <TableRow>
                 <TableCell className="font-medium text-muted-foreground">
                   Gender
                 </TableCell>
-                <TableCell>{test.patient.gender || "N/A"}</TableCell>
+                <TableCell>{readPatientField(test, "gender")}</TableCell>
               </TableRow>
               <TableRow>
                 <TableCell className="font-medium text-muted-foreground">
                   Date of Birth
                 </TableCell>
                 <TableCell>
-                  {test.patient.dateOfBirth
-                    ? format(parseISO(test.patient.dateOfBirth), "MMM dd, yyyy")
-                    : "N/A"}
+                  {(() => {
+                    const dob = readPatientField(test, "dateOfBirth", "");
+                    if (!dob) return "N/A";
+                    try {
+                      return format(parseISO(dob), "MMM dd, yyyy");
+                    } catch {
+                      return "N/A";
+                    }
+                  })()}
                 </TableCell>
               </TableRow>
             </TableBody>

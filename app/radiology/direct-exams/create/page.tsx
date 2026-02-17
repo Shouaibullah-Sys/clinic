@@ -55,7 +55,7 @@ interface Patient {
   name: string;
   patientId: string;
   phone?: string;
-  email?: string;
+  guardian?: string;
 }
 
 interface ExamFinding {
@@ -173,7 +173,7 @@ export default function CreateDirectExamPage() {
   const [newPatient, setNewPatient] = useState({
     name: "",
     phone: "",
-    email: "",
+    guardian: "",
     dateOfBirth: "",
     gender: "",
     address: "",
@@ -359,7 +359,7 @@ export default function CreateDirectExamPage() {
         body: JSON.stringify({
           name: newPatient.name,
           phone: newPatient.phone,
-          email: newPatient.email || undefined,
+          guardian: newPatient.guardian || undefined,
           dateOfBirth: newPatient.dateOfBirth || undefined,
           gender: newPatient.gender || undefined,
           address: newPatient.address || undefined,
@@ -383,7 +383,7 @@ export default function CreateDirectExamPage() {
       setNewPatient({
         name: "",
         phone: "",
-        email: "",
+        guardian: "",
         dateOfBirth: "",
         gender: "",
         address: "",
@@ -1368,15 +1368,15 @@ export default function CreateDirectExamPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="patientEmail">Email</Label>
+                <Label htmlFor="patientGuardian">Guardian</Label>
                 <Input
-                  id="patientEmail"
-                  type="email"
-                  value={newPatient.email}
+                  id="patientGuardian"
+                  type="text"
+                  value={newPatient.guardian}
                   onChange={(e) =>
-                    setNewPatient({ ...newPatient, email: e.target.value })
+                    setNewPatient({ ...newPatient, guardian: e.target.value })
                   }
-                  placeholder="Enter email address"
+                  placeholder="Enter guardian name"
                 />
               </div>
 

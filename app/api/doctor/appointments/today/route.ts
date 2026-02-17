@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
       startTime: { $gte: startOfToday, $lte: endOfToday },
       status: { $nin: ["cancelled", "no-show"] },
     })
-      .populate("patient", "name phone email patientId dateOfBirth gender")
+      .populate("patient", "name phone guardian patientId dateOfBirth gender")
       .sort({ startTime: 1 })
       .lean();
     

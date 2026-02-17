@@ -47,7 +47,6 @@ import {
   Loader2,
   Calendar,
   Phone,
-  Mail,
   MapPin,
   Activity,
   RefreshCw,
@@ -89,7 +88,7 @@ import { z } from "zod";
 const patientSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
   phone: z.string().min(10, "Phone number must be at least 10 digits"),
-  email: z.string().email("Invalid email").optional().or(z.literal("")),
+  guardian: z.string().optional().or(z.literal("")),
   dateOfBirth: z
     .string()
     .refine((date) => isValid(new Date(date)), "Invalid date of birth"),
@@ -119,7 +118,7 @@ interface Patient {
   _id: string;
   name: string;
   phone: string;
-  email?: string;
+  guardian?: string;
   patientId: string;
   dateOfBirth?: string;
   gender?: string;
@@ -144,7 +143,7 @@ interface Doctor {
 interface NewPatientFormData {
   name: string;
   phone: string;
-  email: string;
+  guardian: string;
   dateOfBirth: string;
   gender: "male" | "female" | "other";
   address: string;
@@ -210,7 +209,7 @@ export default function NewAppointmentPage() {
   const [newPatientForm, setNewPatientForm] = useState<NewPatientFormData>({
     name: "",
     phone: "",
-    email: "",
+    guardian: "",
     dateOfBirth: format(
       new Date(new Date().getFullYear() - 30, 0, 1),
       "yyyy-MM-dd",
@@ -486,7 +485,7 @@ export default function NewAppointmentPage() {
           _id: data.data.id || data.data._id,
           name: data.data.name,
           phone: data.data.phone,
-          email: data.data.email,
+          guardian: data.data.guardian,
           patientId: data.data.patientId,
           dateOfBirth: data.data.dateOfBirth,
           gender: data.data.gender,
@@ -503,7 +502,7 @@ export default function NewAppointmentPage() {
         setNewPatientForm({
           name: "",
           phone: "",
-          email: "",
+          guardian: "",
           dateOfBirth: format(
             new Date(new Date().getFullYear() - 30, 0, 1),
             "yyyy-MM-dd",
@@ -525,7 +524,7 @@ export default function NewAppointmentPage() {
             name: data.data.name,
             phone: data.data.phone,
             patientId: data.data.patientId || "N/A",
-            email: data.data.email,
+            guardian: data.data.guardian,
             dateOfBirth: data.data.dateOfBirth,
             gender: data.data.gender,
           };
@@ -635,8 +634,20 @@ export default function NewAppointmentPage() {
       const data = await response.json();
 
       if (data.success) {
+        const scheduledTime = data.data?.startTime
+          ? format(parseISO(data.data.startTime), "MMM dd, yyyy 'at' h:mm a")
+          : undefined;
+        const adjustedNotice = data.data?.autoAdjusted && scheduledTime
+          ? `Adjusted to ${scheduledTime}`
+          : scheduledTime
+            ? `Scheduled for ${scheduledTime}`
+            : undefined;
+
         toast.success("Appointment created successfully!", {
-          description: `Appointment #${data.data.autoNumber} scheduled`,
+          description:
+            adjustedNotice
+              ? `Appointment #${data.data.autoNumber}. ${adjustedNotice}`
+              : `Appointment #${data.data.autoNumber} scheduled`,
           action: {
             label: "View",
             onClick: () => router.push("/reception/appointments"),
@@ -1115,11 +1126,11 @@ export default function NewAppointmentPage() {
                                     {selectedPatient.phone}
                                   </span>
                                 </div>
-                                {selectedPatient.email && (
+                                {selectedPatient.guardian && (
                                   <div className="flex items-center gap-2">
-                                    <Mail className="h-4 w-4 text-muted-foreground" />
+                                    <Users className="h-4 w-4 text-muted-foreground" />
                                     <span className="text-sm">
-                                      {selectedPatient.email}
+                                      {selectedPatient.guardian}
                                     </span>
                                   </div>
                                 )}
@@ -1297,29 +1308,29 @@ export default function NewAppointmentPage() {
                                     </div>
 
                                     <div className="space-y-2">
-                                      <Label htmlFor="email">
-                                        Email Address
+                                      <Label htmlFor="guardian">
+                                        Guardian
                                       </Label>
                                       <Input
-                                        id="email"
-                                        type="email"
-                                        placeholder="john@example.com"
-                                        value={newPatientForm.email}
+                                        id="guardian"
+                                        type="text"
+                                        placeholder="Enter guardian name"
+                                        value={newPatientForm.guardian}
                                         onChange={(e) =>
                                           setNewPatientForm((prev) => ({
                                             ...prev,
-                                            email: e.target.value,
+                                            guardian: e.target.value,
                                           }))
                                         }
                                         className={
-                                          formErrors.email
+                                          formErrors.guardian
                                             ? "border-destructive"
                                             : ""
                                         }
                                       />
-                                      {formErrors.email && (
+                                      {formErrors.guardian && (
                                         <p className="text-sm text-destructive">
-                                          {formErrors.email}
+                                          {formErrors.guardian}
                                         </p>
                                       )}
                                     </div>
@@ -1619,10 +1630,10 @@ export default function NewAppointmentPage() {
                                           <Phone className="h-3 w-3" />
                                           {patient.phone}
                                         </span>
-                                        {patient.email && (
+                                        {patient.guardian && (
                                           <span className="text-sm text-muted-foreground flex items-center gap-1">
-                                            <Mail className="h-3 w-3" />
-                                            {patient.email}
+                                            <Users className="h-3 w-3" />
+                                            {patient.guardian}
                                           </span>
                                         )}
                                         {patient.patientId && (
@@ -1667,7 +1678,7 @@ export default function NewAppointmentPage() {
                                   ...prev,
                                   name: patientSearch.trim(),
                                   phone: "",
-                                  email: "",
+                                  guardian: "",
                                 }));
                                 setShowNewPatientDialog(true);
                               }}

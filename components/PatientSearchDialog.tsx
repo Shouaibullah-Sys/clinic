@@ -26,7 +26,7 @@ interface Patient {
   name: string;
   patientId: string;
   phone: string;
-  email?: string;
+  guardian?: string;
   dateOfBirth?: string;
   age?: number;
   gender?: string;

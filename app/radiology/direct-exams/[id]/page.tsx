@@ -44,7 +44,7 @@ interface DirectRadiologyExam {
     name: string;
     patientId: string;
     phone?: string;
-    email?: string;
+    guardian?: string;
     dateOfBirth?: string;
     gender?: string;
   };
@@ -723,9 +723,9 @@ export default function DirectExamDetailPage() {
                 </td>
               </tr>
               <tr className="border-b">
-                <td className="p-3 text-sm text-muted-foreground">Email</td>
+                <td className="p-3 text-sm text-muted-foreground">Guardian</td>
                 <td className="p-3 font-medium">
-                  {exam.patient.email || "N/A"}
+                  {exam.patient.guardian || "N/A"}
                 </td>
               </tr>
               <tr className="border-b">

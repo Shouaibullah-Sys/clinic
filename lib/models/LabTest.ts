@@ -22,7 +22,19 @@ export interface ILabTest extends mongoose.Document {
   testId: string;
   appointment?: mongoose.Types.ObjectId;
   patient: mongoose.Types.ObjectId;
+  patientSnapshot?: {
+    name?: string;
+    patientId?: string;
+    phone?: string;
+    gender?: string;
+    guardian?: string;
+    address?: string;
+    refPerson?: string;
+    passTskNo?: string;
+    registrationNo?: string;
+  };
   doctor?: mongoose.Types.ObjectId;
+  doctorName?: string;
   testName: string;
   category: string;
   description?: string;
@@ -44,6 +56,7 @@ export interface ILabTest extends mongoose.Document {
   isDirectTest: boolean;
   createdBy?: mongoose.Types.ObjectId;
   createdAtDirect?: Date;
+  directBatchId?: string;
   finalized: boolean;
   finalizedAt?: Date;
   finalizedBy?: mongoose.Types.ObjectId;
@@ -227,9 +240,24 @@ const labTestSchema = new Schema<ILabTest, LabTestModel>(
       ref: "Patient",
       required: true,
     },
+    patientSnapshot: {
+      name: { type: String, trim: true },
+      patientId: { type: String, trim: true },
+      phone: { type: String, trim: true },
+      gender: { type: String, trim: true },
+      guardian: { type: String, trim: true },
+      address: { type: String, trim: true },
+      refPerson: { type: String, trim: true },
+      passTskNo: { type: String, trim: true },
+      registrationNo: { type: String, trim: true },
+    },
     doctor: {
       type: Schema.Types.ObjectId,
       ref: "User",
+    },
+    doctorName: {
+      type: String,
+      trim: true,
     },
     testName: {
       type: String,
@@ -241,10 +269,17 @@ const labTestSchema = new Schema<ILabTest, LabTestModel>(
       required: true,
       enum: [
         "hematology",
+        "biochemistry",
+        "microbiology",
+        "serology",
+        "immunology",
+        "hormonal",
+        "urinalysis",
+        "stool_test",
+        "molecular",
+        "imaging",
         "blood_test",
         "urine_test",
-        "stool_test",
-        "imaging",
         "biopsy",
         "culture",
         "hormone_test",
@@ -312,6 +347,10 @@ const labTestSchema = new Schema<ILabTest, LabTestModel>(
     },
     createdAtDirect: {
       type: Date,
+    },
+    directBatchId: {
+      type: String,
+      trim: true,
     },
     finalized: {
       type: Boolean,
@@ -488,6 +527,7 @@ labTestSchema.index({ isDirectTest: 1, paymentVerified: 1 });
 labTestSchema.index({ isDirectTest: 1, finalized: 1 });
 labTestSchema.index({ isDirectTest: 1, readyForPrint: 1 });
 labTestSchema.index({ isDirectTest: 1, status: 1 });
+labTestSchema.index({ isDirectTest: 1, directBatchId: 1 });
 labTestSchema.index({ createdBy: 1, createdAtDirect: -1 });
 labTestSchema.index({ finalized: 1, readyForPrint: 1 });
 labTestSchema.index({ paymentVerified: 1, finalized: 1, readyForPrint: 1 });

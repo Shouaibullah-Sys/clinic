@@ -60,6 +60,7 @@ export async function GET(request: NextRequest) {
     const paymentStatus = searchParams.get("paymentStatus");
     const finalized = searchParams.get("finalized");
     const readyForPrint = searchParams.get("readyForPrint");
+    const batchId = searchParams.get("batchId");
     const limit = parseInt(searchParams.get("limit") || "100");
     const sort = searchParams.get("sort") || "-createdAtDirect";
 
@@ -82,6 +83,9 @@ export async function GET(request: NextRequest) {
     if (readyForPrint !== null && readyForPrint !== undefined) {
       query.readyForPrint = readyForPrint === "true";
     }
+    if (batchId) {
+      query.directBatchId = batchId;
+    }
 
     // Convert sort string to MongoDB sort object
     const sortObj: any = {};
@@ -99,7 +103,10 @@ export async function GET(request: NextRequest) {
 
     // Fetch direct tests with proper population
     const tests = await LabTest.find(finalQuery)
-      .populate("patient", "name patientId phone email dateOfBirth gender")
+      .populate(
+        "patient",
+        "name patientId phone guardian dateOfBirth gender address refPerson passTskNo registrationNo",
+      )
       .populate("createdBy", "name")
       .populate("finalizedBy", "name")
       .populate("printedBy", "name")
@@ -198,6 +205,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const snapshotOverrides = body.patientSnapshot || {};
+    const patientSnapshot = {
+      name: snapshotOverrides.name ?? patient.name,
+      patientId: snapshotOverrides.patientId ?? patient.patientId,
+      phone: snapshotOverrides.phone ?? patient.phone,
+      gender: snapshotOverrides.gender ?? patient.gender,
+      guardian: snapshotOverrides.guardian ?? patient.guardian,
+      address: snapshotOverrides.address ?? patient.address,
+      refPerson: snapshotOverrides.refPerson ?? patient.refPerson,
+      passTskNo: snapshotOverrides.passTskNo ?? patient.passTskNo,
+      registrationNo:
+        snapshotOverrides.registrationNo ?? patient.registrationNo,
+    };
+
     // Determine test details from template or custom input
     const testName = testTemplate?.testName || body.testName;
     const category = testTemplate?.category || body.category || "general";
@@ -282,6 +303,9 @@ export async function POST(request: NextRequest) {
       verificationStatus: "pending",
       priority: priority,
       paymentVerified: false,
+      ...(body.doctorName?.trim()
+        ? { doctorName: body.doctorName.trim() }
+        : {}),
       specimen: {
         type: specimenType,
       },
@@ -315,6 +339,9 @@ export async function POST(request: NextRequest) {
       },
       // Optional notes
       notes: body.notes,
+      // Optional direct batch id (for multi-test slip grouping)
+      ...(body.batchId ? { directBatchId: body.batchId } : {}),
+      patientSnapshot,
     };
 
     const labTest = new LabTest(labTestData);

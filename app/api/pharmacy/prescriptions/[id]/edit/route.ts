@@ -39,7 +39,7 @@ export async function GET(
 
     // Find prescription with populated references
     const prescription = await Prescription.findById(prescriptionId)
-      .populate("patient", "name patientId phone email")
+      .populate("patient", "name patientId phone guardian")
       .populate("doctor", "name specialization")
       .populate("appointment", "appointmentId appointmentDate");
 
@@ -250,7 +250,7 @@ export async function PUT(
 
     // Fetch updated prescription with populated fields
     const updatedPrescription = await Prescription.findById(prescriptionId)
-      .populate("patient", "name patientId phone email")
+      .populate("patient", "name patientId phone guardian")
       .populate("doctor", "name specialization");
 
     // Calculate medication totals for response

@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
 
     // Get pending invoices
     const pendingInvoices = await Invoice.find(invoiceQuery)
-      .populate("patient", "name patientId phone email")
+      .populate("patient", "name patientId phone guardian")
       .populate("createdBy", "name")
       .sort({ dueDate: 1 })
       .skip(skip)
@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
       paymentStatus: { $in: ["pending", "partial"] },
       balance: { $gt: 0 },
     })
-      .populate("patient", "name patientId phone email")
+      .populate("patient", "name patientId phone guardian")
       .populate("createdBy", "name")
       .sort({ dueDate: 1 })
       .skip(skip)
@@ -68,7 +68,7 @@ export async function GET(req: NextRequest) {
       "charges.paymentStatus": { $in: ["pending", "partial"] },
       status: { $ne: "cancelled" },
     })
-      .populate("patient", "name patientId phone email")
+      .populate("patient", "name patientId phone guardian")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
@@ -84,7 +84,7 @@ export async function GET(req: NextRequest) {
       "charges.paymentStatus": { $in: ["pending", "partial"] },
       status: { $ne: "cancelled" },
     })
-      .populate("patient", "name patientId phone email")
+      .populate("patient", "name patientId phone guardian")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
@@ -100,7 +100,7 @@ export async function GET(req: NextRequest) {
       "billing.paymentStatus": { $in: ["pending", "partial"] },
       status: { $ne: "cancelled" },
     })
-      .populate("patient", "name patientId phone email")
+      .populate("patient", "name patientId phone guardian")
       .populate("doctor", "name")
       .sort({ createdAt: -1 })
       .skip(skip)

@@ -13,7 +13,7 @@ interface PopulatedPatient {
   name: string;
   patientId: string;
   phone?: string;
-  email?: string;
+  guardian?: string;
   dateOfBirth?: Date;
   gender?: string;
 }
@@ -149,7 +149,7 @@ export async function GET(request: NextRequest) {
 
     // Fetch requests with proper population
     const requests = await RadiologyService.find(finalQuery)
-      .populate<{ patient: PopulatedPatient }>("patient", "name patientId phone email dateOfBirth gender")
+      .populate<{ patient: PopulatedPatient }>("patient", "name patientId phone guardian dateOfBirth gender")
       .populate<{ referringDoctor: PopulatedDoctor }>("referringDoctor", "name specialization department")
       .populate<{ radiologist: PopulatedUser }>("radiologist", "name")
       .populate<{ technician: PopulatedUser }>("technician", "name")

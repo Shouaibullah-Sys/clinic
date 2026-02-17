@@ -38,7 +38,7 @@ interface RadiologyRequest {
     name: string;
     patientId: string;
     phone?: string;
-    email?: string;
+    guardian?: string;
     dateOfBirth?: string;
     gender?: string;
   };
@@ -219,8 +219,8 @@ export function BillingDetailsDialog({
                 <p className="font-medium">{request.patient.phone || "N/A"}</p>
               </div>
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Email</p>
-                <p className="font-medium">{request.patient.email || "N/A"}</p>
+                <p className="text-sm font-medium text-muted-foreground">Guardian</p>
+                <p className="font-medium">{request.patient.guardian || "N/A"}</p>
               </div>
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Date of Birth</p>

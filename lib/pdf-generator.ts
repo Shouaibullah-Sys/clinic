@@ -85,6 +85,11 @@ export interface Patient {
   name: string;
   patientId: string;
   phone?: string;
+  guardian?: string;
+  address?: string;
+  refPerson?: string;
+  passTskNo?: string;
+  registrationNo?: string;
   age?: number;
   gender?: string;
   dateOfBirth?: string;
@@ -103,7 +108,9 @@ export interface LabTest {
   testName: string;
   category?: string;
   patient?: Patient;
+  patientSnapshot?: Patient;
   doctor?: Doctor;
+  doctorName?: string;
   status: string;
   collectionStatus: string;
   processingStatus: string;
@@ -128,9 +135,7 @@ export interface LabTest {
 
 // lib/pdf-generator.ts - Updated generateLabTestPDF fu
 
-const normalizeDirectToLabTest = (
-  input: DirectLabTest | LabTest,
-): LabTest => {
+const normalizeDirectToLabTest = (input: DirectLabTest | LabTest): LabTest => {
   if ("orderedAt" in input) return input;
 
   return {
@@ -140,6 +145,7 @@ const normalizeDirectToLabTest = (
     category: input.category,
     patient: input.patient,
     doctor: (input as any).doctor,
+    doctorName: (input as any).doctorName,
     status: input.status,
     collectionStatus: input.collectionStatus,
     processingStatus: input.processingStatus,
@@ -149,44 +155,57 @@ const normalizeDirectToLabTest = (
     results: input.results,
     priority: input.priority,
     labReferenceId: input.testId,
+    patientSnapshot: (input as any).patientSnapshot,
   };
 };
 
 export const generateDirectTestPDF = async (
-  input: DirectLabTest | LabTest,
+  input: DirectLabTest | LabTest | Array<DirectLabTest | LabTest>,
   mode: "print" | "download" = "print",
 ) => {
   if (!input) return;
 
-  const test = normalizeDirectToLabTest(input);
+  const inputs = Array.isArray(input) ? input : [input];
+  const normalizedTests = inputs.map((item) => normalizeDirectToLabTest(item));
+  const seenTestIds = new Set<string>();
+  const tests = normalizedTests.filter((item) => {
+    const key = item.testId || item._id;
+    if (!key) return true;
+    if (seenTestIds.has(key)) return false;
+    seenTestIds.add(key);
+    return true;
+  });
+  const test = tests[0];
 
   // Fallback for records where values were stored in specimen parameters.
-  if (
-    (!test.results?.parameters || test.results.parameters.length === 0) &&
-    test.specimen?.parameters &&
-    test.specimen.parameters.length > 0
-  ) {
-    test.results = {
-      ...(test.results || {}),
-      parameters: test.specimen.parameters
-        .filter(
-          (p) =>
-            p.name &&
-            p.name.trim() &&
-            (p.value !== undefined ||
-              p.result !== undefined ||
-              p.value === 0 ||
-              p.result === 0),
-        )
-        .map((p) => ({
-          name: p.name,
-          value: p.value ?? p.result ?? "",
-          unit: p.unit,
-          normalRange: p.normalRange,
-          remarks: p.remarks,
-        })),
-    };
-  }
+  tests.forEach((t) => {
+    if (
+      (!t.results?.parameters || t.results.parameters.length === 0) &&
+      t.specimen?.parameters &&
+      t.specimen.parameters.length > 0
+    ) {
+      t.results = {
+        ...(t.results || {}),
+        parameters: t.specimen.parameters
+          .filter(
+            (p) =>
+              p.name &&
+              p.name.trim() &&
+              (p.value !== undefined ||
+                p.result !== undefined ||
+                p.value === 0 ||
+                p.result === 0),
+          )
+          .map((p) => ({
+            name: p.name,
+            value: p.value ?? p.result ?? "",
+            unit: p.unit,
+            normalRange: p.normalRange,
+            remarks: p.remarks,
+          })),
+      };
+    }
+  });
 
   const doc = new jsPDF({
     orientation: "portrait",
@@ -225,63 +244,56 @@ export const generateDirectTestPDF = async (
     doc.setLineWidth(0.8);
     doc.rect(tableX, startY, tableWidth, rows.length * rowHeight, "S");
 
-    // Draw vertical divider
-    doc.setDrawColor(200, 200, 200);
-    doc.setLineWidth(0.5);
-    doc.line(
-      tableX + colWidth,
-      startY,
-      tableX + colWidth,
-      startY + rows.length * rowHeight,
-    );
-
     rows.forEach(([lLabel, lValue, rLabel, rValue], index) => {
       const rowY = startY + index * rowHeight;
 
-      // Draw horizontal divider between rows
-      if (index < rows.length - 1) {
-        doc.setDrawColor(220, 220, 220);
-        doc.setLineWidth(0.3);
-        doc.line(
-          tableX + 2,
-          rowY + rowHeight,
-          tableX + tableWidth - 2,
-          rowY + rowHeight,
-        );
-      }
-
-      doc.setFont("helvetica", "normal");
+      doc.setFont("courier", "normal");
       doc.setFontSize(9.5);
       doc.setTextColor(textDark[0], textDark[1], textDark[2]);
 
       // Format values with bold labels
       const leftText = `${lLabel}:`;
-      const rightText = `${rLabel}:`;
+      const rightText = rLabel ? `${rLabel}:` : "";
 
       // Draw labels in bold
-      doc.setFont("helvetica", "bold");
+      doc.setFont("courier", "bold");
       doc.text(leftText, tableX + 8, rowY + 14);
-      doc.text(rightText, tableX + colWidth + 8, rowY + 14);
+      if (rightText) {
+        doc.text(rightText, tableX + colWidth + 8, rowY + 14);
+      }
 
       // Draw values in normal font
-      doc.setFont("helvetica", "normal");
-      doc.text(
-        lValue || "N/A",
-        tableX + 8 + doc.getTextWidth(leftText) + 5,
-        rowY + 14,
-      );
-      doc.text(
-        rValue || "N/A",
-        tableX + colWidth + 8 + doc.getTextWidth(rightText) + 5,
-        rowY + 14,
-      );
+      doc.setFont("courier", "normal");
+      const leftValue = lValue || "N/A";
+      const rightValue = rLabel ? rValue || "N/A" : "";
+      const leftValueX = tableX + 8 + doc.getTextWidth(leftText) + 5;
+      const rightValueX =
+        tableX + colWidth + 8 + doc.getTextWidth(rightText) + 5;
+      doc.text(leftValue, leftValueX, rowY + 14);
+      if (rightText) {
+        doc.text(rightValue, rightValueX, rowY + 14);
+      }
+
+      // Underline values only (not labels)
+      doc.setDrawColor(180, 180, 180);
+      doc.setLineWidth(0.3);
+      doc.line(leftValueX, rowY + 16, tableX + colWidth - 8, rowY + 16);
+      if (rightText) {
+        doc.line(rightValueX, rowY + 16, tableX + tableWidth - 8, rowY + 16);
+      }
     });
 
     y = startY + rows.length * rowHeight + 15;
   };
 
   // --- PATIENT INFORMATION TABLE ---
-  const doctorName = test.doctor?.name ? `Dr. ${test.doctor.name}` : "N/A";
+  const doctorSource = (test as any).doctorName || test.doctor?.name;
+  const doctorName = (() => {
+    if (!doctorSource) return "N/A";
+    const trimmed = String(doctorSource).trim();
+    if (!trimmed) return "N/A";
+    return /^dr\.?\s+/i.test(trimmed) ? trimmed : `Dr. ${trimmed}`;
+  })();
   const formatReportId = (id: string) => {
     if (/-\d{3}$/.test(id)) return id;
     const match = id.match(/^(.*?)(\d+)$/);
@@ -292,168 +304,203 @@ export const generateDirectTestPDF = async (
     const head = digits.slice(0, -3);
     return `${prefix}${head}-${tail}`;
   };
-  const rawReportId = `LAB-${test.labReferenceId || test.testId}`;
+  const baseReportId = test.labReferenceId || test.testId || "LAB";
+  const rawReportId = /^lab[-]?/i.test(baseReportId)
+    ? baseReportId
+    : `LAB-${baseReportId}`;
   const reportId = formatReportId(rawReportId);
   const reportDate = format(new Date(test.orderedAt), "PPP");
+
+  const patientRecord = test.patient || {};
+  const patientSnapshot = test.patientSnapshot || {};
+  const readPatientField = (field: keyof Patient, fallback = "N/A") => {
+    const value =
+      (patientRecord as any)[field] ?? (patientSnapshot as any)[field];
+    if (value === undefined || value === null) return fallback;
+    if (typeof value === "string" && value.trim() === "") return fallback;
+    return value as string;
+  };
+
+  const resolveSlipAge = () => {
+    const directAge =
+      (patientRecord as any).age ?? (patientSnapshot as any).age;
+    if (directAge !== undefined && directAge !== null && directAge !== "") {
+      return String(directAge);
+    }
+    const dob =
+      (patientRecord as any).dateOfBirth ||
+      (patientSnapshot as any).dateOfBirth;
+    if (!dob) return "N/A";
+    const date = new Date(dob);
+    if (Number.isNaN(date.getTime())) return "N/A";
+    const today = new Date();
+    let age = today.getFullYear() - date.getFullYear();
+    const monthDiff = today.getMonth() - date.getMonth();
+    if (
+      monthDiff < 0 ||
+      (monthDiff === 0 && today.getDate() < date.getDate())
+    ) {
+      age -= 1;
+    }
+    return age >= 0 ? String(age) : "N/A";
+  };
+
+  const preparedBy =
+    test.results?.reportedBy?.name ||
+    (test as any)?.collectionDetails?.collectedBy?.name ||
+    (test as any)?.createdBy?.name ||
+    "Laboratory Staff";
+
+  const resolveAge = () => {
+    const directAge =
+      (patientRecord as any).age ?? (patientSnapshot as any).age;
+    if (directAge !== undefined && directAge !== null && directAge !== "") {
+      return String(directAge);
+    }
+    const dob =
+      (patientRecord as any).dateOfBirth ||
+      (patientSnapshot as any).dateOfBirth;
+    if (!dob) return "N/A";
+    const date = new Date(dob);
+    if (Number.isNaN(date.getTime())) return "N/A";
+    const today = new Date();
+    let age = today.getFullYear() - date.getFullYear();
+    const monthDiff = today.getMonth() - date.getMonth();
+    if (
+      monthDiff < 0 ||
+      (monthDiff === 0 && today.getDate() < date.getDate())
+    ) {
+      age -= 1;
+    }
+    return age >= 0 ? String(age) : "N/A";
+  };
 
   drawTwoColumnTable([
     [
       "Patient",
-      test.patient?.name || "N/A",
+      readPatientField("name"),
       "Patient ID",
-      test.patient?.patientId || "N/A",
+      readPatientField("patientId"),
     ],
+    ["Age", resolveAge(), "Guardian", readPatientField("guardian")],
+    ["Gender", readPatientField("gender"), "Prepared By", preparedBy],
     [
-      "Gender",
-      test.patient?.gender || "N/A",
       "Phone",
-      test.patient?.phone || "Not provided",
+      readPatientField("phone", "Not provided"),
+      "Pass/Tsk #",
+      readPatientField("passTskNo"),
     ],
-    ["Test ID", test.testId, "Report ID", reportId],
-    ["Date", reportDate, "Doctor", doctorName],
     [
-      "Category",
-      test.category?.replace(/_/g, " ") || "General",
-      "Priority",
-      test.priority || "N/A",
+      "Address",
+      readPatientField("address"),
+      "Ref Person",
+      readPatientField("refPerson"),
     ],
+    ["Regn No", readPatientField("registrationNo"), "Test ID", test.testId],
+    ["Report ID", reportId, "Date", reportDate],
+    ["Doctor", doctorName, "", ""],
   ]);
 
-  // --- TEST TITLE ---
   y += 5;
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(14);
+  doc.setFontSize(12);
   doc.setTextColor(primary[0], primary[1], primary[2]);
-  const testTitle = test.testName || "Test";
-  doc.text(testTitle, pageWidth / 2, y, { align: "center" });
+  doc.text("TEST RESULTS", margin, y);
+  y += 10;
 
-  // Decorative line under test title
-  doc.setDrawColor(accent[0], accent[1], accent[2]);
-  doc.setLineWidth(0.8);
-  doc.line(pageWidth / 2 - 80, y + 5, pageWidth / 2 + 80, y + 5);
+  const tableX = margin;
+  const tableWidth = pageWidth - margin * 2;
+  const headerHeight = 24;
+  const rowHeight = 24;
+  const colPositions = {
+    test: tableX + 10,
+    name: tableX + tableWidth * 0.28,
+    value: tableX + tableWidth * 0.53,
+    unit: tableX + tableWidth * 0.64,
+    range: tableX + tableWidth * 0.75,
+    status: tableX + tableWidth * 0.9,
+  };
 
-  y += 20;
+  const isAbnormal = (
+    param: TestParameter,
+  ): { status: string; color: number[] } => {
+    const remarks = param.remarks?.toLowerCase() || "";
+    const numValue = parseFloat(param.value.toString());
+    const isNumeric = !isNaN(numValue);
 
-  // --- TEST RESULTS ---
-  if (test.results?.parameters && test.results.parameters.length > 0) {
-    const tableX = margin;
-    const tableWidth = pageWidth - margin * 2;
-    const headerHeight = 24;
-    const rowHeight = 24;
+    if (isNumeric && param.normalRange) {
+      const rangeMatch = param.normalRange.match(
+        /(\\d+\\.?\\d*)\\s*-\\s*(\\d+\\.?\\d*)/,
+      );
+      if (rangeMatch) {
+        const min = parseFloat(rangeMatch[1]);
+        const max = parseFloat(rangeMatch[2]);
+        if (numValue < min) {
+          return { status: "Low", color: alertOrange };
+        } else if (numValue > max) {
+          return { status: "High", color: accent };
+        }
+      }
+    }
 
-    // Column positions
-    const colPositions = {
-      name: tableX + 15,
-      value: tableX + tableWidth * 0.4,
-      unit: tableX + tableWidth * 0.55,
-      range: tableX + tableWidth * 0.68,
-      status: tableX + tableWidth * 0.82,
-    };
+    if (
+      remarks.includes("abnormal") ||
+      remarks.includes("high") ||
+      remarks.includes("low") ||
+      remarks.includes("critical")
+    ) {
+      if (remarks.includes("critical")) {
+        return { status: "Critical", color: accent };
+      }
+      return { status: "Abnormal", color: accent };
+    }
 
-    // Draw outer border
+    return { status: "Normal", color: normalGreen };
+  };
+
+  const combinedParameters = tests.flatMap((currentTest) =>
+    (currentTest.results?.parameters || []).map((param) => ({
+      ...param,
+      testName: currentTest.testName || "Test",
+    })),
+  );
+
+  if (combinedParameters.length > 0) {
+    doc.setFont("courier", "normal");
     doc.setDrawColor(primary[0], primary[1], primary[2]);
     doc.setLineWidth(0.8);
     doc.rect(
       tableX,
       y,
       tableWidth,
-      headerHeight + test.results.parameters.length * rowHeight,
+      headerHeight + combinedParameters.length * rowHeight,
       "S",
     );
 
-    // Table header with background
     doc.setFillColor(primary[0], primary[1], primary[2]);
     doc.rect(tableX + 1, y + 1, tableWidth - 2, headerHeight - 2, "F");
 
     doc.setTextColor(255, 255, 255);
-    doc.setFont("helvetica", "bold");
+    doc.setFont("courier", "bold");
     doc.setFontSize(9.5);
+    doc.text("Test", colPositions.test, y + 16);
     doc.text("Parameter", colPositions.name, y + 16);
     doc.text("Value", colPositions.value, y + 16);
     doc.text("Unit", colPositions.unit, y + 16);
     doc.text("Normal Range", colPositions.range, y + 16);
     doc.text("Status", colPositions.status, y + 16);
 
-    // Draw vertical dividers in header
-    doc.setDrawColor(255, 255, 255);
-    doc.setLineWidth(0.3);
-    doc.line(
-      colPositions.value - 8,
-      y + 2,
-      colPositions.value - 8,
-      y + headerHeight - 2,
-    );
-    doc.line(
-      colPositions.unit - 8,
-      y + 2,
-      colPositions.unit - 8,
-      y + headerHeight - 2,
-    );
-    doc.line(
-      colPositions.range - 8,
-      y + 2,
-      colPositions.range - 8,
-      y + headerHeight - 2,
-    );
-    doc.line(
-      colPositions.status - 8,
-      y + 2,
-      colPositions.status - 8,
-      y + headerHeight - 2,
-    );
-
     y += headerHeight;
 
-    // Helper function to check if value is abnormal
-    const isAbnormal = (
-      param: TestParameter,
-    ): { status: string; color: number[] } => {
-      const remarks = param.remarks?.toLowerCase() || "";
-      const numValue = parseFloat(param.value.toString());
-      const isNumeric = !isNaN(numValue);
-
-      if (isNumeric && param.normalRange) {
-        const rangeMatch = param.normalRange.match(
-          /(\d+\.?\d*)\s*-\s*(\d+\.?\d*)/,
-        );
-        if (rangeMatch) {
-          const min = parseFloat(rangeMatch[1]);
-          const max = parseFloat(rangeMatch[2]);
-          if (numValue < min) {
-            return { status: "Low", color: alertOrange };
-          } else if (numValue > max) {
-            return { status: "High", color: accent };
-          }
-        }
-      }
-
-      if (
-        remarks.includes("abnormal") ||
-        remarks.includes("high") ||
-        remarks.includes("low") ||
-        remarks.includes("critical")
-      ) {
-        if (remarks.includes("critical")) {
-          return { status: "Critical", color: accent };
-        }
-        return { status: "Abnormal", color: accent };
-      }
-
-      return { status: "Normal", color: normalGreen };
-    };
-
-    // Table body
-    test.results.parameters.forEach((param, paramIndex) => {
+    combinedParameters.forEach((param, paramIndex) => {
       const rowY = y + paramIndex * rowHeight;
 
-      // Alternate row background
       if (paramIndex % 2 === 0) {
         doc.setFillColor(248, 250, 252);
         doc.rect(tableX + 1, rowY, tableWidth - 2, rowHeight - 1, "F");
       }
 
-      // Draw horizontal divider between rows
-      if (paramIndex < (test.results?.parameters?.length ?? 0) - 1) {
+      if (paramIndex < combinedParameters.length - 1) {
         doc.setDrawColor(220, 220, 220);
         doc.setLineWidth(0.3);
         doc.line(
@@ -465,99 +512,45 @@ export const generateDirectTestPDF = async (
       }
 
       const { status, color } = isAbnormal(param);
-
       doc.setTextColor(textDark[0], textDark[1], textDark[2]);
-
-      // Parameter name (bold)
-      doc.setFont("helvetica", "bold");
+      doc.setFont("courier", "bold");
       doc.setFontSize(9);
+      doc.text(param.testName, colPositions.test, rowY + 15);
       doc.text(param.name, colPositions.name, rowY + 15);
 
-      // Value (normal)
-      doc.setFont("helvetica", "normal");
+      doc.setFont("courier", "bold");
       doc.text(param.value.toString(), colPositions.value, rowY + 15);
       doc.text(param.unit || "-", colPositions.unit, rowY + 15);
       doc.text(param.normalRange || "-", colPositions.range, rowY + 15);
 
-      // Status with color coding
       doc.setTextColor(color[0], color[1], color[2]);
-      doc.setFont("helvetica", "bold");
+      doc.setFont("courier", "bold");
       doc.text(status, colPositions.status, rowY + 15);
 
-      // Page break check
       if (
         rowY + rowHeight > pageHeight - 80 &&
-        paramIndex < (test.results?.parameters?.length ?? 0) - 1
+        paramIndex < combinedParameters.length - 1
       ) {
         doc.addPage();
         y = 50;
 
-        // Recreate header on new page
         doc.setFillColor(primary[0], primary[1], primary[2]);
         doc.rect(tableX + 1, y, tableWidth - 2, headerHeight - 2, "F");
         doc.setTextColor(255, 255, 255);
-        doc.setFont("helvetica", "bold");
+        doc.setFont("courier", "bold");
+        doc.text("Test", colPositions.test, y + 16);
         doc.text("Parameter", colPositions.name, y + 16);
         doc.text("Value", colPositions.value, y + 16);
         doc.text("Unit", colPositions.unit, y + 16);
-        doc.text("Reference Range", colPositions.range, y + 16);
+        doc.text("Normal Range", colPositions.range, y + 16);
         doc.text("Status", colPositions.status, y + 16);
-
-        // Redraw vertical dividers
-        doc.setDrawColor(255, 255, 255);
-        doc.setLineWidth(0.3);
-        doc.line(
-          colPositions.value - 8,
-          y + 2,
-          colPositions.value - 8,
-          y + headerHeight - 2,
-        );
-        doc.line(
-          colPositions.unit - 8,
-          y + 2,
-          colPositions.unit - 8,
-          y + headerHeight - 2,
-        );
-        doc.line(
-          colPositions.range - 8,
-          y + 2,
-          colPositions.range - 8,
-          y + headerHeight - 2,
-        );
-        doc.line(
-          colPositions.status - 8,
-          y + 2,
-          colPositions.status - 8,
-          y + headerHeight - 2,
-        );
 
         y += headerHeight;
       }
     });
 
-    y += test.results.parameters.length * rowHeight + 20;
-
-    // --- REPORTED BY (with border, matching payment slip style) ---
-    doc.setDrawColor(primary[0], primary[1], primary[2]);
-    doc.setLineWidth(0.5);
-    doc.setFillColor(bgLight[0], bgLight[1], bgLight[2]);
-    doc.roundedRect(margin, y - 5, 200, 35, 3, 3, "FD");
-
+    y += combinedParameters.length * rowHeight + 20;
     doc.setFont("helvetica", "normal");
-    doc.setTextColor(textDark[0], textDark[1], textDark[2]);
-    doc.setFontSize(9.5);
-
-    doc.setFont("helvetica", "bold");
-    doc.text("Reported By:", margin + 10, y + 10);
-    doc.setFont("helvetica", "normal");
-
-    const reportedByName =
-      test.results?.reportedBy?.name ||
-      (test as any)?.collectionDetails?.collectedBy?.name ||
-      "Laboratory Staff";
-    doc.text(reportedByName, margin + 80, y + 10);
-
-    y += 35;
   } else {
     doc.setFont("helvetica", "italic");
     doc.setTextColor(150, 150, 150);
@@ -581,7 +574,9 @@ export const generateDirectTestPDF = async (
     }
     setTimeout(() => URL.revokeObjectURL(pdfUrl), 15000);
   } else {
-    const fileName = `lab-report-${test.patient?.name?.toLowerCase().replace(/\s+/g, "-") || "patient"}-${test.testId}.pdf`;
+    const patientName =
+      test.patient?.name || test.patientSnapshot?.name || "patient";
+    const fileName = `lab-report-${patientName.toLowerCase().replace(/\s+/g, "-")}-${test.testId}.pdf`;
     doc.save(fileName);
   }
 };
@@ -592,19 +587,27 @@ export interface DirectLabTest {
   testId: string;
   testName: string;
   category: string;
+  directBatchId?: string;
   patient: {
     _id: string;
     name: string;
     patientId: string;
     phone?: string;
+    guardian?: string;
+    address?: string;
+    refPerson?: string;
+    passTskNo?: string;
+    registrationNo?: string;
     age?: number;
     gender?: string;
     dateOfBirth?: string;
   };
+  patientSnapshot?: Patient;
   createdBy?: {
     _id: string;
     name: string;
   };
+  doctorName?: string;
   status: string;
   collectionStatus: string;
   processingStatus: string;
@@ -669,38 +672,43 @@ export interface DirectLabTest {
  */
 
 export const generateLabTestPDF = async (
-  test: LabTest,
+  input: LabTest | LabTest[],
   mode: "print" | "download" = "print",
 ) => {
-  if (!test) return;
+  if (!input) return;
+  const tests = Array.isArray(input) ? input : [input];
+  if (tests.length === 0) return;
+  const test = tests[0];
 
   // Fallback for records where values were stored in specimen parameters.
-  if (
-    (!test.results?.parameters || test.results.parameters.length === 0) &&
-    test.specimen?.parameters &&
-    test.specimen.parameters.length > 0
-  ) {
-    test.results = {
-      ...(test.results || {}),
-      parameters: test.specimen.parameters
-        .filter(
-          (p) =>
-            p.name &&
-            p.name.trim() &&
-            (p.value !== undefined ||
-              p.result !== undefined ||
-              p.value === 0 ||
-              p.result === 0),
-        )
-        .map((p) => ({
-          name: p.name,
-          value: p.value ?? p.result ?? "",
-          unit: p.unit,
-          normalRange: p.normalRange,
-          remarks: p.remarks,
-        })),
-    };
-  }
+  tests.forEach((t) => {
+    if (
+      (!t.results?.parameters || t.results.parameters.length === 0) &&
+      t.specimen?.parameters &&
+      t.specimen.parameters.length > 0
+    ) {
+      t.results = {
+        ...(t.results || {}),
+        parameters: t.specimen.parameters
+          .filter(
+            (p) =>
+              p.name &&
+              p.name.trim() &&
+              (p.value !== undefined ||
+                p.result !== undefined ||
+                p.value === 0 ||
+                p.result === 0),
+          )
+          .map((p) => ({
+            name: p.name,
+            value: p.value ?? p.result ?? "",
+            unit: p.unit,
+            normalRange: p.normalRange,
+            remarks: p.remarks,
+          })),
+      };
+    }
+  });
 
   const doc = new jsPDF({
     orientation: "portrait",
@@ -711,7 +719,7 @@ export const generateLabTestPDF = async (
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   let y = 100; // Starting Y position
-  const margin = 25; // Reduced margin from 40 to 25
+  const margin = 25;
 
   // --- PROFESSIONAL COLOR SCHEME ---
   const primary = [41, 128, 185]; // Professional blue
@@ -727,24 +735,6 @@ export const generateLabTestPDF = async (
 
   await ensurePersianFont(doc);
 
-  // --- PATIENT INFORMATION SECTION (with rounded corners) ---
-  doc.setDrawColor(borderColor[0], borderColor[1], borderColor[2]);
-  doc.setLineWidth(0.5);
-  doc.setFillColor(bgLight[0], bgLight[1], bgLight[2]);
-  doc.roundedRect(margin, y, pageWidth - margin * 2, 100, 3, 3, "FD");
-
-  doc.setTextColor(textDark[0], textDark[1], textDark[2]);
-  doc.setFontSize(11);
-  doc.setFont("helvetica", "bold");
-  doc.text("PATIENT INFORMATION", margin + 15, y + 20);
-
-  // Underline for section title
-  doc.setDrawColor(primary[0], primary[1], primary[2]);
-  doc.setLineWidth(0.5);
-  doc.line(margin + 15, y + 23, margin + 150, y + 23);
-
-  doc.setFontSize(9.5);
-
   const doctorName = test.doctor?.name ? `Dr. ${test.doctor.name}` : "N/A";
   const formatReportId = (id: string) => {
     if (/-\d{3}$/.test(id)) return id;
@@ -756,44 +746,153 @@ export const generateLabTestPDF = async (
     const head = digits.slice(0, -3);
     return `${prefix}${head}-${tail}`;
   };
-  const rawReportId = `LAB-${test.labReferenceId || test.testId}`;
+  const baseReportId = test.labReferenceId || test.testId || "LAB";
+  const rawReportId = /^lab[-]?/i.test(baseReportId)
+    ? baseReportId
+    : `LAB-${baseReportId}`;
   const reportId = formatReportId(rawReportId);
   const reportDate = format(new Date(test.orderedAt), "PPP");
 
-  // Patient details grid (3 columns)
-  const patientDetails = [
-    { label: "Patient Name", value: test.patient?.name || "N/A" },
-    { label: "Patient ID", value: test.patient?.patientId || "N/A" },
-    { label: "Gender", value: test.patient?.gender || "N/A" },
-    { label: "Phone", value: test.patient?.phone || "Not provided" },
-    { label: "Test ID", value: test.testId },
-    { label: "Report ID", value: reportId },
-    { label: "Date", value: reportDate },
-    { label: "Doctor", value: doctorName },
-    {
-      label: "Category",
-      value: test.category?.replace(/_/g, " ") || "General",
-    },
-    { label: "Priority", value: test.priority || "N/A" },
-  ];
+  // --- PATIENT INFORMATION SECTION (with rounded corners) ---
+  doc.setDrawColor(borderColor[0], borderColor[1], borderColor[2]);
+  doc.setLineWidth(0.5);
+  doc.setFillColor(bgLight[0], bgLight[1], bgLight[2]);
 
-  patientDetails.forEach((detail, index) => {
-    const row = Math.floor(index / 3);
-    const col = index % 3;
-    const x = margin + 20 + col * ((pageWidth - margin * 2 - 80) / 3);
-    const yPos = y + 45 + row * 18;
+  // Calculate section height based on number of rows (6 rows for the layout)
+  const sectionHeight = 180; // Fixed height for the new layout
+  doc.roundedRect(margin, y, pageWidth - margin * 2, sectionHeight, 3, 3, "FD");
 
-    doc.setFont("helvetica", "bold");
-    doc.text(`${detail.label}:`, x, yPos);
-    doc.setFont("helvetica", "normal");
-    doc.text(detail.value, x + doc.getTextWidth(`${detail.label}: `) + 5, yPos);
-  });
+  doc.setTextColor(textDark[0], textDark[1], textDark[2]);
+  doc.setFontSize(11);
+  doc.setFont("helvetica", "bold");
+  doc.text("PATIENT INFORMATION", margin + 15, y + 20);
 
-  // Calculate how many rows were used
-  const rowsUsed = Math.ceil(patientDetails.length / 3);
-  y += 45 + rowsUsed * 18 + 15;
+  // Underline for section title
+  doc.setDrawColor(primary[0], primary[1], primary[2]);
+  doc.setLineWidth(0.5);
+  doc.line(margin + 15, y + 23, margin + 100, y + 23);
 
-  // --- TEST RESULTS ---
+  doc.setFontSize(9.5);
+
+  const startY = y + 45;
+  const col1X = margin + 20;
+  const col2X = margin + 250;
+  const underlineEndX = margin + 220; // End of underline for col1
+  const col2UnderlineEndX = pageWidth - margin - 30; // End of underline for col2
+
+  // Row 1: Patient Name and Patient ID
+  doc.setFont("helvetica", "bold");
+  doc.text("Patient Name" + " ".repeat(14) + ":", col1X, startY);
+  doc.setFont("helvetica", "normal");
+  const patientName = test.patient?.name || "N/A";
+  doc.text(patientName, col1X + 100, startY);
+  doc.line(col1X + 100, startY + 2, underlineEndX, startY + 2);
+
+  doc.setFont("helvetica", "bold");
+  doc.text("Patient ID" + " ".repeat(16) + ":", col2X, startY);
+  doc.setFont("helvetica", "normal");
+  const patientId = test.patient?.patientId || "N/A";
+  doc.text(patientId, col2X + 95, startY);
+  doc.line(col2X + 95, startY + 2, col2UnderlineEndX, startY + 2);
+
+  // Row 2: Guardian, Age/Gender in one line
+  let row2Y = startY + 20;
+  doc.setFont("helvetica", "bold");
+  doc.text("Guardian" + " ".repeat(18) + ":", col1X, row2Y);
+  doc.setFont("helvetica", "normal");
+  const guardian = test.patient?.guardian || "N/A";
+  doc.text(guardian, col1X + 100, row2Y);
+  doc.line(col1X + 100, row2Y + 2, col1X + 180, row2Y + 2);
+
+  doc.setFont("helvetica", "bold");
+  doc.text("Age/Gender:", col1X + 190, row2Y);
+  doc.setFont("helvetica", "normal");
+  const ageGender = `${test.patient?.age || "N/A"}/${test.patient?.gender || "N/A"}`;
+  doc.text(ageGender, col1X + 260, row2Y);
+  doc.line(col1X + 260, row2Y + 2, underlineEndX, row2Y + 2);
+
+  // Right side - Doctor Name
+  doc.setFont("helvetica", "bold");
+  doc.text("Doctor Name" + " ".repeat(14) + ":", col2X, row2Y);
+  doc.setFont("helvetica", "normal");
+  doc.text(doctorName, col2X + 95, row2Y);
+  doc.line(col2X + 95, row2Y + 2, col2UnderlineEndX, row2Y + 2);
+
+  // Row 3: Address
+  let row3Y = row2Y + 20;
+  doc.setFont("helvetica", "bold");
+  doc.text("Address" + " ".repeat(19) + ":", col1X, row3Y);
+  doc.setFont("helvetica", "normal");
+  const address = test.patient?.address || "N/A";
+  doc.text(address, col1X + 100, row3Y);
+  doc.line(col1X + 100, row3Y + 2, underlineEndX, row3Y + 2);
+
+  // Right side - empty or could be used for something else
+  doc.setFont("helvetica", "bold");
+  doc.text("Report ID" + " ".repeat(17) + ":", col2X, row3Y);
+  doc.setFont("helvetica", "normal");
+  doc.text(reportId, col2X + 95, row3Y);
+  doc.line(col2X + 95, row3Y + 2, col2UnderlineEndX, row3Y + 2);
+
+  // Row 4: Ref Person
+  let row4Y = row3Y + 20;
+  doc.setFont("helvetica", "bold");
+  doc.text("Ref Person" + " ".repeat(17) + ":", col1X, row4Y);
+  doc.setFont("helvetica", "normal");
+  const refPerson = test.patient?.refPerson || "N/A";
+  doc.text(refPerson, col1X + 100, row4Y);
+  doc.line(col1X + 100, row4Y + 2, underlineEndX, row4Y + 2);
+
+  // Right side - Test ID
+  doc.setFont("helvetica", "bold");
+  doc.text("Test ID" + " ".repeat(19) + ":", col2X, row4Y);
+  doc.setFont("helvetica", "normal");
+  doc.text(test.testId, col2X + 95, row4Y);
+  doc.line(col2X + 95, row4Y + 2, col2UnderlineEndX, row4Y + 2);
+
+  // Row 5: Phone and Pass/Taz in one line
+  let row5Y = row4Y + 20;
+  doc.setFont("helvetica", "bold");
+  doc.text("Phone" + " ".repeat(21) + ":", col1X, row5Y);
+  doc.setFont("helvetica", "normal");
+  const phone = test.patient?.phone || "N/A";
+  doc.text(phone, col1X + 100, row5Y);
+  doc.line(col1X + 100, row5Y + 2, col1X + 180, row5Y + 2);
+
+  doc.setFont("helvetica", "bold");
+  doc.text("Pass/Taz:", col1X + 190, row5Y);
+  doc.setFont("helvetica", "normal");
+  const passTaz = test.patient?.passTskNo || "N/A";
+  doc.text(passTaz, col1X + 250, row5Y);
+  doc.line(col1X + 250, row5Y + 2, underlineEndX, row5Y + 2);
+
+  // Right side - Date
+  doc.setFont("helvetica", "bold");
+  doc.text("Date" + " ".repeat(22) + ":", col2X, row5Y);
+  doc.setFont("helvetica", "normal");
+  doc.text(reportDate, col2X + 95, row5Y);
+  doc.line(col2X + 95, row5Y + 2, col2UnderlineEndX, row5Y + 2);
+
+  // Row 6: Regn No and Category
+  let row6Y = row5Y + 20;
+  doc.setFont("helvetica", "bold");
+  doc.text("Regn No" + " ".repeat(19) + ":", col1X, row6Y);
+  doc.setFont("helvetica", "normal");
+  const regnNo = test.patient?.registrationNo || "N/A";
+  doc.text(regnNo, col1X + 100, row6Y);
+  doc.line(col1X + 100, row6Y + 2, underlineEndX, row6Y + 2);
+
+  // Right side - Category
+  doc.setFont("helvetica", "bold");
+  doc.text("Category" + " ".repeat(18) + ":", col2X, row6Y);
+  doc.setFont("helvetica", "normal");
+  const category = test.category?.replace(/_/g, " ") || "General";
+  doc.text(category, col2X + 95, row6Y);
+  doc.line(col2X + 95, row6Y + 2, col2UnderlineEndX, row6Y + 2);
+
+  y += sectionHeight + 10;
+
+  // --- TEST RESULTS (KEPT EXACTLY THE SAME) ---
   if (test.results?.parameters && test.results.parameters.length > 0) {
     // Results table header - without outer border
     doc.setFillColor(primary[0], primary[1], primary[2]);
@@ -941,6 +1040,7 @@ export const generateLabTestPDF = async (
     const reportedByName =
       test.results?.reportedBy?.name ||
       (test as any)?.collectionDetails?.collectedBy?.name ||
+      (test as any)?.createdBy?.name ||
       "Laboratory Staff";
     doc.text(reportedByName, margin + 70, y);
 
@@ -1007,44 +1107,61 @@ export const generateLabTestPDF = async (
 /**
  * generateDirectTestPaymentSlip
  *
- * Generates an A5 payment slip PDF for a direct laboratory test.
- * Updated to match the styling of the lab test PDF generator.
- *
+ * Generates an A5 landscape payment slip with border around all elements
+ * Layout: Top half - Test Information (left side)
+ *         Bottom half - Payment Information (full width)
+ *         Complete border around all content
  */
 export const generateDirectTestPaymentSlip = async (
   test: DirectLabTest,
   mode: "print" | "download" = "print",
+  options?: { testNames?: string[] },
 ) => {
   if (!test) return;
 
+  // A5 Landscape format (210mm x 148mm)
   const doc = new jsPDF({
-    orientation: "portrait",
+    orientation: "landscape",
     unit: "pt",
-    format: "a4",
+    format: "a5",
   });
 
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 20;
-  let y = 40;
-
-  // --- COLOR SCHEME (matching lab test style) ---
-  const primary = [0, 92, 169]; // Hospital blue
-  const accent = [0, 155, 116]; // Hospital green
-  const bgLight = [250, 251, 252];
-  const textDark = [30, 30, 30];
-  const warning = [245, 159, 0]; // Warning orange
-  const success = [56, 161, 105]; // Success green
+  const borderPadding = 10;
+  const contentStartX = margin + borderPadding;
+  const contentWidth = pageWidth - margin * 2 - borderPadding * 2;
+  const contentEndX = pageWidth - margin - borderPadding;
 
   await ensurePersianFont(doc);
 
-  // Helper function to safely format dates
+  // TWO-COLOR THERMAL SETUP
+  const black = [0, 0, 0];
+  const lightGray = [150, 150, 150]; // 50% lighter than black
+  const red = [255, 0, 0];
+
+  doc.setTextColor(black[0], black[1], black[2]);
+  doc.setDrawColor(lightGray[0], lightGray[1], lightGray[2]); // Set default draw color to light gray
+
+  // Helper functions
   const safeFormatDate = (value?: string): string => {
     if (!value) return "N/A";
     try {
       const parsed = new Date(value);
       if (Number.isNaN(parsed.getTime())) return "N/A";
-      return format(parsed, "PPP");
+      return format(parsed, "dd/MM/yyyy");
+    } catch {
+      return "N/A";
+    }
+  };
+
+  const formatTime = (value?: string): string => {
+    if (!value) return "N/A";
+    try {
+      const parsed = new Date(value);
+      if (Number.isNaN(parsed.getTime())) return "N/A";
+      return format(parsed, "HH:mm");
     } catch {
       return "N/A";
     }
@@ -1057,204 +1174,365 @@ export const generateDirectTestPaymentSlip = async (
       currency: "AFN",
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
-    }).format(amount);
+    })
+      .format(amount)
+      .replace("AFN", "؋")
+      .replace(/\s/g, ""); // Remove any spaces
   };
 
+  // Data extraction
   const slipDate = test.charges?.paymentDate || test.createdAtDirect;
-
-  // --- SINGLE BORDERED TABLE CONTAINING ALL INFORMATION ---
-  const tableX = margin;
-  const tableWidth = pageWidth - margin * 2;
-  const rowHeight = 22;
-
-  // Calculate number of rows: 5 info rows + 1 amount row = 6 rows total
-  const totalRows = 6; // Changed from 8 to 6
-  const tableHeight = totalRows * rowHeight;
-  const startY = y;
-
-  // Draw outer border
-  doc.setDrawColor(primary[0], primary[1], primary[2]);
-  doc.setLineWidth(0.8);
-  doc.rect(tableX, startY, tableWidth, tableHeight, "S");
-
-  // Draw vertical divider
-  doc.setDrawColor(200, 200, 200);
-  doc.setLineWidth(0.5);
-  doc.line(
-    tableX + tableWidth / 2,
-    startY,
-    tableX + tableWidth / 2,
-    startY + tableHeight,
-  );
-
-  // Patient & Payment Information Rows (5 rows)
-  const infoRows: Array<[string, string, string, string]> = [
-    ["Patient", test.patient?.name || "N/A", "Date", safeFormatDate(slipDate)],
-    [
-      "Patient ID",
-      test.patient?.patientId || "N/A",
-      "Phone",
-      test.patient?.phone || "N/A",
-    ],
-    ["Test", test.testName || "N/A", "Test ID", test.testId || "N/A"],
-    [
-      "Category",
-      test.category?.replace(/_/g, " ") || "General",
-      "Status",
-      test.charges?.paymentStatus || "pending",
-    ],
-    [
-      "Transaction",
-      test.charges?.transactionId || "N/A",
-      "Method",
-      test.charges?.paymentMethod || "N/A",
-    ],
-  ];
-
-  infoRows.forEach(([lLabel, lValue, rLabel, rValue], index) => {
-    const rowY = startY + index * rowHeight;
-
-    // Draw horizontal divider between rows
-    if (index < infoRows.length - 1) {
-      doc.setDrawColor(220, 220, 220);
-      doc.setLineWidth(0.3);
-      doc.line(
-        tableX + 2,
-        rowY + rowHeight,
-        tableX + tableWidth - 2,
-        rowY + rowHeight,
-      );
-    }
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
-    doc.setTextColor(textDark[0], textDark[1], textDark[2]);
-
-    // Format values with bold labels
-    const leftText = `${lLabel}:`;
-    const rightText = `${rLabel}:`;
-
-    // Draw labels in bold
-    doc.setFont("helvetica", "bold");
-    doc.text(leftText, tableX + 8, rowY + 14);
-    doc.text(rightText, tableX + tableWidth / 2 + 8, rowY + 14);
-
-    // Draw values in normal font
-    doc.setFont("helvetica", "normal");
-
-    // Special handling for status to show in color
-    if (rLabel === "Status") {
-      const statusColor =
-        rValue === "paid"
-          ? success
-          : rValue === "partial"
-            ? warning
-            : [107, 114, 128]; // gray for pending
-      doc.setTextColor(statusColor[0], statusColor[1], statusColor[2]);
-      doc.setFont("helvetica", "bold");
-      doc.text(
-        rValue.toUpperCase(),
-        tableX + tableWidth / 2 + 8 + doc.getTextWidth(rightText) + 5,
-        rowY + 14,
-      );
-      doc.setTextColor(textDark[0], textDark[1], textDark[2]);
-    } else {
-      // Trim any extra spaces from values
-      const cleanValue = rValue.trim();
-      doc.text(
-        cleanValue,
-        tableX + tableWidth / 2 + 8 + doc.getTextWidth(rightText) + 5,
-        rowY + 14,
-      );
-    }
-
-    // Trim any extra spaces from left value
-    const cleanLeftValue = lValue.trim();
-    doc.text(
-      cleanLeftValue,
-      tableX + 8 + doc.getTextWidth(leftText) + 5,
-      rowY + 14,
-    );
-  });
-
-  // Draw a slightly thicker line to separate info from amounts
-  doc.setDrawColor(primary[0], primary[1], primary[2]);
-  doc.setLineWidth(0.8);
-  doc.line(
-    tableX + 2,
-    startY + 5 * rowHeight,
-    tableX + tableWidth - 2,
-    startY + 5 * rowHeight,
-  );
-
-  // Amount Row (1 row)
   const totalAmount = test.charges?.totalAmount ?? 0;
+  const paidAmount = test.charges?.paid ?? 0;
+  const dueAmount = test.charges?.due ?? 0;
+  const paymentStatus = test.charges?.paymentStatus || "pending";
 
-  const amountRowY = startY + 5 * rowHeight;
+  const patientRecord = test.patient || {};
+  const patientSnapshot = test.patientSnapshot || {};
 
-  // Alternate row background for amount row
-  doc.setFillColor(248, 250, 252);
-  doc.rect(tableX + 1, amountRowY + 1, tableWidth - 2, rowHeight - 2, "F");
+  const readPatientField = (field: keyof Patient, fallback = "N/A") => {
+    const value =
+      (patientRecord as any)[field] ?? (patientSnapshot as any)[field];
+    if (value === undefined || value === null) return fallback;
+    if (typeof value === "string" && value.trim() === "") return fallback;
+    return value as string;
+  };
 
-  // Left side - label (bold)
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(9);
-  doc.setTextColor(textDark[0], textDark[1], textDark[2]);
-  doc.text("Payment Amount:", tableX + 8, amountRowY + 14);
+  const preparedBy =
+    test.results?.reportedBy?.name ||
+    (test as any)?.collectionDetails?.collectedBy?.name ||
+    (test as any)?.createdBy?.name ||
+    "Lab Staff";
 
-  // Right side - amount (bold)
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(primary[0], primary[1], primary[2]);
-  doc.text(
-    formatAmount(totalAmount),
-    tableX + tableWidth - 15,
-    amountRowY + 14,
-    { align: "right" },
+  const doctorName =
+    (test as any).doctorName || (test as any).doctor?.name || "N/A";
+
+  const resolveSlipAge = () => {
+    const directAge =
+      (patientRecord as any).age ?? (patientSnapshot as any).age;
+    if (directAge !== undefined && directAge !== null && directAge !== "") {
+      return String(directAge);
+    }
+    const dob =
+      (patientRecord as any).dateOfBirth ||
+      (patientSnapshot as any).dateOfBirth;
+    if (!dob) return "N/A";
+    const date = new Date(dob);
+    if (Number.isNaN(date.getTime())) return "N/A";
+    const today = new Date();
+    let age = today.getFullYear() - date.getFullYear();
+    const monthDiff = today.getMonth() - date.getMonth();
+    if (
+      monthDiff < 0 ||
+      (monthDiff === 0 && today.getDate() < date.getDate())
+    ) {
+      age -= 1;
+    }
+    return age >= 0 ? String(age) : "N/A";
+  };
+
+  const ageValue = resolveSlipAge();
+
+  // Draw outer border with light gray
+  doc.setDrawColor(lightGray[0], lightGray[1], lightGray[2]);
+  doc.setLineWidth(1.5);
+  doc.rect(margin, margin, pageWidth - margin * 2, pageHeight - margin * 2);
+
+  let y = margin + borderPadding + 10;
+
+  // ==================== HEADER ====================
+  doc.setFontSize(11);
+  doc.setFont("courier", "normal");
+  doc.setTextColor(black[0], black[1], black[2]);
+  doc.text("PAYMENT RECEIPT", pageWidth / 2, y, { align: "center" });
+
+  y += 12;
+  doc.setDrawColor(lightGray[0], lightGray[1], lightGray[2]);
+  doc.setLineWidth(0.8);
+  doc.line(contentStartX, y, contentEndX, y);
+  y += 15;
+
+  // ==================== LEFT COLUMN - PATIENT INFO ====================
+  const leftColX = contentStartX;
+  const rightColX = pageWidth / 2 + 15;
+  const labelWidth = 70;
+  const rowHeight = 16;
+
+  // Helper for left column fields
+  const drawLeftField = (label: string, value: string) => {
+    doc.setFont("courier", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(black[0], black[1], black[2]);
+    doc.text(label + ":", leftColX, y);
+
+    doc.setFont("courier", "normal");
+    const valueX = leftColX + labelWidth;
+    doc.text(value || "N/A", valueX, y);
+
+    doc.setDrawColor(lightGray[0], lightGray[1], lightGray[2]);
+    doc.line(valueX, y + 2, rightColX - 15, y + 2);
+
+    y += rowHeight;
+  };
+
+  // Helper for right column fields
+  const drawRightField = (label: string, value: string) => {
+    doc.setFont("courier", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(black[0], black[1], black[2]);
+    doc.text(label + ":", rightColX, currentRightY);
+
+    doc.setFont("courier", "normal");
+    const valueX = rightColX + labelWidth;
+    doc.text(value || "N/A", valueX, currentRightY);
+
+    doc.setDrawColor(lightGray[0], lightGray[1], lightGray[2]);
+    doc.line(valueX, currentRightY + 2, contentEndX, currentRightY + 2);
+  };
+
+  // Track right column position separately
+  let currentRightY = y;
+
+  // Row 1: Patient Name (left) and Patient ID (right)
+  drawLeftField("Patient Name", readPatientField("name"));
+  drawRightField("Patient ID", readPatientField("patientId"));
+  currentRightY += rowHeight;
+
+  // Row 2: Age (left) and Guardian (right)
+  drawLeftField("Age", String(ageValue));
+  drawRightField("Guardian", readPatientField("guardian"));
+  currentRightY += rowHeight;
+
+  // Row 3: Gender (left) and Phone (right)
+  drawLeftField("Gender", readPatientField("gender"));
+  drawRightField("Phone", readPatientField("phone"));
+  currentRightY += rowHeight;
+
+  // Row 4: Regn No (left) and Test ID (right)
+  drawLeftField("Regn No", readPatientField("registrationNo"));
+  drawRightField("Test ID", test.testId);
+  currentRightY += rowHeight;
+
+  // Row 5: Doctor (left) and Date (right)
+  drawLeftField("Doctor", doctorName);
+  drawRightField("Date", safeFormatDate(slipDate));
+  currentRightY += rowHeight;
+
+  // Row 6: Prepared By (left) and Receipt No (right)
+  drawLeftField("Prepared By", preparedBy);
+  drawRightField("Receipt No", test.testId);
+  currentRightY += rowHeight;
+
+  // Row 7: Pass/Tsk (left) and Ref Person (right)
+  drawLeftField("Pass/Tsk", readPatientField("passTskNo"));
+  drawRightField("Ref Person", readPatientField("refPerson"));
+  currentRightY += rowHeight;
+
+  // Row 8: Address (full width - both columns)
+  doc.setFont("courier", "bold");
+  doc.setTextColor(black[0], black[1], black[2]);
+  doc.text("Address:", leftColX, y);
+  doc.setFont("courier", "normal");
+  const address = readPatientField("address");
+  doc.text(address, leftColX + labelWidth, y);
+
+  doc.setDrawColor(lightGray[0], lightGray[1], lightGray[2]);
+  doc.line(leftColX + labelWidth, y + 2, contentEndX, y + 2);
+
+  y += rowHeight;
+
+  // Update y to max of both columns
+  y = Math.max(y, currentRightY) + 5;
+
+  // ==================== PAYMENT SECTION ====================
+  doc.setFont("courier", "normal");
+  doc.setFontSize(12);
+  doc.setTextColor(black[0], black[1], black[2]);
+  doc.text("PAYMENT DETAILS", pageWidth / 2, y, { align: "center" });
+  y += 20;
+
+  const paymentLeftX = contentStartX + 40;
+  const paymentRightX = contentEndX - 40;
+
+  // Helper function to draw field with proper underline
+  const drawPaymentField = (
+    label: string,
+    value: string,
+    yPos: number,
+    highlight: boolean = false,
+  ) => {
+    // Draw label
+    doc.setFont("courier", "bold");
+    doc.setFontSize(10);
+    doc.setTextColor(black[0], black[1], black[2]);
+    doc.text(label, paymentLeftX, yPos);
+
+    // Calculate value width for proper underline positioning
+    doc.setFont("courier", "normal");
+    if (highlight) {
+      doc.setTextColor(red[0], red[1], red[2]);
+    }
+
+    // Draw value
+    doc.text(value, paymentRightX, yPos, { align: "right" });
+
+    // Get value width to position underline correctly
+    const valueWidth = doc.getTextWidth(value);
+    const valueStartX = paymentRightX - valueWidth;
+
+    // Draw underline from value start to paymentRightX with light gray
+    doc.setDrawColor(lightGray[0], lightGray[1], lightGray[2]);
+    doc.setLineWidth(0.3);
+    doc.line(valueStartX, yPos + 2, paymentRightX, yPos + 2);
+
+    // Reset color
+    doc.setTextColor(black[0], black[1], black[2]);
+
+    return yPos + 18;
+  };
+
+  // Format amounts without extra spaces
+  const formatDisplayAmount = (value?: number): string => {
+    const amount = typeof value === "number" && !isNaN(value) ? value : 0;
+    return new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency: "AFN",
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    })
+      .format(amount)
+      .replace("AFN", "؋")
+      .replace(/\s/g, ""); // Remove any spaces
+  };
+
+  // Test names section
+  doc.setFont("courier", "bold");
+  doc.setTextColor(black[0], black[1], black[2]);
+  doc.text("Tests:", leftColX, y);
+  y += 14;
+
+  const tests = (() => {
+    if (options?.testNames && options.testNames.length > 0) {
+      const unique = new Set(options.testNames.filter(Boolean) as string[]);
+      return unique.size > 0 ? Array.from(unique) : [test.testName];
+    }
+    return test.testName ? [test.testName] : ["N/A"];
+  })();
+
+  tests.forEach((testItem) => {
+    doc.setFont("courier", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(black[0], black[1], black[2]);
+    doc.text("• " + testItem, leftColX + 10, y);
+    y += 14;
+  });
+
+  // Total Amount
+  y = drawPaymentField("Total Amount:", formatDisplayAmount(totalAmount), y);
+
+  // Paid Amount
+  y = drawPaymentField("Paid Amount:", formatDisplayAmount(paidAmount), y);
+
+  // Balance Due - highlight if > 0
+  y = drawPaymentField(
+    "Balance Due:",
+    formatDisplayAmount(dueAmount),
+    y,
+    dueAmount > 0,
   );
 
-  y = startY + tableHeight + 20;
+  // Payment Status
+  const statusDisplay = paymentStatus.toUpperCase();
+  doc.setFont("courier", "bold");
+  doc.setTextColor(black[0], black[1], black[2]);
+  doc.text("Payment Status:", paymentLeftX, y);
+  if (
+    paymentStatus.toLowerCase() === "pending" ||
+    paymentStatus.toLowerCase() === "partial"
+  ) {
+    doc.setTextColor(red[0], red[1], red[2]);
+  }
+  doc.text(statusDisplay, paymentRightX, y, { align: "right" });
 
-  // --- AUTHORIZED SIGNATORY (matching lab test style) ---
-  doc.setDrawColor(primary[0], primary[1], primary[2]);
-  doc.setLineWidth(0.5);
-  doc.setFillColor(bgLight[0], bgLight[1], bgLight[2]);
-  doc.roundedRect(pageWidth - 150, y - 5, 120, 40, 3, 3, "FD");
+  // Calculate status width for underline
+  const statusWidth = doc.getTextWidth(statusDisplay);
+  const statusStartX = paymentRightX - statusWidth;
 
-  doc.setFont("helvetica", "normal");
-  doc.setTextColor(textDark[0], textDark[1], textDark[2]);
-  doc.setFontSize(8.5);
+  doc.setDrawColor(lightGray[0], lightGray[1], lightGray[2]);
+  doc.setLineWidth(0.3);
+  doc.line(statusStartX, y + 2, paymentRightX, y + 2);
 
-  doc.setFont("helvetica", "bold");
-  doc.text("Authorized Signatory", pageWidth - 90, y + 10, {
-    align: "center",
-  });
+  doc.setTextColor(black[0], black[1], black[2]);
+  y += 18;
 
-  // Signature line
-  doc.setDrawColor(200, 200, 200);
-  doc.setLineWidth(0.5);
-  doc.line(pageWidth - 130, y + 2, pageWidth - 50, y + 2);
+  // Payment Method (if available)
+  if (test.charges?.paymentMethod) {
+    doc.setFont("courier", "bold");
+    doc.setTextColor(black[0], black[1], black[2]);
+    doc.text("Payment Method:", paymentLeftX, y);
+    doc.setFont("courier", "normal");
+    const methodValue = test.charges.paymentMethod;
+    doc.text(methodValue, paymentRightX, y, { align: "right" });
 
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(7);
-  doc.setTextColor(150, 150, 150);
-  doc.text("(Lab Staff)", pageWidth - 90, y + 20, {
-    align: "center",
-  });
+    const methodWidth = doc.getTextWidth(methodValue);
+    const methodStartX = paymentRightX - methodWidth;
+
+    doc.setDrawColor(lightGray[0], lightGray[1], lightGray[2]);
+    doc.line(methodStartX, y + 2, paymentRightX, y + 2);
+
+    y += 18;
+  }
+
+  // Transaction ID (if available)
+  if (test.charges?.transactionId) {
+    doc.setFont("courier", "bold");
+    doc.setTextColor(black[0], black[1], black[2]);
+    doc.text("Transaction ID:", paymentLeftX, y);
+    doc.setFont("courier", "normal");
+    const txValue = test.charges.transactionId;
+    doc.text(txValue, paymentRightX, y, { align: "right" });
+
+    const txWidth = doc.getTextWidth(txValue);
+    const txStartX = paymentRightX - txWidth;
+
+    doc.setDrawColor(lightGray[0], lightGray[1], lightGray[2]);
+    doc.line(txStartX, y + 2, paymentRightX, y + 2);
+
+    y += 18;
+  }
+
+  // Payment Date/Time
+  doc.setFont("courier", "bold");
+  doc.setTextColor(black[0], black[1], black[2]);
+  doc.text("Payment Date:", paymentLeftX, y);
+  doc.setFont("courier", "normal");
+  const paymentDateTime = `${safeFormatDate(slipDate)} ${formatTime(slipDate)}`;
+  doc.text(paymentDateTime, paymentRightX, y, { align: "right" });
+
+  // Calculate date width for underline
+  const dateWidth = doc.getTextWidth(paymentDateTime);
+  const dateStartX = paymentRightX - dateWidth;
+
+  doc.setDrawColor(lightGray[0], lightGray[1], lightGray[2]);
+  doc.line(dateStartX, y + 2, paymentRightX, y + 2);
 
   y += 25;
 
-  // --- FOOTER NOTE (matching lab test style) ---
-  doc.setFont("helvetica", "italic");
-  doc.setFontSize(7.5);
-  doc.setTextColor(150, 150, 150);
-  doc.text(
-    "This is a system-generated payment slip and does not require a signature.",
-    pageWidth / 2,
-    pageHeight - 20,
-    { align: "center" },
-  );
+  // ==================== FOOTER ====================
+  // Authorized signature line with light gray
+  doc.setDrawColor(lightGray[0], lightGray[1], lightGray[2]);
+  doc.line(contentStartX + 40, y + 5, contentStartX + 160, y + 5);
 
-  // --- OUTPUT (unchanged) ---
+  doc.setFont("courier", "normal");
+  doc.setFontSize(8);
+  doc.setTextColor(black[0], black[1], black[2]);
+  doc.text("Authorized Signature", contentStartX + 50, y + 15);
+
+  // Print timestamp
+  const printTime = `Printed: ${format(new Date(), "dd/MM/yyyy HH:mm")}`;
+  doc.text(printTime, contentEndX - 150, y + 5);
+
+  // --- OUTPUT ---
   if (mode === "print") {
     const pdfBlob = doc.output("blob");
     const pdfUrl = URL.createObjectURL(pdfBlob);
@@ -1752,7 +2030,7 @@ export const generateDischargeCardPDF = (
   drawSectionHeader("Billing Summary");
   y += 10;
 
-  doc.setFont("helvetica", "normal");
+  doc.setFont("courier", "normal");
   doc.setFontSize(10);
   doc.setTextColor(textDark[0], textDark[1], textDark[2]);
 
@@ -1773,11 +2051,11 @@ export const generateDischargeCardPDF = (
   doc.text(`Other Requirements: ${otherRequirementsCost.toFixed(2)}`, 55, y);
   y += 16;
 
-  doc.setDrawColor(220, 220, 220);
+  doc.setDrawColor(176, 176, 176);
   doc.line(50, y, 250, y);
   y += 12;
 
-  doc.setFont("helvetica", "bold");
+  doc.setFont("courier", "bold");
   doc.setFontSize(12);
   doc.setTextColor(primary[0], primary[1], primary[2]);
   doc.text(`Total Amount: ${card.billing.totalAmount.toFixed(2)}`, 55, y);

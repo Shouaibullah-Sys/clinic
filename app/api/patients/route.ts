@@ -71,6 +71,10 @@ export async function POST(request: NextRequest) {
       name,
       phone,
       email,
+      guardian,
+      refPerson,
+      passTskNo,
+      registrationNo,
       dateOfBirth,
       gender,
       address,
@@ -118,6 +122,10 @@ export async function POST(request: NextRequest) {
             phone: existingPatient.phone,
             patientId: existingPatient.patientId,
             email: existingPatient.email,
+            guardian: existingPatient.guardian,
+            refPerson: existingPatient.refPerson,
+            passTskNo: existingPatient.passTskNo,
+            registrationNo: existingPatient.registrationNo,
             dateOfBirth: existingPatient.dateOfBirth,
             gender: existingPatient.gender,
           },
@@ -155,6 +163,10 @@ export async function POST(request: NextRequest) {
 
     // Add optional fields
     if (email) patientData.email = email.trim().toLowerCase();
+    if (guardian) patientData.guardian = guardian.trim();
+    if (refPerson) patientData.refPerson = refPerson.trim();
+    if (passTskNo) patientData.passTskNo = passTskNo.trim();
+    if (registrationNo) patientData.registrationNo = registrationNo.trim();
     if (address) patientData.address = address.trim();
     if (emergencyContact)
       patientData.emergencyContact = emergencyContact.trim();
@@ -209,6 +221,10 @@ export async function POST(request: NextRequest) {
           name: patient.name,
           phone: patient.phone,
           email: patient.email,
+          guardian: patient.guardian,
+          refPerson: patient.refPerson,
+          passTskNo: patient.passTskNo,
+          registrationNo: patient.registrationNo,
           dateOfBirth: patient.dateOfBirth?.toISOString().split("T")[0],
           gender: patient.gender,
           address: patient.address,

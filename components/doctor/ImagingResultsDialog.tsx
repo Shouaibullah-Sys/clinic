@@ -54,7 +54,7 @@ interface ImagingStudy {
     name: string;
     patientId: string;
     phone?: string;
-    email?: string;
+    guardian?: string;
     dateOfBirth?: string;
     gender?: string;
   };
@@ -350,10 +350,10 @@ export function ImagingResultsDialog({
                       <p className="font-semibold">{study.patient.phone}</p>
                     </div>
                   )}
-                  {study.patient.email && (
+                  {study.patient.guardian && (
                     <div>
-                      <p className="text-sm text-muted-foreground">Email</p>
-                      <p className="font-semibold">{study.patient.email}</p>
+                      <p className="text-sm text-muted-foreground">Guardian</p>
+                      <p className="font-semibold">{study.patient.guardian}</p>
                     </div>
                   )}
                   {study.patient.gender && (

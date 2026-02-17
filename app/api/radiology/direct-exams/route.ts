@@ -100,7 +100,7 @@ export async function GET(request: NextRequest) {
 
     // Fetch direct exams with proper population
     const exams = await RadiologyExam.find(finalQuery)
-      .populate("patient", "name patientId phone email dateOfBirth gender")
+      .populate("patient", "name patientId phone guardian dateOfBirth gender")
       .populate("createdBy", "name")
       .populate("finalizedBy", "name")
       .populate("printedBy", "name")

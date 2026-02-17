@@ -16,7 +16,7 @@ interface PopulatedPatient {
   _id?: Types.ObjectId;
   name?: string;
   phone?: string;
-  email?: string;
+  guardian?: string;
   patientId?: string;
   dateOfBirth?: Date;
   gender?: string;
@@ -89,7 +89,7 @@ export async function GET(
     
     // Get appointment with basic info
     const appointment = await Appointment.findById(appointmentId)
-      .populate<{ patient: PopulatedPatient }>("patient", "name phone email patientId dateOfBirth gender address emergencyContact bloodGroup allergies")
+      .populate<{ patient: PopulatedPatient }>("patient", "name phone guardian patientId dateOfBirth gender address emergencyContact bloodGroup allergies")
       .populate<{ doctor: PopulatedDoctor }>("doctor", "name specialization department phone")
       .populate("createdBy", "name")
       .lean();

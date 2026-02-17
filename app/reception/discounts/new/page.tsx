@@ -31,7 +31,7 @@ interface PatientSearchResult {
   _id: string;
   name: string;
   phone: string;
-  email?: string;
+  guardian?: string;
 }
 
 export default function NewDiscountRequestPage() {
@@ -235,8 +235,10 @@ export default function NewDiscountRequestPage() {
                         <p className="font-medium">{patient.name}</p>
                         <div className="text-sm text-gray-500">
                           {patient.phone && <span>Phone: {patient.phone}</span>}
-                          {patient.email && (
-                            <span className="ml-4">Email: {patient.email}</span>
+                          {patient.guardian && (
+                            <span className="ml-4">
+                              Guardian: {patient.guardian}
+                            </span>
                           )}
                         </div>
                       </div>

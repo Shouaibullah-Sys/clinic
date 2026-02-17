@@ -57,11 +57,17 @@ export async function GET(request: NextRequest) {
         { name: searchRegex },
         { phone: searchRegex },
         { email: searchRegex },
+        { guardian: searchRegex },
+        { refPerson: searchRegex },
+        { passTskNo: searchRegex },
+        { registrationNo: searchRegex },
         { patientId: searchRegex },
       ],
       active: true,
     })
-      .select("name phone email patientId")
+      .select(
+        "name phone email guardian refPerson passTskNo registrationNo patientId address gender dateOfBirth",
+      )
       .limit(limit)
       .lean();
 

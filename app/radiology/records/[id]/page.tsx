@@ -40,7 +40,7 @@ interface RadiologyRecord {
     name: string;
     patientId: string;
     phone?: string;
-    email?: string;
+    guardian?: string;
     dateOfBirth?: string;
     gender?: string;
   };
@@ -646,9 +646,9 @@ export default function RadiologyRecordPage() {
                 </td>
               </tr>
               <tr className="border-b">
-                <td className="p-3 text-sm text-muted-foreground">Email</td>
+                <td className="p-3 text-sm text-muted-foreground">Guardian</td>
                 <td className="p-3 font-medium">
-                  {record.patient.email || "N/A"}
+                  {record.patient.guardian || "N/A"}
                 </td>
               </tr>
               <tr className="border-b">

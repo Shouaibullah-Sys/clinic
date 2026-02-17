@@ -111,10 +111,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Parse times
-    const appointmentStartTime = new Date(startTime);
-    const appointmentEndTime = endTime
+    let appointmentStartTime = new Date(startTime);
+    let appointmentEndTime = endTime
       ? new Date(endTime)
       : new Date(appointmentStartTime.getTime() + duration * 60000);
+    const requestedStartTime = new Date(appointmentStartTime);
+    let autoAdjusted = false;
 
     // Validate appointment time
     const now = new Date();
@@ -134,9 +136,43 @@ export async function POST(request: NextRequest) {
     );
 
     if (!isAvailable) {
-      return NextResponse.json(
-        { success: false, error: "Doctor is not available at this time" },
-        { status: 409 },
+      const maxSlotsToCheck = 30;
+      const slotIntervalMinutes = 20;
+      const startDay = new Date(appointmentStartTime);
+      startDay.setHours(0, 0, 0, 0);
+      const endDay = new Date(startDay);
+      endDay.setHours(23, 59, 59, 999);
+
+      let foundSlot: Date | null = null;
+      for (let i = 1; i <= maxSlotsToCheck; i++) {
+        const candidateStart = new Date(
+          appointmentStartTime.getTime() + i * slotIntervalMinutes * 60000,
+        );
+        if (candidateStart > endDay) break;
+
+        const available = await Appointment.checkAvailability(
+          doctorId,
+          candidateStart,
+          duration,
+          undefined,
+        );
+        if (available) {
+          foundSlot = candidateStart;
+          break;
+        }
+      }
+
+      if (!foundSlot) {
+        return NextResponse.json(
+          { success: false, error: "Doctor is not available at this time" },
+          { status: 409 },
+        );
+      }
+
+      autoAdjusted = true;
+      appointmentStartTime = foundSlot;
+      appointmentEndTime = new Date(
+        appointmentStartTime.getTime() + duration * 60000,
       );
     }
 
@@ -209,7 +245,7 @@ export async function POST(request: NextRequest) {
 
     // Populate response
     await appointment.populate([
-      { path: "patient", select: "name phone email patientId" },
+      { path: "patient", select: "name phone guardian patientId" },
       { path: "doctor", select: "name specialization department" },
       { path: "createdBy", select: "name" },
     ]);
@@ -230,6 +266,8 @@ export async function POST(request: NextRequest) {
           status: appointment.status,
           reason: appointment.reason,
           priority: appointment.priority,
+          autoAdjusted,
+          requestedStartTime: autoAdjusted ? requestedStartTime : undefined,
         },
         message: "Appointment created successfully",
       },

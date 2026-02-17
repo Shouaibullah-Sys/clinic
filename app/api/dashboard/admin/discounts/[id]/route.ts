@@ -173,7 +173,7 @@ export async function GET(
     const { id: requestId } = await params;
     
     const discountRequest = await DiscountRequest.findById(requestId)
-      .populate("patient", "name phone email dateOfBirth gender address emergencyContact bloodGroup allergies medicalHistory")
+      .populate("patient", "name phone guardian dateOfBirth gender address emergencyContact bloodGroup allergies medicalHistory")
       .populate("requestedBy", "name role email phone")
       .populate("approvedBy", "name")
       .populate("reviewedBy", "name")

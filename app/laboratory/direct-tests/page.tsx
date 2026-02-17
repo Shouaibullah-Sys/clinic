@@ -71,11 +71,17 @@ interface DirectLabTest {
   testId: string;
   testName: string;
   category: string;
+  directBatchId?: string;
   patient: {
     _id: string;
     name: string;
     patientId: string;
     phone?: string;
+    guardian?: string;
+    address?: string;
+    refPerson?: string;
+    passTskNo?: string;
+    registrationNo?: string;
   };
   createdBy?: {
     _id: string;
@@ -403,8 +409,32 @@ export default function DirectTestsPage() {
         });
       }
 
+      let reportData = data.data as DirectLabTest | DirectLabTest[];
+      if (data.data?.directBatchId) {
+        const batchResponse = await fetch(
+          `/api/laboratory/direct-tests?batchId=${encodeURIComponent(
+            data.data.directBatchId,
+          )}&limit=200`,
+          {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+            },
+          },
+        );
+
+        if (batchResponse.ok) {
+          const batchData = await batchResponse.json();
+          const batchTests: DirectLabTest[] = batchData?.data || [];
+          if (batchTests.length > 0) {
+            reportData = batchTests;
+          }
+        }
+      }
+
       // Generate and print PDF using the fetched test data
-      await generateDirectTestPDF(data.data);
+      await generateDirectTestPDF(reportData);
 
       // Refresh tests to update printed status
       fetchTests();
@@ -441,8 +471,57 @@ export default function DirectTestsPage() {
           data.error || "Failed to fetch test data for payment slip",
         );
       }
+      let slipData = data.data as DirectLabTest;
+      let testNames: string[] | undefined = undefined;
 
-      await generateDirectTestPaymentSlip(data.data, "print");
+      if (slipData.directBatchId) {
+        const batchResponse = await fetch(
+          `/api/laboratory/direct-tests?batchId=${encodeURIComponent(
+            slipData.directBatchId,
+          )}&limit=200`,
+          {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+            },
+          },
+        );
+
+        if (batchResponse.ok) {
+          const batchData = await batchResponse.json();
+          const batchTests: DirectLabTest[] = batchData?.data || [];
+          if (batchTests.length > 0) {
+            testNames = batchTests
+              .map((t) => t.testName)
+              .filter((name) => Boolean(name));
+            const totalAmount = batchTests.reduce(
+              (sum, t) => sum + (t.charges?.totalAmount ?? 0),
+              0,
+            );
+            const paidAmount = batchTests.reduce(
+              (sum, t) => sum + (t.charges?.paid ?? 0),
+              0,
+            );
+            const dueAmount = batchTests.reduce(
+              (sum, t) => sum + (t.charges?.due ?? 0),
+              0,
+            );
+            slipData = {
+              ...slipData,
+              charges: {
+                ...slipData.charges,
+                totalAmount,
+                paid: paidAmount,
+                due: dueAmount,
+                paymentStatus: dueAmount > 0 ? "pending" : "paid",
+              },
+            };
+          }
+        }
+      }
+
+      await generateDirectTestPaymentSlip(slipData, "print", { testNames });
     } catch (err: any) {
       console.error("Error printing payment slip:", err);
       toast.error(err.message || "Failed to generate payment slip");

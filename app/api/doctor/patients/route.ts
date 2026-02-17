@@ -31,7 +31,7 @@ interface PatientData {
   patientId: string;
   name: string;
   phone: string;
-  email?: string;
+  guardian?: string;
   dateOfBirth: Date;
   gender: string;
   bloodGroup?: string;
@@ -220,7 +220,7 @@ export async function GET(request: NextRequest) {
       active: true,
     })
       .select(
-        "name phone email patientId dateOfBirth gender bloodGroup allergies emergencyContact address",
+        "name phone guardian patientId dateOfBirth gender bloodGroup allergies emergencyContact address",
       )
       .lean<PatientData[]>();
 

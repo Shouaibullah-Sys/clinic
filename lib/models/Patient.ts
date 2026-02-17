@@ -7,6 +7,10 @@ export interface IPatient extends mongoose.Document {
   name: string;
   phone: string;
   email?: string;
+  guardian?: string;
+  refPerson?: string;
+  passTskNo?: string;
+  registrationNo?: string;
   dateOfBirth: Date;
   gender: "male" | "female" | "other";
   address?: string;
@@ -76,6 +80,22 @@ const patientSchema = new Schema<IPatient>(
         },
         message: "Please enter a valid email address"
       }
+    },
+    guardian: {
+      type: String,
+      trim: true,
+    },
+    refPerson: {
+      type: String,
+      trim: true,
+    },
+    passTskNo: {
+      type: String,
+      trim: true,
+    },
+    registrationNo: {
+      type: String,
+      trim: true,
     },
     dateOfBirth: {
       type: Date,

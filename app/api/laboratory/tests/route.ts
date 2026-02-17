@@ -14,7 +14,7 @@ interface PopulatedPatient {
   name: string;
   patientId: string;
   phone?: string;
-  email?: string;
+  guardian?: string;
   dateOfBirth?: Date;
   gender?: string;
 }
