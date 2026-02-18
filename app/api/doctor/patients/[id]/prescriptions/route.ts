@@ -191,29 +191,31 @@ export async function POST(
       );
     }
 
-    // NEW: Check for duplicate prescriptions
-    const existingPrescription = await Prescription.findOne({
-      patient: patientId,
-      doctor: doctorId,
-      diagnosis: { $regex: new RegExp(diagnosis.trim(), "i") },
-      prescribedDate: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }, // Within 24 hours
-    });
+    // Only check for duplicates if diagnosis is provided
+    if (diagnosis && diagnosis.trim()) {
+      const existingPrescription = await Prescription.findOne({
+        patient: patientId,
+        doctor: doctorId,
+        diagnosis: { $regex: new RegExp(diagnosis.trim(), "i") },
+        prescribedDate: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }, // Within 24 hours
+      });
 
-    if (existingPrescription) {
-      return NextResponse.json(
-        {
-          success: false,
-          error:
-            "Similar prescription created recently. Please edit existing prescription instead.",
-          existingPrescriptionId: existingPrescription._id,
-          existingPrescription: {
-            prescriptionId: existingPrescription.prescriptionId,
-            prescribedDate: existingPrescription.prescribedDate,
-            diagnosis: existingPrescription.diagnosis,
+      if (existingPrescription) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "A prescription with similar diagnosis was already created for this patient in the last 24 hours. Please check existing prescriptions.",
+            existingPrescriptionId: existingPrescription._id,
+            existingPrescription: {
+              prescriptionId: existingPrescription.prescriptionId,
+              prescribedDate: existingPrescription.prescribedDate,
+              diagnosis: existingPrescription.diagnosis,
+            },
           },
-        },
-        { status: 400 },
-      );
+          { status: 400 },
+        );
+      }
     }
 
     // Validate each medication
