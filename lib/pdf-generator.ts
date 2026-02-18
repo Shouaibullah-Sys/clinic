@@ -236,7 +236,7 @@ export const generateDirectTestPDF = async (
     const tableX = margin;
     const tableWidth = pageWidth - margin * 2;
     const colWidth = tableWidth / 2;
-    const rowHeight = 22;
+    const rowHeight = 16;
     const startY = y;
 
     // Draw outer border
@@ -402,7 +402,7 @@ export const generateDirectTestPDF = async (
   ]);
 
   y += 5;
-  doc.setFont("helvetica", "bold");
+  doc.setFont("courier", "bold");
   doc.setFontSize(12);
   doc.setTextColor(primary[0], primary[1], primary[2]);
   doc.text("TEST RESULTS", margin, y);
@@ -410,15 +410,16 @@ export const generateDirectTestPDF = async (
 
   const tableX = margin;
   const tableWidth = pageWidth - margin * 2;
-  const headerHeight = 24;
-  const rowHeight = 24;
+  const headerHeight = 18;
+  const rowHeight = 18;
+
+  // Adjusted column positions to ensure Parameter is visible on the left
   const colPositions = {
-    test: tableX + 10,
-    name: tableX + tableWidth * 0.28,
-    value: tableX + tableWidth * 0.53,
-    unit: tableX + tableWidth * 0.64,
-    range: tableX + tableWidth * 0.75,
-    status: tableX + tableWidth * 0.9,
+    parameter: tableX + 10, // Parameter column - start from left margin + small padding
+    value: tableX + tableWidth * 0.3, // Value column
+    unit: tableX + tableWidth * 0.5, // Unit column
+    range: tableX + tableWidth * 0.65, // Normal Range column
+    status: tableX + tableWidth * 0.85, // Status column
   };
 
   const isAbnormal = (
@@ -483,8 +484,8 @@ export const generateDirectTestPDF = async (
     doc.setTextColor(255, 255, 255);
     doc.setFont("courier", "bold");
     doc.setFontSize(9.5);
-    doc.text("Test", colPositions.test, y + 16);
-    doc.text("Parameter", colPositions.name, y + 16);
+    // Headers for all 5 columns
+    doc.text("Parameter", colPositions.parameter, y + 16);
     doc.text("Value", colPositions.value, y + 16);
     doc.text("Unit", colPositions.unit, y + 16);
     doc.text("Normal Range", colPositions.range, y + 16);
@@ -512,17 +513,36 @@ export const generateDirectTestPDF = async (
       }
 
       const { status, color } = isAbnormal(param);
+
+      // Draw Parameter name - make sure it's visible on the left
       doc.setTextColor(textDark[0], textDark[1], textDark[2]);
       doc.setFont("courier", "bold");
       doc.setFontSize(9);
-      doc.text(param.testName, colPositions.test, rowY + 15);
-      doc.text(param.name, colPositions.name, rowY + 15);
 
-      doc.setFont("courier", "bold");
+      // Truncate parameter name if too long to prevent overflow
+      let paramName = param.name;
+      const maxParamWidth = colPositions.value - colPositions.parameter - 20;
+      if (doc.getTextWidth(paramName) > maxParamWidth) {
+        while (
+          doc.getTextWidth(paramName + "...") > maxParamWidth &&
+          paramName.length > 0
+        ) {
+          paramName = paramName.slice(0, -1);
+        }
+        paramName = paramName + "...";
+      }
+      doc.text(paramName, colPositions.parameter, rowY + 15);
+
+      // Draw Value
       doc.text(param.value.toString(), colPositions.value, rowY + 15);
+
+      // Draw Unit
       doc.text(param.unit || "-", colPositions.unit, rowY + 15);
+
+      // Draw Normal Range
       doc.text(param.normalRange || "-", colPositions.range, rowY + 15);
 
+      // Draw Status with color
       doc.setTextColor(color[0], color[1], color[2]);
       doc.setFont("courier", "bold");
       doc.text(status, colPositions.status, rowY + 15);
@@ -538,8 +558,8 @@ export const generateDirectTestPDF = async (
         doc.rect(tableX + 1, y, tableWidth - 2, headerHeight - 2, "F");
         doc.setTextColor(255, 255, 255);
         doc.setFont("courier", "bold");
-        doc.text("Test", colPositions.test, y + 16);
-        doc.text("Parameter", colPositions.name, y + 16);
+        // Headers for new page
+        doc.text("Parameter", colPositions.parameter, y + 16);
         doc.text("Value", colPositions.value, y + 16);
         doc.text("Unit", colPositions.unit, y + 16);
         doc.text("Normal Range", colPositions.range, y + 16);
@@ -550,12 +570,27 @@ export const generateDirectTestPDF = async (
     });
 
     y += combinedParameters.length * rowHeight + 20;
+
+    // Add "Prepared By" below the table
+    doc.setFont("courier", "normal");
+    doc.setFontSize(10);
+    doc.setTextColor(textDark[0], textDark[1], textDark[2]);
+    doc.text(`Prepared By: ${preparedBy}`, margin, y);
+
+    y += 20; // Add some spacing after Prepared By
     doc.setFont("helvetica", "normal");
   } else {
     doc.setFont("helvetica", "italic");
     doc.setTextColor(150, 150, 150);
     doc.text("No test results available.", margin, y);
     y += 30;
+
+    // Add "Prepared By" even when no results
+    doc.setFont("courier", "normal");
+    doc.setFontSize(10);
+    doc.setTextColor(textDark[0], textDark[1], textDark[2]);
+    doc.text(`Prepared By: ${preparedBy}`, margin, y);
+    y += 20;
   }
 
   // --- OUTPUT ---
@@ -580,7 +615,6 @@ export const generateDirectTestPDF = async (
     doc.save(fileName);
   }
 };
-
 // Direct Lab Test Interface
 export interface DirectLabTest {
   _id: string;
