@@ -27,6 +27,10 @@ import {
 import { format, parseISO } from "date-fns";
 import { toast } from "sonner";
 import { generateDirectTestPDF } from "@/lib/pdf-generator";
+import type {
+  DirectLabTest as PdfDirectLabTest,
+  Patient as PdfPatient,
+} from "@/lib/pdf-generator";
 
 interface DirectLabTest {
   _id: string;
@@ -131,17 +135,42 @@ export default function DirectTestDetailPage() {
   const { accessToken } = useAuthStore();
   const [test, setTest] = useState<DirectLabTest | null>(null);
 
+  type PatientSnapshot = NonNullable<DirectLabTest["patientSnapshot"]>;
+  type PatientField = keyof DirectLabTest["patient"] | keyof PatientSnapshot;
+
   const readPatientField = (
     record: DirectLabTest | null,
-    field: keyof DirectLabTest["patient"],
+    field: PatientField,
     fallback = "N/A",
   ) => {
     if (!record) return fallback;
-    const value =
-      record.patient?.[field] ?? record.patientSnapshot?.[field as any];
+    const patientValue =
+      record.patient?.[field as keyof DirectLabTest["patient"]];
+    const snapshotValue =
+      record.patientSnapshot && field in record.patientSnapshot
+        ? record.patientSnapshot[field as keyof PatientSnapshot]
+        : undefined;
+    const value = patientValue ?? snapshotValue;
     if (value === undefined || value === null) return fallback;
     if (typeof value === "string" && value.trim() === "") return fallback;
     return value as string;
+  };
+
+  const normalizeForPdf = (record: DirectLabTest): PdfDirectLabTest => {
+    const snapshot = record.patientSnapshot;
+    const patientFallback = record.patient;
+    const normalizedSnapshot: PdfPatient | undefined = snapshot
+      ? {
+          ...snapshot,
+          name: snapshot.name ?? patientFallback?.name ?? "N/A",
+          patientId: snapshot.patientId ?? patientFallback?.patientId ?? "N/A",
+        }
+      : undefined;
+
+    return {
+      ...(record as PdfDirectLabTest),
+      patientSnapshot: normalizedSnapshot,
+    };
   };
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -260,7 +289,10 @@ export default function DirectTestDetailPage() {
       }
 
       // Generate PDF
-      await generateDirectTestPDF(reportData, "print");
+      const pdfData = Array.isArray(reportData)
+        ? reportData.map(normalizeForPdf)
+        : normalizeForPdf(reportData);
+      await generateDirectTestPDF(pdfData, "print");
 
       // Mark as printed only once after successful PDF generation
       if (!test.printedAt) {

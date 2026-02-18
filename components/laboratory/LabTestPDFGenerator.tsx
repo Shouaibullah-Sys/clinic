@@ -40,6 +40,10 @@ const LabTestPDFGenerator = ({
   const [showPreview, setShowPreview] = useState(false);
 
   const primaryTest = Array.isArray(test) ? test[0] : test;
+  const isDirectTest = (value: LabTest | DirectLabTest): value is DirectLabTest =>
+    "createdAtDirect" in value || "directBatchId" in value;
+  const useDirectGenerator =
+    generator === "direct" || (primaryTest ? isDirectTest(primaryTest) : false);
 
   const handleGeneratePDF = async () => {
     if (mode === "preview") {
@@ -49,11 +53,14 @@ const LabTestPDFGenerator = ({
 
     try {
       setIsGenerating(true);
-      if (generator === "direct") {
-        await generateDirectTestPDF(test as any, mode);
-      } else {
-        await generateLabTestPDF(test as any, mode);
+      if (useDirectGenerator) {
+        await generateDirectTestPDF(
+          test as DirectLabTest | DirectLabTest[],
+          mode,
+        );
+        return;
       }
+      await generateLabTestPDF(test as LabTest | LabTest[], mode);
     } catch (error) {
       console.error("Failed to generate PDF:", error);
       alert("Failed to generate PDF. Please try again.");
@@ -163,7 +170,14 @@ const LabTestPDFGenerator = ({
                 variant="outline"
                 onClick={async () => {
                   try {
-                    await generateLabTestPDF(test, "download");
+                    if (useDirectGenerator) {
+                      await generateDirectTestPDF(
+                        test as DirectLabTest | DirectLabTest[],
+                        "download",
+                      );
+                      return;
+                    }
+                    await generateLabTestPDF(test as LabTest | LabTest[], "download");
                   } catch (error) {
                     console.error("Failed to generate PDF:", error);
                     alert("Failed to generate PDF. Please try again.");
