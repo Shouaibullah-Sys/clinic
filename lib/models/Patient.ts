@@ -5,7 +5,7 @@ import mongoose, { Schema, model, models } from "mongoose";
 export interface IPatient extends mongoose.Document {
   patientId: string;
   name: string;
-  phone: string;
+  phone?: string;
   email?: string;
   guardian?: string;
   refPerson?: string;
@@ -61,10 +61,10 @@ const patientSchema = new Schema<IPatient>(
     },
     phone: {
       type: String,
-      required: [true, "Phone number is required"],
       trim: true,
       validate: {
-        validator: function(v: string) {
+        validator: function(v?: string) {
+          if (!v) return true;
           return /^[\d+\-\s()]{10,15}$/.test(v.replace(/\D/g, ''));
         },
         message: "Please enter a valid phone number"
@@ -146,7 +146,7 @@ const patientSchema = new Schema<IPatient>(
 
 // Indexes - ONLY schema.index() method (NO index: true in fields)
 patientSchema.index({ patientId: 1 }, { unique: true, sparse: true });
-patientSchema.index({ phone: 1 }, { unique: true });
+patientSchema.index({ phone: 1 }, { unique: true, sparse: true });
 patientSchema.index({ name: 1 });
 patientSchema.index({ email: 1 }, { sparse: true });
 patientSchema.index({ active: 1 });

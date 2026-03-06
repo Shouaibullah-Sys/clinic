@@ -109,13 +109,6 @@ export async function PUT(
       delete data.active;
     }
 
-    // If password is being updated, hash it
-    if (data.password) {
-      const bcrypt = await import("bcryptjs");
-      const salt = await bcrypt.genSalt(10);
-      data.password = await bcrypt.hash(data.password, salt);
-    }
-
     // Update user
     Object.assign(user, data);
     await user.save();

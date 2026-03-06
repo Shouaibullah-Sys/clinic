@@ -85,53 +85,56 @@ export async function POST(request: NextRequest) {
     } = body;
 
     // Validation
-    if (!name || !phone || !dateOfBirth || !gender) {
+    if (!name || !dateOfBirth || !gender) {
       return NextResponse.json(
         {
           success: false,
           error:
-            "Missing required fields: name, phone, dateOfBirth, and gender are required",
+            "Missing required fields: name, dateOfBirth, and gender are required",
         },
         { status: 400 },
       );
     }
 
-    // Clean phone number
-    const cleanPhone = phone.replace(/\D/g, "");
+    const cleanPhone =
+      typeof phone === "string" && phone.trim()
+        ? phone.replace(/\D/g, "")
+        : "";
 
-    if (cleanPhone.length < 10) {
+    if (cleanPhone && cleanPhone.length < 10) {
       return NextResponse.json(
         { success: false, error: "Phone number must be at least 10 digits" },
         { status: 400 },
       );
     }
 
-    // Check for existing patient
-    const existingPatient = await Patient.findOne({
-      phone: { $regex: cleanPhone, $options: "i" },
-    });
+    if (cleanPhone) {
+      const existingPatient = await Patient.findOne({
+        phone: { $regex: cleanPhone, $options: "i" },
+      });
 
-    if (existingPatient) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "A patient with this phone number already exists",
-          data: {
-            id: existingPatient._id,
-            name: existingPatient.name,
-            phone: existingPatient.phone,
-            patientId: existingPatient.patientId,
-            email: existingPatient.email,
-            guardian: existingPatient.guardian,
-            refPerson: existingPatient.refPerson,
-            passTskNo: existingPatient.passTskNo,
-            registrationNo: existingPatient.registrationNo,
-            dateOfBirth: existingPatient.dateOfBirth,
-            gender: existingPatient.gender,
+      if (existingPatient) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "A patient with this phone number already exists",
+            data: {
+              id: existingPatient._id,
+              name: existingPatient.name,
+              phone: existingPatient.phone,
+              patientId: existingPatient.patientId,
+              email: existingPatient.email,
+              guardian: existingPatient.guardian,
+              refPerson: existingPatient.refPerson,
+              passTskNo: existingPatient.passTskNo,
+              registrationNo: existingPatient.registrationNo,
+              dateOfBirth: existingPatient.dateOfBirth,
+              gender: existingPatient.gender,
+            },
           },
-        },
-        { status: 409 },
-      );
+          { status: 409 },
+        );
+      }
     }
 
     // Generate patient ID
@@ -154,12 +157,13 @@ export async function POST(request: NextRequest) {
     const patientData: any = {
       patientId: generatedPatientId,
       name: name.trim(),
-      phone: cleanPhone,
       dateOfBirth: new Date(dateOfBirth),
       gender,
       createdBy: new mongoose.Types.ObjectId(userId),
       active: true,
     };
+
+    if (cleanPhone) patientData.phone = cleanPhone;
 
     // Add optional fields
     if (email) patientData.email = email.trim().toLowerCase();

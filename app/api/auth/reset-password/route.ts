@@ -1,6 +1,5 @@
 // app/api/auth/reset-password/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import bcrypt from "bcryptjs";
 import dbConnect from "@/lib/dbConnect";
 import { User } from "@/lib/models/User";
 import { z } from "zod";
@@ -59,15 +58,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Hash new password
-    const hashedPassword = await bcrypt.hash(newPassword, 12);
-    
     // Update password
-    user.password = hashedPassword;
+    user.password = newPassword;
     await user.save();
 
     console.log(`Password reset for ${email}`);
-    console.log(`New password hash: ${hashedPassword.substring(0, 30)}...`);
+    console.log(`New password hash: ${user.password.substring(0, 30)}...`);
 
     return NextResponse.json({
       message: "Password reset successfully",

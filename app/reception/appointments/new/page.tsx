@@ -87,7 +87,14 @@ import { z } from "zod";
 // Validation schemas
 const patientSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
-  phone: z.string().min(10, "Phone number must be at least 10 digits"),
+  phone: z
+    .string()
+    .optional()
+    .or(z.literal(""))
+    .refine(
+      (value) => !value || value.replace(/\D/g, "").length >= 10,
+      "Phone number must be at least 10 digits",
+    ),
   guardian: z.string().optional().or(z.literal("")),
   dateOfBirth: z
     .string()
@@ -117,7 +124,7 @@ const appointmentSchema = z.object({
 interface Patient {
   _id: string;
   name: string;
-  phone: string;
+  phone?: string;
   guardian?: string;
   patientId: string;
   dateOfBirth?: string;
@@ -1281,7 +1288,7 @@ export default function NewAppointmentPage() {
 
                                     <div className="space-y-2">
                                       <Label htmlFor="phone">
-                                        Phone Number *
+                                        Phone Number
                                       </Label>
                                       <Input
                                         id="phone"
@@ -1293,7 +1300,6 @@ export default function NewAppointmentPage() {
                                             phone: e.target.value,
                                           }))
                                         }
-                                        required
                                         className={
                                           formErrors.phone
                                             ? "border-destructive"
@@ -1553,8 +1559,7 @@ export default function NewAppointmentPage() {
                                   onClick={createNewPatient}
                                   disabled={
                                     creatingPatient ||
-                                    !newPatientForm.name.trim() ||
-                                    !newPatientForm.phone.trim()
+                                    !newPatientForm.name.trim()
                                   }
                                   className="gap-2"
                                 >

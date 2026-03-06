@@ -4,7 +4,6 @@ import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
 import { User } from "@/lib/models/User";
 import { jwtVerify } from "jose";
-import bcrypt from "bcryptjs";
 import mongoose from "mongoose";
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-this";
@@ -196,10 +195,6 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Hash password
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-    
     // Parse qualifications if it's a string
     let qualificationsArray: string[] = [];
     if (qualifications) {
@@ -225,7 +220,7 @@ export async function POST(request: NextRequest) {
       name: name.trim(),
       email: email.toLowerCase().trim(),
       phone: phone.trim(),
-      password: hashedPassword,
+      password,
       role: "doctor",
       department: department.trim(),
       specialization: specialization.trim(),

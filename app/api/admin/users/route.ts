@@ -3,7 +3,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { User } from "@/lib/models/User";
 import dbConnect from "@/lib/dbConnect";
 import { CreateUserSchema } from "@/lib/schemas/userSchema";
-import bcrypt from "bcryptjs";
 import { jwtVerify } from "jose";
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-this";
@@ -118,12 +117,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Hash password
-    const hashedPassword = await bcrypt.hash(body.password, 10);
-
     const newUser = await User.create({
       ...body,
-      password: hashedPassword,
+      password: body.password,
     });
 
     // Exclude password and refresh tokens

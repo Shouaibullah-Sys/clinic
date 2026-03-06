@@ -342,6 +342,12 @@ export async function PUT(
       }
     }
 
+    if (body.phone !== undefined) {
+      const cleanPhone =
+        typeof body.phone === "string" ? body.phone.replace(/\D/g, "") : "";
+      updateData.phone = cleanPhone || undefined;
+    }
+
     // If updating address, ensure it's a string (address is stored as string in the model)
     if (body.address !== undefined) {
       updateData.address = body.address;
@@ -593,6 +599,12 @@ export async function PATCH(
       if (body[field] !== undefined) {
         updateData[field] = body[field];
       }
+    }
+
+    if (body.phone !== undefined) {
+      const cleanPhone =
+        typeof body.phone === "string" ? body.phone.replace(/\D/g, "") : "";
+      updateData.phone = cleanPhone || undefined;
     }
 
     // Special handling for specific fields

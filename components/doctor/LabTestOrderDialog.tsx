@@ -136,6 +136,7 @@ export function LabTestOrderDialog({
       const requestData = {
         ...data,
         appointmentId,
+        templateId: selectedTemplate?._id,
       };
 
       const response = await fetch(

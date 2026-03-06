@@ -1,6 +1,5 @@
 // app/api/auth/register/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import bcrypt from "bcryptjs";
 import dbConnect from "@/lib/dbConnect";
 import { User } from "@/lib/models/User";
 import jwt from "jsonwebtoken";
@@ -86,10 +85,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Hash password
-    const saltRounds = 12;
-    const hashedPassword = await bcrypt.hash(password, saltRounds);
-
     // Generate employee ID if not provided
     const generatedEmployeeId = employeeId || generateEmployeeId(role);
     
@@ -103,7 +98,7 @@ export async function POST(request: NextRequest) {
     const user = new User({
       name,
       email,
-      password: hashedPassword,
+      password,
       phone,
       role,
       employeeId: generatedEmployeeId,

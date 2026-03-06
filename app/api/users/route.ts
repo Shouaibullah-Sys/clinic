@@ -1,7 +1,6 @@
 // app/api/users/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import jwt, { JwtPayload } from "jsonwebtoken";
-import bcrypt from "bcryptjs";
 import { cookies } from "next/headers";
 import dbConnect from "@/lib/dbConnect";
 import { User } from "@/lib/models/User";
@@ -112,14 +111,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Hash password
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-
     const newUser = new User({
       name,
       email,
-      password: hashedPassword,
+      password,
       phone,
       role,
       approved: role === "admin" ? true : false,

@@ -1,5 +1,4 @@
 // scripts/reset-admin-password.ts
-import bcrypt from "bcryptjs";
 import dbConnect from "@/lib/dbConnect";
 import { User } from "@/lib/models/User";
 import dotenv from "dotenv";
@@ -19,12 +18,10 @@ async function resetAdminPassword() {
     if (!user) {
       console.log("User not found. Creating new admin user...");
       
-      // Create admin user if doesn't exist
-      const hashedPassword = await bcrypt.hash(newPassword, 12);
       const adminUser = new User({
         name: "Admin User",
         email: email,
-        password: hashedPassword,
+        password: newPassword,
         phone: "1234567890",
         role: "admin",
         employeeId: "ADM24001",
@@ -40,7 +37,7 @@ async function resetAdminPassword() {
       console.log("Admin user created successfully");
       console.log(`Email: ${email}`);
       console.log(`Password: ${newPassword}`);
-      console.log(`Hash: ${hashedPassword.substring(0, 30)}...`);
+      console.log(`Hash: ${adminUser.password.substring(0, 30)}...`);
       
     } else {
       console.log("User found:", {
@@ -52,8 +49,7 @@ async function resetAdminPassword() {
       });
       
       // Reset password
-      const hashedPassword = await bcrypt.hash(newPassword, 12);
-      user.password = hashedPassword;
+      user.password = newPassword;
       user.approved = true;
       user.active = true;
       
@@ -61,7 +57,7 @@ async function resetAdminPassword() {
       
       console.log("Password reset successfully");
       console.log(`New password: ${newPassword}`);
-      console.log(`New hash: ${hashedPassword.substring(0, 30)}...`);
+      console.log(`New hash: ${user.password.substring(0, 30)}...`);
     }
     
     process.exit(0);

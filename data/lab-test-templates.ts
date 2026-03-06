@@ -1,5 +1,6 @@
 // data/lab-test-templates.ts
 // Common lab test templates for seeding the database
+import { additionalLabTestTemplates } from "./additional-lab-test-templates";
 
 export const labTestTemplates = [
   // HEMATOLOGY TESTS
@@ -866,4 +867,5 @@ export const labTestTemplates = [
       },
     ],
   },
+  ...additionalLabTestTemplates,
 ];

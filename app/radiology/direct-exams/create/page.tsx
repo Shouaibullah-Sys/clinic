@@ -342,8 +342,8 @@ export default function CreateDirectExamPage() {
     e.preventDefault();
 
     // Validate required fields
-    if (!newPatient.name || !newPatient.phone) {
-      toast.error("Name and phone are required");
+    if (!newPatient.name) {
+      toast.error("Name is required");
       return;
     }
 
@@ -1352,9 +1352,7 @@ export default function CreateDirectExamPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="patientPhone">
-                  Phone <span className="text-red-500">*</span>
-                </Label>
+                <Label htmlFor="patientPhone">Phone</Label>
                 <Input
                   id="patientPhone"
                   type="tel"
@@ -1363,7 +1361,6 @@ export default function CreateDirectExamPage() {
                     setNewPatient({ ...newPatient, phone: e.target.value })
                   }
                   placeholder="Enter phone number"
-                  required
                 />
               </div>
 

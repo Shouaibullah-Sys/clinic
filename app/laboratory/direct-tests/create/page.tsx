@@ -94,7 +94,9 @@ interface LabTest {
   id: string;
   name: string;
   price: number;
+  testCode?: string;
   category?: string;
+  description?: string;
   specimenType?: string;
   parameters: SampleParameter[];
 }
@@ -106,8 +108,10 @@ interface LabTestCategory {
 
 interface LabTestTemplate {
   _id: string;
+  testCode?: string;
   testName: string;
   category: string;
+  description?: string;
   basePrice: number;
   specimenType?: string[];
   parameters?: Array<{
@@ -1728,7 +1732,6 @@ export default function CreateDirectTestPage() {
   const incompletePatientFields = useMemo(() => {
     if (!selectedPatient) return [];
     const missing: string[] = [];
-    if (!selectedPatient.phone) missing.push("Phone");
     if (!selectedPatient.guardian?.trim()) missing.push("Guardian");
     return missing;
   }, [selectedPatient]);
@@ -1757,7 +1760,9 @@ export default function CreateDirectTestPage() {
           id: template._id,
           name: template.testName,
           price: Number(template.basePrice) || 0,
+          testCode: template.testCode,
           category: template.category,
+          description: template.description,
           specimenType: template.specimenType?.[0] || "blood",
           parameters: (template.parameters || []).map((p, index) => ({
             id: String(index + 1),
@@ -1831,7 +1836,12 @@ export default function CreateDirectTestPage() {
     activeLabTests.forEach((category) => {
       category.tests.forEach((test) => {
         const testName = test.name.toLowerCase();
+        const testCode = (test.testCode || "").toLowerCase();
+        const testDescription = (test.description || "").toLowerCase();
         const categoryName = category.name.toLowerCase();
+        const parameterNames = test.parameters
+          .map((parameter) => parameter.name.toLowerCase())
+          .join(" ");
 
         // Smart matching: check for partial matches, acronyms, etc.
         const words = testName.split(/\s+/);
@@ -1839,6 +1849,9 @@ export default function CreateDirectTestPage() {
 
         if (
           testName.includes(query) ||
+          testCode.includes(query) ||
+          testDescription.includes(query) ||
+          parameterNames.includes(query) ||
           categoryName.includes(query) ||
           acronym.includes(query) ||
           words.some((word) => word.startsWith(query)) ||
@@ -1933,7 +1946,6 @@ export default function CreateDirectTestPage() {
     }
     if (isLabRole) {
       const missing: string[] = [];
-      if (!patient.phone) missing.push("Phone");
       if (!patient.guardian?.trim()) missing.push("Guardian");
       if (missing.length > 0) {
         toast.warning("Patient info is incomplete", {
@@ -1988,8 +2000,8 @@ export default function CreateDirectTestPage() {
   const handleCreatePatient = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!newPatient.name || !newPatient.phone || !newPatient.gender || !newPatientAge) {
-      toast.error("Name, phone, gender, and age are required");
+    if (!newPatient.name || !newPatient.gender || !newPatientAge) {
+      toast.error("Name, gender, and age are required");
       return;
     }
 
@@ -2261,6 +2273,7 @@ export default function CreateDirectTestPage() {
           doctorName.trim() || selectedPatient.doctorName?.trim() || undefined;
         const payload = {
           patientId: selectedPatient._id,
+          testTemplateId: test.id,
           testName: test.name,
           category: activeLabTests
             .find((cat) => cat.tests.some((t) => t.id === test.id))
@@ -2941,9 +2954,7 @@ export default function CreateDirectTestPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="patientPhone">
-                  Phone <span className="text-red-500">*</span>
-                </Label>
+                <Label htmlFor="patientPhone">Phone</Label>
                 <Input
                   id="patientPhone"
                   type="tel"
@@ -2952,7 +2963,6 @@ export default function CreateDirectTestPage() {
                     setNewPatient({ ...newPatient, phone: e.target.value })
                   }
                   placeholder="Enter phone number"
-                  required
                 />
               </div>
 
