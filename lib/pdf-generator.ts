@@ -312,7 +312,7 @@ const drawVerificationBlock = (
 ) => {
   const size = 54;
   const x = pageWidth / 2 - size / 2;
-  const y = pageHeight - 92;
+  const y = pageHeight - 142;
 
   if (qrDataUrl) {
     doc.addImage(qrDataUrl, "PNG", x, y, size, size);
@@ -482,7 +482,7 @@ const generateSharedLabReportPDF = async (
   ];
 
   const renderTopBlock = (pageNumber: number) => {
-    let y = 95;
+    let y = 135;
 
     doc.setTextColor(40, 40, 40);
     doc.setFontSize(8.5);
