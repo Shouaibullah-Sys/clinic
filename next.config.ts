@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Provide an explicit Turbopack config to avoid build error on Vercel
+  turbopack: {},
   // turbopack removed - using webpack for development
   // Webpack configuration to handle Node.js modules that shouldn't be bundled for the client
   webpack: (config, { isServer }) => {
