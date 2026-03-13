@@ -8,6 +8,10 @@ import { User } from "@/lib/models/User";
 import { authenticateRequest } from "@/lib/auth";
 import mongoose from "mongoose";
 
+// Ensure models are registered in the mongoose connection (avoid tree-shaking in route bundling)
+void Patient;
+void User;
+
 // Type definitions for populated data
 interface PopulatedPatient {
   _id: mongoose.Types.ObjectId;

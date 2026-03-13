@@ -254,20 +254,93 @@ const getPreparedBy = (test: LabTest) =>
   (test as any)?.createdBy?.name ||
   "Laboratory Staff";
 
-const getCombinedLabRows = (tests: LabTest[]) =>
-  tests.flatMap((currentTest) => {
-    const parameters = currentTest.results?.parameters || [];
-    const useTestName = parameters.length <= 1;
+const normalizeCategoryLabel = (category?: string) => {
+  if (!category) return "LABORATORY";
+  const cleaned = category.replace(/_/g, " ").trim();
+  return cleaned ? cleaned.toUpperCase() : "LABORATORY";
+};
 
-    return parameters.map((param) => ({
-      displayName:
-        useTestName && currentTest.testName ? currentTest.testName : param.name,
-      value: param.value ?? "",
-      unit: param.unit || "",
-      normalRange: param.normalRange || "",
-      remarks: param.remarks || "",
-    }));
+const groupTestsByCategory = (tests: LabTest[]) => {
+  const ordered: Array<{ key: string; title: string; tests: LabTest[] }> = [];
+  const indexMap = new Map<string, number>();
+
+  tests.forEach((test) => {
+    const key = normalizeCategoryLabel(test.category);
+    const existingIndex = indexMap.get(key);
+    if (existingIndex !== undefined) {
+      ordered[existingIndex].tests.push(test);
+      return;
+    }
+
+    indexMap.set(key, ordered.length);
+    ordered.push({ key, title: key, tests: [test] });
   });
+
+  return ordered;
+};
+
+type LabRow =
+  | {
+      type: "section";
+      label: string;
+    }
+  | {
+      type: "row";
+      name: string;
+      value: string | number;
+      unit: string;
+      normalRange: string;
+      remarks?: string;
+      indent?: number;
+    };
+
+const buildCategoryRows = (tests: LabTest[]): LabRow[] => {
+  const rows: LabRow[] = [];
+
+  tests.forEach((currentTest) => {
+    const parameters = currentTest.results?.parameters || [];
+    const testName = currentTest.testName?.trim() || "Test";
+
+    if (parameters.length > 1) {
+      rows.push({ type: "section", label: testName });
+      parameters.forEach((param) => {
+        rows.push({
+          type: "row",
+          name: param.name || testName,
+          value: param.value ?? "",
+          unit: param.unit || "",
+          normalRange: param.normalRange || "",
+          remarks: param.remarks || "",
+          indent: 10,
+        });
+      });
+      return;
+    }
+
+    if (parameters.length === 1) {
+      const param = parameters[0];
+      rows.push({
+        type: "row",
+        name: testName || param.name || "Test",
+        value: param.value ?? "",
+        unit: param.unit || "",
+        normalRange: param.normalRange || "",
+        remarks: param.remarks || "",
+      });
+      return;
+    }
+
+    rows.push({
+      type: "row",
+      name: testName,
+      value: "",
+      unit: "",
+      normalRange: "",
+    });
+  });
+
+  return rows;
+};
 
 const getResultColor = (
   value: string | number,
@@ -331,7 +404,7 @@ const drawVerificationBlock = (
     });
   }
 
-  doc.setFont("times", "normal");
+  doc.setFont("courier", "normal");
   doc.setFontSize(7);
   doc.setTextColor(40, 40, 40);
 };
@@ -409,12 +482,10 @@ const generateSharedLabReportPDF = async (
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 30;
-  const rightColumnX = pageWidth / 2 + 15;
-  const detailLabelWidth = 88;
-  const detailRowHeight = 16;
-  const investigationBoxHeight = 28;
+  const headerHeight = 96;
+  const headerTop = 155;
   const tableHeaderHeight = 12;
-  const rowHeight = 18;
+  const rowHeight = 14;
   const footerReserve = 130;
 
   const baseReportId = test.labReferenceId || test.testId || "LAB";
@@ -441,91 +512,104 @@ const generateSharedLabReportPDF = async (
     "dd/MM/yyyy HH:mm",
   );
   const patientName = getPatientField(test, "name");
-  const reportTitle =
-    Array.from(
-      new Set(
-        tests
-          .map((item) => item.category || "")
-          .filter(Boolean)
-          .map((item) => item.replace(/_/g, " ").toUpperCase()),
-      ),
-    ).join(" / ") || "LABORATORY REPORT";
-
-  const investigationDescription = tests
-    .map((item) => item.testName?.toUpperCase())
-    .filter(Boolean)
-    .join(", ");
-
-  const rows = getCombinedLabRows(tests);
-
   const leftColumnRows: Array<[string, string]> = [
-    ["Transaction Id", test.testId || "N/A"],
     ["Patient Name", patientName],
-    ["Relation", getPatientField(test, "guardian")],
-    ["Age/Gender", `${getPatientAge(test)}/${getPatientField(test, "gender")}`],
+    ["Age/Sex", `${getPatientAge(test)}/${getPatientField(test, "gender")}`],
     ["Ref. By", doctorName],
+    ["UHID", getPatientField(test, "patientId")],
   ];
 
   const rightColumnRows: Array<[string, string]> = [
-    ["Collection Date", collectionDate],
-    ["Reporting Date", reportingDate],
-    ["Passport NO", getPatientField(test, "passTskNo")],
-    ["Cont. No", getPatientField(test, "phone")],
     [
-      "2ND ID",
+      "Registration No.",
       getPatientField(
         test,
         "registrationNo",
         getPatientField(test, "patientId"),
       ),
     ],
+    ["Transaction Id", test.testId || "N/A"],
+    ["Collection Date", collectionDate],
+    ["Reporting Date", reportingDate.split(" ")[0]],
   ];
 
-  const renderTopBlock = (pageNumber: number) => {
-    let y = 135;
-
+  const renderTopBlock = (pageNumber: number, categoryTitle: string) => {
     doc.setTextColor(40, 40, 40);
-    doc.setFontSize(8.5);
 
-    const drawField = (
-      x: number,
-      rowIndex: number,
-      label: string,
-      value: string,
-    ) => {
-      const lineY = y + rowIndex * detailRowHeight;
-      doc.setFont("times", "normal");
-      doc.text(`${label}`, x, lineY);
-      doc.text(":", x + detailLabelWidth - 6, lineY);
-      doc.setFont("times", "bold");
-      doc.text(value || "N/A", x + detailLabelWidth, lineY);
-    };
-
-    leftColumnRows.forEach(([label, value], index) =>
-      drawField(margin, index, label, value),
+    const headerWidth = pageWidth - margin * 2;
+    doc.setLineWidth(0.5);
+    doc.rect(margin, headerTop, headerWidth, headerHeight);
+    doc.setFont("courier", "bold");
+    doc.setFontSize(14);
+    doc.text("RESULT", pageWidth / 2, headerTop + 28, { align: "center" });
+    doc.setLineWidth(0.5);
+    doc.setLineDashPattern([2, 2], 0);
+    doc.line(
+      margin + 8,
+      headerTop + 32,
+      pageWidth - margin - 8,
+      headerTop + 32,
     );
-    rightColumnRows.forEach(([label, value], index) =>
-      drawField(rightColumnX, index, label, value),
-    );
+    doc.setLineDashPattern([], 0);
 
-    const afterColumnsY = y + leftColumnRows.length * detailRowHeight + 4;
-    doc.rect(
-      margin - 1,
-      afterColumnsY,
-      pageWidth - margin * 2 + 2,
-      investigationBoxHeight,
+    const infoBoxY = headerTop + 36;
+    const infoBoxHeight = headerHeight - 40;
+    doc.rect(margin, infoBoxY, headerWidth, infoBoxHeight);
+
+    const columnDividerX = margin + headerWidth / 2;
+    doc.line(
+      columnDividerX,
+      infoBoxY,
+      columnDividerX,
+      infoBoxY + infoBoxHeight,
     );
 
-    doc.text("Investigation Description", margin, afterColumnsY + 11);
-    doc.text(":", margin + 90, afterColumnsY + 11);
-    const investigationLines = doc.splitTextToSize(
-      investigationDescription || test.testName || "N/A",
-      pageWidth - margin * 2 - 105,
+    const rowHeight = infoBoxHeight / 4;
+    for (let i = 1; i < 4; i += 1) {
+      const y = infoBoxY + rowHeight * i;
+      doc.line(margin, y, pageWidth - margin, y);
+    }
+
+    doc.setFontSize(11);
+    doc.setFont("courier", "normal");
+
+    const leftLabelX = margin + 6;
+    const rightLabelX = columnDividerX + 6;
+    const leftLabelWidth = Math.max(
+      ...leftColumnRows.map(([label]) => doc.getTextWidth(label)),
     );
-    doc.text(investigationLines.slice(0, 2), margin + 100, afterColumnsY + 11);
+    const rightLabelWidth = Math.max(
+      ...rightColumnRows.map(([label]) => doc.getTextWidth(label)),
+    );
+    const leftColonX = leftLabelX + leftLabelWidth + 4;
+    const leftValueX = leftColonX + 6;
+    const rightColonX = rightLabelX + rightLabelWidth + 4;
+    const rightValueX = rightColonX + 6;
+    leftColumnRows.forEach(([label, value], index) => {
+      const lineY = infoBoxY + rowHeight * (index + 0.7);
+      doc.text(label, leftLabelX, lineY);
+      doc.text(":", leftColonX, lineY);
+      doc.setFont("courier", "bold");
+      doc.text(value || "N/A", leftValueX, lineY);
+      doc.setFont("courier", "normal");
+    });
 
-    const tableY = afterColumnsY + investigationBoxHeight + 12;
+    rightColumnRows.forEach(([label, value], index) => {
+      const lineY = infoBoxY + rowHeight * (index + 0.7);
+      doc.text(label, rightLabelX, lineY);
+      doc.text(":", rightColonX, lineY);
+      doc.setFont("courier", "bold");
+      doc.text(value || "N/A", rightValueX, lineY);
+      doc.setFont("courier", "normal");
+    });
 
+    const sectionY = headerTop + headerHeight + 16;
+    doc.setFont("courier", "bold");
+    doc.setFontSize(10);
+    doc.text(categoryTitle, pageWidth / 2, sectionY, { align: "center" });
+    doc.line(margin, sectionY + 4, pageWidth - margin, sectionY + 4);
+
+    const tableY = sectionY + 8;
     doc.line(margin, tableY, pageWidth - margin, tableY);
     doc.line(
       margin,
@@ -534,29 +618,22 @@ const generateSharedLabReportPDF = async (
       tableY + tableHeaderHeight,
     );
 
-    doc.setFont("Courier", "bold");
-    doc.text("Test Name", margin + 4, tableY + 9);
-    doc.text("Result", margin + 195, tableY + 9);
-    doc.text("Unit", margin + 305, tableY + 9);
-    doc.text("Normal Range", margin + 395, tableY + 9);
-
-    let currentY = tableY + tableHeaderHeight + 28;
-    if (pageNumber === 1) {
-      doc.setFontSize(12);
-      doc.text(reportTitle, pageWidth / 2, currentY, { align: "center" });
-      currentY += 22;
-    }
+    doc.setFont("courier", "bold");
+    doc.setFontSize(10);
+    doc.text("Test Description", margin + 4, tableY + 10);
+    doc.text("Value Observed", margin + 215, tableY + 10);
+    doc.text("Normal Ranges", margin + 340, tableY + 10);
+    doc.text("Unit", pageWidth - margin - 26, tableY + 10);
 
     return {
-      tableY,
-      contentY: currentY,
+      contentY: tableY + tableHeaderHeight + 18,
     };
   };
 
   const addPageFooter = (pageNumber: number, hasMorePages: boolean) => {
     if (hasMorePages) {
-      doc.setFont("times", "normal");
-      doc.setFontSize(9);
+      doc.setFont("courier", "normal");
+      doc.setFontSize(11);
       doc.text(
         `Continue On Page - ${pageNumber + 1}`,
         pageWidth / 2,
@@ -568,148 +645,172 @@ const generateSharedLabReportPDF = async (
     }
 
     drawVerificationBlock(doc, pageWidth, pageHeight, reportId, qrDataUrl);
+
+    doc.setFont("courier", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(60, 60, 60);
+    doc.text("Lab Technologies", margin, pageHeight - 118);
   };
+
+  const categoryGroups = groupTestsByCategory(tests);
 
   let pageNumber = 1;
-  let { contentY } = renderTopBlock(pageNumber);
-
-  for (let index = 0; index < rows.length; index += 1) {
-    const row = rows[index];
-
-    if (contentY + rowHeight > pageHeight - footerReserve) {
-      addPageFooter(pageNumber, true);
+  categoryGroups.forEach((group, groupIndex) => {
+    if (groupIndex > 0) {
       doc.addPage();
       pageNumber += 1;
-      contentY = renderTopBlock(pageNumber).contentY;
     }
 
-    const color = getResultColor(row.value, row.normalRange, row.remarks);
-    const resultValue = String(row.value ?? "");
-    const nameLines = doc.splitTextToSize(row.displayName || "-", 180);
-    const rangeLines = doc.splitTextToSize(row.normalRange || "-", 145);
+    let { contentY } = renderTopBlock(pageNumber, group.title);
+    const rows = buildCategoryRows(group.tests);
 
-    doc.setFont("Courier", "bold");
-    doc.setFontSize(8.5);
-    doc.setTextColor(40, 40, 40);
-    doc.text(nameLines[0] || "-", margin + 4, contentY);
-
-    doc.setFont("Courier", "bold");
-    doc.setTextColor(color[0], color[1], color[2]);
-    doc.text(resultValue || "-", margin + 200, contentY);
-
-    doc.setFont("Courier", "normal");
-    doc.setTextColor(40, 40, 40);
-    doc.text(row.unit || "", margin + 310, contentY);
-    doc.text(rangeLines, margin + 395, contentY);
-
-    contentY += rowHeight;
-  }
-
-  const interpretation = tests
-    .map((item) => item.results?.interpretation?.trim())
-    .filter(Boolean)
-    .join("\n\n");
-
-  const commentEntries = tests
-    .map((item) => ({
-      testName: item.testName?.trim() || "Test",
-      description: extractCommentText(item),
-    }))
-    .filter((item) => item.description)
-    .filter(
-      (item, index, all) =>
-        all.findIndex(
-          (candidate) =>
-            candidate.testName === item.testName &&
-            candidate.description === item.description,
-        ) === index,
-    );
-
-  const ensureSpaceForBlock = (requiredHeight: number) => {
-    if (contentY + requiredHeight <= pageHeight - footerReserve) {
-      return;
-    }
-
-    addPageFooter(pageNumber, true);
-    doc.addPage();
-    pageNumber += 1;
-    contentY = renderTopBlock(pageNumber).contentY;
-  };
-
-  const renderParagraphBlock = (
-    title: string,
-    body: string,
-    options?: { titleFontSize?: number; bodyFontSize?: number },
-  ) => {
-    const titleFontSize = options?.titleFontSize ?? 9;
-    const bodyFontSize = options?.bodyFontSize ?? 8;
-    const bodyLines = doc.splitTextToSize(body, pageWidth - margin * 2);
-
-    ensureSpaceForBlock(22);
-
-    doc.setFont("times", "bold");
-    doc.setFontSize(titleFontSize);
-    doc.setTextColor(40, 40, 40);
-    doc.text(title, margin, contentY);
-    contentY += 12;
-
-    doc.setFont("times", "normal");
-    doc.setFontSize(bodyFontSize);
-    doc.setTextColor(60, 60, 60);
-
-    bodyLines.forEach((line: string) => {
-      ensureSpaceForBlock(12);
-      doc.text(line, margin, contentY);
-      contentY += 11;
-    });
-
-    contentY += 6;
-  };
-
-  if (commentEntries.length > 0) {
-    ensureSpaceForBlock(22);
-    doc.setFont("times", "bold");
-    doc.setFontSize(9);
-    doc.setTextColor(40, 40, 40);
-    contentY += 12;
-
-    commentEntries.forEach((entry) => {
-      if (commentEntries.length > 1) {
-        renderParagraphBlock(entry.testName, entry.description, {
-          titleFontSize: 10,
-          bodyFontSize: 9,
-        });
+    const ensureSpaceForBlock = (requiredHeight: number) => {
+      if (contentY + requiredHeight <= pageHeight - footerReserve) {
         return;
       }
 
-      const descriptionLines = doc.splitTextToSize(
-        entry.description,
-        pageWidth - margin * 2,
+      addPageFooter(pageNumber, true);
+      doc.addPage();
+      pageNumber += 1;
+      contentY = renderTopBlock(pageNumber, group.title).contentY;
+    };
+
+    rows.forEach((row) => {
+      const blockHeight = row.type === "section" ? rowHeight : rowHeight;
+      if (contentY + blockHeight > pageHeight - footerReserve) {
+        addPageFooter(pageNumber, true);
+        doc.addPage();
+        pageNumber += 1;
+        contentY = renderTopBlock(pageNumber, group.title).contentY;
+      }
+
+      if (row.type === "section") {
+        doc.setFont("courier", "bold");
+        doc.setFontSize(11);
+        doc.setTextColor(40, 40, 40);
+        doc.text(row.label, margin + 4, contentY);
+        contentY += rowHeight;
+        return;
+      }
+
+      const color = getResultColor(row.value, row.normalRange, row.remarks);
+      const resultValue = String(row.value ?? "");
+      const nameLines = doc.splitTextToSize(row.name || "-", 190);
+      const rangeLines = doc.splitTextToSize(row.normalRange || "-", 150);
+      const nameX = margin + 4 + (row.indent ?? 0);
+
+      doc.setFont("courier", "normal");
+      doc.setFontSize(10);
+      doc.setTextColor(40, 40, 40);
+      doc.text(nameLines[0] || "-", nameX, contentY);
+
+      doc.setFont("courier", "bold");
+      doc.setTextColor(color[0], color[1], color[2]);
+      doc.text(resultValue || "-", margin + 220, contentY);
+
+      doc.setFont("courier", "normal");
+      doc.setTextColor(40, 40, 40);
+      doc.text(rangeLines, margin + 350, contentY);
+      doc.text(row.unit || "", pageWidth - margin - 30, contentY);
+
+      contentY += rowHeight;
+    });
+
+    const interpretation = group.tests
+      .map((item) => item.results?.interpretation?.trim())
+      .filter(Boolean)
+      .join("\n\n");
+
+    const commentEntries = group.tests
+      .map((item) => ({
+        testName: item.testName?.trim() || "Test",
+        description: extractCommentText(item),
+      }))
+      .filter((item) => item.description)
+      .filter(
+        (item, index, all) =>
+          all.findIndex(
+            (candidate) =>
+              candidate.testName === item.testName &&
+              candidate.description === item.description,
+          ) === index,
       );
 
-      ensureSpaceForBlock(20);
-      doc.setFont("times", "normal");
-      doc.setFontSize(8);
+    const renderParagraphBlock = (
+      title: string,
+      body: string,
+      options?: { titleFontSize?: number; bodyFontSize?: number },
+    ) => {
+      const titleFontSize = options?.titleFontSize ?? 9;
+      const bodyFontSize = options?.bodyFontSize ?? 8;
+      const bodyLines = doc.splitTextToSize(body, pageWidth - margin * 2);
+
+      ensureSpaceForBlock(22);
+
+      doc.setFont("courier", "bold");
+      doc.setFontSize(titleFontSize);
+      doc.setTextColor(40, 40, 40);
+      doc.text(title, margin, contentY);
+      contentY += 12;
+
+      doc.setFont("courier", "normal");
+      doc.setFontSize(bodyFontSize);
       doc.setTextColor(60, 60, 60);
 
-      descriptionLines.forEach((line: string) => {
+      bodyLines.forEach((line: string) => {
         ensureSpaceForBlock(12);
         doc.text(line, margin, contentY);
         contentY += 11;
       });
 
       contentY += 6;
-    });
-  }
+    };
 
-  if (interpretation) {
-    renderParagraphBlock("Interpretation", interpretation, {
-      titleFontSize: 9,
-      bodyFontSize: 8,
-    });
-  }
+    if (commentEntries.length > 0) {
+      ensureSpaceForBlock(22);
+      doc.setFont("courier", "bold");
+      doc.setFontSize(9);
+      doc.setTextColor(40, 40, 40);
+      contentY += 12;
 
-  addPageFooter(pageNumber, false);
+      commentEntries.forEach((entry) => {
+        if (commentEntries.length > 1) {
+          renderParagraphBlock(entry.testName, entry.description, {
+            titleFontSize: 10,
+            bodyFontSize: 9,
+          });
+          return;
+        }
+
+        const descriptionLines = doc.splitTextToSize(
+          entry.description,
+          pageWidth - margin * 2,
+        );
+
+        ensureSpaceForBlock(20);
+        doc.setFont("courier", "normal");
+        doc.setFontSize(9);
+        doc.setTextColor(60, 60, 60);
+
+        descriptionLines.forEach((line: string) => {
+          ensureSpaceForBlock(12);
+          doc.text(line, margin, contentY);
+          contentY += 11;
+        });
+
+        contentY += 6;
+      });
+    }
+
+    if (interpretation) {
+      renderParagraphBlock("Interpretation", interpretation, {
+        titleFontSize: 9,
+        bodyFontSize: 8,
+      });
+    }
+
+    addPageFooter(pageNumber, false);
+  });
 
   const fileName = `lab-report-${patientName.toLowerCase().replace(/\s+/g, "-") || "patient"}-${test.testId}.pdf`;
   saveOrPrintPdf(doc, mode, fileName);

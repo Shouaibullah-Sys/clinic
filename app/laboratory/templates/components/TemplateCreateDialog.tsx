@@ -77,6 +77,7 @@ const CONTAINER_TYPES = [
 ];
 
 interface FormData {
+  testCode: string;
   testName: string;
   category: string;
   description: string;
@@ -117,6 +118,7 @@ export function TemplateCreateDialog({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [formData, setFormData] = useState<FormData>({
+    testCode: "",
     testName: "",
     category: "",
     description: "",
@@ -134,6 +136,7 @@ export function TemplateCreateDialog({
   useEffect(() => {
     if (open) {
       setFormData({
+        testCode: "",
         testName: "",
         category: "",
         description: "",
@@ -154,6 +157,14 @@ export function TemplateCreateDialog({
   const handleInputChange = (field: keyof FormData, value: any) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
+
+  const deriveTestCode = (name: string) =>
+    name
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 20);
 
   const handleSpecimenToggle = (specimen: string) => {
     const current = formData.specimenType;
@@ -222,6 +233,12 @@ export function TemplateCreateDialog({
       setError("Test name is required");
       return;
     }
+    const generatedCode =
+      formData.testCode?.trim() || deriveTestCode(formData.testName);
+    if (!generatedCode) {
+      setError("Test code is required");
+      return;
+    }
     if (!formData.category) {
       setError("Category is required");
       return;
@@ -242,6 +259,7 @@ export function TemplateCreateDialog({
       // Prepare data for API
       const submitData = {
         ...formData,
+        testCode: generatedCode,
         turnaroundTime: Number(formData.turnaroundTime),
         basePrice: Number(formData.basePrice),
         parameters: formData.parameters
@@ -270,8 +288,15 @@ export function TemplateCreateDialog({
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to create template");
+        const errorData = await response.json().catch(() => ({}));
+        const details = Array.isArray(errorData.details)
+          ? ` ${errorData.details.join(", ")}`
+          : "";
+        const message =
+          errorData.message ||
+          errorData.error ||
+          `Failed to create template.${details}`;
+        throw new Error(message);
       }
 
       setSuccess("Template created successfully");
@@ -325,10 +350,33 @@ export function TemplateCreateDialog({
                   <Input
                     id="testName"
                     value={formData.testName}
-                    onChange={(e) =>
-                      handleInputChange("testName", e.target.value)
-                    }
+                    onChange={(e) => {
+                      const nextName = e.target.value;
+                      setFormData((prev) => {
+                        const autoCode = deriveTestCode(nextName);
+                        const shouldUpdateCode =
+                          !prev.testCode ||
+                          prev.testCode === deriveTestCode(prev.testName);
+                        return {
+                          ...prev,
+                          testName: nextName,
+                          testCode: shouldUpdateCode ? autoCode : prev.testCode,
+                        };
+                      });
+                    }}
                     placeholder="Complete Blood Count"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="testCode">Test Code *</Label>
+                  <Input
+                    id="testCode"
+                    value={formData.testCode}
+                    onChange={(e) =>
+                      handleInputChange("testCode", e.target.value.toUpperCase())
+                    }
+                    placeholder="CBC"
                   />
                 </div>
 
