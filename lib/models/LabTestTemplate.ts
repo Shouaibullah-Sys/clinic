@@ -22,9 +22,6 @@ export interface ILabTestTemplate extends mongoose.Document {
     normalRange: string;
     criticalLow?: number;
     criticalHigh?: number;
-    maleRange?: string;
-    femaleRange?: string;
-    childRange?: string;
     methodology?: string;
   }>;
   createdBy: mongoose.Types.ObjectId;
@@ -137,15 +134,6 @@ const labTestTemplateSchema = new Schema<ILabTestTemplate>(
         },
         criticalHigh: {
           type: Number,
-        },
-        maleRange: {
-          type: String,
-        },
-        femaleRange: {
-          type: String,
-        },
-        childRange: {
-          type: String,
         },
         methodology: {
           type: String,

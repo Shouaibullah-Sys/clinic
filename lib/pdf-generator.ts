@@ -482,7 +482,6 @@ const generateSharedLabReportPDF = async (
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 30;
-  const headerHeight = 96;
   const headerTop = 155;
   const tableHeaderHeight = 12;
   const rowHeight = 14;
@@ -494,7 +493,7 @@ const generateSharedLabReportPDF = async (
     : `LAB-${baseReportId}`;
   const reportId = formatReportId(rawReportId);
   const doctorName = getDoctorName(test);
-  const whatsappUrl = "https://wa.me/93787288622";
+  const whatsappUrl = "https://wa.me/93748893012";
   const qrDataUrl = await QRCode.toDataURL(whatsappUrl, {
     errorCorrectionLevel: "M",
     margin: 1,
@@ -513,99 +512,70 @@ const generateSharedLabReportPDF = async (
   );
   const patientName = getPatientField(test, "name");
   const leftColumnRows: Array<[string, string]> = [
+    ["Transaction Id", test.testId || "N/A"],
     ["Patient Name", patientName],
-    ["Age/Sex", `${getPatientAge(test)}/${getPatientField(test, "gender")}`],
-    ["Ref. By", doctorName],
-    ["UHID", getPatientField(test, "patientId")],
+    ["Father", getPatientField(test, "guardian")],
+    ["Age/Gender", `${getPatientAge(test)}/${getPatientField(test, "gender")}`],
   ];
 
   const rightColumnRows: Array<[string, string]> = [
-    [
-      "Registration No.",
-      getPatientField(
-        test,
-        "registrationNo",
-        getPatientField(test, "patientId"),
-      ),
-    ],
-    ["Transaction Id", test.testId || "N/A"],
+    ["Ref. By", doctorName],
     ["Collection Date", collectionDate],
-    ["Reporting Date", reportingDate.split(" ")[0]],
+    ["Reporting Date", reportingDate],
+    ["Pass/Taskera", getPatientField(test, "passTskNo")],
+    ["Cont. No", getPatientField(test, "phone")],
   ];
 
-  const renderTopBlock = (pageNumber: number, categoryTitle: string) => {
+  const renderTopBlock = (
+    pageNumber: number,
+    categoryTitle: string,
+    categoryTests: LabTest[],
+  ) => {
     doc.setTextColor(40, 40, 40);
+    doc.setFont("times", "normal");
+    doc.setFontSize(9.5);
 
-    const headerWidth = pageWidth - margin * 2;
-    doc.setLineWidth(0.5);
-    doc.rect(margin, headerTop, headerWidth, headerHeight);
-    doc.setFont("courier", "bold");
-    doc.setFontSize(14);
-    doc.text("RESULT", pageWidth / 2, headerTop + 28, { align: "center" });
-    doc.setLineWidth(0.5);
-    doc.setLineDashPattern([2, 2], 0);
-    doc.line(
-      margin + 8,
-      headerTop + 32,
-      pageWidth - margin - 8,
-      headerTop + 32,
-    );
-    doc.setLineDashPattern([], 0);
+    const leftX = margin;
+    const rightX = pageWidth / 2 + 20;
+    const infoRowGap = 12;
 
-    const infoBoxY = headerTop + 36;
-    const infoBoxHeight = headerHeight - 40;
-    doc.rect(margin, infoBoxY, headerWidth, infoBoxHeight);
-
-    const columnDividerX = margin + headerWidth / 2;
-    doc.line(
-      columnDividerX,
-      infoBoxY,
-      columnDividerX,
-      infoBoxY + infoBoxHeight,
-    );
-
-    const rowHeight = infoBoxHeight / 4;
-    for (let i = 1; i < 4; i += 1) {
-      const y = infoBoxY + rowHeight * i;
-      doc.line(margin, y, pageWidth - margin, y);
-    }
-
-    doc.setFontSize(11);
-    doc.setFont("courier", "normal");
-
-    const leftLabelX = margin + 6;
-    const rightLabelX = columnDividerX + 6;
-    const leftLabelWidth = Math.max(
-      ...leftColumnRows.map(([label]) => doc.getTextWidth(label)),
-    );
-    const rightLabelWidth = Math.max(
-      ...rightColumnRows.map(([label]) => doc.getTextWidth(label)),
-    );
-    const leftColonX = leftLabelX + leftLabelWidth + 4;
-    const leftValueX = leftColonX + 6;
-    const rightColonX = rightLabelX + rightLabelWidth + 4;
-    const rightValueX = rightColonX + 6;
     leftColumnRows.forEach(([label, value], index) => {
-      const lineY = infoBoxY + rowHeight * (index + 0.7);
-      doc.text(label, leftLabelX, lineY);
-      doc.text(":", leftColonX, lineY);
-      doc.setFont("courier", "bold");
-      doc.text(value || "N/A", leftValueX, lineY);
-      doc.setFont("courier", "normal");
+      const y = headerTop + index * infoRowGap;
+      doc.text(label, leftX, y);
+      doc.text(":", leftX + 70, y);
+      doc.setFont("times", "bold");
+      doc.text(value || "N/A", leftX + 76, y);
+      doc.setFont("times", "normal");
     });
 
     rightColumnRows.forEach(([label, value], index) => {
-      const lineY = infoBoxY + rowHeight * (index + 0.7);
-      doc.text(label, rightLabelX, lineY);
-      doc.text(":", rightColonX, lineY);
-      doc.setFont("courier", "bold");
-      doc.text(value || "N/A", rightValueX, lineY);
-      doc.setFont("courier", "normal");
+      const y = headerTop + index * infoRowGap;
+      doc.text(label, rightX, y);
+      doc.text(":", rightX + 70, y);
+      doc.setFont("times", "bold");
+      doc.text(value || "N/A", rightX + 76, y);
+      doc.setFont("times", "normal");
     });
 
-    const sectionY = headerTop + headerHeight + 16;
+    const infoEndY = headerTop + leftColumnRows.length * infoRowGap + 4;
+    doc.rect(margin, infoEndY, pageWidth - margin * 2, 16);
+    doc.setFont("time", "normal");
+    doc.text("Investigation Desired:", margin + 6, infoEndY + 11);
+    doc.setFont("courier", "normal");
+
+    const investigationText = categoryTests
+      .map((item: LabTest) => item.testName?.trim())
+      .filter(Boolean)
+      .join(", ");
+    const invLines = doc.splitTextToSize(
+      investigationText || "N/A",
+      pageWidth - margin * 2 - 120,
+    );
+    doc.text(invLines[0] || "N/A", margin + 118, infoEndY + 11);
+
+    const sectionY = infoEndY + 38;
     doc.setFont("courier", "bold");
-    doc.setFontSize(10);
+    doc.setFontSize(12);
     doc.text(categoryTitle, pageWidth / 2, sectionY, { align: "center" });
     doc.line(margin, sectionY + 4, pageWidth - margin, sectionY + 4);
 
@@ -620,20 +590,20 @@ const generateSharedLabReportPDF = async (
 
     doc.setFont("courier", "bold");
     doc.setFontSize(10);
-    doc.text("Test Description", margin + 4, tableY + 10);
-    doc.text("Value Observed", margin + 215, tableY + 10);
-    doc.text("Normal Ranges", margin + 340, tableY + 10);
-    doc.text("Unit", pageWidth - margin - 26, tableY + 10);
+    doc.text("Test Name", margin + 4, tableY + 9);
+    doc.text("Result", margin + 210, tableY + 9);
+    doc.text("Unit", margin + 300, tableY + 9);
+    doc.text("Normal Range", margin + 370, tableY + 9);
 
     return {
-      contentY: tableY + tableHeaderHeight + 18,
+      contentY: tableY + tableHeaderHeight + 16,
     };
   };
 
   const addPageFooter = (pageNumber: number, hasMorePages: boolean) => {
     if (hasMorePages) {
-      doc.setFont("courier", "normal");
-      doc.setFontSize(11);
+      doc.setFont("times", "normal");
+      doc.setFontSize(9);
       doc.text(
         `Continue On Page - ${pageNumber + 1}`,
         pageWidth / 2,
@@ -645,11 +615,6 @@ const generateSharedLabReportPDF = async (
     }
 
     drawVerificationBlock(doc, pageWidth, pageHeight, reportId, qrDataUrl);
-
-    doc.setFont("courier", "normal");
-    doc.setFontSize(9);
-    doc.setTextColor(60, 60, 60);
-    doc.text("Lab Technologies", margin, pageHeight - 118);
   };
 
   const categoryGroups = groupTestsByCategory(tests);
@@ -661,7 +626,7 @@ const generateSharedLabReportPDF = async (
       pageNumber += 1;
     }
 
-    let { contentY } = renderTopBlock(pageNumber, group.title);
+    let { contentY } = renderTopBlock(pageNumber, group.title, group.tests);
     const rows = buildCategoryRows(group.tests);
 
     const ensureSpaceForBlock = (requiredHeight: number) => {
@@ -672,7 +637,7 @@ const generateSharedLabReportPDF = async (
       addPageFooter(pageNumber, true);
       doc.addPage();
       pageNumber += 1;
-      contentY = renderTopBlock(pageNumber, group.title).contentY;
+      contentY = renderTopBlock(pageNumber, group.title, group.tests).contentY;
     };
 
     rows.forEach((row) => {
@@ -681,12 +646,16 @@ const generateSharedLabReportPDF = async (
         addPageFooter(pageNumber, true);
         doc.addPage();
         pageNumber += 1;
-        contentY = renderTopBlock(pageNumber, group.title).contentY;
+        contentY = renderTopBlock(
+          pageNumber,
+          group.title,
+          group.tests,
+        ).contentY;
       }
 
       if (row.type === "section") {
-        doc.setFont("courier", "bold");
-        doc.setFontSize(11);
+        doc.setFont("times", "bold");
+        doc.setFontSize(9);
         doc.setTextColor(40, 40, 40);
         doc.text(row.label, margin + 4, contentY);
         contentY += rowHeight;
@@ -699,36 +668,42 @@ const generateSharedLabReportPDF = async (
       const rangeLines = doc.splitTextToSize(row.normalRange || "-", 150);
       const nameX = margin + 4 + (row.indent ?? 0);
 
-      doc.setFont("courier", "normal");
-      doc.setFontSize(10);
+      doc.setFont("times", "normal");
+      doc.setFontSize(8.2);
       doc.setTextColor(40, 40, 40);
       doc.text(nameLines[0] || "-", nameX, contentY);
 
-      doc.setFont("courier", "bold");
+      doc.setFont("times", "bold");
       doc.setTextColor(color[0], color[1], color[2]);
       doc.text(resultValue || "-", margin + 220, contentY);
 
-      doc.setFont("courier", "normal");
+      doc.setFont("times", "normal");
       doc.setTextColor(40, 40, 40);
-      doc.text(rangeLines, margin + 350, contentY);
-      doc.text(row.unit || "", pageWidth - margin - 30, contentY);
+      doc.text(row.unit || "", margin + 300, contentY);
+      doc.text(rangeLines, margin + 370, contentY);
 
       contentY += rowHeight;
     });
 
     const interpretation = group.tests
-      .map((item) => item.results?.interpretation?.trim())
+      .map((item: LabTest) => item.results?.interpretation?.trim())
       .filter(Boolean)
       .join("\n\n");
 
     const commentEntries = group.tests
-      .map((item) => ({
+      .map((item: LabTest) => ({
         testName: item.testName?.trim() || "Test",
         description: extractCommentText(item),
       }))
-      .filter((item) => item.description)
       .filter(
-        (item, index, all) =>
+        (item: { testName: string; description: string }) => item.description,
+      )
+      .filter(
+        (
+          item: { testName: string; description: string },
+          index: number,
+          all: Array<{ testName: string; description: string }>,
+        ) =>
           all.findIndex(
             (candidate) =>
               candidate.testName === item.testName &&
@@ -747,13 +722,13 @@ const generateSharedLabReportPDF = async (
 
       ensureSpaceForBlock(22);
 
-      doc.setFont("courier", "bold");
+      doc.setFont("times", "bold");
       doc.setFontSize(titleFontSize);
       doc.setTextColor(40, 40, 40);
       doc.text(title, margin, contentY);
       contentY += 12;
 
-      doc.setFont("courier", "normal");
+      doc.setFont("times", "normal");
       doc.setFontSize(bodyFontSize);
       doc.setTextColor(60, 60, 60);
 
@@ -771,6 +746,7 @@ const generateSharedLabReportPDF = async (
       doc.setFont("courier", "bold");
       doc.setFontSize(9);
       doc.setTextColor(40, 40, 40);
+      doc.text("CLINICAL DESCRIPTION.", margin, contentY);
       contentY += 12;
 
       commentEntries.forEach((entry) => {

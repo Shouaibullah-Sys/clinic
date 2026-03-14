@@ -2057,8 +2057,7 @@ export default function CreateDirectTestPage() {
           data.data?.registrationNo ||
           newPatient.registrationNo?.trim() ||
           undefined,
-        address:
-          data.data?.address || newPatient.address?.trim() || undefined,
+        address: data.data?.address || newPatient.address?.trim() || undefined,
         doctorName: newPatient.doctorName.trim() || undefined,
       });
       if (!doctorName.trim() && newPatient.doctorName.trim()) {
@@ -2306,7 +2305,9 @@ export default function CreateDirectTestPage() {
         }).then(async (res) => {
           if (!res.ok) {
             const errorData = await res.json();
-            throw new Error(errorData.error || "Failed to create direct lab test");
+            throw new Error(
+              errorData.error || "Failed to create direct lab test",
+            );
           }
           return res.json();
         });
@@ -2446,12 +2447,12 @@ export default function CreateDirectTestPage() {
                                     <div className="font-medium">
                                       {patient.name}
                                     </div>
-                    <div className="text-xs text-muted-foreground">
-                      {formatPatientId(patient.patientId)}
-                      {patient.phone
-                        ? ` • ${patient.phone}`
-                        : ""}
-                    </div>
+                                    <div className="text-xs text-muted-foreground">
+                                      {formatPatientId(patient.patientId)}
+                                      {patient.phone
+                                        ? ` • ${patient.phone}`
+                                        : ""}
+                                    </div>
                                   </div>
                                 </div>
                                 <Badge variant="outline" className="text-xs">
@@ -2487,22 +2488,22 @@ export default function CreateDirectTestPage() {
 
                 {/* Selected Patient */}
                 {selectedPatient && (
-                    <div className="p-4 bg-green-50 dark:bg-green-950/20 rounded-md border border-green-200 dark:border-green-800 space-y-3">
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-center gap-3">
-                          <CheckCircle className="h-5 w-5 text-green-600" />
-                          <div>
-                            <div className="font-medium">
-                              {selectedPatient.name}
-                            </div>
-                            <div className="text-sm text-muted-foreground">
+                  <div className="p-4 bg-green-50 dark:bg-green-950/20 rounded-md border border-green-200 dark:border-green-800 space-y-3">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-3">
+                        <CheckCircle className="h-5 w-5 text-green-600" />
+                        <div>
+                          <div className="font-medium">
+                            {selectedPatient.name}
+                          </div>
+                          <div className="text-sm text-muted-foreground">
                             Lab Test ID:{" "}
                             {formatPatientId(selectedPatient.patientId)}
                             {selectedPatient.phone &&
                               ` • Phone: ${selectedPatient.phone}`}
-                            </div>
                           </div>
                         </div>
+                      </div>
                       <Button
                         type="button"
                         variant="ghost"
@@ -2513,48 +2514,48 @@ export default function CreateDirectTestPage() {
                         }}
                       >
                         Change
-                        </Button>
+                      </Button>
+                    </div>
+                    {isLabRole && incompletePatientFields.length > 0 && (
+                      <Alert variant="destructive" className="mt-2">
+                        <AlertTriangle className="h-4 w-4" />
+                        <AlertTitle>Incomplete patient info</AlertTitle>
+                        <AlertDescription>
+                          Missing: {incompletePatientFields.join(", ")}. You can
+                          continue or ignore.
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div className="space-y-1">
+                        <Label htmlFor="doctorName">Doctor Name</Label>
+                        <Input
+                          id="doctorName"
+                          value={doctorName}
+                          onChange={(e) => setDoctorName(e.target.value)}
+                          placeholder="Optional"
+                        />
                       </div>
-                      {isLabRole && incompletePatientFields.length > 0 && (
-                        <Alert variant="destructive" className="mt-2">
-                          <AlertTriangle className="h-4 w-4" />
-                          <AlertTitle>Incomplete patient info</AlertTitle>
-                          <AlertDescription>
-                            Missing: {incompletePatientFields.join(", ")}. You
-                            can continue or ignore.
-                          </AlertDescription>
-                        </Alert>
-                      )}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        <div className="space-y-1">
-                          <Label htmlFor="doctorName">Doctor Name</Label>
-                          <Input
-                            id="doctorName"
-                            value={doctorName}
-                            onChange={(e) => setDoctorName(e.target.value)}
-                            placeholder="Optional"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label htmlFor="receiptNo">Receipt No (Auto)</Label>
-                          <Input
-                            id="receiptNo"
-                            value={receiptNo}
-                            onChange={(e) => setReceiptNo(e.target.value)}
-                            placeholder="Auto generated"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label htmlFor="labTestId">Lab Test ID</Label>
-                          <Input
-                            id="labTestId"
-                            value={formatPatientId(selectedPatient.patientId)}
-                            readOnly
-                          />
-                        </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="receiptNo">Receipt No (Auto)</Label>
+                        <Input
+                          id="receiptNo"
+                          value={receiptNo}
+                          onChange={(e) => setReceiptNo(e.target.value)}
+                          placeholder="Auto generated"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="labTestId">Lab Test ID</Label>
+                        <Input
+                          id="labTestId"
+                          value={formatPatientId(selectedPatient.patientId)}
+                          readOnly
+                        />
                       </div>
                     </div>
-                  )}
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -2605,8 +2606,8 @@ export default function CreateDirectTestPage() {
 
                   {showTestDropdown && (
                     <div className="absolute z-50 w-full mt-1 border rounded-md shadow-lg bg-popover max-h-80 overflow-y-auto">
-                  {testSearchResults.length > 0 ? (
-                    testSearchResults.map((test, index) => {
+                      {testSearchResults.length > 0 ? (
+                        testSearchResults.map((test, index) => {
                           const category = activeLabTests.find((cat) =>
                             cat.tests.some((t) => t.id === test.id),
                           )?.name;
@@ -2638,11 +2639,17 @@ export default function CreateDirectTestPage() {
                                 </div>
                                 <div className="flex items-center gap-2">
                                   {isSelected && (
-                                    <Badge variant="outline" className="text-xs">
+                                    <Badge
+                                      variant="outline"
+                                      className="text-xs"
+                                    >
                                       Added
                                     </Badge>
                                   )}
-                                  <Badge variant="secondary" className="text-xs">
+                                  <Badge
+                                    variant="secondary"
+                                    className="text-xs"
+                                  >
                                     ₹{test.price}
                                   </Badge>
                                 </div>
@@ -2803,6 +2810,7 @@ export default function CreateDirectTestPage() {
                             <TableRow key={param.id}>
                               <TableCell>
                                 <Input
+                                  readOnly
                                   value={param.name}
                                   onChange={(e) =>
                                     updateTestParameter(
@@ -2845,6 +2853,7 @@ export default function CreateDirectTestPage() {
                               </TableCell>
                               <TableCell>
                                 <Input
+                                  readOnly
                                   value={param.normalRange}
                                   onChange={(e) =>
                                     updateTestParameter(
@@ -2909,7 +2918,9 @@ export default function CreateDirectTestPage() {
           </Button>
           <Button
             type="submit"
-            disabled={submitting || !selectedPatient || selectedTests.length === 0}
+            disabled={
+              submitting || !selectedPatient || selectedTests.length === 0
+            }
             className="min-w-[200px]"
           >
             {submitting ? (
@@ -3105,7 +3116,10 @@ export default function CreateDirectTestPage() {
                       id="patientAddress"
                       value={newPatient.address}
                       onChange={(e) =>
-                        setNewPatient({ ...newPatient, address: e.target.value })
+                        setNewPatient({
+                          ...newPatient,
+                          address: e.target.value,
+                        })
                       }
                       placeholder="Enter patient address"
                       rows={3}

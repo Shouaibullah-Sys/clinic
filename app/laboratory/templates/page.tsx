@@ -108,9 +108,6 @@ interface LabTestTemplate {
     normalRange: string;
     criticalLow?: number;
     criticalHigh?: number;
-    maleRange?: string;
-    femaleRange?: string;
-    childRange?: string;
     methodology?: string;
   }>;
   createdBy: {

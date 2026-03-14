@@ -56,9 +56,6 @@ interface LabTestTemplate {
     normalRange: string;
     criticalLow?: number;
     criticalHigh?: number;
-    maleRange?: string;
-    femaleRange?: string;
-    childRange?: string;
     methodology?: string;
   }>;
   createdBy: {
@@ -135,9 +132,6 @@ interface FormData {
     normalRange: string;
     criticalLow: string;
     criticalHigh: string;
-    maleRange: string;
-    femaleRange: string;
-    childRange: string;
     methodology: string;
   }>;
 }
@@ -188,9 +182,6 @@ export function TemplateEditDialog({
           criticalLow: p.criticalLow !== undefined ? String(p.criticalLow) : "",
           criticalHigh:
             p.criticalHigh !== undefined ? String(p.criticalHigh) : "",
-          maleRange: p.maleRange || "",
-          femaleRange: p.femaleRange || "",
-          childRange: p.childRange || "",
           methodology: p.methodology || "",
         })),
       });
@@ -237,9 +228,6 @@ export function TemplateEditDialog({
         normalRange: "",
         criticalLow: "",
         criticalHigh: "",
-        maleRange: "",
-        femaleRange: "",
-        childRange: "",
         methodology: "",
       },
     ]);
@@ -294,9 +282,6 @@ export function TemplateEditDialog({
             normalRange: p.normalRange || undefined,
             criticalLow: p.criticalLow ? Number(p.criticalLow) : undefined,
             criticalHigh: p.criticalHigh ? Number(p.criticalHigh) : undefined,
-            maleRange: p.maleRange || undefined,
-            femaleRange: p.femaleRange || undefined,
-            childRange: p.childRange || undefined,
             methodology: p.methodology || undefined,
           })),
       };
@@ -721,50 +706,6 @@ export function TemplateEditDialog({
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        <div className="space-y-2">
-                          <Label>Male Range</Label>
-                          <Input
-                            value={param.maleRange}
-                            onChange={(e) =>
-                              updateParameter(
-                                index,
-                                "maleRange",
-                                e.target.value,
-                              )
-                            }
-                            placeholder="Male normal range"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Female Range</Label>
-                          <Input
-                            value={param.femaleRange}
-                            onChange={(e) =>
-                              updateParameter(
-                                index,
-                                "femaleRange",
-                                e.target.value,
-                              )
-                            }
-                            placeholder="Female normal range"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Child Range</Label>
-                          <Input
-                            value={param.childRange}
-                            onChange={(e) =>
-                              updateParameter(
-                                index,
-                                "childRange",
-                                e.target.value,
-                              )
-                            }
-                            placeholder="Child/Pediatric range"
-                          />
-                        </div>
-                      </div>
                     </div>
                   ))}
                 </div>

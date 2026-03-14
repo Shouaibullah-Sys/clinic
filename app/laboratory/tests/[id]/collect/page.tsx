@@ -411,7 +411,9 @@ export default function CollectSamplePage() {
     }
 
     if (initialOrderedTestName) {
-      const normalizedName = String(initialOrderedTestName).trim().toLowerCase();
+      const normalizedName = String(initialOrderedTestName)
+        .trim()
+        .toLowerCase();
       const byName = allTests.find(
         (t) => t.name.trim().toLowerCase() === normalizedName,
       );
@@ -498,7 +500,9 @@ export default function CollectSamplePage() {
     setActiveTestIndex(-1);
   };
 
-  const handleTestSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleTestSearchKeyDown = (
+    e: React.KeyboardEvent<HTMLInputElement>,
+  ) => {
     if (!showTestDropdown && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
       setShowTestDropdown(true);
     }
@@ -907,7 +911,9 @@ export default function CollectSamplePage() {
                         }
                         onKeyDown={handleTestSearchKeyDown}
                         disabled={
-                          !canCollectSample || loadingTemplates || !labTests.length
+                          !canCollectSample ||
+                          loadingTemplates ||
+                          !labTests.length
                         }
                       />
                       {testSearchQuery && (
@@ -953,11 +959,14 @@ export default function CollectSamplePage() {
                                         {foundTest.name}
                                       </div>
                                       <div className="text-xs text-muted-foreground">
-                                        {category} • {foundTest.parameters.length}{" "}
-                                        parameters
+                                        {category} •{" "}
+                                        {foundTest.parameters.length} parameters
                                       </div>
                                     </div>
-                                    <Badge variant="secondary" className="text-xs">
+                                    <Badge
+                                      variant="secondary"
+                                      className="text-xs"
+                                    >
                                       ₹{foundTest.price}
                                     </Badge>
                                   </div>
@@ -1049,9 +1058,14 @@ export default function CollectSamplePage() {
                         <TableRow key={param.id}>
                           <TableCell>
                             <Input
+                              readOnly
                               value={param.name}
                               onChange={(e) =>
-                                updateParameter(param.id, "name", e.target.value)
+                                updateParameter(
+                                  param.id,
+                                  "name",
+                                  e.target.value,
+                                )
                               }
                               placeholder="e.g., Hemoglobin"
                               disabled={!canCollectSample}
@@ -1061,7 +1075,11 @@ export default function CollectSamplePage() {
                             <Input
                               value={param.result}
                               onChange={(e) =>
-                                updateParameter(param.id, "result", e.target.value)
+                                updateParameter(
+                                  param.id,
+                                  "result",
+                                  e.target.value,
+                                )
                               }
                               placeholder="Enter result"
                               disabled={!canCollectSample}
@@ -1069,9 +1087,14 @@ export default function CollectSamplePage() {
                           </TableCell>
                           <TableCell>
                             <Input
+                              readOnly
                               value={param.unit}
                               onChange={(e) =>
-                                updateParameter(param.id, "unit", e.target.value)
+                                updateParameter(
+                                  param.id,
+                                  "unit",
+                                  e.target.value,
+                                )
                               }
                               placeholder="Unit"
                               disabled={!canCollectSample}
@@ -1079,6 +1102,7 @@ export default function CollectSamplePage() {
                           </TableCell>
                           <TableCell>
                             <Input
+                              readOnly
                               value={param.normalRange}
                               onChange={(e) =>
                                 updateParameter(
@@ -1095,7 +1119,11 @@ export default function CollectSamplePage() {
                             <Input
                               value={param.remarks || ""}
                               onChange={(e) =>
-                                updateParameter(param.id, "remarks", e.target.value)
+                                updateParameter(
+                                  param.id,
+                                  "remarks",
+                                  e.target.value,
+                                )
                               }
                               placeholder="Remarks"
                               disabled={!canCollectSample}
@@ -1108,7 +1136,9 @@ export default function CollectSamplePage() {
                               variant="ghost"
                               size="sm"
                               className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
-                              disabled={!canCollectSample || parameters.length === 1}
+                              disabled={
+                                !canCollectSample || parameters.length === 1
+                              }
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
