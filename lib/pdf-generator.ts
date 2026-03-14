@@ -393,6 +393,7 @@ const drawVerificationBlock = (
   pageWidth: number,
   pageHeight: number,
   reportId: string,
+  preparedByName?: string,
   qrDataUrl?: string,
 ) => {
   const size = 54;
@@ -416,9 +417,15 @@ const drawVerificationBlock = (
     });
   }
 
-  doc.setFont("courier", "normal");
-  doc.setFontSize(7);
+  doc.setFont("courier", "bold");
+  doc.setFontSize(9);
   doc.setTextColor(40, 40, 40);
+
+  const labelX = Math.max(30, x - 170);
+  const labelY = y + size - 6;
+  if (preparedByName) {
+    doc.text(`Prepared By: ${preparedByName}`, labelX, labelY);
+  }
 };
 
 const saveOrPrintPdf = (
@@ -569,7 +576,11 @@ const generateSharedLabReportPDF = async (
       doc.setFont("times", "normal");
     });
 
-    const infoEndY = headerTop + leftColumnRows.length * infoRowGap + 4;
+    const infoRowsCount = Math.max(
+      leftColumnRows.length,
+      rightColumnRows.length,
+    );
+    const infoEndY = headerTop + infoRowsCount * infoRowGap + 4;
     doc.rect(margin, infoEndY, pageWidth - margin * 2, 16);
     doc.setFont("time", "normal");
     doc.text("Investigation Desired:", margin + 6, infoEndY + 11);
@@ -615,7 +626,7 @@ const generateSharedLabReportPDF = async (
   const addPageFooter = (pageNumber: number, hasMorePages: boolean) => {
     if (hasMorePages) {
       doc.setFont("times", "normal");
-      doc.setFontSize(9);
+      doc.setFontSize(10);
       doc.text(
         `Continue On Page - ${pageNumber + 1}`,
         pageWidth / 2,
@@ -626,7 +637,19 @@ const generateSharedLabReportPDF = async (
       );
     }
 
-    drawVerificationBlock(doc, pageWidth, pageHeight, reportId, qrDataUrl);
+    const footerPreparedBy =
+      test.results?.reportedBy?.name ||
+      (test as any)?.collectionDetails?.collectedBy?.name ||
+      (test as any)?.createdBy?.name ||
+      "";
+    drawVerificationBlock(
+      doc,
+      pageWidth,
+      pageHeight,
+      reportId,
+      footerPreparedBy,
+      qrDataUrl,
+    );
   };
 
   const categoryGroups = groupTestsByCategory(tests);
@@ -653,7 +676,19 @@ const generateSharedLabReportPDF = async (
     };
 
     rows.forEach((row) => {
-      const blockHeight = rowHeight;
+      const nameLines =
+        row.type === "row"
+          ? doc.splitTextToSize(row.name || "-", 190)
+          : [""];
+      const rangeLines =
+        row.type === "row"
+          ? doc.splitTextToSize(row.normalRange || "-", 150)
+          : [""];
+      const linesCount =
+        row.type === "row"
+          ? Math.max(nameLines.length, rangeLines.length, 1)
+          : 1;
+      const blockHeight = rowHeight * linesCount;
       if (contentY + blockHeight > pageHeight - footerReserve) {
         addPageFooter(pageNumber, true);
         doc.addPage();
@@ -667,7 +702,7 @@ const generateSharedLabReportPDF = async (
 
       if (row.type === "section") {
         doc.setFont("times", "bold");
-        doc.setFontSize(9);
+        doc.setFontSize(10);
         doc.setTextColor(40, 40, 40);
         doc.text(row.label, margin + 4, contentY);
         contentY += rowHeight;
@@ -675,7 +710,7 @@ const generateSharedLabReportPDF = async (
       }
       if (row.type === "group") {
         doc.setFont("times", "bold");
-        doc.setFontSize(8.6);
+        doc.setFontSize(10);
         doc.setTextColor(40, 40, 40);
         doc.text(row.label, margin + 4 + (row.indent ?? 0), contentY);
         contentY += rowHeight;
@@ -684,14 +719,14 @@ const generateSharedLabReportPDF = async (
 
       const color = getResultColor(row.value, row.normalRange, row.remarks);
       const resultValue = String(row.value ?? "");
-      const nameLines = doc.splitTextToSize(row.name || "-", 190);
-      const rangeLines = doc.splitTextToSize(row.normalRange || "-", 150);
       const nameX = margin + 4 + (row.indent ?? 0);
 
       doc.setFont("times", "normal");
-      doc.setFontSize(8.2);
+      doc.setFontSize(10);
       doc.setTextColor(40, 40, 40);
-      doc.text(nameLines[0] || "-", nameX, contentY);
+      nameLines.forEach((line: string, idx: number) => {
+        doc.text(line || "-", nameX, contentY + idx * rowHeight);
+      });
 
       doc.setFont("times", "bold");
       doc.setTextColor(color[0], color[1], color[2]);
@@ -700,9 +735,11 @@ const generateSharedLabReportPDF = async (
       doc.setFont("times", "normal");
       doc.setTextColor(40, 40, 40);
       doc.text(row.unit || "", margin + 300, contentY);
-      doc.text(rangeLines, margin + 370, contentY);
+      rangeLines.forEach((line: string, idx: number) => {
+        doc.text(line || "-", margin + 370, contentY + idx * rowHeight);
+      });
 
-      contentY += rowHeight;
+      contentY += blockHeight;
     });
 
     const interpretation = group.tests
@@ -739,23 +776,25 @@ const generateSharedLabReportPDF = async (
       const titleFontSize = options?.titleFontSize ?? 9;
       const bodyFontSize = options?.bodyFontSize ?? 8;
       const bodyLines = doc.splitTextToSize(body, pageWidth - margin * 2);
-
-      ensureSpaceForBlock(22);
+      const lineHeight = 12;
+      const requiredHeight =
+        lineHeight + bodyLines.length * lineHeight + 8;
+      ensureSpaceForBlock(requiredHeight);
 
       doc.setFont("times", "bold");
       doc.setFontSize(titleFontSize);
       doc.setTextColor(40, 40, 40);
       doc.text(title, margin, contentY);
-      contentY += 12;
+      contentY += lineHeight;
 
       doc.setFont("times", "normal");
       doc.setFontSize(bodyFontSize);
       doc.setTextColor(60, 60, 60);
 
       bodyLines.forEach((line: string) => {
-        ensureSpaceForBlock(12);
+        ensureSpaceForBlock(lineHeight);
         doc.text(line, margin, contentY);
-        contentY += 11;
+        contentY += lineHeight;
       });
 
       contentY += 6;
@@ -1029,6 +1068,7 @@ export const generateDirectTestPaymentSlip = async (
     (test as any)?.collectionDetails?.collectedBy?.name ||
     (test as any)?.createdBy?.name ||
     "Lab Staff";
+  const createdByName = (test as any)?.createdBy?.name || "N/A";
 
   const doctorName =
     (test as any).doctorName || (test as any).doctor?.name || "N/A";
@@ -1144,8 +1184,8 @@ export const generateDirectTestPaymentSlip = async (
   drawRightField("Date", safeFormatDate(slipDate));
   currentRightY += rowHeight;
 
-  // Row 6: Prepared By (left) and Receipt No (right)
-  drawLeftField("Prepared By", preparedBy);
+  // Row 6: Created By (left) and Receipt No (right)
+  drawLeftField("Created By", createdByName);
   drawRightField("Receipt No", test.testId);
   currentRightY += rowHeight;
 
@@ -1247,7 +1287,7 @@ export const generateDirectTestPaymentSlip = async (
 
   tests.forEach((testItem) => {
     doc.setFont("courier", "normal");
-    doc.setFontSize(9);
+    doc.setFontSize(11);
     doc.setTextColor(black[0], black[1], black[2]);
     doc.text("• " + testItem, leftColX + 10, y);
     y += 14;

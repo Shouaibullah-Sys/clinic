@@ -56,6 +56,7 @@ export async function GET(
         "name patientId phone guardian dateOfBirth gender address refPerson passTskNo registrationNo",
       )
       .populate("doctor", "name specialization department licenseNumber")
+      .populate("createdBy", "name")
       .populate("orderedBy", "name")
       .populate("charges.collectedBy", "name")
       .populate("collectionDetails.collectedBy", "name")

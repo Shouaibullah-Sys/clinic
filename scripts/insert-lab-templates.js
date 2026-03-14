@@ -79,6 +79,16 @@ const templates = [
     basePrice: 200,
   },
   {
+    testCode: "CHEM_008",
+    testName: "Random Blood Sugar (RBS)",
+    category: "biochemistry",
+    description:
+      "Measures blood glucose at any time during the day without fasting.\n\nNormal Ranges:\nNormal: 70-140 mg/dL\nPrediabetes: 140-200 mg/dL\nDiabetes: ≥200 mg/dL\n\nInterpretation:\nUseful for monitoring glucose levels throughout the day.\nNo fasting required.\nResults should be interpreted in context of meals.",
+    specimenType: ["blood"],
+    turnaroundTime: 24,
+    basePrice: 200,
+  },
+  {
     testCode: "SERO_001",
     testName: "Rheumatoid Factor (RF)",
     category: "serology",
