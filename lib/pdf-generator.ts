@@ -421,11 +421,7 @@ const drawVerificationBlock = (
   doc.setFontSize(9);
   doc.setTextColor(40, 40, 40);
 
-  const labelX = Math.max(30, x - 170);
-  const labelY = y + size - 6;
-  if (preparedByName) {
-    doc.text(`Prepared By: ${preparedByName}`, labelX, labelY);
-  }
+  // Prepared By moved to header right column; keep QR area clean.
 };
 
 const saveOrPrintPdf = (
@@ -530,11 +526,17 @@ const generateSharedLabReportPDF = async (
     "dd/MM/yyyy HH:mm",
   );
   const patientName = getPatientField(test, "name");
+  const preparedByName =
+    test.results?.reportedBy?.name ||
+    (test as any)?.collectionDetails?.collectedBy?.name ||
+    (test as any)?.createdBy?.name ||
+    "N/A";
   const leftColumnRows: Array<[string, string]> = [
     ["Transaction Id", test.testId || "N/A"],
     ["Patient Name", patientName],
     ["Father", getPatientField(test, "guardian")],
     ["Age/Gender", `${getPatientAge(test)}/${getPatientField(test, "gender")}`],
+    ["Cont. No", getPatientField(test, "phone")],
   ];
 
   const rightColumnRows: Array<[string, string]> = [
@@ -542,7 +544,7 @@ const generateSharedLabReportPDF = async (
     ["Collection Date", collectionDate],
     ["Reporting Date", reportingDate],
     ["Pass/Taskera", getPatientField(test, "passTskNo")],
-    ["Cont. No", getPatientField(test, "phone")],
+    ["Prepared By", preparedByName],
   ];
 
   const renderTopBlock = (
@@ -555,7 +557,7 @@ const generateSharedLabReportPDF = async (
     doc.setFontSize(9.5);
 
     const leftX = margin;
-    const rightX = pageWidth / 2 + 20;
+    const rightX = pageWidth / 2;
     const infoRowGap = 12;
 
     leftColumnRows.forEach(([label, value], index) => {
@@ -637,19 +639,7 @@ const generateSharedLabReportPDF = async (
       );
     }
 
-    const footerPreparedBy =
-      test.results?.reportedBy?.name ||
-      (test as any)?.collectionDetails?.collectedBy?.name ||
-      (test as any)?.createdBy?.name ||
-      "";
-    drawVerificationBlock(
-      doc,
-      pageWidth,
-      pageHeight,
-      reportId,
-      footerPreparedBy,
-      qrDataUrl,
-    );
+    drawVerificationBlock(doc, pageWidth, pageHeight, reportId, qrDataUrl);
   };
 
   const categoryGroups = groupTestsByCategory(tests);
@@ -677,9 +667,7 @@ const generateSharedLabReportPDF = async (
 
     rows.forEach((row) => {
       const nameLines =
-        row.type === "row"
-          ? doc.splitTextToSize(row.name || "-", 190)
-          : [""];
+        row.type === "row" ? doc.splitTextToSize(row.name || "-", 190) : [""];
       const rangeLines =
         row.type === "row"
           ? doc.splitTextToSize(row.normalRange || "-", 150)
@@ -777,8 +765,7 @@ const generateSharedLabReportPDF = async (
       const bodyFontSize = options?.bodyFontSize ?? 8;
       const bodyLines = doc.splitTextToSize(body, pageWidth - margin * 2);
       const lineHeight = 12;
-      const requiredHeight =
-        lineHeight + bodyLines.length * lineHeight + 8;
+      const requiredHeight = lineHeight + bodyLines.length * lineHeight + 8;
       ensureSpaceForBlock(requiredHeight);
 
       doc.setFont("times", "bold");
