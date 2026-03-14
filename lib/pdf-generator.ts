@@ -500,7 +500,7 @@ const generateSharedLabReportPDF = async (
   const headerTop = 155;
   const tableHeaderHeight = 12;
   const rowHeight = 14;
-  const footerReserve = 130;
+  const footerReserve = 170;
 
   const baseReportId = test.labReferenceId || test.testId || "LAB";
   const rawReportId = /^lab[-]?/i.test(baseReportId)
@@ -639,7 +639,14 @@ const generateSharedLabReportPDF = async (
       );
     }
 
-    drawVerificationBlock(doc, pageWidth, pageHeight, reportId, qrDataUrl);
+    drawVerificationBlock(
+      doc,
+      pageWidth,
+      pageHeight,
+      reportId,
+      undefined,
+      qrDataUrl,
+    );
   };
 
   const categoryGroups = groupTestsByCategory(tests);
