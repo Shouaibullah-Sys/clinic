@@ -111,6 +111,7 @@ interface DirectLabTest {
       value: string | number;
       unit?: string;
       normalRange: string;
+      group?: string;
       flag?: "normal" | "low" | "high" | "critical";
       remarks?: string;
     }>;
