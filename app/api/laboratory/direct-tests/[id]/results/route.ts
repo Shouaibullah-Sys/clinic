@@ -99,6 +99,7 @@ export async function PUT(
         normalRange: p.normalRange || "",
         flag: p.flag || "normal",
         remarks: p.remarks || "",
+        group: p.group || undefined,
       })),
       interpretation: interpretation || "",
       reportedBy: new mongoose.Types.ObjectId(auth.userId),

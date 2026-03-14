@@ -131,6 +131,7 @@ export interface ILabTest extends mongoose.Document {
       value: string | number;
       unit?: string;
       normalRange: string;
+      group?: string;
       flag?: "normal" | "low" | "high" | "critical";
       remarks?: string;
     }>;
@@ -454,6 +455,7 @@ const labTestSchema = new Schema<ILabTest, LabTestModel>(
           value: { type: Schema.Types.Mixed, required: true },
           unit: { type: String, trim: true },
           normalRange: { type: String, trim: true },
+          group: { type: String, trim: true },
           flag: {
             type: String,
             enum: ["normal", "low", "high", "critical"],

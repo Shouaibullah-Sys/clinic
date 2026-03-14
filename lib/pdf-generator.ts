@@ -64,6 +64,7 @@ export interface TestParameter {
   normalRange?: string;
   remarks?: string;
   flag?: "normal" | "low" | "high" | "critical";
+  group?: string;
 }
 
 export interface TestResults {
@@ -285,6 +286,11 @@ type LabRow =
       label: string;
     }
   | {
+      type: "group";
+      label: string;
+      indent?: number;
+    }
+  | {
       type: "row";
       name: string;
       value: string | number;
@@ -303,7 +309,13 @@ const buildCategoryRows = (tests: LabTest[]): LabRow[] => {
 
     if (parameters.length > 1) {
       rows.push({ type: "section", label: testName });
+      let currentGroup = "";
       parameters.forEach((param) => {
+        const nextGroup = (param as any).group?.trim();
+        if (nextGroup && nextGroup !== currentGroup) {
+          rows.push({ type: "group", label: nextGroup, indent: 10 });
+          currentGroup = nextGroup;
+        }
         rows.push({
           type: "row",
           name: param.name || testName,
@@ -311,7 +323,7 @@ const buildCategoryRows = (tests: LabTest[]): LabRow[] => {
           unit: param.unit || "",
           normalRange: param.normalRange || "",
           remarks: param.remarks || "",
-          indent: 10,
+          indent: nextGroup ? 20 : 10,
         });
       });
       return;
@@ -641,7 +653,7 @@ const generateSharedLabReportPDF = async (
     };
 
     rows.forEach((row) => {
-      const blockHeight = row.type === "section" ? rowHeight : rowHeight;
+      const blockHeight = rowHeight;
       if (contentY + blockHeight > pageHeight - footerReserve) {
         addPageFooter(pageNumber, true);
         doc.addPage();
@@ -658,6 +670,14 @@ const generateSharedLabReportPDF = async (
         doc.setFontSize(9);
         doc.setTextColor(40, 40, 40);
         doc.text(row.label, margin + 4, contentY);
+        contentY += rowHeight;
+        return;
+      }
+      if (row.type === "group") {
+        doc.setFont("times", "bold");
+        doc.setFontSize(8.6);
+        doc.setTextColor(40, 40, 40);
+        doc.text(row.label, margin + 4 + (row.indent ?? 0), contentY);
         contentY += rowHeight;
         return;
       }

@@ -20,6 +20,7 @@ export interface ILabTestTemplate extends mongoose.Document {
     parameterName: string;
     unit?: string;
     normalRange: string;
+    group?: string;
     criticalLow?: number;
     criticalHigh?: number;
     methodology?: string;
@@ -128,6 +129,10 @@ const labTestTemplateSchema = new Schema<ILabTestTemplate>(
         normalRange: {
           type: String,
           required: true,
+        },
+        group: {
+          type: String,
+          trim: true,
         },
         criticalLow: {
           type: Number,

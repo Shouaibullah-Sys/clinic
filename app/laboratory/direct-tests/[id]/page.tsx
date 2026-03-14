@@ -789,17 +789,50 @@ export default function DirectTestDetailPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {test.results.parameters.map((param, index) => (
-                      <tr key={index} className="border-b last:border-b-0">
-                        <td className="p-3 font-medium">{param.name}</td>
-                        <td className="p-3">{param.value}</td>
-                        <td className="p-3">{param.unit || "-"}</td>
-                        <td className="p-3 text-sm text-muted-foreground">
-                          {param.normalRange}
-                        </td>
-                        <td className="p-3 text-sm">{param.remarks || "-"}</td>
-                      </tr>
-                    ))}
+                    {test.results.parameters
+                      .flatMap((param, index, all) => {
+                        const group = param.group?.trim();
+                        const prevGroup = all[index - 1]?.group?.trim();
+                        const needsHeader = group && group !== prevGroup;
+                        return needsHeader
+                          ? [
+                              { type: "group" as const, label: group },
+                              { type: "param" as const, param },
+                            ]
+                          : [{ type: "param" as const, param }];
+                      })
+                      .map((row, index) =>
+                        row.type === "group" ? (
+                          <tr
+                            key={`group-${row.label}-${index}`}
+                            className="border-b bg-muted/40"
+                          >
+                            <td
+                              className="p-3 font-semibold text-sm"
+                              colSpan={5}
+                            >
+                              {row.label}
+                            </td>
+                          </tr>
+                        ) : (
+                          <tr
+                            key={`${row.param.name}-${index}`}
+                            className="border-b last:border-b-0"
+                          >
+                            <td className="p-3 font-medium">
+                              {row.param.name}
+                            </td>
+                            <td className="p-3">{row.param.value}</td>
+                            <td className="p-3">{row.param.unit || "-"}</td>
+                            <td className="p-3 text-sm text-muted-foreground">
+                              {row.param.normalRange}
+                            </td>
+                            <td className="p-3 text-sm">
+                              {row.param.remarks || "-"}
+                            </td>
+                          </tr>
+                        ),
+                      )}
                   </tbody>
                 </table>
               </div>

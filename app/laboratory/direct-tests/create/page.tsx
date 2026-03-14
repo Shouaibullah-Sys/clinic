@@ -79,6 +79,7 @@ interface SampleParameter {
   unit: string;
   normalRange: string;
   result: string;
+  group?: string;
 }
 
 interface TestParameter {
@@ -88,6 +89,7 @@ interface TestParameter {
   unit: string;
   normalRange: string;
   remarks: string;
+  group?: string;
 }
 
 interface LabTest {
@@ -593,6 +595,7 @@ const labTests: LabTestCategory[] = [
             unit: "ml",
             normalRange: "1.5-5.0",
             result: "",
+            group: "Physical Examination",
           },
           {
             id: "2",
@@ -600,14 +603,23 @@ const labTests: LabTestCategory[] = [
             unit: "",
             normalRange: "White/Grey",
             result: "",
+            group: "Physical Examination",
           },
-          { id: "3", name: "pH", unit: "", normalRange: "7.2-8.0", result: "" },
+          {
+            id: "3",
+            name: "pH",
+            unit: "",
+            normalRange: "7.2-8.0",
+            result: "",
+            group: "Physical Examination",
+          },
           {
             id: "4",
             name: "Liquefaction Time",
             unit: "min",
             normalRange: "<60",
             result: "",
+            group: "Physical Examination",
           },
           {
             id: "5",
@@ -615,6 +627,7 @@ const labTests: LabTestCategory[] = [
             unit: "million/ml",
             normalRange: "15-200",
             result: "",
+            group: "Microscopic Examination",
           },
           {
             id: "6",
@@ -622,6 +635,7 @@ const labTests: LabTestCategory[] = [
             unit: "%",
             normalRange: ">32",
             result: "",
+            group: "Microscopic Examination",
           },
           {
             id: "7",
@@ -629,13 +643,7 @@ const labTests: LabTestCategory[] = [
             unit: "%",
             normalRange: ">40",
             result: "",
-          },
-          {
-            id: "8",
-            name: "Morphology",
-            unit: "%",
-            normalRange: ">4",
-            result: "",
+            group: "Microscopic Examination",
           },
           {
             id: "9",
@@ -643,6 +651,7 @@ const labTests: LabTestCategory[] = [
             unit: "/HPF",
             normalRange: "<5",
             result: "",
+            group: "Microscopic Examination",
           },
           {
             id: "10",
@@ -650,6 +659,15 @@ const labTests: LabTestCategory[] = [
             unit: "/HPF",
             normalRange: "<2",
             result: "",
+            group: "Microscopic Examination",
+          },
+          {
+            id: "8",
+            name: "Morphology",
+            unit: "%",
+            normalRange: ">4",
+            result: "",
+            group: "Morphology",
           },
         ],
       },
@@ -1770,6 +1788,7 @@ export default function CreateDirectTestPage() {
             unit: p.unit || "",
             normalRange: p.normalRange || "",
             result: "",
+            group: (p as any).group || (p as any).section || undefined,
           })),
         });
         grouped.set(categoryName, current);
@@ -2103,6 +2122,7 @@ export default function CreateDirectTestPage() {
                 unit: p.unit,
                 normalRange: p.normalRange,
                 remarks: "",
+                group: p.group,
               }))
             : [
                 {
@@ -2289,6 +2309,7 @@ export default function CreateDirectTestPage() {
               unit: p.unit,
               normalRange: p.normalRange,
               remarks: p.remarks,
+              group: p.group,
             })),
           },
           batchId,
@@ -2767,6 +2788,17 @@ export default function CreateDirectTestPage() {
           <div className="mt-6 space-y-6">
             {selectedTests.map((test) => {
               const params = testParameters[test.id] || [];
+              const rows = params.flatMap((param, index) => {
+                const group = param.group?.trim();
+                const prevGroup = params[index - 1]?.group?.trim();
+                const needsHeader = group && group !== prevGroup;
+                return needsHeader
+                  ? [
+                      { type: "group" as const, label: group },
+                      { type: "param" as const, param },
+                    ]
+                  : [{ type: "param" as const, param }];
+              });
               return (
                 <Card
                   key={test.id}
@@ -2802,100 +2834,111 @@ export default function CreateDirectTestPage() {
                             <TableHead>Unit</TableHead>
                             <TableHead>Normal Range</TableHead>
                             <TableHead>Remarks</TableHead>
-                            <TableHead className="w-[70px]">Action</TableHead>
+                            <TableHead className="w-17.5">Action</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {params.map((param) => (
-                            <TableRow key={param.id}>
-                              <TableCell>
-                                <Input
-                                  readOnly
-                                  value={param.name}
-                                  onChange={(e) =>
-                                    updateTestParameter(
-                                      test.id,
-                                      param.id,
-                                      "name",
-                                      e.target.value,
-                                    )
-                                  }
-                                  placeholder="e.g. Hemoglobin"
-                                />
-                              </TableCell>
-                              <TableCell>
-                                <Input
-                                  value={param.value}
-                                  onChange={(e) =>
-                                    updateTestParameter(
-                                      test.id,
-                                      param.id,
-                                      "value",
-                                      e.target.value,
-                                    )
-                                  }
-                                  placeholder="Result"
-                                />
-                              </TableCell>
-                              <TableCell>
-                                <Input
-                                  value={param.unit}
-                                  onChange={(e) =>
-                                    updateTestParameter(
-                                      test.id,
-                                      param.id,
-                                      "unit",
-                                      e.target.value,
-                                    )
-                                  }
-                                  placeholder="Unit"
-                                />
-                              </TableCell>
-                              <TableCell>
-                                <Input
-                                  readOnly
-                                  value={param.normalRange}
-                                  onChange={(e) =>
-                                    updateTestParameter(
-                                      test.id,
-                                      param.id,
-                                      "normalRange",
-                                      e.target.value,
-                                    )
-                                  }
-                                  placeholder="Normal range"
-                                />
-                              </TableCell>
-                              <TableCell>
-                                <Input
-                                  value={param.remarks}
-                                  onChange={(e) =>
-                                    updateTestParameter(
-                                      test.id,
-                                      param.id,
-                                      "remarks",
-                                      e.target.value,
-                                    )
-                                  }
-                                  placeholder="Remarks"
-                                />
-                              </TableCell>
-                              <TableCell>
-                                <Button
-                                  type="button"
-                                  onClick={() =>
-                                    removeTestParameter(test.id, param.id)
-                                  }
-                                  variant="ghost"
-                                  size="sm"
-                                  className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
-                                  disabled={params.length === 1}
+                          {rows.map((row, index) =>
+                            row.type === "group" ? (
+                              <TableRow key={`group-${row.label}-${index}`}>
+                                <TableCell
+                                  colSpan={6}
+                                  className="bg-muted/40 font-semibold text-sm text-foreground"
                                 >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </TableCell>
-                            </TableRow>
-                          ))}
+                                  {row.label}
+                                </TableCell>
+                              </TableRow>
+                            ) : (
+                              <TableRow key={row.param.id}>
+                                <TableCell>
+                                  <Input
+                                    readOnly
+                                    value={row.param.name}
+                                    onChange={(e) =>
+                                      updateTestParameter(
+                                        test.id,
+                                        row.param.id,
+                                        "name",
+                                        e.target.value,
+                                      )
+                                    }
+                                    placeholder="e.g. Hemoglobin"
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  <Input
+                                    value={row.param.value}
+                                    onChange={(e) =>
+                                      updateTestParameter(
+                                        test.id,
+                                        row.param.id,
+                                        "value",
+                                        e.target.value,
+                                      )
+                                    }
+                                    placeholder="Result"
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  <Input
+                                    value={row.param.unit}
+                                    onChange={(e) =>
+                                      updateTestParameter(
+                                        test.id,
+                                        row.param.id,
+                                        "unit",
+                                        e.target.value,
+                                      )
+                                    }
+                                    placeholder="Unit"
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  <Input
+                                    readOnly
+                                    value={row.param.normalRange}
+                                    onChange={(e) =>
+                                      updateTestParameter(
+                                        test.id,
+                                        row.param.id,
+                                        "normalRange",
+                                        e.target.value,
+                                      )
+                                    }
+                                    placeholder="Normal range"
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  <Input
+                                    value={row.param.remarks}
+                                    onChange={(e) =>
+                                      updateTestParameter(
+                                        test.id,
+                                        row.param.id,
+                                        "remarks",
+                                        e.target.value,
+                                      )
+                                    }
+                                    placeholder="Remarks"
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  <Button
+                                    type="button"
+                                    onClick={() =>
+                                      removeTestParameter(test.id, row.param.id)
+                                    }
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
+                                    disabled={params.length === 1}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            ),
+                          )}
                         </TableBody>
                       </Table>
                     </div>
@@ -2921,7 +2964,7 @@ export default function CreateDirectTestPage() {
             disabled={
               submitting || !selectedPatient || selectedTests.length === 0
             }
-            className="min-w-[200px]"
+            className="min-w-50"
           >
             {submitting ? (
               <>

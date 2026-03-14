@@ -480,6 +480,7 @@ export const labTestTemplates = [
         parameterName: "Color",
         unit: "",
         normalRange: "Pale yellow to amber",
+        group: "Physical Examination",
         methodology: "Visual examination",
       },
       {
@@ -487,6 +488,7 @@ export const labTestTemplates = [
         parameterName: "Appearance",
         unit: "",
         normalRange: "Clear",
+        group: "Physical Examination",
         methodology: "Visual examination",
       },
       {
@@ -494,6 +496,7 @@ export const labTestTemplates = [
         parameterName: "pH",
         unit: "",
         normalRange: "4.5-8.0",
+        group: "Physical Examination",
         methodology: "Dipstick",
       },
       {
@@ -501,6 +504,7 @@ export const labTestTemplates = [
         parameterName: "Specific Gravity",
         unit: "",
         normalRange: "1.003-1.035",
+        group: "Physical Examination",
         methodology: "Dipstick",
       },
       {
@@ -508,6 +512,7 @@ export const labTestTemplates = [
         parameterName: "Protein",
         unit: "",
         normalRange: "Negative",
+        group: "Chemical Examination",
         methodology: "Dipstick",
       },
       {
@@ -515,6 +520,7 @@ export const labTestTemplates = [
         parameterName: "Glucose",
         unit: "",
         normalRange: "Negative",
+        group: "Chemical Examination",
         methodology: "Dipstick",
       },
       {
@@ -522,6 +528,7 @@ export const labTestTemplates = [
         parameterName: "Ketones",
         unit: "",
         normalRange: "Negative",
+        group: "Chemical Examination",
         methodology: "Dipstick",
       },
       {
@@ -529,6 +536,7 @@ export const labTestTemplates = [
         parameterName: "Bilirubin",
         unit: "",
         normalRange: "Negative",
+        group: "Chemical Examination",
         methodology: "Dipstick",
       },
       {
@@ -536,6 +544,7 @@ export const labTestTemplates = [
         parameterName: "Red Blood Cells",
         unit: "/HPF",
         normalRange: "0-2",
+        group: "Microscopic Examination",
         methodology: "Microscopic examination",
       },
       {
@@ -543,6 +552,107 @@ export const labTestTemplates = [
         parameterName: "White Blood Cells",
         unit: "/HPF",
         normalRange: "0-5",
+        group: "Microscopic Examination",
+        methodology: "Microscopic examination",
+      },
+    ],
+  },
+
+  // CLINICAL PATHOLOGY TESTS
+  {
+    testCode: "SEMEN",
+    testName: "Semen Analysis",
+    category: "other",
+    description:
+      "Semen analysis evaluates physical and microscopic parameters of semen. Used to assess male fertility and reproductive health.",
+    specimenType: ["other"],
+    containerType: ["Sterile container"],
+    sampleVolume: "2-5 mL",
+    fastingRequired: false,
+    preparationInstructions:
+      "Maintain 2-7 days of abstinence before sample collection. Collect the entire ejaculate in a sterile container.",
+    turnaroundTime: 24,
+    basePrice: 800,
+    active: true,
+    parameters: [
+      {
+        parameterCode: "VOLUME",
+        parameterName: "Volume",
+        unit: "mL",
+        normalRange: "1.5-5.0",
+        group: "Physical Examination",
+        methodology: "Visual examination",
+      },
+      {
+        parameterCode: "COLOR",
+        parameterName: "Color",
+        unit: "",
+        normalRange: "White/Grey",
+        group: "Physical Examination",
+        methodology: "Visual examination",
+      },
+      {
+        parameterCode: "PH",
+        parameterName: "pH",
+        unit: "",
+        normalRange: "7.2-8.0",
+        group: "Physical Examination",
+        methodology: "pH paper",
+      },
+      {
+        parameterCode: "LIQUEFACTION",
+        parameterName: "Liquefaction Time",
+        unit: "min",
+        normalRange: "<60",
+        group: "Physical Examination",
+        methodology: "Observation",
+      },
+      {
+        parameterCode: "COUNT",
+        parameterName: "Sperm Count",
+        unit: "million/mL",
+        normalRange: "15-200",
+        group: "Microscopic Examination",
+        methodology: "Microscopic examination",
+      },
+      {
+        parameterCode: "MOTILITY_P",
+        parameterName: "Motility (Progressive)",
+        unit: "%",
+        normalRange: ">32",
+        group: "Microscopic Examination",
+        methodology: "Microscopic examination",
+      },
+      {
+        parameterCode: "MOTILITY_T",
+        parameterName: "Motility (Total)",
+        unit: "%",
+        normalRange: ">40",
+        group: "Microscopic Examination",
+        methodology: "Microscopic examination",
+      },
+      {
+        parameterCode: "PUS",
+        parameterName: "Pus Cells",
+        unit: "/HPF",
+        normalRange: "<5",
+        group: "Microscopic Examination",
+        methodology: "Microscopic examination",
+      },
+      {
+        parameterCode: "RBC",
+        parameterName: "RBCs",
+        unit: "/HPF",
+        normalRange: "<2",
+        group: "Microscopic Examination",
+        methodology: "Microscopic examination",
+      },
+      {
+        parameterCode: "MORPH",
+        parameterName: "Morphology",
+        unit: "%",
+        normalRange: ">4",
+        group: "Morphology",
         methodology: "Microscopic examination",
       },
     ],
@@ -801,6 +911,7 @@ export const labTestTemplates = [
         parameterName: "Color",
         unit: "",
         normalRange: "Brown",
+        group: "Physical Examination",
         methodology: "Visual examination",
       },
       {
@@ -808,6 +919,7 @@ export const labTestTemplates = [
         parameterName: "Consistency",
         unit: "",
         normalRange: "Formed",
+        group: "Physical Examination",
         methodology: "Visual examination",
       },
       {
@@ -815,6 +927,7 @@ export const labTestTemplates = [
         parameterName: "Ova/Cysts",
         unit: "",
         normalRange: "Not seen",
+        group: "Microscopic Examination",
         methodology: "Microscopic examination",
       },
       {
@@ -822,6 +935,7 @@ export const labTestTemplates = [
         parameterName: "Parasites",
         unit: "",
         normalRange: "Not seen",
+        group: "Microscopic Examination",
         methodology: "Microscopic examination",
       },
       {
@@ -829,6 +943,7 @@ export const labTestTemplates = [
         parameterName: "Red Blood Cells",
         unit: "/HPF",
         normalRange: "0-2",
+        group: "Microscopic Examination",
         methodology: "Microscopic examination",
       },
       {
@@ -836,6 +951,7 @@ export const labTestTemplates = [
         parameterName: "White Blood Cells",
         unit: "/HPF",
         normalRange: "0-5",
+        group: "Microscopic Examination",
         methodology: "Microscopic examination",
       },
     ],

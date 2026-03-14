@@ -285,6 +285,7 @@ export async function POST(request: NextRequest) {
         normalRange: param.normalRange || "",
         remarks: param.remarks || "",
         flag: param.flag || "normal",
+        group: param.group || undefined,
       }));
     }
 
