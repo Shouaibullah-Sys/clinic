@@ -186,12 +186,14 @@ export async function DELETE(
       );
     }
 
-    // Only admins can delete templates
-    if (auth.userRole !== "admin") {
+    // Only admins and lab technicians can delete templates
+    const allowedRoles = ["admin", "lab_technician"];
+    if (!hasRequiredRole(auth.userRole, allowedRoles)) {
       return NextResponse.json(
         {
           success: false,
-          error: "Forbidden. Only admins can delete lab test templates.",
+          error:
+            "Forbidden. Only admins and lab technicians can delete lab test templates.",
         },
         { status: 403 },
       );
