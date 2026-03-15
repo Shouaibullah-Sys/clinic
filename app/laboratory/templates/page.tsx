@@ -3,7 +3,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Card,
   CardContent,
@@ -120,6 +120,7 @@ interface LabTestTemplate {
 
 export default function LabTemplatesPage() {
   const { accessToken } = useAuthStore();
+  const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -897,7 +898,17 @@ export default function LabTemplatesPage() {
         template={selectedTemplate}
         open={showEditDialog}
         onOpenChange={setShowEditDialog}
-        onSuccess={() => {
+        onSuccess={(updatedTemplate) => {
+          queryClient.setQueryData<LabTestTemplate[]>(
+            ["laboratory-templates", accessToken],
+            (oldData) =>
+              oldData?.map((template) =>
+                template._id === updatedTemplate._id
+                  ? updatedTemplate
+                  : template,
+              ) || oldData,
+          );
+          setSelectedTemplate(updatedTemplate);
           fetchTemplates();
           setSuccess("Template updated successfully");
         }}

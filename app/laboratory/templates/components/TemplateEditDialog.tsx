@@ -70,7 +70,7 @@ interface TemplateEditDialogProps {
   template: LabTestTemplate | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSuccess: () => void;
+  onSuccess: (updatedTemplate: LabTestTemplate) => void;
 }
 
 // Category options
@@ -263,6 +263,28 @@ export function TemplateEditDialog({
       setError("At least one specimen type is required");
       return;
     }
+    const invalidParamIndex = formData.parameters.findIndex((p) => {
+      const hasAny =
+        p.parameterCode.trim() ||
+        p.parameterName.trim() ||
+        p.normalRange.trim() ||
+        p.unit.trim() ||
+        p.methodology.trim() ||
+        p.criticalLow.trim() ||
+        p.criticalHigh.trim();
+      if (!hasAny) return false;
+      return (
+        !p.parameterCode.trim() ||
+        !p.parameterName.trim() ||
+        !p.normalRange.trim()
+      );
+    });
+    if (invalidParamIndex !== -1) {
+      setError(
+        `Parameter #${invalidParamIndex + 1} requires code, name, and normal range.`,
+      );
+      return;
+    }
 
     try {
       setLoading(true);
@@ -276,13 +298,13 @@ export function TemplateEditDialog({
         parameters: formData.parameters
           .filter((p) => p.parameterName.trim() || p.normalRange.trim())
           .map((p) => ({
-            parameterCode: p.parameterCode || undefined,
-            parameterName: p.parameterName || undefined,
-            unit: p.unit || undefined,
-            normalRange: p.normalRange || undefined,
+            parameterCode: p.parameterCode.trim() || undefined,
+            parameterName: p.parameterName.trim() || undefined,
+            unit: p.unit.trim() || undefined,
+            normalRange: p.normalRange.trim() || undefined,
             criticalLow: p.criticalLow ? Number(p.criticalLow) : undefined,
             criticalHigh: p.criticalHigh ? Number(p.criticalHigh) : undefined,
-            methodology: p.methodology || undefined,
+            methodology: p.methodology.trim() || undefined,
           })),
       };
 
@@ -299,15 +321,25 @@ export function TemplateEditDialog({
       );
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to update template");
+        const errorData = await response.json().catch(() => ({}));
+        const details = Array.isArray(errorData.details)
+          ? ` ${errorData.details.join(", ")}`
+          : "";
+        const message =
+          errorData.message ||
+          errorData.error ||
+          `Failed to update template.${details}`;
+        throw new Error(message);
       }
+
+      const responseData = await response.json().catch(() => ({}));
+      const updatedTemplate = responseData.data || template;
 
       setSuccess("Template updated successfully");
 
       // Close dialog after brief delay to show success message
       setTimeout(() => {
-        onSuccess();
+        onSuccess(updatedTemplate);
         onOpenChange(false);
       }, 1000);
     } catch (err: any) {

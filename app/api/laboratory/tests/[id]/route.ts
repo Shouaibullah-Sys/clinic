@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
 import { LabTest } from "@/lib/models/LabTest";
 import { authenticateRequest, canAccessLaboratory } from "@/lib/auth";
+import mongoose from "mongoose";
 
 export async function GET(
   request: NextRequest,
@@ -38,6 +39,13 @@ export async function GET(
     console.log(
       `Lab test requested by ${auth.userRole} ${auth.userName}: ${testId}`,
     );
+
+    if (!mongoose.Types.ObjectId.isValid(testId)) {
+      return NextResponse.json(
+        { success: false, error: "Invalid lab test id" },
+        { status: 400 },
+      );
+    }
 
     // Find the test by ID
     const test = await LabTest.findById(testId)
