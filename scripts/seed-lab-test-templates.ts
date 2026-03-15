@@ -1,6 +1,9 @@
 // scripts/seed-lab-test-templates.ts
 // Seed script to populate lab test templates in the database
 
+import dotenv from "dotenv";
+dotenv.config({ path: ".env.local" });
+
 import mongoose from "mongoose";
 import { LabTestTemplate } from "../lib/models/LabTestTemplate";
 import { labTestTemplates } from "../data/lab-test-templates";

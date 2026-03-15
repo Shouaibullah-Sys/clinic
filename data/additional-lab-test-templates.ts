@@ -388,7 +388,6 @@ const rawGroups: RawGroup[] = [
       { id: "15.5", name: "Blood Culture and Sensitivity", unit: "", normalRange: "No growth", price: "1500" },
       { id: "15.6", name: "Urine Culture and Sensitivity", unit: "CFU/mL", normalRange: "<10,000", price: "1200" },
       { id: "15.7", name: "Stool Culture and Sensitivity", unit: "", normalRange: "No pathogens", price: "1200" },
-      { id: "15.8", name: "Semen Culture and Sensitivity", unit: "", normalRange: "No growth", price: "1200" },
       { id: "15.9", name: "Vaginal Culture and Sensitivity", unit: "", normalRange: "Normal flora", price: "1200" },
       { id: "15.10", name: "Throat Culture and Sensitivity", unit: "", normalRange: "Normal flora", price: "1200" },
       { id: "15.11", name: "Wound /Pus Swab Culture and Sensitivity", unit: "", normalRange: "No growth", price: "1200" },

@@ -122,6 +122,40 @@
     ]
   },
   {
+    "testCode": "BG",
+    "testName": "Blood Group (ABO & Rh)",
+    "category": "hematology",
+    "description": "Blood group testing to determine ABO type and Rh factor for transfusion compatibility and clinical use.",
+    "specimenType": [
+      "blood"
+    ],
+    "containerType": [
+      "EDTA tube"
+    ],
+    "sampleVolume": "2 mL",
+    "fastingRequired": false,
+    "preparationInstructions": "No special preparation required",
+    "turnaroundTime": 24,
+    "basePrice": 300,
+    "active": true,
+    "parameters": [
+      {
+        "parameterCode": "ABO",
+        "parameterName": "ABO Blood Group",
+        "unit": "",
+        "normalRange": "A, B, AB, O",
+        "methodology": "Slide/tube agglutination"
+      },
+      {
+        "parameterCode": "RH",
+        "parameterName": "Rh Factor (D)",
+        "unit": "",
+        "normalRange": "Positive or Negative",
+        "methodology": "Slide/tube agglutination"
+      }
+    ]
+  },
+  {
     "testCode": "FBS",
     "testName": "Fasting Blood Sugar",
     "category": "biochemistry",
@@ -5481,30 +5515,150 @@
     ]
   },
   {
-    "testCode": "LT15_8",
-    "testName": "Semen Culture and Sensitivity",
-    "category": "microbiology",
-    "description": "Semen culture and sensitivity detects infection and guides antibiotics.\n\nInterpretations:\nGrowth: Organism identified.\nNo growth: No bacterial infection detected.",
+    "testCode": "SEMEN",
+    "testName": "Semen Analysis",
+    "category": "other",
+    "description": "Complete semen analysis including physical examination, microscopic examination, and morphology.",
     "specimenType": [
       "other"
     ],
     "containerType": [
-      "Sterile container",
-      "Swab transport medium"
+      "Sterile container"
     ],
-    "sampleVolume": "Varies by specimen",
+    "sampleVolume": "2-5 mL",
     "fastingRequired": false,
-    "preparationInstructions": "Collect specimen aseptically before starting antibiotics whenever possible.",
-    "turnaroundTime": 72,
-    "basePrice": 1200,
+    "preparationInstructions": "Maintain 2-7 days of abstinence before sample collection. Collect the entire ejaculate in a sterile container.",
+    "turnaroundTime": 24,
+    "basePrice": 800,
     "active": true,
     "parameters": [
       {
-        "parameterCode": "P15_8",
-        "parameterName": "Semen Culture and Sensitivity",
+        "parameterCode": "LIQUEFACTION_TIME",
+        "parameterName": "Liquefaction Time",
+        "unit": "min",
+        "normalRange": "10-30",
+        "group": "Physical Examination",
+        "methodology": "Physical examination"
+      },
+      {
+        "parameterCode": "ABSTINENCE_DAYS",
+        "parameterName": "Abstinence Days",
+        "unit": "days",
+        "normalRange": "3-7",
+        "group": "Physical Examination",
+        "methodology": "History"
+      },
+      {
+        "parameterCode": "CONSISTENCY",
+        "parameterName": "Consistency",
         "unit": "",
-        "normalRange": "No growth",
-        "methodology": "Microbiology (Culture and Sensitivity)"
+        "normalRange": "Thick",
+        "group": "Physical Examination",
+        "methodology": "Visual examination"
+      },
+      {
+        "parameterCode": "VOLUME",
+        "parameterName": "Volume",
+        "unit": "mL",
+        "normalRange": ">2.5",
+        "group": "Physical Examination",
+        "methodology": "Physical examination"
+      },
+      {
+        "parameterCode": "COLOR",
+        "parameterName": "Colour",
+        "unit": "",
+        "normalRange": "Gray White",
+        "group": "Physical Examination",
+        "methodology": "Visual examination"
+      },
+      {
+        "parameterCode": "PH",
+        "parameterName": "pH",
+        "unit": "",
+        "normalRange": "7.5-8.0",
+        "group": "Physical Examination",
+        "methodology": "pH paper"
+      },
+      {
+        "parameterCode": "TOTAL_SPERM_COUNT",
+        "parameterName": "Total Sperm Count",
+        "unit": "million/mL",
+        "normalRange": ">15",
+        "group": "Microscopic Examination",
+        "methodology": "Microscopic examination"
+      },
+      {
+        "parameterCode": "ACTIVE",
+        "parameterName": "Active",
+        "unit": "%",
+        "normalRange": "N/A",
+        "group": "Microscopic Examination",
+        "methodology": "Microscopic examination"
+      },
+      {
+        "parameterCode": "SLUGGISH",
+        "parameterName": "Sluggish",
+        "unit": "%",
+        "normalRange": "N/A",
+        "group": "Microscopic Examination",
+        "methodology": "Microscopic examination"
+      },
+      {
+        "parameterCode": "DEAD",
+        "parameterName": "Dead",
+        "unit": "%",
+        "normalRange": "N/A",
+        "group": "Microscopic Examination",
+        "methodology": "Microscopic examination"
+      },
+      {
+        "parameterCode": "AGGLUTINATION",
+        "parameterName": "Agglutination",
+        "unit": "%",
+        "normalRange": "Negative",
+        "group": "Microscopic Examination",
+        "methodology": "Microscopic examination"
+      },
+      {
+        "parameterCode": "PUS_CELLS",
+        "parameterName": "Pus Cells",
+        "unit": "/HPF",
+        "normalRange": "Nil",
+        "group": "Microscopic Examination",
+        "methodology": "Microscopic examination"
+      },
+      {
+        "parameterCode": "RBC",
+        "parameterName": "Red Blood Cells",
+        "unit": "/HPF",
+        "normalRange": "Nil",
+        "group": "Microscopic Examination",
+        "methodology": "Microscopic examination"
+      },
+      {
+        "parameterCode": "EPITHELIAL_CELLS",
+        "parameterName": "Epithelial Cells",
+        "unit": "/HPF",
+        "normalRange": "Nil",
+        "group": "Microscopic Examination",
+        "methodology": "Microscopic examination"
+      },
+      {
+        "parameterCode": "NORMAL_MORPHOLOGY",
+        "parameterName": "Normal Morphology",
+        "unit": "%",
+        "normalRange": ">40",
+        "group": "Morphology",
+        "methodology": "Microscopic examination"
+      },
+      {
+        "parameterCode": "ABNORMAL_MORPHOLOGY",
+        "parameterName": "Abnormal Morphology",
+        "unit": "%",
+        "normalRange": "N/A",
+        "group": "Morphology",
+        "methodology": "Microscopic examination"
       }
     ]
   },
