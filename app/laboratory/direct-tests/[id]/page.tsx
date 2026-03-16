@@ -147,6 +147,7 @@ interface DirectLabTest {
     unit?: string;
     normalRange?: string;
     description?: string;
+    group?: string;
   }>;
   notes?: string;
 }
