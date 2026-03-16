@@ -48,6 +48,7 @@ import {
   Layers,
   Calendar,
   CreditCard,
+  Pencil,
 } from "lucide-react";
 import Link from "next/link";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -524,6 +525,17 @@ export default function LaboratoryTestsPage() {
                               View
                             </Link>
                           </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            asChild
+                            className="h-8 px-3"
+                          >
+                            <Link href={`/laboratory/tests/${test._id}?edit=1`}>
+                              <Pencil className="h-3 w-3 mr-1" />
+                              Edit
+                            </Link>
+                          </Button>
 
                           {canPrintTest(test) && (
                             <LabTestPDFGenerator
@@ -710,6 +722,17 @@ export default function LaboratoryTestsPage() {
                     <Link href={`/laboratory/tests/${test._id}`}>
                       <Eye className="h-4 w-4 mr-1" />
                       View
+                    </Link>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    asChild
+                    className="flex-1"
+                  >
+                    <Link href={`/laboratory/tests/${test._id}?edit=1`}>
+                      <Pencil className="h-4 w-4 mr-1" />
+                      Edit
                     </Link>
                   </Button>
 

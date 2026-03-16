@@ -58,10 +58,13 @@ export async function PUT(
       );
     }
 
-    // Check if test is already completed
-    if (test.status === "completed" || test.status === "reported") {
+    // Prevent edits after finalization
+    if (test.finalized) {
       return NextResponse.json(
-        { success: false, error: "Test results have already been entered" },
+        {
+          success: false,
+          error: "Test has been finalized and results cannot be edited",
+        },
         { status: 400 },
       );
     }

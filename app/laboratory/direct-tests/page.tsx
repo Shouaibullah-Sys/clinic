@@ -46,6 +46,7 @@ import {
   Calendar,
   Hash,
   Layers,
+  Pencil,
 } from "lucide-react";
 import Link from "next/link";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -876,6 +877,19 @@ export default function DirectTestsPage() {
                               View
                             </Link>
                           </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            asChild
+                            className="h-8 px-3"
+                          >
+                            <Link
+                              href={`/laboratory/direct-tests/${test._id}?edit=1`}
+                            >
+                              <Pencil className="h-3 w-3 mr-1" />
+                              Edit
+                            </Link>
+                          </Button>
                           {canPrintPaymentSlip(test) && (
                             <Button
                               variant="outline"
@@ -1061,6 +1075,17 @@ export default function DirectTestsPage() {
                     <Link href={`/laboratory/direct-tests/${test._id}`}>
                       <Eye className="h-4 w-4 mr-1" />
                       View Details
+                    </Link>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    asChild
+                    className="flex-1"
+                  >
+                    <Link href={`/laboratory/direct-tests/${test._id}?edit=1`}>
+                      <Pencil className="h-4 w-4 mr-1" />
+                      Edit
                     </Link>
                   </Button>
                   {canPrintPaymentSlip(test) && (

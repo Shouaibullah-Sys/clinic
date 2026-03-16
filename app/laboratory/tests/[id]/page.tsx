@@ -3,13 +3,22 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import Link from "next/link";
 import { useAuthStore } from "@/store/useAuthStore";
 import LabTestPDFGenerator from "@/components/laboratory/LabTestPDFGenerator";
@@ -24,6 +33,7 @@ import {
   Clock,
   RefreshCw,
   Printer,
+  Loader2,
   Calendar,
   Hash,
   CreditCard,
@@ -31,6 +41,12 @@ import {
   Microscope,
   Phone,
   IdCard,
+  Pencil,
+  Save,
+  X,
+  Plus,
+  Trash2,
+  FileText,
 } from "lucide-react";
 
 interface LabTest {
@@ -47,8 +63,24 @@ interface LabTest {
   orderedAt: string;
   charges?: any;
   specimen?: any;
-  results?: any;
+  results?: {
+    parameters: Array<{
+      name: string;
+      value: string | number;
+      unit?: string;
+      normalRange?: string;
+      group?: string;
+      flag?: "normal" | "low" | "high" | "critical";
+      remarks?: string;
+    }>;
+    interpretation?: string;
+    reportedBy?: { _id: string; name: string } | null;
+    reportedAt?: string;
+    verifiedBy?: { _id: string; name: string } | null;
+    verifiedAt?: string;
+  };
   category?: string;
+  finalized?: boolean;
 }
 
 // Safe access functions
@@ -97,14 +129,45 @@ const safeCharges = (charges: any) => {
 export default function TestDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { accessToken } = useAuthStore();
   const [test, setTest] = useState<LabTest | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isEditingResults, setIsEditingResults] = useState(false);
+  const [editParameters, setEditParameters] = useState<EditableParameter[]>([]);
+  const [editInterpretation, setEditInterpretation] = useState("");
+  const [savingResults, setSavingResults] = useState(false);
+  const [templateParameters, setTemplateParameters] = useState<
+    Array<{
+      parameterName?: string;
+      name?: string;
+      unit?: string;
+      normalRange?: string;
+      group?: string;
+    }>
+  >([]);
+
+  type EditableParameter = {
+    id: string;
+    name: string;
+    value: string;
+    unit: string;
+    normalRange: string;
+    remarks: string;
+    group?: string;
+    flag?: "normal" | "low" | "high" | "critical";
+  };
 
   useEffect(() => {
     fetchTestDetails();
   }, [params.id]);
+
+  useEffect(() => {
+    if (searchParams.get("edit") === "1") {
+      setIsEditingResults(true);
+    }
+  }, [searchParams]);
 
   const fetchTestDetails = async () => {
     try {
@@ -136,6 +199,257 @@ export default function TestDetailPage() {
     }
   };
 
+  const makeParamId = () => Math.random().toString(36).slice(2, 10);
+
+  const buildInitialParameters = (
+    record: LabTest | null,
+    templateParams?: Array<{
+      parameterName?: string;
+      name?: string;
+      unit?: string;
+      normalRange?: string;
+      group?: string;
+    }>,
+  ): EditableParameter[] => {
+    if (!record) return [];
+    const resultParams = record.results?.parameters || [];
+    const fallbackParams = templateParams || [];
+
+    const normalizedResults = new Map(
+      resultParams.map((param) => [param.name.trim().toLowerCase(), param]),
+    );
+    const normalizedTemplateNames = new Set(
+      fallbackParams.map((param) =>
+        (param.parameterName || param.name || "").trim().toLowerCase(),
+      ),
+    );
+
+    if (fallbackParams.length > 0) {
+      const merged = fallbackParams.map((param) => {
+        const name = param.parameterName || param.name || "";
+        const match = normalizedResults.get(name.trim().toLowerCase());
+        return {
+          id: makeParamId(),
+          name,
+          value:
+            match?.value !== undefined && match?.value !== null
+              ? String(match.value)
+              : "",
+          unit: match?.unit || param.unit || "",
+          normalRange: match?.normalRange || param.normalRange || "",
+          remarks: match?.remarks || "",
+          group: match?.group || param.group || "",
+          flag: match?.flag || "normal",
+        };
+      });
+
+      const extraResults = resultParams.filter(
+        (param) =>
+          !normalizedTemplateNames.has(param.name.trim().toLowerCase()),
+      );
+
+      return [
+        ...merged,
+        ...extraResults.map((param) => ({
+          id: makeParamId(),
+          name: param.name || "",
+          value: param.value !== undefined ? String(param.value) : "",
+          unit: param.unit || "",
+          normalRange: param.normalRange || "",
+          remarks: param.remarks || "",
+          group: param.group || "",
+          flag: param.flag || "normal",
+        })),
+      ];
+    }
+
+    if (resultParams.length > 0) {
+      return resultParams.map((param) => ({
+        id: makeParamId(),
+        name: param.name || "",
+        value: param.value !== undefined ? String(param.value) : "",
+        unit: param.unit || "",
+        normalRange: param.normalRange || "",
+        remarks: param.remarks || "",
+        group: param.group || "",
+        flag: param.flag || "normal",
+      }));
+    }
+
+    return [
+      {
+        id: makeParamId(),
+        name: "",
+        value: "",
+        unit: "",
+        normalRange: "",
+        remarks: "",
+        group: "",
+        flag: "normal",
+      },
+    ];
+  };
+
+  useEffect(() => {
+    if (!test) return;
+    let isActive = true;
+
+    const hydrateParameters = async () => {
+      try {
+        const search = encodeURIComponent(test.testName);
+        const category = test.category
+          ? `&category=${encodeURIComponent(test.category)}`
+          : "";
+        const response = await fetch(
+          `/api/laboratory/templates?search=${search}${category}&active=true`,
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+            },
+          },
+        );
+
+        if (!response.ok) {
+          throw new Error("Failed to fetch template parameters");
+        }
+
+        const data = await response.json();
+        const templates = Array.isArray(data?.data) ? data.data : [];
+        const matchedTemplate = templates.find(
+          (template: any) =>
+            template.testName?.trim().toLowerCase() ===
+            test.testName.trim().toLowerCase(),
+        );
+        const templateParams =
+          matchedTemplate?.parameters?.map((param: any) => ({
+            parameterName: param.parameterName || param.parameterCode || "",
+            unit: param.unit || "",
+            normalRange: param.normalRange || "",
+            group: param.group || "",
+          })) || [];
+
+        if (!isActive) return;
+        setTemplateParameters(templateParams);
+        setEditParameters(buildInitialParameters(test, templateParams));
+        setEditInterpretation(test.results?.interpretation || "");
+      } catch (err) {
+        console.error("Failed to load template parameters:", err);
+        if (!isActive) return;
+        setTemplateParameters([]);
+        setEditParameters(buildInitialParameters(test));
+        setEditInterpretation(test.results?.interpretation || "");
+      }
+    };
+
+    hydrateParameters();
+
+    return () => {
+      isActive = false;
+    };
+  }, [test?._id, accessToken]);
+
+  const updateParameterField = (
+    id: string,
+    field: keyof Omit<EditableParameter, "id">,
+    value: string,
+  ) => {
+    setEditParameters((prev) =>
+      prev.map((param) =>
+        param.id === id ? { ...param, [field]: value } : param,
+      ),
+    );
+  };
+
+  const addParameter = () => {
+    setEditParameters((prev) => [
+      ...prev,
+      {
+        id: makeParamId(),
+        name: "",
+        value: "",
+        unit: "",
+        normalRange: "",
+        remarks: "",
+        group: "",
+        flag: "normal",
+      },
+    ]);
+  };
+
+  const removeParameter = (id: string) => {
+    setEditParameters((prev) => prev.filter((param) => param.id !== id));
+  };
+
+  const cancelEditResults = () => {
+    if (!test) return;
+    setEditParameters(
+      buildInitialParameters(
+        test,
+        templateParameters.length > 0 ? templateParameters : undefined,
+      ),
+    );
+    setEditInterpretation(test.results?.interpretation || "");
+    setIsEditingResults(false);
+  };
+
+  const handleSaveResults = async () => {
+    if (!test) return;
+
+    const cleanedParameters = editParameters
+      .filter((param) => param.name.trim() && param.value.trim())
+      .map((param) => ({
+        name: param.name.trim(),
+        value: param.value.trim(),
+        unit: param.unit.trim(),
+        normalRange: param.normalRange.trim(),
+        remarks: param.remarks.trim(),
+        group: param.group?.trim() || undefined,
+        flag: param.flag || "normal",
+      }));
+
+    if (cleanedParameters.length === 0) {
+      alert("Please add at least one parameter with a value.");
+      return;
+    }
+
+    try {
+      setSavingResults(true);
+      const response = await fetch(
+        `/api/laboratory/tests/${test._id}/results`,
+        {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            parameters: cleanedParameters,
+            interpretation: editInterpretation.trim(),
+          }),
+        },
+      );
+
+      if (response.status === 401) {
+        router.push("/login");
+        return;
+      }
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to save test results");
+      }
+
+      setTest(data.data);
+      setIsEditingResults(false);
+      alert("Test results updated successfully.");
+    } catch (err: any) {
+      console.error("Error saving test results:", err);
+      alert(err.message || "Failed to save test results");
+    } finally {
+      setSavingResults(false);
+    }
+  };
+
   // Use safe access functions
   const doctorInfo = safeDoctor(test?.doctor);
   const patientInfo = safePatient(test?.patient);
@@ -147,6 +461,12 @@ export default function TestDetailPage() {
     test?.status !== "cancelled";
 
   const canPrintTest = test?.collectionStatus === "collected";
+  const resultsLocked = !!test?.finalized;
+  const visibleResults =
+    test?.results?.parameters?.filter((param) => {
+      if (param.value === undefined || param.value === null) return false;
+      return String(param.value).trim() !== "";
+    }) || [];
 
   if (loading) {
     return (
@@ -664,6 +984,279 @@ export default function TestDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Test Results */}
+      <Card className="mb-6">
+        <CardHeader className="pb-3">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <CardTitle className="text-base md:text-lg">
+                Test Results
+              </CardTitle>
+              <p className="text-xs md:text-sm text-muted-foreground mt-1">
+                {visibleResults.length > 0
+                  ? `${visibleResults.length} parameter(s) recorded`
+                  : "No results recorded yet"}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              {isEditingResults ? (
+                <>
+                  <Button
+                    size="sm"
+                    onClick={handleSaveResults}
+                    disabled={savingResults || resultsLocked}
+                  >
+                    {savingResults ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="h-4 w-4 mr-2" />
+                        Save
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={cancelEditResults}
+                  >
+                    <X className="h-4 w-4 mr-2" />
+                    Cancel
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsEditingResults(true)}
+                  disabled={resultsLocked}
+                >
+                  <Pencil className="h-4 w-4 mr-2" />
+                  Edit Results
+                </Button>
+              )}
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {isEditingResults ? (
+            <div className="space-y-4">
+              <div className="rounded-md border overflow-x-auto">
+                <table className="w-full min-w-[980px]">
+                  <thead>
+                    <tr className="border-b bg-muted/50">
+                      <th className="text-left p-3 font-medium">Parameter</th>
+                      <th className="text-left p-3 font-medium">Value</th>
+                      <th className="text-left p-3 font-medium">Unit</th>
+                      <th className="text-left p-3 font-medium">
+                        Normal Range
+                      </th>
+                      <th className="text-left p-3 font-medium">Group</th>
+                      <th className="text-left p-3 font-medium">Flag</th>
+                      <th className="text-left p-3 font-medium">Remarks</th>
+                      <th className="text-left p-3 font-medium">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {editParameters.map((param) => (
+                      <tr key={param.id} className="border-b last:border-b-0">
+                        <td className="p-3">
+                          <Input
+                            value={param.name}
+                            onChange={(e) =>
+                              updateParameterField(
+                                param.id,
+                                "name",
+                                e.target.value,
+                              )
+                            }
+                            placeholder="Parameter name"
+                          />
+                        </td>
+                        <td className="p-3">
+                          <Input
+                            value={param.value}
+                            onChange={(e) =>
+                              updateParameterField(
+                                param.id,
+                                "value",
+                                e.target.value,
+                              )
+                            }
+                            placeholder="Value"
+                          />
+                        </td>
+                        <td className="p-3">
+                          <Input
+                            value={param.unit}
+                            onChange={(e) =>
+                              updateParameterField(
+                                param.id,
+                                "unit",
+                                e.target.value,
+                              )
+                            }
+                            placeholder="Unit"
+                          />
+                        </td>
+                        <td className="p-3">
+                          <Input
+                            value={param.normalRange}
+                            onChange={(e) =>
+                              updateParameterField(
+                                param.id,
+                                "normalRange",
+                                e.target.value,
+                              )
+                            }
+                            placeholder="Normal range"
+                          />
+                        </td>
+                        <td className="p-3">
+                          <Input
+                            value={param.group || ""}
+                            onChange={(e) =>
+                              updateParameterField(
+                                param.id,
+                                "group",
+                                e.target.value,
+                              )
+                            }
+                            placeholder="Group"
+                          />
+                        </td>
+                        <td className="p-3">
+                          <Select
+                            value={param.flag || "normal"}
+                            onValueChange={(value) =>
+                              updateParameterField(param.id, "flag", value)
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Flag" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="normal">Normal</SelectItem>
+                              <SelectItem value="low">Low</SelectItem>
+                              <SelectItem value="high">High</SelectItem>
+                              <SelectItem value="critical">Critical</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </td>
+                        <td className="p-3">
+                          <Input
+                            value={param.remarks}
+                            onChange={(e) =>
+                              updateParameterField(
+                                param.id,
+                                "remarks",
+                                e.target.value,
+                              )
+                            }
+                            placeholder="Remarks"
+                          />
+                        </td>
+                        <td className="p-3">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removeParameter(param.id)}
+                            disabled={editParameters.length <= 1}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <Button variant="outline" onClick={addParameter}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Parameter
+                </Button>
+                {resultsLocked && (
+                  <p className="text-sm text-muted-foreground">
+                    Results are finalized and cannot be edited.
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <h4 className="font-medium mb-2">Interpretation</h4>
+                <Textarea
+                  value={editInterpretation}
+                  onChange={(e) => setEditInterpretation(e.target.value)}
+                  placeholder="Add interpretation notes"
+                  className="min-h-[120px]"
+                />
+              </div>
+            </div>
+          ) : visibleResults.length > 0 ? (
+            <div className="space-y-4">
+              <div className="rounded-md border overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b bg-muted/50">
+                      <th className="text-left p-3 font-medium">Parameter</th>
+                      <th className="text-left p-3 font-medium">Value</th>
+                      <th className="text-left p-3 font-medium">Unit</th>
+                      <th className="text-left p-3 font-medium">
+                        Normal Range
+                      </th>
+                      <th className="text-left p-3 font-medium">Remarks</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibleResults.map((param, index) => (
+                      <tr
+                        key={`${param.name}-${index}`}
+                        className="border-b last:border-b-0"
+                      >
+                        <td className="p-3 font-medium">{param.name}</td>
+                        <td className="p-3">{param.value}</td>
+                        <td className="p-3">{param.unit || "-"}</td>
+                        <td className="p-3 text-sm text-muted-foreground">
+                          {param.normalRange || "-"}
+                        </td>
+                        <td className="p-3 text-sm">{param.remarks || "-"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {test.results?.interpretation && (
+                <div>
+                  <h4 className="font-medium mb-2">Interpretation</h4>
+                  <p className="text-sm text-muted-foreground">
+                    {test.results.interpretation}
+                  </p>
+                </div>
+              )}
+              {test.results?.reportedAt && (
+                <div className="text-sm text-muted-foreground">
+                  Reported on{" "}
+                  {new Date(test.results.reportedAt).toLocaleString()}
+                  {test.results.reportedBy && (
+                    <> by {test.results.reportedBy.name}</>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>No results recorded yet</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Quick Actions */}
       <Card>

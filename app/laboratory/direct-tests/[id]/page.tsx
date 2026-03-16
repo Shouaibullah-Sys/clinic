@@ -3,12 +3,21 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import Link from "next/link";
 import { useAuthStore } from "@/store/useAuthStore";
 import {
@@ -23,6 +32,11 @@ import {
   Loader2,
   CreditCard,
   BarChart3,
+  Pencil,
+  Save,
+  X,
+  Plus,
+  Trash2,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { toast } from "sonner";
@@ -127,17 +141,39 @@ interface DirectLabTest {
     } | null;
     verifiedAt?: string;
   };
+  testParameters?: Array<{
+    parameterName?: string;
+    name?: string;
+    unit?: string;
+    normalRange?: string;
+    description?: string;
+  }>;
   notes?: string;
 }
 
 export default function DirectTestDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { accessToken } = useAuthStore();
   const [test, setTest] = useState<DirectLabTest | null>(null);
+  const [isEditingResults, setIsEditingResults] = useState(false);
+  const [editParameters, setEditParameters] = useState<EditableParameter[]>([]);
+  const [editInterpretation, setEditInterpretation] = useState("");
+  const [savingResults, setSavingResults] = useState(false);
 
   type PatientSnapshot = NonNullable<DirectLabTest["patientSnapshot"]>;
   type PatientField = keyof DirectLabTest["patient"] | keyof PatientSnapshot;
+  type EditableParameter = {
+    id: string;
+    name: string;
+    value: string;
+    unit: string;
+    normalRange: string;
+    remarks: string;
+    group?: string;
+    flag?: "normal" | "low" | "high" | "critical";
+  };
 
   const readPatientField = (
     record: DirectLabTest | null,
@@ -155,6 +191,92 @@ export default function DirectTestDetailPage() {
     if (value === undefined || value === null) return fallback;
     if (typeof value === "string" && value.trim() === "") return fallback;
     return value as string;
+  };
+
+  const makeParamId = () => Math.random().toString(36).slice(2, 10);
+
+  const buildInitialParameters = (
+    record: DirectLabTest | null,
+    templateOverrides?: DirectLabTest["testParameters"],
+  ): EditableParameter[] => {
+    if (!record) return [];
+    const resultParams = record.results?.parameters || [];
+    const fallbackParams = templateOverrides || record.testParameters || [];
+    const normalizedResults = new Map(
+      resultParams.map((param) => [
+        param.name.trim().toLowerCase(),
+        param,
+      ]),
+    );
+    const normalizedTemplateNames = new Set(
+      fallbackParams.map((param) =>
+        (param.parameterName || param.name || "").trim().toLowerCase(),
+      ),
+    );
+
+    if (fallbackParams.length > 0) {
+      const merged = fallbackParams.map((param) => {
+        const name = param.parameterName || param.name || "";
+        const match = normalizedResults.get(name.trim().toLowerCase());
+        return {
+          id: makeParamId(),
+          name,
+          value:
+            match?.value !== undefined && match?.value !== null
+              ? String(match.value)
+              : "",
+          unit: match?.unit || param.unit || "",
+          normalRange: match?.normalRange || param.normalRange || "",
+          remarks: match?.remarks || "",
+          group: match?.group || param.group || "",
+          flag: match?.flag || "normal",
+        };
+      });
+
+      const extraResults = resultParams.filter(
+        (param) => !normalizedTemplateNames.has(param.name.trim().toLowerCase()),
+      );
+
+      return [
+        ...merged,
+        ...extraResults.map((param) => ({
+          id: makeParamId(),
+          name: param.name || "",
+          value: param.value !== undefined ? String(param.value) : "",
+          unit: param.unit || "",
+          normalRange: param.normalRange || "",
+          remarks: param.remarks || "",
+          group: param.group || "",
+          flag: param.flag || "normal",
+        })),
+      ];
+    }
+
+    if (resultParams.length > 0) {
+      return resultParams.map((param) => ({
+        id: makeParamId(),
+        name: param.name || "",
+        value: param.value !== undefined ? String(param.value) : "",
+        unit: param.unit || "",
+        normalRange: param.normalRange || "",
+        remarks: param.remarks || "",
+        group: param.group || "",
+        flag: param.flag || "normal",
+      }));
+    }
+
+    return [
+      {
+        id: makeParamId(),
+        name: "",
+        value: "",
+        unit: "",
+        normalRange: "",
+        remarks: "",
+        group: "",
+        flag: "normal",
+      },
+    ];
   };
 
   const normalizeForPdf = (record: DirectLabTest): PdfDirectLabTest => {
@@ -185,6 +307,75 @@ export default function DirectTestDetailPage() {
   useEffect(() => {
     fetchPaymentSetting();
   }, []);
+
+  useEffect(() => {
+    if (searchParams.get("edit") === "1") {
+      setIsEditingResults(true);
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (!test) return;
+    let isActive = true;
+
+    const hydrateParameters = async () => {
+      const existingTemplateParams = test.testParameters || [];
+      if (existingTemplateParams.length > 0) {
+        if (!isActive) return;
+        setEditParameters(buildInitialParameters(test, existingTemplateParams));
+        setEditInterpretation(test.results?.interpretation || "");
+        return;
+      }
+
+      try {
+        const search = encodeURIComponent(test.testName);
+        const category = test.category
+          ? `&category=${encodeURIComponent(test.category)}`
+          : "";
+        const response = await fetch(
+          `/api/laboratory/templates?search=${search}${category}&active=true`,
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+            },
+          },
+        );
+        if (!response.ok) {
+          throw new Error("Failed to fetch template parameters");
+        }
+        const data = await response.json();
+        const templates = Array.isArray(data?.data) ? data.data : [];
+        const matchedTemplate = templates.find(
+          (template: any) =>
+            template.testName?.trim().toLowerCase() ===
+            test.testName.trim().toLowerCase(),
+        );
+        const templateParams =
+          matchedTemplate?.parameters?.map((param: any) => ({
+            parameterName: param.parameterName || param.parameterCode || "",
+            unit: param.unit || "",
+            normalRange: param.normalRange || "",
+            description: param.methodology || "",
+            group: param.group || "",
+          })) || [];
+
+        if (!isActive) return;
+        setEditParameters(buildInitialParameters(test, templateParams));
+        setEditInterpretation(test.results?.interpretation || "");
+      } catch (err) {
+        console.error("Failed to load template parameters:", err);
+        if (!isActive) return;
+        setEditParameters(buildInitialParameters(test));
+        setEditInterpretation(test.results?.interpretation || "");
+      }
+    };
+
+    hydrateParameters();
+
+    return () => {
+      isActive = false;
+    };
+  }, [test?._id, accessToken]);
 
   const fetchTestDetails = async () => {
     try {
@@ -235,6 +426,101 @@ export default function DirectTestDetailPage() {
       }
     } catch (err) {
       console.error("Failed to fetch payment setting:", err);
+    }
+  };
+
+  const updateParameterField = (
+    id: string,
+    field: keyof Omit<EditableParameter, "id">,
+    value: string,
+  ) => {
+    setEditParameters((prev) =>
+      prev.map((param) => (param.id === id ? { ...param, [field]: value } : param)),
+    );
+  };
+
+  const addParameter = () => {
+    setEditParameters((prev) => [
+      ...prev,
+      {
+        id: makeParamId(),
+        name: "",
+        value: "",
+        unit: "",
+        normalRange: "",
+        remarks: "",
+        group: "",
+        flag: "normal",
+      },
+    ]);
+  };
+
+  const removeParameter = (id: string) => {
+    setEditParameters((prev) => prev.filter((param) => param.id !== id));
+  };
+
+  const cancelEditResults = () => {
+    if (!test) return;
+    setEditParameters(buildInitialParameters(test));
+    setEditInterpretation(test.results?.interpretation || "");
+    setIsEditingResults(false);
+  };
+
+  const handleSaveResults = async () => {
+    if (!test) return;
+
+    const cleanedParameters = editParameters
+      .filter((param) => param.name.trim() && param.value.trim())
+      .map((param) => ({
+        name: param.name.trim(),
+        value: param.value.trim(),
+        unit: param.unit.trim(),
+        normalRange: param.normalRange.trim(),
+        remarks: param.remarks.trim(),
+        group: param.group?.trim() || undefined,
+        flag: param.flag || "normal",
+      }));
+
+    if (cleanedParameters.length === 0) {
+      toast.error("Please add at least one parameter with a value.");
+      return;
+    }
+
+    try {
+      setSavingResults(true);
+      const response = await fetch(
+        `/api/laboratory/direct-tests/${test._id}/results`,
+        {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            parameters: cleanedParameters,
+            interpretation: editInterpretation.trim(),
+          }),
+        },
+      );
+
+      if (response.status === 401) {
+        router.push("/login");
+        return;
+      }
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to save test results");
+      }
+
+      setTest(data.data);
+      setIsEditingResults(false);
+      toast.success("Test results updated successfully.");
+    } catch (err: any) {
+      console.error("Error saving test results:", err);
+      toast.error(err.message || "Failed to save test results");
+    } finally {
+      setSavingResults(false);
     }
   };
 
@@ -322,6 +608,7 @@ export default function DirectTestDetailPage() {
     test?.status === "completed" ||
     test?.status === "reported" ||
     (test?.results?.parameters?.length || 0) > 0;
+  const resultsLocked = !!test?.finalized;
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat("en-IN", {
@@ -760,7 +1047,7 @@ export default function DirectTestDetailPage() {
 
       {/* Test Results */}
       <div className="border rounded-lg overflow-hidden mt-6">
-        <div className="bg-muted/50 px-4 py-3 border-b">
+        <div className="bg-muted/50 px-4 py-3 border-b flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <h3 className="font-semibold">Test Results</h3>
             <p className="text-sm text-muted-foreground">
@@ -769,12 +1056,204 @@ export default function DirectTestDetailPage() {
                 : "No results recorded yet"}
             </p>
           </div>
+          <div className="flex items-center gap-2">
+            {isEditingResults ? (
+              <>
+                <Button
+                  size="sm"
+                  onClick={handleSaveResults}
+                  disabled={savingResults || resultsLocked}
+                >
+                  {savingResults ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4 mr-2" />
+                      Save
+                    </>
+                  )}
+                </Button>
+                <Button variant="outline" size="sm" onClick={cancelEditResults}>
+                  <X className="h-4 w-4 mr-2" />
+                  Cancel
+                </Button>
+              </>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsEditingResults(true)}
+                disabled={resultsLocked}
+              >
+                <Pencil className="h-4 w-4 mr-2" />
+                Edit Results
+              </Button>
+            )}
+          </div>
         </div>
         <div className="p-4">
-          {test.results &&
-          "parameters" in test.results &&
-          Array.isArray(test.results.parameters) &&
-          test.results.parameters.length > 0 ? (
+          {isEditingResults ? (
+            <div className="space-y-4">
+              <div className="rounded-md border overflow-x-auto">
+                <table className="w-full min-w-[980px]">
+                  <thead>
+                    <tr className="border-b bg-muted/50">
+                      <th className="text-left p-3 font-medium">Parameter</th>
+                      <th className="text-left p-3 font-medium">Value</th>
+                      <th className="text-left p-3 font-medium">Unit</th>
+                      <th className="text-left p-3 font-medium">
+                        Normal Range
+                      </th>
+                      <th className="text-left p-3 font-medium">Group</th>
+                      <th className="text-left p-3 font-medium">Flag</th>
+                      <th className="text-left p-3 font-medium">Remarks</th>
+                      <th className="text-left p-3 font-medium">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {editParameters.map((param) => (
+                      <tr key={param.id} className="border-b last:border-b-0">
+                        <td className="p-3">
+                          <Input
+                            value={param.name}
+                            onChange={(e) =>
+                              updateParameterField(
+                                param.id,
+                                "name",
+                                e.target.value,
+                              )
+                            }
+                            placeholder="Parameter name"
+                          />
+                        </td>
+                        <td className="p-3">
+                          <Input
+                            value={param.value}
+                            onChange={(e) =>
+                              updateParameterField(
+                                param.id,
+                                "value",
+                                e.target.value,
+                              )
+                            }
+                            placeholder="Value"
+                          />
+                        </td>
+                        <td className="p-3">
+                          <Input
+                            value={param.unit}
+                            onChange={(e) =>
+                              updateParameterField(
+                                param.id,
+                                "unit",
+                                e.target.value,
+                              )
+                            }
+                            placeholder="Unit"
+                          />
+                        </td>
+                        <td className="p-3">
+                          <Input
+                            value={param.normalRange}
+                            onChange={(e) =>
+                              updateParameterField(
+                                param.id,
+                                "normalRange",
+                                e.target.value,
+                              )
+                            }
+                            placeholder="Normal range"
+                          />
+                        </td>
+                        <td className="p-3">
+                          <Input
+                            value={param.group || ""}
+                            onChange={(e) =>
+                              updateParameterField(
+                                param.id,
+                                "group",
+                                e.target.value,
+                              )
+                            }
+                            placeholder="Group"
+                          />
+                        </td>
+                        <td className="p-3">
+                          <Select
+                            value={param.flag || "normal"}
+                            onValueChange={(value) =>
+                              updateParameterField(param.id, "flag", value)
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Flag" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="normal">Normal</SelectItem>
+                              <SelectItem value="low">Low</SelectItem>
+                              <SelectItem value="high">High</SelectItem>
+                              <SelectItem value="critical">Critical</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </td>
+                        <td className="p-3">
+                          <Input
+                            value={param.remarks}
+                            onChange={(e) =>
+                              updateParameterField(
+                                param.id,
+                                "remarks",
+                                e.target.value,
+                              )
+                            }
+                            placeholder="Remarks"
+                          />
+                        </td>
+                        <td className="p-3">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removeParameter(param.id)}
+                            disabled={editParameters.length <= 1}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <Button variant="outline" onClick={addParameter}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Parameter
+                </Button>
+                {resultsLocked && (
+                  <p className="text-sm text-muted-foreground">
+                    Results are finalized and cannot be edited.
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <h4 className="font-medium mb-2">Interpretation</h4>
+                <Textarea
+                  value={editInterpretation}
+                  onChange={(e) => setEditInterpretation(e.target.value)}
+                  placeholder="Add interpretation notes"
+                  className="min-h-[120px]"
+                />
+              </div>
+            </div>
+          ) : test.results &&
+            "parameters" in test.results &&
+            Array.isArray(test.results.parameters) &&
+            test.results.parameters.length > 0 ? (
             <div className="space-y-4">
               <div className="rounded-md border">
                 <table className="w-full">

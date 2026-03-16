@@ -142,6 +142,13 @@ export interface ILabTest extends mongoose.Document {
     verifiedAt?: Date;
     reportUrl?: string;
   };
+  testParameters?: Array<{
+    parameterName: string;
+    unit?: string;
+    normalRange?: string;
+    description?: string;
+    group?: string;
+  }>;
   orderedBy: mongoose.Types.ObjectId;
   orderedAt: Date;
   collectedAt?: Date;
@@ -471,6 +478,15 @@ const labTestSchema = new Schema<ILabTest, LabTestModel>(
       verifiedAt: { type: Date },
       reportUrl: { type: String, trim: true },
     },
+    testParameters: [
+      {
+        parameterName: { type: String, required: true, trim: true },
+        unit: { type: String, trim: true },
+        normalRange: { type: String, trim: true },
+        description: { type: String, trim: true },
+        group: { type: String, trim: true },
+      },
+    ],
     orderedBy: {
       type: Schema.Types.ObjectId,
       ref: "User",

@@ -33,7 +33,7 @@ export async function PUT(
 
     const { id: testId } = await params;
     const body = await request.json();
-    const { parameters, status, processingStatus } = body;
+    const { parameters, interpretation, processingStatus } = body;
 
     // Find the test
     const test = await LabTest.findById(testId);
@@ -45,10 +45,13 @@ export async function PUT(
       );
     }
 
-    // Check if test is already completed
-    if (test.status === "completed" || test.status === "reported") {
+    // Prevent edits after finalization
+    if (test.finalized) {
       return NextResponse.json(
-        { success: false, error: "Test results have already been entered" },
+        {
+          success: false,
+          error: "Test has been finalized and results cannot be edited",
+        },
         { status: 400 },
       );
     }
@@ -72,7 +75,10 @@ export async function PUT(
         unit: p.unit || "",
         normalRange: p.normalRange || "",
         remarks: p.remarks || "",
+        group: p.group || undefined,
+        flag: p.flag || "normal",
       })),
+      interpretation: interpretation || "",
       reportedBy: new mongoose.Types.ObjectId(auth.userId),
       reportedAt: new Date(),
     };

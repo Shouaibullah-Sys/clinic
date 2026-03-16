@@ -256,10 +256,11 @@ export async function POST(request: NextRequest) {
     if (testTemplate && testTemplate.parameters) {
       // Use template parameters
       testParameters = testTemplate.parameters.map((param: any) => ({
-        parameterName: param.name || param.parameterName,
+        parameterName: param.parameterName || param.name,
         unit: param.unit || "",
         normalRange: param.normalRange || "",
         description: param.description || "",
+        group: param.group || "",
       }));
     } else if (body.parameters && Array.isArray(body.parameters)) {
       // Use custom parameters from request
@@ -268,6 +269,7 @@ export async function POST(request: NextRequest) {
         unit: param.unit || "",
         normalRange: param.normalRange || "",
         description: param.description || "",
+        group: param.group || "",
       }));
     }
 
