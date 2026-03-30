@@ -296,6 +296,7 @@ type LabRow =
       value: string | number;
       unit: string;
       normalRange: string;
+      flag?: "normal" | "low" | "high" | "critical";
       remarks?: string;
       indent?: number;
     };
@@ -322,6 +323,7 @@ const buildCategoryRows = (tests: LabTest[]): LabRow[] => {
           value: param.value ?? "",
           unit: param.unit || "",
           normalRange: param.normalRange || "",
+          flag: param.flag || "normal",
           remarks: param.remarks || "",
           indent: nextGroup ? 20 : 10,
         });
@@ -337,6 +339,7 @@ const buildCategoryRows = (tests: LabTest[]): LabRow[] => {
         value: param.value ?? "",
         unit: param.unit || "",
         normalRange: param.normalRange || "",
+        flag: param.flag || "normal",
         remarks: param.remarks || "",
       });
       return;
@@ -357,12 +360,19 @@ const buildCategoryRows = (tests: LabTest[]): LabRow[] => {
 const getResultColor = (
   value: string | number,
   normalRange?: string,
+  flag?: "normal" | "low" | "high" | "critical",
   remarks?: string,
 ) => {
   const red: [number, number, number] = [200, 0, 0];
   const black: [number, number, number] = [0, 0, 0];
-  const numericValue = Number(value);
+  const parsedValueMatch = String(value).match(/-?\d+(\.\d+)?/);
+  const numericValue = parsedValueMatch ? Number(parsedValueMatch[0]) : NaN;
   const note = (remarks || "").toLowerCase();
+  const normalizedFlag = (flag || "normal").toLowerCase();
+
+  if (["low", "high", "critical"].includes(normalizedFlag)) {
+    return red;
+  }
 
   if (
     ["high", "low", "critical", "abnormal"].some((word) => note.includes(word))
@@ -374,7 +384,25 @@ const getResultColor = (
     return black;
   }
 
-  const rangeMatch = normalRange.match(/(-?\d+\.?\d*)\s*[-–]\s*(-?\d+\.?\d*)/);
+  const normalizedRange = normalRange.trim().toLowerCase();
+
+  const lessThanMatch = normalizedRange.match(/^(?:<|<=|≤)\s*(-?\d+(\.\d+)?)$/);
+  if (lessThanMatch) {
+    const upper = Number(lessThanMatch[1]);
+    return numericValue > upper ? red : black;
+  }
+
+  const greaterThanMatch = normalizedRange.match(
+    /^(?:>|>=|≥)\s*(-?\d+(\.\d+)?)$/,
+  );
+  if (greaterThanMatch) {
+    const lower = Number(greaterThanMatch[1]);
+    return numericValue < lower ? red : black;
+  }
+
+  const rangeMatch = normalizedRange.match(
+    /(-?\d+\.?\d*)\s*[-–]\s*(-?\d+\.?\d*)/,
+  );
   if (!rangeMatch) {
     return black;
   }
@@ -712,7 +740,12 @@ const generateSharedLabReportPDF = async (
         return;
       }
 
-      const color = getResultColor(row.value, row.normalRange, row.remarks);
+      const color = getResultColor(
+        row.value,
+        row.normalRange,
+        row.flag,
+        row.remarks,
+      );
       const resultValue = String(row.value ?? "");
       const nameX = margin + 4 + (row.indent ?? 0);
 
@@ -966,10 +999,8 @@ export const generateLabTestPDF = async (
 /**
  * generateDirectTestPaymentSlip
  *
- * Generates an A5 landscape payment slip with border around all elements
- * Layout: Top half - Test Information (left side)
- *         Bottom half - Payment Information (full width)
- *         Complete border around all content
+ * Generates a payment slip on A4 portrait.
+ * The slip is rendered only in the top half and the bottom half remains empty.
  */
 export const generateDirectTestPaymentSlip = async (
   test: DirectLabTest,
@@ -978,22 +1009,18 @@ export const generateDirectTestPaymentSlip = async (
 ) => {
   if (!test) return;
 
-  // A5 Landscape format (210mm x 148mm)
+  // A4 Portrait format (for printing 2 slips per page).
   const doc = new jsPDF({
-    orientation: "landscape",
+    orientation: "portrait",
     unit: "pt",
-    format: "a5",
+    format: "a4",
   });
+
+  await ensurePersianFont(doc);
 
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
-  const margin = 20;
-  const borderPadding = 10;
-  const contentStartX = margin + borderPadding;
-  const contentWidth = pageWidth - margin * 2 - borderPadding * 2;
-  const contentEndX = pageWidth - margin - borderPadding;
-
-  await ensurePersianFont(doc);
+  const slipHeight = pageHeight / 2;
 
   // TWO-COLOR THERMAL SETUP
   const black = [0, 0, 0];
@@ -1026,19 +1053,6 @@ export const generateDirectTestPaymentSlip = async (
     }
   };
 
-  const formatAmount = (value?: number): string => {
-    const amount = typeof value === "number" && !isNaN(value) ? value : 0;
-    return new Intl.NumberFormat("en-IN", {
-      style: "currency",
-      currency: "AFN",
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    })
-      .format(amount)
-      .replace("AFN", "؋")
-      .replace(/\s/g, ""); // Remove any spaces
-  };
-
   // Data extraction
   const slipDate = test.charges?.paymentDate || test.createdAtDirect;
   const totalAmount = test.charges?.totalAmount ?? 0;
@@ -1057,11 +1071,6 @@ export const generateDirectTestPaymentSlip = async (
     return value as string;
   };
 
-  const preparedBy =
-    test.results?.reportedBy?.name ||
-    (test as any)?.collectionDetails?.collectedBy?.name ||
-    (test as any)?.createdBy?.name ||
-    "Lab Staff";
   const createdByName = (test as any)?.createdBy?.name || "N/A";
 
   const doctorName =
@@ -1093,164 +1102,6 @@ export const generateDirectTestPaymentSlip = async (
 
   const ageValue = resolveSlipAge();
 
-  // Draw outer border with light gray
-  doc.setDrawColor(lightGray[0], lightGray[1], lightGray[2]);
-  doc.setLineWidth(1.5);
-  doc.rect(margin, margin, pageWidth - margin * 2, pageHeight - margin * 2);
-
-  let y = margin + borderPadding + 10;
-
-  // ==================== HEADER ====================
-  doc.setFontSize(11);
-  doc.setFont("courier", "normal");
-  doc.setTextColor(black[0], black[1], black[2]);
-  doc.text("PAYMENT RECEIPT", pageWidth / 2, y, { align: "center" });
-
-  y += 12;
-  doc.setDrawColor(lightGray[0], lightGray[1], lightGray[2]);
-  doc.setLineWidth(0.8);
-  doc.line(contentStartX, y, contentEndX, y);
-  y += 15;
-
-  // ==================== LEFT COLUMN - PATIENT INFO ====================
-  const leftColX = contentStartX;
-  const rightColX = pageWidth / 2 + 15;
-  const labelWidth = 70;
-  const rowHeight = 16;
-
-  // Helper for left column fields
-  const drawLeftField = (label: string, value: string) => {
-    doc.setFont("courier", "bold");
-    doc.setFontSize(9);
-    doc.setTextColor(black[0], black[1], black[2]);
-    doc.text(label + ":", leftColX, y);
-
-    doc.setFont("courier", "normal");
-    const valueX = leftColX + labelWidth;
-    doc.text(value || "N/A", valueX, y);
-
-    doc.setDrawColor(lightGray[0], lightGray[1], lightGray[2]);
-    doc.line(valueX, y + 2, rightColX - 15, y + 2);
-
-    y += rowHeight;
-  };
-
-  // Helper for right column fields
-  const drawRightField = (label: string, value: string) => {
-    doc.setFont("courier", "bold");
-    doc.setFontSize(9);
-    doc.setTextColor(black[0], black[1], black[2]);
-    doc.text(label + ":", rightColX, currentRightY);
-
-    doc.setFont("courier", "normal");
-    const valueX = rightColX + labelWidth;
-    doc.text(value || "N/A", valueX, currentRightY);
-
-    doc.setDrawColor(lightGray[0], lightGray[1], lightGray[2]);
-    doc.line(valueX, currentRightY + 2, contentEndX, currentRightY + 2);
-  };
-
-  // Track right column position separately
-  let currentRightY = y;
-
-  // Row 1: Patient Name (left) and Patient ID (right)
-  drawLeftField("Patient Name", readPatientField("name"));
-  drawRightField("Patient ID", readPatientField("patientId"));
-  currentRightY += rowHeight;
-
-  // Row 2: Age (left) and Guardian (right)
-  drawLeftField("Age", String(ageValue));
-  drawRightField("Guardian", readPatientField("guardian"));
-  currentRightY += rowHeight;
-
-  // Row 3: Gender (left) and Phone (right)
-  drawLeftField("Gender", readPatientField("gender"));
-  drawRightField("Phone", readPatientField("phone"));
-  currentRightY += rowHeight;
-
-  // Row 4: Regn No (left) and Test ID (right)
-  drawLeftField("Regn No", readPatientField("registrationNo"));
-  drawRightField("Test ID", test.testId);
-  currentRightY += rowHeight;
-
-  // Row 5: Doctor (left) and Date (right)
-  drawLeftField("Doctor", doctorName);
-  drawRightField("Date", safeFormatDate(slipDate));
-  currentRightY += rowHeight;
-
-  // Row 6: Created By (left) and Receipt No (right)
-  drawLeftField("Created By", createdByName);
-  drawRightField("Receipt No", test.testId);
-  currentRightY += rowHeight;
-
-  // Row 7: Pass/Tsk (left) and Ref Person (right)
-  drawLeftField("Pass/Tsk", readPatientField("passTskNo"));
-  drawRightField("Ref Person", readPatientField("refPerson"));
-  currentRightY += rowHeight;
-
-  // Row 8: Address (full width - both columns)
-  doc.setFont("courier", "bold");
-  doc.setTextColor(black[0], black[1], black[2]);
-  doc.text("Address:", leftColX, y);
-  doc.setFont("courier", "normal");
-  const address = readPatientField("address");
-  doc.text(address, leftColX + labelWidth, y);
-
-  doc.setDrawColor(lightGray[0], lightGray[1], lightGray[2]);
-  doc.line(leftColX + labelWidth, y + 2, contentEndX, y + 2);
-
-  y += rowHeight;
-
-  // Update y to max of both columns
-  y = Math.max(y, currentRightY) + 5;
-
-  // ==================== PAYMENT SECTION ====================
-  doc.setFont("courier", "normal");
-  doc.setFontSize(12);
-  doc.setTextColor(black[0], black[1], black[2]);
-  doc.text("PAYMENT DETAILS", pageWidth / 2, y, { align: "center" });
-  y += 20;
-
-  const paymentLeftX = contentStartX + 40;
-  const paymentRightX = contentEndX - 40;
-
-  // Helper function to draw field with proper underline
-  const drawPaymentField = (
-    label: string,
-    value: string,
-    yPos: number,
-    highlight: boolean = false,
-  ) => {
-    // Draw label
-    doc.setFont("courier", "bold");
-    doc.setFontSize(10);
-    doc.setTextColor(black[0], black[1], black[2]);
-    doc.text(label, paymentLeftX, yPos);
-
-    // Calculate value width for proper underline positioning
-    doc.setFont("courier", "normal");
-    if (highlight) {
-      doc.setTextColor(red[0], red[1], red[2]);
-    }
-
-    // Draw value
-    doc.text(value, paymentRightX, yPos, { align: "right" });
-
-    // Get value width to position underline correctly
-    const valueWidth = doc.getTextWidth(value);
-    const valueStartX = paymentRightX - valueWidth;
-
-    // Draw underline from value start to paymentRightX with light gray
-    doc.setDrawColor(lightGray[0], lightGray[1], lightGray[2]);
-    doc.setLineWidth(0.3);
-    doc.line(valueStartX, yPos + 2, paymentRightX, yPos + 2);
-
-    // Reset color
-    doc.setTextColor(black[0], black[1], black[2]);
-
-    return yPos + 18;
-  };
-
   // Format amounts without extra spaces
   const formatDisplayAmount = (value?: number): string => {
     const amount = typeof value === "number" && !isNaN(value) ? value : 0;
@@ -1265,12 +1116,6 @@ export const generateDirectTestPaymentSlip = async (
       .replace(/\s/g, ""); // Remove any spaces
   };
 
-  // Test names section
-  doc.setFont("courier", "bold");
-  doc.setTextColor(black[0], black[1], black[2]);
-  doc.text("Tests:", leftColX, y);
-  y += 14;
-
   const tests = (() => {
     if (options?.testNames && options.testNames.length > 0) {
       const unique = new Set(options.testNames.filter(Boolean) as string[]);
@@ -1279,118 +1124,294 @@ export const generateDirectTestPaymentSlip = async (
     return test.testName ? [test.testName] : ["N/A"];
   })();
 
-  tests.forEach((testItem) => {
-    doc.setFont("courier", "normal");
+  const renderSlip = (offsetY: number) => {
+    const toPageY = (localY: number) => offsetY + localY;
+    const drawText = (
+      text: string,
+      x: number,
+      y: number,
+      options?: { align?: "left" | "center" | "right" | "justify" },
+    ) => {
+      doc.text(text, x, toPageY(y), options);
+    };
+    const drawLine = (x1: number, y1: number, x2: number, y2: number) => {
+      doc.line(x1, toPageY(y1), x2, toPageY(y2));
+    };
+    const drawRect = (x: number, y: number, w: number, h: number) => {
+      doc.rect(x, toPageY(y), w, h);
+    };
+
+    const margin = 20;
+    const borderPadding = 10;
+    const contentStartX = margin + borderPadding;
+    const contentEndX = pageWidth - margin - borderPadding;
+
+    // Draw outer border with light gray
+    doc.setDrawColor(lightGray[0], lightGray[1], lightGray[2]);
+    doc.setLineWidth(1.5);
+    drawRect(margin, margin, pageWidth - margin * 2, slipHeight - margin * 2);
+
+    let y = margin + borderPadding + 10;
+
+    // ==================== HEADER ====================
     doc.setFontSize(11);
+    doc.setFont("courier", "normal");
     doc.setTextColor(black[0], black[1], black[2]);
-    doc.text("• " + testItem, leftColX + 10, y);
+    drawText("PAYMENT RECEIPT", pageWidth / 2, y, { align: "center" });
+
+    y += 12;
+    doc.setDrawColor(lightGray[0], lightGray[1], lightGray[2]);
+    doc.setLineWidth(0.8);
+    drawLine(contentStartX, y, contentEndX, y);
+    y += 15;
+
+    // ==================== LEFT COLUMN - PATIENT INFO ====================
+    const leftColX = contentStartX;
+    const rightColX = pageWidth / 2 + 15;
+    const labelWidth = 70;
+    const rowHeight = 16;
+
+    // Helper for left column fields
+    const drawLeftField = (label: string, value: string) => {
+      doc.setFont("courier", "bold");
+      doc.setFontSize(9);
+      doc.setTextColor(black[0], black[1], black[2]);
+      drawText(label + ":", leftColX, y);
+
+      doc.setFont("courier", "normal");
+      const valueX = leftColX + labelWidth;
+      drawText(value || "N/A", valueX, y);
+
+      doc.setDrawColor(lightGray[0], lightGray[1], lightGray[2]);
+      drawLine(valueX, y + 2, rightColX - 15, y + 2);
+
+      y += rowHeight;
+    };
+
+    // Helper for right column fields
+    let currentRightY = y;
+    const drawRightField = (label: string, value: string) => {
+      doc.setFont("courier", "bold");
+      doc.setFontSize(9);
+      doc.setTextColor(black[0], black[1], black[2]);
+      drawText(label + ":", rightColX, currentRightY);
+
+      doc.setFont("courier", "normal");
+      const valueX = rightColX + labelWidth;
+      drawText(value || "N/A", valueX, currentRightY);
+
+      doc.setDrawColor(lightGray[0], lightGray[1], lightGray[2]);
+      drawLine(valueX, currentRightY + 2, contentEndX, currentRightY + 2);
+    };
+
+    // Row 1: Patient Name (left) and Patient ID (right)
+    drawLeftField("Patient Name", readPatientField("name"));
+    drawRightField("Patient ID", readPatientField("patientId"));
+    currentRightY += rowHeight;
+
+    // Row 2: Age (left) and Guardian (right)
+    drawLeftField("Age", String(ageValue));
+    drawRightField("Guardian", readPatientField("guardian"));
+    currentRightY += rowHeight;
+
+    // Row 3: Gender (left) and Phone (right)
+    drawLeftField("Gender", readPatientField("gender"));
+    drawRightField("Phone", readPatientField("phone"));
+    currentRightY += rowHeight;
+
+    // Row 4: Regn No (left) and Test ID (right)
+    drawLeftField("Regn No", readPatientField("registrationNo"));
+    drawRightField("Test ID", test.testId);
+    currentRightY += rowHeight;
+
+    // Row 5: Doctor (left) and Date (right)
+    drawLeftField("Doctor", doctorName);
+    drawRightField("Date", safeFormatDate(slipDate));
+    currentRightY += rowHeight;
+
+    // Row 6: Created By (left) and Receipt No (right)
+    drawLeftField("Created By", createdByName);
+    drawRightField("Receipt No", test.testId);
+    currentRightY += rowHeight;
+
+    // Row 7: Pass/Tsk (left) and Ref Person (right)
+    drawLeftField("Pass/Tsk", readPatientField("passTskNo"));
+    drawRightField("Ref Person", readPatientField("refPerson"));
+    currentRightY += rowHeight;
+
+    // Row 8: Address (full width - both columns)
+    doc.setFont("courier", "bold");
+    doc.setTextColor(black[0], black[1], black[2]);
+    drawText("Address:", leftColX, y);
+    doc.setFont("courier", "normal");
+    const address = readPatientField("address");
+    drawText(address, leftColX + labelWidth, y);
+
+    doc.setDrawColor(lightGray[0], lightGray[1], lightGray[2]);
+    drawLine(leftColX + labelWidth, y + 2, contentEndX, y + 2);
+
+    y += rowHeight;
+    y = Math.max(y, currentRightY) + 5;
+
+    // ==================== PAYMENT SECTION ====================
+    doc.setFont("courier", "normal");
+    doc.setFontSize(12);
+    doc.setTextColor(black[0], black[1], black[2]);
+    drawText("PAYMENT DETAILS", pageWidth / 2, y, { align: "center" });
+    y += 20;
+
+    const paymentLeftX = contentStartX + 40;
+    const paymentRightX = contentEndX - 40;
+
+    // Helper function to draw field with proper underline
+    const drawPaymentField = (
+      label: string,
+      value: string,
+      yPos: number,
+      highlight: boolean = false,
+    ) => {
+      doc.setFont("courier", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(black[0], black[1], black[2]);
+      drawText(label, paymentLeftX, yPos);
+
+      doc.setFont("courier", "normal");
+      if (highlight) {
+        doc.setTextColor(red[0], red[1], red[2]);
+      }
+
+      drawText(value, paymentRightX, yPos, { align: "right" });
+
+      const valueWidth = doc.getTextWidth(value);
+      const valueStartX = paymentRightX - valueWidth;
+
+      doc.setDrawColor(lightGray[0], lightGray[1], lightGray[2]);
+      doc.setLineWidth(0.3);
+      drawLine(valueStartX, yPos + 2, paymentRightX, yPos + 2);
+
+      doc.setTextColor(black[0], black[1], black[2]);
+      return yPos + 18;
+    };
+
+    // Test names section
+    doc.setFont("courier", "bold");
+    doc.setTextColor(black[0], black[1], black[2]);
+    drawText("Tests:", leftColX, y);
     y += 14;
-  });
 
-  // Total Amount
-  y = drawPaymentField("Total Amount:", formatDisplayAmount(totalAmount), y);
+    tests.forEach((testItem) => {
+      doc.setFont("courier", "normal");
+      doc.setFontSize(11);
+      doc.setTextColor(black[0], black[1], black[2]);
+      drawText("• " + testItem, leftColX + 10, y);
+      y += 14;
+    });
 
-  // Paid Amount
-  y = drawPaymentField("Paid Amount:", formatDisplayAmount(paidAmount), y);
+    // Total Amount
+    y = drawPaymentField("Total Amount:", formatDisplayAmount(totalAmount), y);
 
-  // Balance Due - highlight if > 0
-  y = drawPaymentField(
-    "Balance Due:",
-    formatDisplayAmount(dueAmount),
-    y,
-    dueAmount > 0,
-  );
+    // Paid Amount
+    y = drawPaymentField("Paid Amount:", formatDisplayAmount(paidAmount), y);
 
-  // Payment Status
-  const statusDisplay = paymentStatus.toUpperCase();
-  doc.setFont("courier", "bold");
-  doc.setTextColor(black[0], black[1], black[2]);
-  doc.text("Payment Status:", paymentLeftX, y);
-  if (
-    paymentStatus.toLowerCase() === "pending" ||
-    paymentStatus.toLowerCase() === "partial"
-  ) {
-    doc.setTextColor(red[0], red[1], red[2]);
-  }
-  doc.text(statusDisplay, paymentRightX, y, { align: "right" });
+    // Balance Due - highlight if > 0
+    y = drawPaymentField(
+      "Balance Due:",
+      formatDisplayAmount(dueAmount),
+      y,
+      dueAmount > 0,
+    );
 
-  // Calculate status width for underline
-  const statusWidth = doc.getTextWidth(statusDisplay);
-  const statusStartX = paymentRightX - statusWidth;
-
-  doc.setDrawColor(lightGray[0], lightGray[1], lightGray[2]);
-  doc.setLineWidth(0.3);
-  doc.line(statusStartX, y + 2, paymentRightX, y + 2);
-
-  doc.setTextColor(black[0], black[1], black[2]);
-  y += 18;
-
-  // Payment Method (if available)
-  if (test.charges?.paymentMethod) {
+    // Payment Status
+    const statusDisplay = paymentStatus.toUpperCase();
     doc.setFont("courier", "bold");
     doc.setTextColor(black[0], black[1], black[2]);
-    doc.text("Payment Method:", paymentLeftX, y);
-    doc.setFont("courier", "normal");
-    const methodValue = test.charges.paymentMethod;
-    doc.text(methodValue, paymentRightX, y, { align: "right" });
+    drawText("Payment Status:", paymentLeftX, y);
+    if (
+      paymentStatus.toLowerCase() === "pending" ||
+      paymentStatus.toLowerCase() === "partial"
+    ) {
+      doc.setTextColor(red[0], red[1], red[2]);
+    }
+    drawText(statusDisplay, paymentRightX, y, { align: "right" });
 
-    const methodWidth = doc.getTextWidth(methodValue);
-    const methodStartX = paymentRightX - methodWidth;
+    const statusWidth = doc.getTextWidth(statusDisplay);
+    const statusStartX = paymentRightX - statusWidth;
 
     doc.setDrawColor(lightGray[0], lightGray[1], lightGray[2]);
-    doc.line(methodStartX, y + 2, paymentRightX, y + 2);
+    doc.setLineWidth(0.3);
+    drawLine(statusStartX, y + 2, paymentRightX, y + 2);
 
+    doc.setTextColor(black[0], black[1], black[2]);
     y += 18;
-  }
 
-  // Transaction ID (if available)
-  if (test.charges?.transactionId) {
+    // Payment Method (if available)
+    if (test.charges?.paymentMethod) {
+      doc.setFont("courier", "bold");
+      doc.setTextColor(black[0], black[1], black[2]);
+      drawText("Payment Method:", paymentLeftX, y);
+      doc.setFont("courier", "normal");
+      const methodValue = test.charges.paymentMethod;
+      drawText(methodValue, paymentRightX, y, { align: "right" });
+
+      const methodWidth = doc.getTextWidth(methodValue);
+      const methodStartX = paymentRightX - methodWidth;
+
+      doc.setDrawColor(lightGray[0], lightGray[1], lightGray[2]);
+      drawLine(methodStartX, y + 2, paymentRightX, y + 2);
+
+      y += 18;
+    }
+
+    // Transaction ID (if available)
+    if (test.charges?.transactionId) {
+      doc.setFont("courier", "bold");
+      doc.setTextColor(black[0], black[1], black[2]);
+      drawText("Transaction ID:", paymentLeftX, y);
+      doc.setFont("courier", "normal");
+      const txValue = test.charges.transactionId;
+      drawText(txValue, paymentRightX, y, { align: "right" });
+
+      const txWidth = doc.getTextWidth(txValue);
+      const txStartX = paymentRightX - txWidth;
+
+      doc.setDrawColor(lightGray[0], lightGray[1], lightGray[2]);
+      drawLine(txStartX, y + 2, paymentRightX, y + 2);
+
+      y += 18;
+    }
+
+    // Payment Date/Time
     doc.setFont("courier", "bold");
     doc.setTextColor(black[0], black[1], black[2]);
-    doc.text("Transaction ID:", paymentLeftX, y);
+    drawText("Payment Date:", paymentLeftX, y);
     doc.setFont("courier", "normal");
-    const txValue = test.charges.transactionId;
-    doc.text(txValue, paymentRightX, y, { align: "right" });
+    const paymentDateTime = `${safeFormatDate(slipDate)} ${formatTime(slipDate)}`;
+    drawText(paymentDateTime, paymentRightX, y, { align: "right" });
 
-    const txWidth = doc.getTextWidth(txValue);
-    const txStartX = paymentRightX - txWidth;
+    const dateWidth = doc.getTextWidth(paymentDateTime);
+    const dateStartX = paymentRightX - dateWidth;
 
     doc.setDrawColor(lightGray[0], lightGray[1], lightGray[2]);
-    doc.line(txStartX, y + 2, paymentRightX, y + 2);
+    drawLine(dateStartX, y + 2, paymentRightX, y + 2);
 
-    y += 18;
-  }
+    y += 25;
 
-  // Payment Date/Time
-  doc.setFont("courier", "bold");
-  doc.setTextColor(black[0], black[1], black[2]);
-  doc.text("Payment Date:", paymentLeftX, y);
-  doc.setFont("courier", "normal");
-  const paymentDateTime = `${safeFormatDate(slipDate)} ${formatTime(slipDate)}`;
-  doc.text(paymentDateTime, paymentRightX, y, { align: "right" });
+    // ==================== FOOTER ====================
+    doc.setDrawColor(lightGray[0], lightGray[1], lightGray[2]);
+    drawLine(contentStartX + 40, y + 5, contentStartX + 160, y + 5);
 
-  // Calculate date width for underline
-  const dateWidth = doc.getTextWidth(paymentDateTime);
-  const dateStartX = paymentRightX - dateWidth;
+    doc.setFont("courier", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(black[0], black[1], black[2]);
+    drawText("Authorized Signature", contentStartX + 50, y + 15);
 
-  doc.setDrawColor(lightGray[0], lightGray[1], lightGray[2]);
-  doc.line(dateStartX, y + 2, paymentRightX, y + 2);
+    // Print timestamp
+    const printTime = `Printed: ${format(new Date(), "dd/MM/yyyy HH:mm")}`;
+    drawText(printTime, contentEndX - 150, y + 5);
+  };
 
-  y += 25;
-
-  // ==================== FOOTER ====================
-  // Authorized signature line with light gray
-  doc.setDrawColor(lightGray[0], lightGray[1], lightGray[2]);
-  doc.line(contentStartX + 40, y + 5, contentStartX + 160, y + 5);
-
-  doc.setFont("courier", "normal");
-  doc.setFontSize(8);
-  doc.setTextColor(black[0], black[1], black[2]);
-  doc.text("Authorized Signature", contentStartX + 50, y + 15);
-
-  // Print timestamp
-  const printTime = `Printed: ${format(new Date(), "dd/MM/yyyy HH:mm")}`;
-  doc.text(printTime, contentEndX - 150, y + 5);
+  // Render slip in top half only; keep lower half empty.
+  renderSlip(0);
 
   // --- OUTPUT ---
   if (mode === "print") {
