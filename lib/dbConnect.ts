@@ -1,8 +1,15 @@
 // lib/dbConnect.ts
 import mongoose from "mongoose";
 
-const MONGODB_URI = process.env.MONGODB_URI;
-const MONGODB_FALLBACK_URI = process.env.MONGODB_FALLBACK_URI;
+function normalizeMongoUri(uri?: string): string | undefined {
+  if (!uri) return undefined;
+  // Handle accidental quotes/newlines/spaces from env dashboards.
+  const normalized = uri.trim().replace(/^['"]|['"]$/g, "");
+  return normalized || undefined;
+}
+
+const MONGODB_URI = normalizeMongoUri(process.env.MONGODB_URI);
+const MONGODB_FALLBACK_URI = normalizeMongoUri(process.env.MONGODB_FALLBACK_URI);
 
 if (!MONGODB_URI) {
   throw new Error(
