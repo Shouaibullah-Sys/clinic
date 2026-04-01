@@ -99,7 +99,12 @@ const userSchema = new Schema<IUser>(
     },
     employeeId: {
       type: String,
-      unique: true,
+      trim: true,
+      set: (value: unknown) => {
+        if (typeof value !== "string") return value;
+        const normalized = value.trim();
+        return normalized === "" ? undefined : normalized;
+      },
     },
     // Doctor-specific fields
     department: {
@@ -113,7 +118,12 @@ const userSchema = new Schema<IUser>(
     },
     licenseNumber: {
       type: String,
-      unique: true,
+      trim: true,
+      set: (value: unknown) => {
+        if (typeof value !== "string") return value;
+        const normalized = value.trim();
+        return normalized === "" ? undefined : normalized;
+      },
     },
     address: {
       type: String,
@@ -220,6 +230,26 @@ userSchema.index({ role: 1 });
 userSchema.index({ department: 1 });
 userSchema.index({ specialization: 1 });
 userSchema.index({ active: 1, approved: 1 });
+userSchema.index(
+  { employeeId: 1 },
+  {
+    name: "employeeId_unique_nonempty",
+    unique: true,
+    partialFilterExpression: {
+      employeeId: { $type: "string", $gt: "" },
+    },
+  },
+);
+userSchema.index(
+  { licenseNumber: 1 },
+  {
+    name: "licenseNumber_unique_nonempty",
+    unique: true,
+    partialFilterExpression: {
+      licenseNumber: { $type: "string", $gt: "" },
+    },
+  },
+);
 
 // Pre-save hook for doctors
 userSchema.pre("save", async function (next) {
@@ -402,3 +432,59 @@ if (models.User && process.env.NODE_ENV === "development") {
 }
 
 export const User = models.User || model<IUser>("User", userSchema);
+
+let optionalUniqueIndexesEnsured = false;
+
+export async function ensureUserOptionalUniqueIndexes() {
+  if (optionalUniqueIndexesEnsured) return;
+
+  // Normalize legacy empty-string values so they don't get indexed as duplicates.
+  await User.collection.updateMany(
+    { employeeId: "" },
+    { $unset: { employeeId: "" } },
+  );
+  await User.collection.updateMany(
+    { licenseNumber: "" },
+    { $unset: { licenseNumber: "" } },
+  );
+
+  const indexes = await User.collection.indexes();
+
+  for (const idx of indexes) {
+    if (!idx.unique) continue;
+
+    const key = idx.key as Record<string, number> | undefined;
+    const isLegacyEmployeeId =
+      key?.employeeId === 1 && idx.name !== "employeeId_unique_nonempty";
+    const isLegacyLicenseNumber =
+      key?.licenseNumber === 1 && idx.name !== "licenseNumber_unique_nonempty";
+
+    if ((isLegacyEmployeeId || isLegacyLicenseNumber) && idx.name) {
+      await User.collection.dropIndex(idx.name);
+    }
+  }
+
+  await User.collection.createIndex(
+    { employeeId: 1 },
+    {
+      name: "employeeId_unique_nonempty",
+      unique: true,
+      partialFilterExpression: {
+        employeeId: { $type: "string", $gt: "" },
+      },
+    },
+  );
+
+  await User.collection.createIndex(
+    { licenseNumber: 1 },
+    {
+      name: "licenseNumber_unique_nonempty",
+      unique: true,
+      partialFilterExpression: {
+        licenseNumber: { $type: "string", $gt: "" },
+      },
+    },
+  );
+
+  optionalUniqueIndexesEnsured = true;
+}

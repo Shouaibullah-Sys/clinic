@@ -1,7 +1,7 @@
 // app/api/auth/register/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
-import { User } from "@/lib/models/User";
+import { User, ensureUserOptionalUniqueIndexes } from "@/lib/models/User";
 import jwt from "jsonwebtoken";
 import { z } from "zod";
 
@@ -64,6 +64,7 @@ export async function POST(request: NextRequest) {
     } = validationResult.data;
 
     await dbConnect();
+    await ensureUserOptionalUniqueIndexes();
 
     // Check if user already exists
     const existingUser = await User.findOne({ email });
@@ -186,6 +187,13 @@ export async function POST(request: NextRequest) {
     // Handle MongoDB duplicate key errors
     if (error.code === 11000) {
       const field = Object.keys(error.keyPattern)[0];
+      if (field === "licenseNumber") {
+        return NextResponse.json(
+          { error: "License number already exists (if provided)." },
+          { status: 409 }
+        );
+      }
+
       return NextResponse.json(
         { error: `${field} already exists` },
         { status: 409 }
