@@ -1055,7 +1055,6 @@ export default function TestDetailPage() {
                       <th className="text-left p-3 font-medium">
                         Normal Range
                       </th>
-                      <th className="text-left p-3 font-medium">Group</th>
                       <th className="text-left p-3 font-medium">Flag</th>
                       <th className="text-left p-3 font-medium">Remarks</th>
                       <th className="text-left p-3 font-medium">Actions</th>
@@ -1066,6 +1065,7 @@ export default function TestDetailPage() {
                       <tr key={param.id} className="border-b last:border-b-0">
                         <td className="p-3">
                           <Input
+                            readOnly
                             value={param.name}
                             onChange={(e) =>
                               updateParameterField(
@@ -1092,6 +1092,7 @@ export default function TestDetailPage() {
                         </td>
                         <td className="p-3">
                           <Input
+                            readOnly
                             value={param.unit}
                             onChange={(e) =>
                               updateParameterField(
@@ -1105,6 +1106,7 @@ export default function TestDetailPage() {
                         </td>
                         <td className="p-3">
                           <Input
+                            readOnly
                             value={param.normalRange}
                             onChange={(e) =>
                               updateParameterField(
@@ -1114,19 +1116,6 @@ export default function TestDetailPage() {
                               )
                             }
                             placeholder="Normal range"
-                          />
-                        </td>
-                        <td className="p-3">
-                          <Input
-                            value={param.group || ""}
-                            onChange={(e) =>
-                              updateParameterField(
-                                param.id,
-                                "group",
-                                e.target.value,
-                              )
-                            }
-                            placeholder="Group"
                           />
                         </td>
                         <td className="p-3">

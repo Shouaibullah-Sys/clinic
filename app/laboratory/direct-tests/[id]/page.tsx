@@ -204,10 +204,7 @@ export default function DirectTestDetailPage() {
     const resultParams = record.results?.parameters || [];
     const fallbackParams = templateOverrides || record.testParameters || [];
     const normalizedResults = new Map(
-      resultParams.map((param) => [
-        param.name.trim().toLowerCase(),
-        param,
-      ]),
+      resultParams.map((param) => [param.name.trim().toLowerCase(), param]),
     );
     const normalizedTemplateNames = new Set(
       fallbackParams.map((param) =>
@@ -235,7 +232,8 @@ export default function DirectTestDetailPage() {
       });
 
       const extraResults = resultParams.filter(
-        (param) => !normalizedTemplateNames.has(param.name.trim().toLowerCase()),
+        (param) =>
+          !normalizedTemplateNames.has(param.name.trim().toLowerCase()),
       );
 
       return [
@@ -436,7 +434,9 @@ export default function DirectTestDetailPage() {
     value: string,
   ) => {
     setEditParameters((prev) =>
-      prev.map((param) => (param.id === id ? { ...param, [field]: value } : param)),
+      prev.map((param) =>
+        param.id === id ? { ...param, [field]: value } : param,
+      ),
     );
   };
 
@@ -447,7 +447,9 @@ export default function DirectTestDetailPage() {
     if (e.key !== "Enter") return;
     e.preventDefault();
 
-    const currentIndex = editParameters.findIndex((param) => param.id === paramId);
+    const currentIndex = editParameters.findIndex(
+      (param) => param.id === paramId,
+    );
     if (currentIndex < 0) return;
 
     const nextParam = editParameters[currentIndex + 1];
@@ -619,7 +621,9 @@ export default function DirectTestDetailPage() {
       fetchTestDetails();
     } catch (err) {
       console.error("Error printing PDF:", err);
-      toast.error(err instanceof Error ? err.message : "Failed to print report");
+      toast.error(
+        err instanceof Error ? err.message : "Failed to print report",
+      );
     } finally {
       setPrinting(false);
     }
@@ -759,7 +763,9 @@ export default function DirectTestDetailPage() {
       ) : (
         <Alert className="bg-blue-50 border-blue-200 mb-6">
           <CheckCircle className="h-4 w-4 text-blue-600" />
-          <AlertTitle className="text-blue-800">Ready for Collection</AlertTitle>
+          <AlertTitle className="text-blue-800">
+            Ready for Collection
+          </AlertTitle>
           <AlertDescription className="text-blue-700">
             Payment verified. You can proceed with sample collection.
           </AlertDescription>
@@ -1060,7 +1066,9 @@ export default function DirectTestDetailPage() {
                   Verification
                 </TableCell>
                 <TableCell>
-                  <Badge className="bg-green-100 text-green-800">Completed</Badge>
+                  <Badge className="bg-green-100 text-green-800">
+                    Completed
+                  </Badge>
                 </TableCell>
               </TableRow>
             </TableBody>
@@ -1130,7 +1138,6 @@ export default function DirectTestDetailPage() {
                       <th className="text-left p-3 font-medium">
                         Normal Range
                       </th>
-                      <th className="text-left p-3 font-medium">Group</th>
                       <th className="text-left p-3 font-medium">Flag</th>
                       <th className="text-left p-3 font-medium">Remarks</th>
                       <th className="text-left p-3 font-medium">Actions</th>
@@ -1141,6 +1148,7 @@ export default function DirectTestDetailPage() {
                       <tr key={param.id} className="border-b last:border-b-0">
                         <td className="p-3">
                           <Input
+                            readOnly
                             value={param.name}
                             onChange={(e) =>
                               updateParameterField(
@@ -1172,6 +1180,7 @@ export default function DirectTestDetailPage() {
                         </td>
                         <td className="p-3">
                           <Input
+                            readOnly
                             value={param.unit}
                             onChange={(e) =>
                               updateParameterField(
@@ -1185,6 +1194,7 @@ export default function DirectTestDetailPage() {
                         </td>
                         <td className="p-3">
                           <Input
+                            readOnly
                             value={param.normalRange}
                             onChange={(e) =>
                               updateParameterField(
@@ -1194,19 +1204,6 @@ export default function DirectTestDetailPage() {
                               )
                             }
                             placeholder="Normal range"
-                          />
-                        </td>
-                        <td className="p-3">
-                          <Input
-                            value={param.group || ""}
-                            onChange={(e) =>
-                              updateParameterField(
-                                param.id,
-                                "group",
-                                e.target.value,
-                              )
-                            }
-                            placeholder="Group"
                           />
                         </td>
                         <td className="p-3">
@@ -1297,50 +1294,20 @@ export default function DirectTestDetailPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {test.results.parameters
-                      .flatMap((param, index, all) => {
-                        const group = param.group?.trim();
-                        const prevGroup = all[index - 1]?.group?.trim();
-                        const needsHeader = group && group !== prevGroup;
-                        return needsHeader
-                          ? [
-                              { type: "group" as const, label: group },
-                              { type: "param" as const, param },
-                            ]
-                          : [{ type: "param" as const, param }];
-                      })
-                      .map((row, index) =>
-                        row.type === "group" ? (
-                          <tr
-                            key={`group-${row.label}-${index}`}
-                            className="border-b bg-muted/40"
-                          >
-                            <td
-                              className="p-3 font-semibold text-sm"
-                              colSpan={5}
-                            >
-                              {row.label}
-                            </td>
-                          </tr>
-                        ) : (
-                          <tr
-                            key={`${row.param.name}-${index}`}
-                            className="border-b last:border-b-0"
-                          >
-                            <td className="p-3 font-medium">
-                              {row.param.name}
-                            </td>
-                            <td className="p-3">{row.param.value}</td>
-                            <td className="p-3">{row.param.unit || "-"}</td>
-                            <td className="p-3 text-sm text-muted-foreground">
-                              {row.param.normalRange}
-                            </td>
-                            <td className="p-3 text-sm">
-                              {row.param.remarks || "-"}
-                            </td>
-                          </tr>
-                        ),
-                      )}
+                    {test.results.parameters.map((param, index) => (
+                      <tr
+                        key={`${param.name}-${index}`}
+                        className="border-b last:border-b-0"
+                      >
+                        <td className="p-3 font-medium">{param.name}</td>
+                        <td className="p-3">{param.value}</td>
+                        <td className="p-3">{param.unit || "-"}</td>
+                        <td className="p-3 text-sm text-muted-foreground">
+                          {param.normalRange}
+                        </td>
+                        <td className="p-3 text-sm">{param.remarks || "-"}</td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
