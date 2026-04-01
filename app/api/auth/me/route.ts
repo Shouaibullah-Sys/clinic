@@ -21,6 +21,22 @@ type AuthMeUser = {
   role: string;
 } & Record<string, unknown>;
 
+function isAuthMeUser(value: unknown): value is AuthMeUser {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+  return (
+    "_id" in record &&
+    typeof record.approved === "boolean" &&
+    typeof record.active === "boolean" &&
+    typeof record.name === "string" &&
+    typeof record.email === "string" &&
+    typeof record.role === "string"
+  );
+}
+
 function withClearedAuthCookies(
   response: NextResponse,
   includeRefreshToken = false,
@@ -192,13 +208,13 @@ export async function GET(request: NextRequest) {
       .select("-password -refreshTokens")
       .lean();
 
-    if (!userResult || Array.isArray(userResult)) {
+    if (!isAuthMeUser(userResult)) {
       return withClearedAuthCookies(
         NextResponse.json({ error: "User not found" }, { status: 401 }),
         true,
       );
     }
-    const user = userResult as AuthMeUser;
+    const user = userResult;
 
     if (!user.approved) {
       return NextResponse.json(

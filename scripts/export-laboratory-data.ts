@@ -57,7 +57,7 @@ async function exportData() {
   try {
     // Connect to MongoDB
     console.log("Connecting to MongoDB...");
-    await mongoose.connect(MONGODB_URI);
+    await mongoose.connect(MONGODB_URI!);
     console.log("Connected successfully!\n");
 
     // Output directory
