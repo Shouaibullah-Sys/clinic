@@ -1,10 +1,12 @@
 // scripts/seed-radiology-templates.ts
 // Seed or update a comprehensive radiology template catalog.
 
-import "dotenv/config";
+import dotenv from "dotenv";
 import mongoose from "mongoose";
 import { RadiologyTemplate } from "../lib/models/RadiologyTemplate";
 import { User } from "../lib/models/User";
+
+dotenv.config({ path: ".env.local" });
 
 type ServiceType =
   | "x-ray"

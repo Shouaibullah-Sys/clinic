@@ -2,6 +2,7 @@
 // Removes male/female/child ranges from all LabTestTemplate parameters.
 
 const mongoose = require("mongoose");
+require("dotenv").config({ path: ".env.local" });
 
 const uri = process.env.MONGODB_URI;
 if (!uri) {

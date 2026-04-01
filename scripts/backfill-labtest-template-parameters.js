@@ -2,6 +2,7 @@
 // Backfill lab test template parameters into lab tests that are missing testParameters.
 
 const mongoose = require("mongoose");
+require("dotenv").config({ path: ".env.local" });
 
 const uri = process.env.MONGODB_URI;
 if (!uri) {

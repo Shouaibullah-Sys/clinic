@@ -72,8 +72,23 @@ export async function POST(request: NextRequest) {
       if (process.env.NODE_ENV === "development") {
         console.error("Database connection error:", dbError);
       }
+      const dbMessage =
+        dbError instanceof Error
+          ? dbError.message
+          : "Unknown database connection error";
       return NextResponse.json(
-        { error: "Database connection failed. Please try again later." },
+        {
+          error: "Database connection failed. Please try again later.",
+          ...(process.env.NODE_ENV === "development"
+            ? {
+                details: dbMessage,
+                troubleshooting: [
+                  "If you use MongoDB Atlas, add your current IP in Atlas Network Access.",
+                  "Or set MONGODB_FALLBACK_URI to a reachable local MongoDB instance.",
+                ],
+              }
+            : {}),
+        },
         { status: 503 },
       );
     }

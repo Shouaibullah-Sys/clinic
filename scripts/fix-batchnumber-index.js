@@ -2,8 +2,13 @@
 // Run this once to drop legacy unique batchNumber indexes and normalize data.
 
 const { MongoClient } = require("mongodb");
+require("dotenv").config({ path: ".env.local" });
 
-const uri = process.env.MONGODB_URI || "mongodb://localhost:27017/test";
+const uri = process.env.MONGODB_URI;
+if (!uri) {
+  console.error("MONGODB_URI is not set.");
+  process.exit(1);
+}
 
 async function fixBatchNumberIndex() {
   const client = new MongoClient(uri);

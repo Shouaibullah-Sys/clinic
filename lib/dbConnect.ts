@@ -2,6 +2,7 @@
 import mongoose from "mongoose";
 
 const MONGODB_URI = process.env.MONGODB_URI;
+const MONGODB_FALLBACK_URI = process.env.MONGODB_FALLBACK_URI;
 
 if (!MONGODB_URI) {
   throw new Error(
@@ -41,10 +42,48 @@ async function dbConnect(): Promise<typeof mongoose> {
       retryReads: true,
     };
 
-    cached.promise = mongoose.connect(MONGODB_URI!, opts).then((mongoose) => {
-      console.log("Database connected successfully");
-      return mongoose;
-    });
+    cached.promise = (async () => {
+      try {
+        const connection = await mongoose.connect(MONGODB_URI!, opts);
+        console.log("Database connected successfully");
+        return connection;
+      } catch (primaryError) {
+        const canTryFallback =
+          !!MONGODB_FALLBACK_URI && MONGODB_FALLBACK_URI !== MONGODB_URI;
+
+        if (!canTryFallback) {
+          throw new Error(
+            [
+              "Primary MongoDB connection failed.",
+              "If you're using MongoDB Atlas, make sure your current IP is allowed in Atlas Network Access.",
+              "Optional local fallback: set MONGODB_FALLBACK_URI=mongodb://127.0.0.1:27017/sajad_barakzai_hospital",
+              `Original error: ${primaryError instanceof Error ? primaryError.message : String(primaryError)}`,
+            ].join(" "),
+          );
+        }
+
+        try {
+          const fallbackConnection = await mongoose.connect(
+            MONGODB_FALLBACK_URI!,
+            opts,
+          );
+          console.warn(
+            "Primary MongoDB connection failed; connected with MONGODB_FALLBACK_URI instead.",
+          );
+          return fallbackConnection;
+        } catch (fallbackError) {
+          throw new Error(
+            [
+              "Primary and fallback MongoDB connections both failed.",
+              "If you're using MongoDB Atlas, make sure your current IP is allowed in Atlas Network Access.",
+              "If using local MongoDB, ensure mongodb is running on the fallback URI host/port.",
+              `Primary error: ${primaryError instanceof Error ? primaryError.message : String(primaryError)}`,
+              `Fallback error: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`,
+            ].join(" "),
+          );
+        }
+      }
+    })();
   }
 
   try {

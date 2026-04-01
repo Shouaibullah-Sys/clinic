@@ -5,14 +5,50 @@ import { User } from "@/lib/models/User";
 import { jwtVerify } from "jose";
 import * as joseErrors from "jose/errors";
 import jwt from "jsonwebtoken";
+import mongoose from "mongoose";
+
+type RefreshTokenPayload = jwt.JwtPayload & {
+  id?: string;
+  type?: string;
+};
+
+function withClearedAuthCookies(
+  response: NextResponse,
+  includeRefreshToken = false,
+) {
+  const cookieOptions = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+    maxAge: 0,
+    path: "/",
+  };
+
+  response.cookies.set("accessToken", "", cookieOptions);
+  if (includeRefreshToken) {
+    response.cookies.set("refreshToken", "", cookieOptions);
+  }
+
+  return response;
+}
 
 // Helper function to refresh the access token
-async function refreshAccessToken(refreshToken: string, secret: Uint8Array) {
+async function refreshAccessToken(refreshToken: string) {
   // Verify refresh token using jsonwebtoken
-  const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET!) as any;
+  const decoded = jwt.verify(
+    refreshToken,
+    process.env.JWT_SECRET!,
+  ) as RefreshTokenPayload;
 
   if (decoded.type !== "refresh") {
     throw new Error("Invalid token type");
+  }
+
+  if (
+    typeof decoded.id !== "string" ||
+    !mongoose.Types.ObjectId.isValid(decoded.id)
+  ) {
+    throw new Error("Invalid refresh token subject");
   }
 
   await dbConnect();
@@ -23,8 +59,7 @@ async function refreshAccessToken(refreshToken: string, secret: Uint8Array) {
   }
 
   // Check if refresh token exists in user's tokens
-  const userDoc = user as any;
-  if (!userDoc.refreshTokens || !userDoc.refreshTokens.includes(refreshToken)) {
+  if (!user.refreshTokens || !user.refreshTokens.includes(refreshToken)) {
     throw new Error("Invalid refresh token");
   }
 
@@ -47,7 +82,7 @@ async function refreshAccessToken(refreshToken: string, secret: Uint8Array) {
 export async function GET(request: NextRequest) {
   try {
     let accessToken = request.cookies.get("accessToken")?.value;
-    let refreshToken = request.cookies.get("refreshToken")?.value;
+    const refreshToken = request.cookies.get("refreshToken")?.value;
 
     // If no cookie, check Authorization header
     if (!accessToken) {
@@ -64,21 +99,20 @@ export async function GET(request: NextRequest) {
     await dbConnect();
     const secret = new TextEncoder().encode(process.env.JWT_SECRET!);
 
-    let payload: any;
+    let payloadId: string | undefined;
 
     try {
       // Verify access token
       const result = await jwtVerify(accessToken, secret);
-      payload = result.payload;
+      if (typeof result.payload.id === "string") {
+        payloadId = result.payload.id;
+      }
     } catch (jwtError) {
       // If token is expired and we have a refresh token, try to refresh
       if (jwtError instanceof joseErrors.JWTExpired && refreshToken) {
         try {
           console.log("Access token expired, attempting refresh...");
-          const { newAccessToken, user } = await refreshAccessToken(
-            refreshToken,
-            secret,
-          );
+          const { newAccessToken, user } = await refreshAccessToken(refreshToken);
 
           // Create response with new token
           const response = NextResponse.json({
@@ -101,9 +135,12 @@ export async function GET(request: NextRequest) {
         } catch (refreshError) {
           console.error("Token refresh failed:", refreshError);
           // Refresh failed, return 401
-          return NextResponse.json(
-            { error: "Session expired. Please login again." },
-            { status: 401 },
+          return withClearedAuthCookies(
+            NextResponse.json(
+              { error: "Session expired. Please login again." },
+              { status: 401 },
+            ),
+            true,
           );
         }
       }
@@ -129,12 +166,28 @@ export async function GET(request: NextRequest) {
       throw jwtError;
     }
 
-    const user = (await User.findById(payload.id)
+    if (
+      typeof payloadId !== "string" ||
+      !mongoose.Types.ObjectId.isValid(payloadId)
+    ) {
+      return withClearedAuthCookies(
+        NextResponse.json(
+          { error: "Session is invalid. Please login again." },
+          { status: 401 },
+        ),
+        true,
+      );
+    }
+
+    const user = await User.findById(payloadId)
       .select("-password -refreshTokens")
-      .lean()) as any;
+      .lean();
 
     if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      return withClearedAuthCookies(
+        NextResponse.json({ error: "User not found" }, { status: 401 }),
+        true,
+      );
     }
 
     if (!user.approved) {
@@ -183,6 +236,19 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         { error: "Token validation failed" },
         { status: 401 },
+      );
+    }
+
+    if (
+      error instanceof mongoose.Error.CastError &&
+      error.path === "_id"
+    ) {
+      return withClearedAuthCookies(
+        NextResponse.json(
+          { error: "Session is invalid. Please login again." },
+          { status: 401 },
+        ),
+        true,
       );
     }
 

@@ -38,6 +38,15 @@ interface AuthState {
   setAccessToken: (token: string) => void;
 }
 
+const clearAuthState = {
+  user: null,
+  accessToken: null,
+  refreshToken: null,
+  isAuthenticated: false,
+  isLoading: false,
+  error: null,
+};
+
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
@@ -73,14 +82,7 @@ export const useAuthStore = create<AuthState>()(
           console.error("Logout API call failed:", error);
         }
 
-        set({
-          user: null,
-          accessToken: null,
-          refreshToken: null,
-          isAuthenticated: false,
-          isLoading: false,
-          error: null,
-        });
+        set(clearAuthState);
       },
 
       initialize: async () => {
@@ -124,7 +126,7 @@ export const useAuthStore = create<AuthState>()(
               });
               return;
             }
-          } catch (cookieError) {
+          } catch {
             console.log("No valid session in cookies either");
           }
 
@@ -134,14 +136,14 @@ export const useAuthStore = create<AuthState>()(
               await get().refreshAccessToken();
             } catch (error) {
               console.error("Token refresh failed:", error);
-              set({ isLoading: false });
+              set(clearAuthState);
             }
           } else {
-            set({ isLoading: false });
+            set(clearAuthState);
           }
         } catch (error) {
           console.error("Initialization error:", error);
-          set({ isLoading: false });
+          set(clearAuthState);
         }
       },
 
