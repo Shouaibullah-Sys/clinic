@@ -12,6 +12,15 @@ type RefreshTokenPayload = jwt.JwtPayload & {
   type?: string;
 };
 
+type AuthMeUser = {
+  _id: mongoose.Types.ObjectId | string;
+  approved: boolean;
+  active: boolean;
+  name: string;
+  email: string;
+  role: string;
+} & Record<string, unknown>;
+
 function withClearedAuthCookies(
   response: NextResponse,
   includeRefreshToken = false,
@@ -179,16 +188,17 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const user = await User.findById(payloadId)
+    const userResult = await User.findById(payloadId)
       .select("-password -refreshTokens")
       .lean();
 
-    if (!user) {
+    if (!userResult || Array.isArray(userResult)) {
       return withClearedAuthCookies(
         NextResponse.json({ error: "User not found" }, { status: 401 }),
         true,
       );
     }
+    const user = userResult as AuthMeUser;
 
     if (!user.approved) {
       return NextResponse.json(
