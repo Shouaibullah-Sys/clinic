@@ -440,6 +440,28 @@ export default function DirectTestDetailPage() {
     );
   };
 
+  const handleValueInputKeyDown = (
+    e: React.KeyboardEvent<HTMLInputElement>,
+    paramId: string,
+  ) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+
+    const currentIndex = editParameters.findIndex((param) => param.id === paramId);
+    if (currentIndex < 0) return;
+
+    const nextParam = editParameters[currentIndex + 1];
+    if (!nextParam) return;
+
+    requestAnimationFrame(() => {
+      const nextValueInput = document.querySelector<HTMLInputElement>(
+        `input[data-edit-param-id="${nextParam.id}"][data-edit-param-field="value"]`,
+      );
+      nextValueInput?.focus();
+      nextValueInput?.select();
+    });
+  };
+
   const addParameter = () => {
     setEditParameters((prev) => [
       ...prev,
@@ -1132,6 +1154,8 @@ export default function DirectTestDetailPage() {
                         </td>
                         <td className="p-3">
                           <Input
+                            data-edit-param-id={param.id}
+                            data-edit-param-field="value"
                             value={param.value}
                             onChange={(e) =>
                               updateParameterField(
@@ -1139,6 +1163,9 @@ export default function DirectTestDetailPage() {
                                 "value",
                                 e.target.value,
                               )
+                            }
+                            onKeyDown={(e) =>
+                              handleValueInputKeyDown(e, param.id)
                             }
                             placeholder="Value"
                           />

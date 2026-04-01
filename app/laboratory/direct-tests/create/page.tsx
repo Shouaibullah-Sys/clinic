@@ -2255,6 +2255,30 @@ export default function CreateDirectTestPage() {
     }));
   };
 
+  const handleValueInputKeyDown = (
+    e: React.KeyboardEvent<HTMLInputElement>,
+    testId: string,
+    paramId: string,
+  ) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+
+    const params = testParameters[testId] || [];
+    const currentIndex = params.findIndex((param) => param.id === paramId);
+    if (currentIndex < 0) return;
+
+    const nextParam = params[currentIndex + 1];
+    if (!nextParam) return;
+
+    requestAnimationFrame(() => {
+      const nextInput = document.querySelector<HTMLInputElement>(
+        `input[data-test-id="${testId}"][data-param-id="${nextParam.id}"][data-param-field="value"]`,
+      );
+      nextInput?.focus();
+      nextInput?.select();
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -2867,6 +2891,9 @@ export default function CreateDirectTestPage() {
                                 </TableCell>
                                 <TableCell>
                                   <Input
+                                    data-test-id={test.id}
+                                    data-param-id={row.param.id}
+                                    data-param-field="value"
                                     value={row.param.value}
                                     onChange={(e) =>
                                       updateTestParameter(
@@ -2874,6 +2901,13 @@ export default function CreateDirectTestPage() {
                                         row.param.id,
                                         "value",
                                         e.target.value,
+                                      )
+                                    }
+                                    onKeyDown={(e) =>
+                                      handleValueInputKeyDown(
+                                        e,
+                                        test.id,
+                                        row.param.id,
                                       )
                                     }
                                     placeholder="Result"

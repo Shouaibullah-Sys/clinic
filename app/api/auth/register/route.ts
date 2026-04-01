@@ -64,7 +64,12 @@ export async function POST(request: NextRequest) {
     } = validationResult.data;
 
     await dbConnect();
-    await ensureUserOptionalUniqueIndexes();
+    try {
+      await ensureUserOptionalUniqueIndexes();
+    } catch (indexError) {
+      // Do not fail registration if index sync fails in production.
+      console.warn("Index sync skipped during registration:", indexError);
+    }
 
     // Check if user already exists
     const existingUser = await User.findOne({ email });

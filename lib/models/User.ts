@@ -435,56 +435,93 @@ export const User = models.User || model<IUser>("User", userSchema);
 
 let optionalUniqueIndexesEnsured = false;
 
+const isIgnorableIndexError = (error: unknown): boolean => {
+  const err = error as { code?: number; codeName?: string; message?: string };
+  const message = err?.message || "";
+
+  return (
+    err?.code === 27 || // IndexNotFound
+    err?.code === 68 || // IndexAlreadyExists
+    err?.code === 85 || // IndexOptionsConflict
+    err?.code === 86 || // IndexKeySpecsConflict
+    err?.code === 13 || // Unauthorized (insufficient Atlas privileges)
+    err?.codeName === "IndexNotFound" ||
+    err?.codeName === "IndexOptionsConflict" ||
+    err?.codeName === "IndexKeySpecsConflict" ||
+    err?.codeName === "Unauthorized" ||
+    message.includes("already exists")
+  );
+};
+
 export async function ensureUserOptionalUniqueIndexes() {
   if (optionalUniqueIndexesEnsured) return;
 
-  // Normalize legacy empty-string values so they don't get indexed as duplicates.
-  await User.collection.updateMany(
-    { employeeId: "" },
-    { $unset: { employeeId: "" } },
-  );
-  await User.collection.updateMany(
-    { licenseNumber: "" },
-    { $unset: { licenseNumber: "" } },
-  );
+  try {
+    // Normalize legacy empty-string values so they don't get indexed as duplicates.
+    await User.collection.updateMany(
+      { employeeId: "" },
+      { $unset: { employeeId: "" } },
+    );
+    await User.collection.updateMany(
+      { licenseNumber: "" },
+      { $unset: { licenseNumber: "" } },
+    );
 
-  const indexes = await User.collection.indexes();
+    const indexes = await User.collection.indexes();
 
-  for (const idx of indexes) {
-    if (!idx.unique) continue;
+    for (const idx of indexes) {
+      if (!idx.unique) continue;
 
-    const key = idx.key as Record<string, number> | undefined;
-    const isLegacyEmployeeId =
-      key?.employeeId === 1 && idx.name !== "employeeId_unique_nonempty";
-    const isLegacyLicenseNumber =
-      key?.licenseNumber === 1 && idx.name !== "licenseNumber_unique_nonempty";
+      const key = idx.key as Record<string, number> | undefined;
+      const isLegacyEmployeeId =
+        key?.employeeId === 1 && idx.name !== "employeeId_unique_nonempty";
+      const isLegacyLicenseNumber =
+        key?.licenseNumber === 1 && idx.name !== "licenseNumber_unique_nonempty";
 
-    if ((isLegacyEmployeeId || isLegacyLicenseNumber) && idx.name) {
-      await User.collection.dropIndex(idx.name);
+      if ((isLegacyEmployeeId || isLegacyLicenseNumber) && idx.name) {
+        try {
+          await User.collection.dropIndex(idx.name);
+        } catch (error) {
+          if (!isIgnorableIndexError(error)) throw error;
+        }
+      }
     }
+
+    try {
+      await User.collection.createIndex(
+        { employeeId: 1 },
+        {
+          name: "employeeId_unique_nonempty",
+          unique: true,
+          partialFilterExpression: {
+            employeeId: { $type: "string", $gt: "" },
+          },
+        },
+      );
+    } catch (error) {
+      if (!isIgnorableIndexError(error)) throw error;
+    }
+
+    try {
+      await User.collection.createIndex(
+        { licenseNumber: 1 },
+        {
+          name: "licenseNumber_unique_nonempty",
+          unique: true,
+          partialFilterExpression: {
+            licenseNumber: { $type: "string", $gt: "" },
+          },
+        },
+      );
+    } catch (error) {
+      if (!isIgnorableIndexError(error)) throw error;
+    }
+
+    optionalUniqueIndexesEnsured = true;
+  } catch (error) {
+    // Never block registration if index maintenance fails in restricted environments.
+    console.warn("Skipping optional user index maintenance:", error);
+    optionalUniqueIndexesEnsured = true;
+    return;
   }
-
-  await User.collection.createIndex(
-    { employeeId: 1 },
-    {
-      name: "employeeId_unique_nonempty",
-      unique: true,
-      partialFilterExpression: {
-        employeeId: { $type: "string", $gt: "" },
-      },
-    },
-  );
-
-  await User.collection.createIndex(
-    { licenseNumber: 1 },
-    {
-      name: "licenseNumber_unique_nonempty",
-      unique: true,
-      partialFilterExpression: {
-        licenseNumber: { $type: "string", $gt: "" },
-      },
-    },
-  );
-
-  optionalUniqueIndexesEnsured = true;
 }
