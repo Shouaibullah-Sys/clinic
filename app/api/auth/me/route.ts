@@ -120,8 +120,6 @@ export async function GET(request: NextRequest) {
     if (!accessToken) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
-
-    await dbConnect();
     const secret = new TextEncoder().encode(process.env.JWT_SECRET!);
 
     let payloadId: string | undefined;
@@ -204,6 +202,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    await dbConnect();
     const userResult = await User.findById(payloadId)
       .select("-password -refreshTokens")
       .lean();

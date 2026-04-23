@@ -1,6 +1,7 @@
 // lib/mongodb.ts
 import mongoose from "mongoose";
 import { MongoClient } from "mongodb";
+import { assertOfflineMongoUri } from "@/lib/mongo-config";
 
 declare global {
   var mongoose: {
@@ -10,7 +11,7 @@ declare global {
   var mongoClient: MongoClient | null;
 }
 
-const MONGODB_URI = process.env.MONGODB_URI!;
+const MONGODB_URI = assertOfflineMongoUri("MONGODB_URI", process.env.MONGODB_URI);
 
 if (!MONGODB_URI) {
   throw new Error("Please define MONGODB_URI environment variable");

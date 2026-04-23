@@ -24,7 +24,11 @@
     "script:backfill-labtest-template-parameters": "node scripts/backfill-labtest-template-parameters.js",
     "script:export-laboratory-data": "pnpm -s exec tsx scripts/export-laboratory-data.ts",
     "script:import-laboratory-data": "pnpm -s exec tsx scripts/import-laboratory-data.ts",
-    "script:sync-exported-lab-templates": "pnpm -s exec tsx scripts/sync-exported-lab-templates.ts"
+    "script:sync-exported-lab-templates": "pnpm -s exec tsx scripts/sync-exported-lab-templates.ts",
+    "offline:check": "node --import tsx scripts/offline-check.ts",
+    "db:export:full": "node --import tsx scripts/db-export-full.ts",
+    "db:import:full": "node --import tsx scripts/db-import-full.ts",
+    "windows:start": "powershell -ExecutionPolicy Bypass -File scripts/start-offline.ps1"
   },
   "dependencies": {
     "@floating-ui/dom": "^1.7.5",

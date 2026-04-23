@@ -1,5 +1,7 @@
 // lib/middleware/activity-logger.ts
 import { NextRequest } from "next/server";
+import dbConnect from "@/lib/dbConnect";
+import { APILog } from "@/lib/models/APILog";
 
 export interface ActivityLog {
   userId: string;
@@ -78,13 +80,26 @@ export class ActivityLogger {
 
   private async persistToDatabase(log: ActivityLog) {
     try {
-      // Send to API for logging
-      await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/log/activity`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      await dbConnect();
+      await APILog.create({
+        userId: log.userId,
+        activityType: [
+          "authentication",
+          "authorization",
+          "service_access",
+          "service_error",
+          "data_change",
+        ].includes(log.activityType)
+          ? log.activityType
+          : "audit",
+        metadata: {
+          description: log.description,
+          entityType: log.entityType,
+          ...log.metadata,
         },
-        body: JSON.stringify(log),
+        ipAddress: log.ipAddress,
+        userAgent: log.userAgent,
+        timestamp: log.timestamp,
       });
     } catch (error) {
       console.error("Failed to persist activity log:", error);

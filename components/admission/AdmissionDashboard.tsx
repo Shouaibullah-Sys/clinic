@@ -18,7 +18,7 @@ export function AdmissionDashboard() {
   const loadDashboardData = async () => {
     try {
       setLoading(true);
-      
+
       // Load stats
       const statsResponse = await fetch("/api/admissions/stats");
       if (statsResponse.ok) {
@@ -48,24 +48,35 @@ export function AdmissionDashboard() {
       {/* Stats Overview */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white p-6 rounded-lg shadow">
-          <h3 className="text-lg font-semibold text-gray-700">Total Admissions</h3>
-          <p className="text-3xl font-bold text-blue-600">{stats?.total || 0}</p>
+          <h3 className="text-lg font-semibold text-gray-700">
+            Total Admissions
+          </h3>
+
+          <p className="text-3xl font-bold text-blue-600">
+            {stats?.total || 0}
+          </p>
         </div>
-        
+
         <div className="bg-white p-6 rounded-lg shadow">
-          <h3 className="text-lg font-semibold text-gray-700">Currently Admitted</h3>
-          <p className="text-3xl font-bold text-green-600">{stats?.admitted || 0}</p>
+          <h3 className="text-lg font-semibold text-gray-700">
+            Currently Admitted
+          </h3>
+          <p className="text-3xl font-bold text-green-600">
+            {stats?.admitted || 0}
+          </p>
         </div>
-        
+
         <div className="bg-white p-6 rounded-lg shadow">
           <h3 className="text-lg font-semibold text-gray-700">Average Stay</h3>
           <p className="text-3xl font-bold text-purple-600">
             {stats?.averageStay ? stats.averageStay.toFixed(1) : 0} days
           </p>
         </div>
-        
+
         <div className="bg-white p-6 rounded-lg shadow">
-          <h3 className="text-lg font-semibold text-gray-700">Occupancy Rate</h3>
+          <h3 className="text-lg font-semibold text-gray-700">
+            Occupancy Rate
+          </h3>
           <p className="text-3xl font-bold text-orange-600">
             {stats?.occupancyRate ? stats.occupancyRate.toFixed(1) : 0}%
           </p>
@@ -86,11 +97,15 @@ export function AdmissionDashboard() {
                 </div>
                 <div className="flex justify-between">
                   <span>Occupied:</span>
-                  <span className="font-semibold text-red-600">{ward.occupiedBeds}</span>
+                  <span className="font-semibold text-red-600">
+                    {ward.occupiedBeds}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span>Available:</span>
-                  <span className="font-semibold text-green-600">{ward.availableBeds}</span>
+                  <span className="font-semibold text-green-600">
+                    {ward.availableBeds}
+                  </span>
                 </div>
                 <div className="mt-2">
                   <div className="flex justify-between mb-1">

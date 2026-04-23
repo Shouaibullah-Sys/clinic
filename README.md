@@ -1,36 +1,79 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Sajad Barakzai Hospital Offline Setup
 
-## Getting Started
+This app now supports an offline-first Windows localhost deployment using a local MongoDB Community Server instance. The application remains a Next.js web app and should be opened in a browser at `http://localhost:3000`.
 
-First, run the development server:
+## Windows Offline Prerequisites
+
+- Node.js LTS
+- `pnpm`
+- MongoDB Community Server running locally
+
+## Environment Setup
+
+Create `.env.local` from `.env.offline.example` if needed:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.offline.example .env.local
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Required offline values:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```env
+APP_MODE=offline
+MONGODB_URI=mongodb://127.0.0.1:27017/sajad_barakzai_hospital
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+NEXT_PUBLIC_API_URL=http://localhost:3000/api
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Start The App
 
-## Learn More
+Development:
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+pnpm run offline:check
+pnpm dev
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Production-like local run:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+pnpm run offline:check
+pnpm build
+pnpm start
+```
 
-## Deploy on Vercel
+On Windows PowerShell:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/setup-offline.ps1
+powershell -ExecutionPolicy Bypass -File scripts/start-offline.ps1
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Full Database Migration
+
+Export from the current source database:
+
+```bash
+EXPORT_MONGODB_URI="your-source-uri" pnpm run db:export:full
+```
+
+Restore into the local offline MongoDB database:
+
+```bash
+ALLOW_DESTRUCTIVE_IMPORT=true pnpm run db:import:full
+```
+
+PowerShell helpers:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/backup-offline.ps1 -SourceUri "your-source-uri"
+powershell -ExecutionPolicy Bypass -File scripts/restore-offline.ps1
+```
+
+The full backup writes Extended JSON files under `exports/full-backup`, preserving MongoDB types such as `ObjectId` and `Date`.
+
+## Notes
+
+- Offline mode rejects remote MongoDB URIs at runtime.
+- The intended deployment target is one Windows PC running the app locally in a browser.
+- Laboratory-only import/export scripts still exist, but the recommended migration path is `db:export:full` and `db:import:full`.

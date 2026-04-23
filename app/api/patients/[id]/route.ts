@@ -8,6 +8,7 @@ import { MedicalRecord } from "@/lib/models/MedicalRecord";
 import { Prescription } from "@/lib/models/Prescription";
 import { LabTest } from "@/lib/models/LabTest";
 import { authenticateRequest } from "@/lib/auth";
+import { createAuditLog } from "@/lib/audit-log";
 
 // Helper to calculate age from date of birth
 const calculateAge = (dateOfBirth: Date): number => {
@@ -370,14 +371,7 @@ export async function PUT(
       { new: true, runValidators: true },
     ).select("-__v -createdAt -updatedAt");
 
-    // Add audit log entry
-    await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/audit-logs`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: request.headers.get("authorization") || "",
-      },
-      body: JSON.stringify({
+    await createAuditLog({
         action: "UPDATE_PATIENT",
         entityType: "Patient",
         entityId: patientId,
@@ -386,8 +380,8 @@ export async function PUT(
         userName: auth.userName,
         changes: updateData,
         ipAddress: request.headers.get("x-forwarded-for") || "unknown",
-      }),
-    }).catch((err) => console.error("Failed to create audit log:", err));
+        userAgent: request.headers.get("user-agent") || "unknown",
+      });
 
     return NextResponse.json({
       success: true,
@@ -495,14 +489,7 @@ export async function DELETE(
       { new: true },
     ).select("-__v -createdAt -updatedAt");
 
-    // Add audit log entry
-    await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/audit-logs`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: request.headers.get("authorization") || "",
-      },
-      body: JSON.stringify({
+    await createAuditLog({
         action: "DELETE_PATIENT",
         entityType: "Patient",
         entityId: patientId,
@@ -511,8 +498,8 @@ export async function DELETE(
         userName: auth.userName,
         changes: { active: false, deletedAt: new Date() },
         ipAddress: request.headers.get("x-forwarded-for") || "unknown",
-      }),
-    }).catch((err) => console.error("Failed to create audit log:", err));
+        userAgent: request.headers.get("user-agent") || "unknown",
+      });
 
     return NextResponse.json({
       success: true,
@@ -631,14 +618,7 @@ export async function PATCH(
       { new: true, runValidators: true },
     ).select("-__v -createdAt -updatedAt");
 
-    // Add audit log entry
-    await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/audit-logs`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: request.headers.get("authorization") || "",
-      },
-      body: JSON.stringify({
+    await createAuditLog({
         action: "UPDATE_PATIENT_PARTIAL",
         entityType: "Patient",
         entityId: patientId,
@@ -647,8 +627,8 @@ export async function PATCH(
         userName: auth.userName,
         changes: updateData,
         ipAddress: request.headers.get("x-forwarded-for") || "unknown",
-      }),
-    }).catch((err) => console.error("Failed to create audit log:", err));
+        userAgent: request.headers.get("user-agent") || "unknown",
+      });
 
     return NextResponse.json({
       success: true,

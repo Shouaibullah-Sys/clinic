@@ -83,8 +83,8 @@ export async function POST(request: NextRequest) {
             ? {
                 details: dbMessage,
                 troubleshooting: [
-                  "If you use MongoDB Atlas, add your current IP in Atlas Network Access.",
-                  "Or set MONGODB_FALLBACK_URI to a reachable local MongoDB instance.",
+                  "This offline build expects a local MongoDB server on the configured localhost URI.",
+                  "Start MongoDB Community Server and confirm MONGODB_URI points to mongodb://127.0.0.1:27017/sajad_barakzai_hospital.",
                 ],
               }
             : {}),

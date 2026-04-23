@@ -1,14 +1,11 @@
-// lib/dbConnect.ts
 import mongoose from "mongoose";
+import {
+  assertOfflineMongoUri,
+  normalizeMongoUri,
+  isOfflineMode,
+} from "@/lib/mongo-config";
 
-function normalizeMongoUri(uri?: string): string | undefined {
-  if (!uri) return undefined;
-  // Handle accidental quotes/newlines/spaces from env dashboards.
-  const normalized = uri.trim().replace(/^['"]|['"]$/g, "");
-  return normalized || undefined;
-}
-
-const MONGODB_URI = normalizeMongoUri(process.env.MONGODB_URI);
+const MONGODB_URI = assertOfflineMongoUri("MONGODB_URI", process.env.MONGODB_URI);
 const MONGODB_FALLBACK_URI = normalizeMongoUri(process.env.MONGODB_FALLBACK_URI);
 
 if (!MONGODB_URI) {
@@ -55,6 +52,22 @@ async function dbConnect(): Promise<typeof mongoose> {
         console.log("Database connected successfully");
         return connection;
       } catch (primaryError) {
+        if (isOfflineMode()) {
+          const localHint = MONGODB_FALLBACK_URI
+            ? `Optional local maintenance fallback is configured as ${MONGODB_FALLBACK_URI}.`
+            : "No local fallback URI is configured.";
+
+          throw new Error(
+            [
+              "Offline database connection failed.",
+              "APP_MODE=offline requires a local MongoDB server.",
+              "Start MongoDB Community Server on the configured localhost URI and try again.",
+              localHint,
+              `Original error: ${primaryError instanceof Error ? primaryError.message : String(primaryError)}`,
+            ].join(" "),
+          );
+        }
+
         const canTryFallback =
           !!MONGODB_FALLBACK_URI && MONGODB_FALLBACK_URI !== MONGODB_URI;
 

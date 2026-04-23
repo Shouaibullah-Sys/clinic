@@ -25,6 +25,10 @@ const APILogSchema = new Schema<IAPILog>({
       "validation_error",
       "authentication",
       "authorization",
+      "service_access",
+      "service_error",
+      "data_change",
+      "audit",
     ],
   },
   metadata: {
