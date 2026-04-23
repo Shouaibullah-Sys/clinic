@@ -39,17 +39,15 @@ export default function LandingPage() {
           <div className="flex items-center gap-2">
             <div className="inline-flex items-center justify-center rounded-lg p-2">
               <Image
-                src="/logo2.png"
-                alt="Sajad Barakzai Logo"
+                src="/logo.png"
+                alt="Atal Clinic Logo"
                 width={40}
                 height={40}
                 className="w-full h-full object-contain"
                 priority
               />
             </div>
-            <span className="font-semibold text-foreground">
-              Sajad Barakzai Hospital
-            </span>
+            <span className="font-semibold text-foreground">Atal Clinic</span>
           </div>
           <div className="flex gap-3">
             <Button variant="ghost" onClick={() => router.push("/login")}>
@@ -70,7 +68,7 @@ export default function LandingPage() {
           </div>
 
           <h1 className="text-4xl md:text-5xl font-bold text-foreground mb-4">
-            Welcome to Sajad Barakzai Hospital
+            Welcome to Atatl Clinic
           </h1>
 
           <p className="text-lg text-muted-foreground mb-8">
@@ -100,10 +98,7 @@ export default function LandingPage() {
       {/* Minimal Footer */}
       <footer className="border-t border-border py-6">
         <div className="max-w-6xl mx-auto px-4 text-center text-sm text-muted-foreground">
-          <p>
-            © {new Date().getFullYear()} Sajad Barakzai Hospital. All rights
-            reserved.
-          </p>
+          <p>© {new Date().getFullYear()} Atal Clinic. All rights reserved.</p>
         </div>
       </footer>
     </div>

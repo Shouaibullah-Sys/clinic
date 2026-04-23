@@ -24,11 +24,13 @@ All project scripts are runnable from root with `pnpm run <script-name>`.
 ## Data Transfer
 - `pnpm run script:export-laboratory-data`
 - `pnpm run script:import-laboratory-data`
+- `pnpm run script:sync-exported-lab-templates` (non-destructive: updates existing templates and creates missing ones from `exports/lab-test-templates.json`)
 
 ## Important Safety Notes
 - Most scripts modify database records.
 - `script:seed-collect-tests-to-templates` depends on a hardcoded block in `collect/page.tsx` and may fail in current codebase.
 - `script:import-laboratory-data` is destructive (it runs `deleteMany` before import).
+- `script:sync-exported-lab-templates` is safe for existing data (no collection wipe).
 - To run import, you must set:
   - `ALLOW_DESTRUCTIVE_IMPORT=true`
 - Connection values come from `.env.local`:

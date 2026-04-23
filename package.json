@@ -1,5 +1,5 @@
 {
-  "name": "Sajad-Barekzai-Hospital",
+  "name": "atatl-clinic",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -23,7 +23,8 @@
     "script:remove-labtest-gender-ranges": "node scripts/remove-labtest-gender-ranges.js",
     "script:backfill-labtest-template-parameters": "node scripts/backfill-labtest-template-parameters.js",
     "script:export-laboratory-data": "pnpm -s exec tsx scripts/export-laboratory-data.ts",
-    "script:import-laboratory-data": "pnpm -s exec tsx scripts/import-laboratory-data.ts"
+    "script:import-laboratory-data": "pnpm -s exec tsx scripts/import-laboratory-data.ts",
+    "script:sync-exported-lab-templates": "pnpm -s exec tsx scripts/sync-exported-lab-templates.ts"
   },
   "dependencies": {
     "@floating-ui/dom": "^1.7.5",

@@ -4,8 +4,8 @@ import { Metadata } from "next";
 import Image from "next/image";
 
 export const metadata: Metadata = {
-  title: "Sajad Barakzai Hospital",
-  description: "Login to access the Sajad Barakzai Hospital management system",
+  title: "Atal Clinic",
+  description: "Login to access the Atal Clinic management system",
 };
 
 export default function LoginPage() {
@@ -16,8 +16,8 @@ export default function LoginPage() {
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-28 h-28 rounded-lg border p-2">
             <Image
-              src="/logo2.png"
-              alt="Sajad Barakzai Logo"
+              src="/logo.png"
+              alt="Atal Clinic Logo"
               width={200}
               height={200}
               className="w-full h-full object-contain"
@@ -25,7 +25,7 @@ export default function LoginPage() {
             />
           </div>
           <h1 className="text-3xl font-bold text-foreground mt-4">
-            Sajad Barakzai Hospital Managment System
+            Atal Clinic Managment System
           </h1>
           <p className="text-muted-foreground mt-2">
             Manage your hospital business efficiently
@@ -38,8 +38,8 @@ export default function LoginPage() {
         {/* Footer */}
         <div className="text-center mt-6 text-sm text-muted-foreground">
           <p>
-            © {new Date().getFullYear()} Sajad Barakzai Hospital Management
-            System. All rights reserved.
+            © {new Date().getFullYear()} Atal Clinic Management System. All
+            rights reserved.
           </p>
         </div>
       </div>
