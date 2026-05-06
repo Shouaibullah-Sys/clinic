@@ -1,21 +1,16 @@
 // app/api/radiology/templates/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { RadiologyTemplate } from "@/lib/models/RadiologyTemplate";
-import { authenticateRequest, hasRequiredRole } from "@/lib/auth";
-import mongoose from "mongoose";
+import { prisma } from "@/lib/prisma";
+import { getTokenPayload } from "@/lib/auth/jwt";
 
-// GET: Fetch all radiology exam templates (with optional filtering)
 export async function GET(request: NextRequest) {
   try {
-    await dbConnect();
-
-    const auth = await authenticateRequest(request);
-    if (!auth.success) {
+    const payload = await getTokenPayload(request);
+    if (!payload) {
       return NextResponse.json(
-        { success: false, error: auth.error },
-        { status: auth.status || 401 },
+        { success: false, error: "Unauthorized" },
+        { status: 401 },
       );
     }
 
@@ -26,41 +21,38 @@ export async function GET(request: NextRequest) {
     const active = searchParams.get("active");
     const search = searchParams.get("search");
 
-    // Build query - only return active templates by default
-    const query: any = {};
+    const where: any = {};
 
     if (serviceType) {
-      query.serviceType = serviceType;
+      where.serviceType = serviceType;
     }
 
     if (category) {
-      query.category = category;
+      where.category = category;
     }
 
     if (bodyPart) {
-      query.bodyPart = bodyPart;
+      where.bodyPart = bodyPart;
     }
 
-    // Only return active templates by default
     if (active !== null) {
-      query.active = active === "true";
+      where.active = active === "true";
     } else {
-      query.active = true; // Default to active only
+      where.active = true;
     }
 
     if (search) {
-      query.$or = [
-        { examName: { $regex: search, $options: "i" } },
-        { templateCode: { $regex: search, $options: "i" } },
-        { description: { $regex: search, $options: "i" } },
-        { bodyPart: { $regex: search, $options: "i" } },
+      where.OR = [
+        { examName: { contains: search, mode: "insensitive" } },
+        { category: { contains: search, mode: "insensitive" } },
+        { bodyPart: { contains: search, mode: "insensitive" } },
       ];
     }
 
-    const templates = await RadiologyTemplate.find(query)
-      .populate("createdBy", "name email")
-      .sort({ category: 1, examName: 1 })
-      .lean();
+    const templates = await prisma.radiologyTemplate.findMany({
+      where,
+      orderBy: [{ category: "asc" }, { examName: "asc" }],
+    });
 
     return NextResponse.json({
       success: true,
@@ -79,22 +71,18 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST: Create a new radiology exam template
 export async function POST(request: NextRequest) {
   try {
-    await dbConnect();
-
-    const auth = await authenticateRequest(request);
-    if (!auth.success) {
+    const payload = await getTokenPayload(request);
+    if (!payload) {
       return NextResponse.json(
-        { success: false, error: auth.error },
-        { status: auth.status || 401 },
+        { success: false, error: "Unauthorized" },
+        { status: 401 },
       );
     }
 
-    // Only radiologists, doctors, and admins can create templates
     const allowedRoles = ["radiologist", "doctor", "admin"];
-    if (!hasRequiredRole(auth.userRole, allowedRoles)) {
+    if (!allowedRoles.includes(payload.role)) {
       return NextResponse.json(
         {
           success: false,
@@ -107,9 +95,7 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const {
-      templateCode,
       examName,
-      serviceType,
       category,
       bodyPart,
       views,
@@ -121,20 +107,10 @@ export async function POST(request: NextRequest) {
       basePrice,
       active = true,
       parameters,
-      clinicalIndicationTemplate,
-      techniqueTemplate,
-      comparisonTemplate,
-      findingsTemplate,
-      impressionTemplate,
-      recommendationTemplate,
-      criticalFindingsChecklist,
     } = body;
 
-    // Validate required fields
     if (
-      !templateCode ||
       !examName ||
-      !serviceType ||
       !category ||
       !duration ||
       basePrice === undefined
@@ -143,82 +119,54 @@ export async function POST(request: NextRequest) {
         {
           success: false,
           error:
-            "Missing required fields: templateCode, examName, serviceType, category, duration, and basePrice are required.",
+            "Missing required fields: examName, category, duration, and basePrice are required.",
         },
         { status: 400 },
       );
     }
 
-    // Check if template code already exists
-    const existingTemplate = await RadiologyTemplate.findOne({
-      templateCode: templateCode.toUpperCase(),
+    const existingTemplate = await prisma.radiologyTemplate.findFirst({
+      where: { examName },
     });
+
     if (existingTemplate) {
       return NextResponse.json(
-        { success: false, error: "Template code already exists" },
+        { success: false, error: "Template already exists" },
         { status: 409 },
       );
     }
 
-    // Create the template
-    const template = await RadiologyTemplate.create({
-      templateCode: templateCode.toUpperCase(),
-      examName,
-      serviceType,
-      category,
-      bodyPart,
-      views: views || [],
-      description,
-      contrastRequired: contrastRequired || false,
-      contrastType,
-      preparationInstructions,
-      duration,
-      basePrice,
-      active,
-      parameters: parameters || [],
-      clinicalIndicationTemplate,
-      techniqueTemplate,
-      comparisonTemplate,
-      findingsTemplate,
-      impressionTemplate,
-      recommendationTemplate,
-      criticalFindingsChecklist: criticalFindingsChecklist || [],
-      createdBy: new mongoose.Types.ObjectId(auth.userId),
+    const templateRecord = await prisma.radiologyTemplate.create({
+      data: {
+        templateCode: examName.toUpperCase().replace(/\s+/g, "_"),
+        name: examName,
+        examName: examName.toUpperCase(),
+        serviceType: "other",
+        category,
+        bodyPart,
+        views: JSON.stringify(views || []),
+        description,
+        contrastRequired: contrastRequired || false,
+        contrastType,
+        preparationInstructions,
+        duration,
+        basePrice,
+        active,
+        parameters: JSON.stringify(parameters || []),
+        createdById: payload.id,
+      },
     });
-
-    // Populate for response
-    const populatedTemplate = await RadiologyTemplate.findById(template._id)
-      .populate("createdBy", "name email")
-      .lean();
 
     return NextResponse.json(
       {
         success: true,
-        data: populatedTemplate,
+        data: templateRecord,
         message: "Radiology template created successfully",
       },
       { status: 201 },
     );
   } catch (error: any) {
     console.error("Error creating radiology template:", error);
-
-    // Handle validation errors
-    if (error.name === "ValidationError") {
-      const errors = Object.values(error.errors).map((err: any) => err.message);
-      return NextResponse.json(
-        { success: false, error: "Validation failed", details: errors },
-        { status: 400 },
-      );
-    }
-
-    // Handle duplicate key errors
-    if (error.code === 11000) {
-      return NextResponse.json(
-        { success: false, error: "Duplicate template code detected" },
-        { status: 409 },
-      );
-    }
-
     return NextResponse.json(
       {
         success: false,

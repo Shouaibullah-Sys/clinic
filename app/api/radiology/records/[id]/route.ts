@@ -1,10 +1,8 @@
 // app/api/radiology/records/[id]/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { RadiologyExam } from "@/lib/models/RadiologyExam";
-import { RadiologyService } from "@/lib/models/RadiologyService";
-import { authenticateRequest } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { getTokenPayload } from "@/lib/auth/jwt";
 
 // GET: Get a single radiology record by ID (any exam type - direct or appointment-based)
 export async function GET(
@@ -12,14 +10,12 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await dbConnect();
-
     // Authenticate the request
-    const auth = await authenticateRequest(request);
-    if (!auth.success) {
+    const payload = await getTokenPayload(request);
+    if (!payload) {
       return NextResponse.json(
-        { success: false, error: auth.error },
-        { status: auth.status || 401 },
+        { success: false, error: "Unauthorized" },
+        { status: 401 },
       );
     }
 
@@ -31,7 +27,7 @@ export async function GET(
       "receptionist",
       "doctor",
     ];
-    if (!auth.userRole || !allowedRoles.includes(auth.userRole)) {
+    if (!allowedRoles.includes(payload.role)) {
       return NextResponse.json(
         {
           success: false,
@@ -47,38 +43,22 @@ export async function GET(
 
     // DEBUG: Log the ID being queried
     console.log(`[DEBUG] Fetching radiology record with ID: ${examId}`);
-    console.log(
-      `[DEBUG] ID length: ${examId.length}, Is valid ObjectId: ${/^[a-f\d]{24}$/i.test(examId)}`,
-    );
 
     // Try to find in RadiologyExam collection first (direct exams)
-    const examResult = await RadiologyExam.findById(examId)
-      .populate("patient", "name patientId phone guardian dateOfBirth gender")
-      .populate("doctor", "name specialization")
-      .populate("createdBy", "name")
-      .populate("finalizedBy", "name")
-      .populate("printedBy", "name")
-      .populate("charges.collectedBy", "name")
-      .populate("paymentVerifiedBy", "name")
-      .populate("results.reportedBy", "name")
-      .populate("results.verifiedBy", "name")
-      .lean();
+    const examResult = await prisma.radiologyExam.findUnique({
+      where: { id: examId },
+    });
 
-    let radiologyExam = examResult as Record<string, any> | null;
+    let radiologyExam = examResult;
 
     // If not found in RadiologyExam, try RadiologyService (appointment-based exams)
     if (!radiologyExam) {
       console.log(
         `[DEBUG] Not found in RadiologyExam, checking RadiologyService...`,
       );
-      const serviceResult = await RadiologyService.findById(examId)
-        .populate("patient", "name patientId phone guardian dateOfBirth gender")
-        .populate("referringDoctor", "name specialization")
-        .populate("radiologist", "name")
-        .populate("technician", "name")
-        .populate("charges.collectedBy", "name")
-        .populate("paymentVerifiedBy", "name")
-        .lean();
+      const serviceResult = await prisma.radiologyService.findUnique({
+        where: { id: examId },
+      });
 
       if (serviceResult) {
         // Map serviceType to category
@@ -91,41 +71,42 @@ export async function GET(
 
         // Normalize RadiologyService data to match RadiologyExam format
         radiologyExam = {
-          ...serviceResult,
+          id: serviceResult.id,
           examId: serviceResult.serviceId,
-          examName: serviceResult.serviceType + " - " + serviceResult.bodyPart,
-          category: categoryMap[serviceResult.serviceType] || "other",
-          examStatus: serviceResult.status,
-          doctor: serviceResult.referringDoctor,
+          examName: serviceResult.name + " - " + (serviceResult as any).bodyPart,
+          category: categoryMap[(serviceResult as any).serviceType] || "other",
+          examStatus: serviceResult.active ? "completed" : "pending",
+          doctor: (serviceResult as any).referringDoctor,
           isDirectExam: false,
           modality: {
-            type: serviceResult.serviceType,
-            bodyPart: serviceResult.bodyPart,
-            view: serviceResult.view,
-            contrastUsed: serviceResult.contrastUsed,
-            contrastType: serviceResult.contrastType,
-            remarks: serviceResult.notes,
+            type: (serviceResult as any).serviceType,
+            bodyPart: (serviceResult as any).bodyPart,
+            view: (serviceResult as any).view,
+            contrastUsed: (serviceResult as any).contrastUsed,
+            contrastType: (serviceResult as any).contrastType,
+            remarks: (serviceResult as any).notes,
           },
-          results: {
-            findings: serviceResult.findings
+          results: JSON.stringify({
+            findings: (serviceResult as any).findings
               ? [
                   {
                     name: "Narrative Findings",
-                    value: serviceResult.findings,
+                    value: (serviceResult as any).findings,
                     unit: "",
                     normalRange: "",
                     remarks: "",
                   },
                 ]
               : [],
-            impression: serviceResult.report?.impression || serviceResult.impression,
-            reportedBy: serviceResult.reportGeneratedBy,
-            reportedAt: serviceResult.reportGeneratedAt,
-            verifiedBy: serviceResult.reviewedBy,
-            verifiedAt: serviceResult.reviewedAt,
-          },
-          report: serviceResult.report || undefined,
-        };
+            impression: (serviceResult as any).report?.impression || (serviceResult as any).impression,
+            reportedBy: (serviceResult as any).reportGeneratedBy,
+            reportedAt: (serviceResult as any).reportGeneratedAt,
+            verifiedBy: (serviceResult as any).reviewedBy,
+            verifiedAt: (serviceResult as any).reviewedAt,
+          }),
+          report: (serviceResult as any).report || undefined,
+          paymentVerified: (serviceResult as any).paymentVerified,
+        } as any;
         console.log(`[DEBUG] Found record in RadiologyService collection`);
       }
     } else {
@@ -141,7 +122,7 @@ export async function GET(
 
     // For radiology roles, allow access regardless of payment verification
     const radiologyRoles = ["radiology_technician", "radiologist"];
-    const isRadiologyUser = radiologyRoles.includes(auth.userRole);
+    const isRadiologyUser = radiologyRoles.includes(payload.role);
 
     // Only enforce payment verification for non-radiology roles
     if (!isRadiologyUser && !radiologyExam.paymentVerified) {

@@ -1,22 +1,23 @@
-// app/api/users/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import jwt, { JwtPayload } from "jsonwebtoken";
+import { jwtVerify } from "jose";
 import { cookies } from "next/headers";
-import dbConnect from "@/lib/dbConnect";
-import { User } from "@/lib/models/User";
-import mongoose from "mongoose";
+import { prisma } from "@/lib/prisma";
+
+async function verifyToken(accessToken: string) {
+  if (!process.env.JWT_SECRET) return null;
+  try {
+    const secret = new TextEncoder().encode(process.env.JWT_SECRET);
+    const { payload } = await jwtVerify(accessToken, secret);
+    return payload;
+  } catch {
+    return null;
+  }
+}
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  if (!process.env.JWT_SECRET) {
-    return NextResponse.json(
-      { error: "Server configuration error" },
-      { status: 500 }
-    );
-  }
-
   try {
     const cookieStore = await cookies();
     const accessToken = cookieStore.get("accessToken")?.value;
@@ -25,27 +26,33 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    let decoded: JwtPayload;
-    try {
-      decoded = jwt.verify(accessToken, process.env.JWT_SECRET) as JwtPayload;
-    } catch (error) {
+    const decoded = await verifyToken(accessToken);
+    if (!decoded) {
       return NextResponse.json({ error: "Invalid token" }, { status: 401 });
     }
 
     const { id } = await params;
 
-    // Only admins or the user themselves can view user details
     if (decoded.role !== "admin" && decoded.id !== id) {
       return NextResponse.json({ error: "Access denied" }, { status: 403 });
     }
 
-    await dbConnect();
-
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return NextResponse.json({ error: "Invalid user ID" }, { status: 400 });
-    }
-
-    const user = await User.findById(id).select("-password -refreshTokens");
+    const user = await prisma.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        role: true,
+        approved: true,
+        active: true,
+        department: true,
+        designation: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
@@ -64,13 +71,6 @@ export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  if (!process.env.JWT_SECRET) {
-    return NextResponse.json(
-      { error: "Server configuration error" },
-      { status: 500 }
-    );
-  }
-
   try {
     const cookieStore = await cookies();
     const accessToken = cookieStore.get("accessToken")?.value;
@@ -79,52 +79,47 @@ export async function PUT(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    let decoded: JwtPayload;
-    try {
-      decoded = jwt.verify(accessToken, process.env.JWT_SECRET) as JwtPayload;
-    } catch (error) {
+    const decoded = await verifyToken(accessToken);
+    if (!decoded) {
       return NextResponse.json({ error: "Invalid token" }, { status: 401 });
     }
 
     const { id } = await params;
     const data = await req.json();
 
-    await dbConnect();
-
-    // Check if user exists
-    const user = await User.findById(id);
+    const user = await prisma.user.findUnique({ where: { id } });
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // Only admins can update other users, users can update their own info
     if (decoded.role !== "admin" && decoded.id !== id) {
       return NextResponse.json({ error: "Access denied" }, { status: 403 });
     }
 
-    // Prevent non-admins from changing role or approval status
     if (decoded.role !== "admin") {
       delete data.role;
       delete data.approved;
       delete data.active;
     }
 
-    // Update user
-    Object.assign(user, data);
-    await user.save();
+    const updatedUser = await prisma.user.update({
+      where: { id },
+      data,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        phone: true,
+        approved: true,
+        active: true,
+      },
+    });
 
     return NextResponse.json({
       success: true,
       message: "User updated successfully",
-      user: {
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        phone: user.phone,
-        approved: user.approved,
-        active: user.active,
-      },
+      user: updatedUser,
     });
   } catch (error) {
     console.error("Error updating user:", error);
@@ -139,13 +134,6 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  if (!process.env.JWT_SECRET) {
-    return NextResponse.json(
-      { error: "Server configuration error" },
-      { status: 500 }
-    );
-  }
-
   try {
     const cookieStore = await cookies();
     const accessToken = cookieStore.get("accessToken")?.value;
@@ -154,10 +142,8 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    let decoded: JwtPayload;
-    try {
-      decoded = jwt.verify(accessToken, process.env.JWT_SECRET) as JwtPayload;
-    } catch (error) {
+    const decoded = await verifyToken(accessToken);
+    if (!decoded) {
       return NextResponse.json({ error: "Invalid token" }, { status: 401 });
     }
 
@@ -170,9 +156,6 @@ export async function DELETE(
 
     const { id } = await params;
 
-    await dbConnect();
-
-    // Prevent admin from deleting themselves
     if (decoded.id === id) {
       return NextResponse.json(
         { error: "Cannot delete your own account" },
@@ -180,10 +163,12 @@ export async function DELETE(
       );
     }
 
-    const user = await User.findByIdAndDelete(id);
+    const user = await prisma.user.findUnique({ where: { id } });
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
+
+    await prisma.user.delete({ where: { id } });
 
     return NextResponse.json({
       success: true,

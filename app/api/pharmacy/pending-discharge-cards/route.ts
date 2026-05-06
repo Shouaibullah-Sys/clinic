@@ -1,13 +1,9 @@
 // app/api/pharmacy/pending-discharge-cards/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import "@/lib/models"; // Import all models to ensure they are registered
-import { DischargeCard } from "@/lib/models/DischargeCard";
+import { prisma } from "@/lib/prisma";
 import { getTokenPayload } from "@/lib/auth/jwt";
-import { buildMarkedOnlyQuery } from "@/lib/utils/markedTransactions";
 
 export async function GET(req: NextRequest) {
-  await dbConnect();
   const payload = await getTokenPayload(req);
 
   if (
@@ -24,125 +20,65 @@ export async function GET(req: NextRequest) {
     const search = searchParams.get("search") || "";
     const skip = (page - 1) * limit;
 
-    // Build query for discharge cards with medicines ready for pharmacy dispensing
-    let query: any = {
-      "billing.medicinesPaid": true, // Only show paid discharge medicines
-      $or: [
-        { pharmacyDispensingStatus: { $exists: false } },
-        { pharmacyDispensingStatus: null },
-        { pharmacyDispensingStatus: "pending" },
-        { pharmacyDispensingStatus: "partial" },
-      ],
-      $and: [
-        {
-          $or: [
-            { "preOpMedicines.0": { $exists: true } },
-            { "postOpMedicines.0": { $exists: true } },
-            { "dischargeMedicines.0": { $exists: true } },
-          ],
-        },
-      ],
-      status: { $nin: ["cancelled", "draft"] },
+    const where: any = {
+      billingMedicinesPaid: true,
+      pharmacyDispensingStatus: { in: ["pending", "partial", null] },
+      status: { notIn: ["cancelled", "draft"] },
     };
 
-    console.log("Query for pending discharge cards:", query);
+    if (search) {
+      where.OR = [
+        { patient: { name: { contains: search, mode: "insensitive" } } },
+        { patient: { patientId: { contains: search, mode: "insensitive" } } },
+      ];
+    }
 
-    const { query: finalQuery } = await buildMarkedOnlyQuery({
-      userId: payload.id,
-      module: "discharge",
-      baseQuery: query,
+    const dischargeCards = await (prisma as any).dischargeCard.findMany({
+      where,
+      skip,
+      take: limit,
+      orderBy: { createdAt: "desc" },
+      include: {
+        patient: {
+          select: { id: true, name: true, patientId: true, phone: true },
+        },
+        doctor: {
+          select: { id: true, name: true, specialization: true },
+        },
+      },
     });
 
-    // Fetch discharge cards with patient and doctor populated
-    const dischargeCards = await DischargeCard.find(finalQuery)
-      .populate({
-        path: "patient",
-        select: "name patientId phone",
-        match: search
-          ? {
-              $or: [
-                { name: { $regex: search, $options: "i" } },
-                { patientId: { $regex: search, $options: "i" } },
-              ],
-            }
-          : {},
-      })
-      .populate({
-        path: "doctor",
-        select: "name specialization",
-      })
-      .populate({
-        path: "preOpMedicines.medicine",
-        select: "name form dosage frequency route currentQuantity sellingPrice",
-        model: "MedicineStock",
-      })
-      .populate({
-        path: "postOpMedicines.medicine",
-        select: "name form dosage frequency route currentQuantity sellingPrice",
-        model: "MedicineStock",
-      })
-      .populate({
-        path: "dischargeMedicines.medicine",
-        select: "name form dosage frequency route currentQuantity sellingPrice",
-        model: "MedicineStock",
-      })
-      .select(
-        "dischargeId patient doctor operationName operationDate diagnosis preOpMedicines postOpMedicines dischargeMedicines billing pharmacyDispensingStatus status createdAt",
-      )
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit);
+    const total = await (prisma as any).dischargeCard.count({ where });
 
-    // Filter out cards where patient wasn't found (if searching)
-    const filteredCards = search
-      ? dischargeCards.filter((card) => card.patient && card.doctor)
-      : dischargeCards;
+    const cardsWithTotals = dischargeCards.map((card: any) => {
+      const billing = JSON.parse(card.billing || "{}");
+      const preOpMedicines = JSON.parse(card.preOpMedicines || "[]");
+      const postOpMedicines = JSON.parse(card.postOpMedicines || "[]");
+      const dischargeMedicines = JSON.parse(card.dischargeMedicines || "[]");
 
-    // Calculate totals for each card
-    const cardsWithTotals = filteredCards.map((card) => {
-      const preOpTotal =
-        card.preOpMedicines?.reduce(
-          (sum: number, med: any) => sum + (med.totalPrice || 0),
-          0,
-        ) || 0;
-      const postOpTotal =
-        card.postOpMedicines?.reduce(
-          (sum: number, med: any) => sum + (med.totalPrice || 0),
-          0,
-        ) || 0;
-      const dischargeTotal =
-        card.dischargeMedicines?.reduce(
-          (sum: number, med: any) => sum + (med.totalPrice || 0),
-          0,
-        ) || 0;
+      const preOpTotal = preOpMedicines.reduce((sum: number, med: any) => sum + (med.totalPrice || 0), 0) || 0;
+      const postOpTotal = postOpMedicines.reduce((sum: number, med: any) => sum + (med.totalPrice || 0), 0) || 0;
+      const dischargeTotal = dischargeMedicines.reduce((sum: number, med: any) => sum + (med.totalPrice || 0), 0) || 0;
 
       const totalMedicineCost = preOpTotal + postOpTotal + dischargeTotal;
-      const totalMedicines =
-        (card.preOpMedicines?.length || 0) +
-        (card.postOpMedicines?.length || 0) +
-        (card.dischargeMedicines?.length || 0);
+      const totalMedicines = preOpMedicines.length + postOpMedicines.length + dischargeMedicines.length;
 
-      // Count dispensed medicines
-      const preOpDispensed =
-        card.preOpMedicines?.filter((m: any) => m.dispensed).length || 0;
-      const postOpDispensed =
-        card.postOpMedicines?.filter((m: any) => m.dispensed).length || 0;
-      const dischargeDispensed =
-        card.dischargeMedicines?.filter((m: any) => m.dispensed).length || 0;
-      const totalDispensed =
-        preOpDispensed + postOpDispensed + dischargeDispensed;
+      const preOpDispensed = preOpMedicines.filter((m: any) => m.dispensed).length || 0;
+      const postOpDispensed = postOpMedicines.filter((m: any) => m.dispensed).length || 0;
+      const dischargeDispensed = dischargeMedicines.filter((m: any) => m.dispensed).length || 0;
+      const totalDispensed = preOpDispensed + postOpDispensed + dischargeDispensed;
 
       return {
-        _id: card._id,
+        id: card.id,
         dischargeId: card.dischargeId,
         patient: card.patient,
         doctor: card.doctor,
         operationName: card.operationName,
         operationDate: card.operationDate,
         diagnosis: card.diagnosis,
-        preOpMedicines: card.preOpMedicines || [],
-        postOpMedicines: card.postOpMedicines || [],
-        dischargeMedicines: card.dischargeMedicines || [],
+        preOpMedicines,
+        postOpMedicines,
+        dischargeMedicines,
         preOpTotal,
         postOpTotal,
         dischargeTotal,
@@ -156,15 +92,8 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    // Filter to show only cards with remaining medicines to dispense
     const pendingCards = cardsWithTotals.filter(
-      (card) => card.remainingMedicines > 0,
-    );
-
-    const total = await DischargeCard.countDocuments(finalQuery);
-
-    console.log(
-      `Found ${pendingCards.length} discharge cards with medicines to dispense`,
+      (card: any) => card.remainingMedicines > 0,
     );
 
     return NextResponse.json({

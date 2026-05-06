@@ -9,13 +9,27 @@ const JwtPayloadSchema = z.object({
   role: z.enum(['admin', 'staff', 'doctor', 'nurse', 'receptionist', 'pharmacist', 'pharmacy_head', 'lab_technician', 'radiologist', 'admission']),
   name: z.string().optional(),
   email: z.string().email().optional(),
-  employeeId: z.string().optional(),
+  employeeId: z.string().nullish(),
 });
 
 export type JwtPayload = z.infer<typeof JwtPayloadSchema>;
 
 export const getTokenPayload = async (req: NextRequest): Promise<JwtPayload | null> => {
-  const token = req.cookies.get('accessToken')?.value;
+  // Try Authorization header first (Bearer token)
+  const authHeader = req.headers.get('authorization');
+  let token = authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
+  
+  // Fall back to cookie
+  if (!token) {
+    token = req.cookies.get('accessToken')?.value || null;
+  }
+  
+  // Also try x-access-token header
+  if (!token) {
+    const xToken = req.headers.get('x-access-token');
+    if (xToken) token = xToken;
+  }
+  
   if (!token) return null;
   
   try {

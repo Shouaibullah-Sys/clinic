@@ -1,22 +1,8 @@
 // app/api/pharmacy/prescriptions/[id]/edit/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import "@/lib/models"; // Import all models to ensure they are registered
-import { Prescription } from "@/lib/models/Prescription";
+import { prisma } from "@/lib/prisma";
 import { getTokenPayload } from "@/lib/auth/jwt";
-import mongoose from "mongoose";
-
-// Type definitions
-interface MedicationUpdate {
-  index: number;
-  price?: number;
-}
-
-interface UpdateBody {
-  medications?: MedicationUpdate[];
-  finalize?: boolean;
-}
 
 // GET /api/pharmacy/prescriptions/[id]/edit
 export async function GET(
@@ -24,7 +10,6 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await dbConnect();
     const payload = await getTokenPayload(req);
 
     // Check authorization - only pharmacist or admin
@@ -38,10 +23,27 @@ export async function GET(
     const { id: prescriptionId } = await params;
 
     // Find prescription with populated references
-    const prescription = await Prescription.findById(prescriptionId)
-      .populate("patient", "name patientId phone guardian")
-      .populate("doctor", "name specialization")
-      .populate("appointment", "appointmentId appointmentDate");
+    const prescription = await prisma.prescription.findUnique({
+      where: { id: prescriptionId },
+      include: {
+        patient: {
+          select: {
+            id: true,
+            name: true,
+            patientId: true,
+            phone: true,
+            guardian: true,
+          },
+        },
+        doctor: {
+          select: {
+            id: true,
+            name: true,
+            specialization: true,
+          },
+        },
+      },
+    });
 
     if (!prescription) {
       return NextResponse.json(
@@ -50,8 +52,9 @@ export async function GET(
       );
     }
 
-    // Calculate medication totals for display
-    const medicationsWithTotals = prescription.medications.map((med) => ({
+    // Parse medications and calculate totals
+    const medications = JSON.parse(prescription.medications || "[]");
+    const medicationsWithTotals = medications.map((med: any) => ({
       ...med,
       totalPrice: med.price * med.quantity,
     }));
@@ -59,7 +62,7 @@ export async function GET(
     return NextResponse.json({
       success: true,
       data: {
-        ...prescription.toObject(),
+        ...prescription,
         medications: medicationsWithTotals,
       },
     });
@@ -81,7 +84,6 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await dbConnect();
     const payload = await getTokenPayload(req);
 
     // Check authorization - only pharmacist or admin
@@ -93,11 +95,13 @@ export async function PUT(
     }
 
     const { id: prescriptionId } = await params;
-    const body: UpdateBody = await req.json();
+    const body = await req.json();
     const { medications, finalize } = body;
 
     // Find the prescription
-    const prescription = await Prescription.findById(prescriptionId);
+    const prescription = await prisma.prescription.findUnique({
+      where: { id: prescriptionId },
+    });
 
     if (!prescription) {
       return NextResponse.json(
@@ -106,6 +110,9 @@ export async function PUT(
       );
     }
 
+    // Parse current medications
+    const currentMedications = JSON.parse(prescription.medications || "[]");
+    
     // Check if prescription is in a valid state for editing
     if (
       prescription.status === "cancelled" ||
@@ -134,7 +141,7 @@ export async function PUT(
       for (const medUpdate of medications) {
         const { index, price } = medUpdate;
 
-        if (index < 0 || index >= prescription.medications.length) {
+        if (index < 0 || index >= currentMedications.length) {
           return NextResponse.json(
             { error: `Invalid medication index: ${index}` },
             { status: 400 },
@@ -142,11 +149,11 @@ export async function PUT(
         }
 
         if (price !== undefined && price >= 0) {
-          const oldPrice = prescription.medications[index].price;
+          const oldPrice = currentMedications[index].price;
           if (oldPrice !== price) {
             priceChanges.push({ index, oldPrice, newPrice: price });
           }
-          prescription.medications[index].price = price;
+          currentMedications[index].price = price;
           updated = true;
         }
       }
@@ -159,7 +166,7 @@ export async function PUT(
     // Finalize prescription if requested
     if (finalize === true) {
       // Check if already finalized
-      if ((prescription as any).pricingFinalized === true) {
+      if (prescription.pricingFinalized === true) {
         return NextResponse.json(
           { error: "Prescription prices already finalized" },
           { status: 400 },
@@ -167,14 +174,14 @@ export async function PUT(
       }
 
       // Validate all medications have prices
-      for (let i = 0; i < prescription.medications.length; i++) {
+      for (let i = 0; i < currentMedications.length; i++) {
         if (
-          prescription.medications[i].price === undefined ||
-          prescription.medications[i].price === null
+          currentMedications[i].price === undefined ||
+          currentMedications[i].price === null
         ) {
           return NextResponse.json(
             {
-              error: `Medication "${prescription.medications[i].name}" does not have a price set`,
+              error: `Medication "${currentMedications[i].name}" does not have a price set`,
               medicationIndex: i,
             },
             { status: 400 },
@@ -183,93 +190,139 @@ export async function PUT(
       }
 
       // Calculate charges from updated medications
-      const basePrice = prescription.medications.reduce(
-        (sum, med) => sum + med.price * med.quantity,
+      const charges = JSON.parse(prescription.charges || "{}");
+      const basePrice = currentMedications.reduce(
+        (sum: number, med: any) => sum + med.price * med.quantity,
         0,
       );
 
       // Apply current charges
       const totalAmount =
         basePrice +
-        prescription.charges.tax +
-        prescription.charges.otherCharges -
-        prescription.charges.discount;
+        (charges.tax || 0) +
+        (charges.otherCharges || 0) -
+        (charges.discount || 0);
 
       // Update charges
-      prescription.charges.basePrice = basePrice;
-      prescription.charges.totalAmount = totalAmount;
-      prescription.charges.due = Math.max(
-        0,
-        totalAmount - prescription.charges.paid,
-      );
+      const updatedCharges = {
+        ...charges,
+        basePrice,
+        totalAmount,
+        due: Math.max(0, totalAmount - (charges.paid || 0)),
+      };
 
       // Update payment status based on charges
-      if (prescription.charges.due === 0 && totalAmount > 0) {
-        prescription.charges.paymentStatus = "paid";
-        prescription.paymentStatus = "verified";
-      } else if (prescription.charges.paid > 0) {
-        prescription.charges.paymentStatus = "partial";
-        prescription.paymentStatus = "partial";
+      let newPaymentStatus = updatedCharges.paymentStatus || "unpaid";
+      if (updatedCharges.due === 0 && totalAmount > 0) {
+        updatedCharges.paymentStatus = "paid";
+        newPaymentStatus = "verified";
+      } else if (updatedCharges.paid > 0) {
+        updatedCharges.paymentStatus = "partial";
+        newPaymentStatus = "partial";
       } else {
-        prescription.charges.paymentStatus = "unpaid";
-        prescription.paymentStatus = "unpaid";
+        updatedCharges.paymentStatus = "unpaid";
+        newPaymentStatus = "unpaid";
       }
 
-      // Mark as pricing finalized
-      (prescription as any).pricingFinalized = true;
-      (prescription as any).pricingFinalizedAt = new Date();
-      (prescription as any).pricingFinalizedBy = payload.id;
+      await prisma.prescription.update({
+        where: { id: prescriptionId },
+        data: {
+          medications: JSON.stringify(currentMedications),
+          charges: JSON.stringify(updatedCharges),
+          pricingFinalized: true,
+          pricingFinalizedById: payload.id,
+          pricingFinalizedAt: new Date(),
+          paymentStatus: newPaymentStatus,
+        },
+      });
 
-      updated = true;
+      // Fetch updated prescription
+      const updatedPrescription = await prisma.prescription.findUnique({
+        where: { id: prescriptionId },
+        include: {
+          patient: {
+            select: {
+              id: true,
+              name: true,
+              patientId: true,
+              phone: true,
+              guardian: true,
+            },
+          },
+          doctor: {
+            select: {
+              id: true,
+              name: true,
+              specialization: true,
+            },
+          },
+        },
+      });
 
-      console.log("✅ Prescription finalized:", prescriptionId);
-      console.log("   Total amount:", totalAmount);
-    } else if (updated && !finalize) {
-      // Recalculate charges if prices were updated but not finalizing
-      const basePrice = prescription.medications.reduce(
-        (sum, med) => sum + med.price * med.quantity,
-        0,
-      );
+      // Calculate medication totals for response
+      const updatedMedications = JSON.parse(updatedPrescription!.medications || "[]");
+      const medicationsWithTotals = updatedMedications.map((med: any) => ({
+        ...med,
+        totalPrice: med.price * med.quantity,
+      }));
 
-      prescription.charges.basePrice = basePrice;
-      prescription.charges.totalAmount =
-        basePrice +
-        prescription.charges.tax +
-        prescription.charges.otherCharges -
-        prescription.charges.discount;
-      prescription.charges.due = Math.max(
-        0,
-        prescription.charges.totalAmount - prescription.charges.paid,
-      );
+      return NextResponse.json({
+        success: true,
+        data: {
+          ...updatedPrescription,
+          medications: medicationsWithTotals,
+        },
+        message: "Prescription finalized successfully",
+      });
     }
 
     // Save the updated prescription
     if (updated) {
-      await prescription.save();
+      await prisma.prescription.update({
+        where: { id: prescriptionId },
+        data: {
+          medications: JSON.stringify(currentMedications),
+        },
+      });
     }
 
-    // Fetch updated prescription with populated fields
-    const updatedPrescription = await Prescription.findById(prescriptionId)
-      .populate("patient", "name patientId phone guardian")
-      .populate("doctor", "name specialization");
+    // Fetch updated prescription
+    const updatedPrescription = await prisma.prescription.findUnique({
+      where: { id: prescriptionId },
+      include: {
+        patient: {
+          select: {
+            id: true,
+            name: true,
+            patientId: true,
+            phone: true,
+            guardian: true,
+          },
+        },
+        doctor: {
+          select: {
+            id: true,
+            name: true,
+            specialization: true,
+          },
+        },
+      },
+    });
 
     // Calculate medication totals for response
-    const medicationsWithTotals = updatedPrescription!.medications.map(
-      (med) => ({
-        ...med,
-        totalPrice: med.price * med.quantity,
-      }),
-    );
+    const updatedMedications = JSON.parse(updatedPrescription!.medications || "[]");
+    const medicationsWithTotals = updatedMedications.map((med: any) => ({
+      ...med,
+      totalPrice: med.price * med.quantity,
+    }));
 
     return NextResponse.json({
       success: true,
       data: {
-        ...updatedPrescription!.toObject(),
+        ...updatedPrescription,
         medications: medicationsWithTotals,
       },
-      message: finalize
-        ? "Prescription finalized successfully"
-        : "Prescription updated successfully",
+      message: "Prescription updated successfully",
     });
   } catch (error: any) {
     console.error("Error updating prescription:", error);

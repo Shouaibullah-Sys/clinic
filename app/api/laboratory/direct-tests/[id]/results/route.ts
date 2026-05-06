@@ -1,22 +1,12 @@
-// app/api/laboratory/direct-tests/[id]/results/route.ts
-
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { LabTest } from "@/lib/models/LabTest";
+import { prisma } from "@/lib/prisma";
 import { authenticateRequest } from "@/lib/auth";
-import mongoose from "mongoose";
-import { AppSetting, IAppSetting } from "@/lib/models/AppSetting";
 
-const SETTING_KEY = "directLabTestPaymentRequired";
-
-// PUT: Add results to a direct lab test
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await dbConnect();
-
     const auth = await authenticateRequest(request);
     if (!auth.success) {
       return NextResponse.json(
@@ -25,7 +15,6 @@ export async function PUT(
       );
     }
 
-    // Only lab technicians can add results
     if (auth.userRole !== "lab_technician" && auth.userRole !== "admin") {
       return NextResponse.json(
         {
@@ -40,8 +29,9 @@ export async function PUT(
     const body = await request.json();
     const { parameters, interpretation } = body;
 
-    // Find test
-    const test = await LabTest.findById(testId);
+    const test = await prisma.labTest.findUnique({
+      where: { id: testId },
+    });
 
     if (!test) {
       return NextResponse.json(
@@ -50,7 +40,6 @@ export async function PUT(
       );
     }
 
-    // Verify this is a direct test
     if (!test.isDirectTest) {
       return NextResponse.json(
         { success: false, error: "This is not a direct lab test" },
@@ -58,7 +47,6 @@ export async function PUT(
       );
     }
 
-    // Prevent edits after finalization
     if (test.finalized) {
       return NextResponse.json(
         {
@@ -69,23 +57,6 @@ export async function PUT(
       );
     }
 
-    const setting = (await AppSetting.findOne({
-      key: SETTING_KEY,
-    }).lean()) as IAppSetting | null;
-    const paymentRequired = setting?.value ?? true;
-
-    // Check payment verification (if required)
-    if (paymentRequired && !test.paymentVerified) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Payment must be verified before adding results",
-        },
-        { status: 400 },
-      );
-    }
-
-    // Validate parameters
     if (!parameters || !Array.isArray(parameters) || parameters.length === 0) {
       return NextResponse.json(
         { success: false, error: "Test parameters are required" },
@@ -93,37 +64,30 @@ export async function PUT(
       );
     }
 
-    // Update test with results
-    test.results = {
-      parameters: parameters.map((p: any) => ({
-        name: p.name,
-        value: p.value,
-        unit: p.unit || "",
-        normalRange: p.normalRange || "",
-        flag: p.flag || "normal",
-        remarks: p.remarks || "",
-        group: p.group || undefined,
-      })),
-      interpretation: interpretation || "",
-      reportedBy: new mongoose.Types.ObjectId(auth.userId),
-      reportedAt: new Date(),
-    };
-
-    // For direct tests, set status to "completed" when results are added
-    // Direct tests don't require sample collection
-    test.status = "completed";
-    test.processingStatus = "completed";
-    test.completedAt = new Date();
-    test.readyForPrint = true;
-
-    await test.save();
-
-    // Return updated test
-    const updatedTest = await LabTest.findById(testId)
-      .populate("patient", "name patientId phone")
-      .populate("createdBy", "name")
-      .populate("results.reportedBy", "name")
-      .lean();
+    const updatedTest = await prisma.labTest.update({
+      where: { id: testId },
+      data: {
+        results: JSON.stringify({
+          parameters: parameters.map((p: any) => ({
+            name: p.name,
+            value: p.value,
+            unit: p.unit || "",
+            normalRange: p.normalRange || "",
+            flag: p.flag || "normal",
+            remarks: p.remarks || "",
+            group: p.group || undefined,
+          })),
+          interpretation: interpretation || "",
+        }),
+        status: "completed",
+        processingStatus: "completed",
+        readyForPrint: true,
+      },
+      include: {
+        patient: { select: { name: true, patientId: true, phone: true } },
+        createdBy: { select: { name: true } },
+      },
+    });
 
     console.log(
       `Results added for direct lab test ${test.testId} by ${auth.userName}`,

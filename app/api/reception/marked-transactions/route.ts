@@ -1,32 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { authenticateRequest } from "@/lib/auth";
-import { MarkedTransaction, MarkedModule } from "@/lib/models/MarkedTransaction";
+import { prisma } from "@/lib/prisma";
+import { getTokenPayload } from "@/lib/auth/jwt";
 
-const allowedModules: MarkedModule[] = [
-  "lab",
-  "appointment",
-  "radiology",
-  "prescription",
-  "discharge",
-  "pharmacy",
-];
-
+const allowedModules = ["lab", "appointment", "radiology", "prescription", "discharge", "pharmacy"];
 const allowedRoles = ["receptionist", "admin"];
 
 export async function GET(request: NextRequest) {
   try {
-    await dbConnect();
+    const payload = await getTokenPayload(request);
 
-    const auth = await authenticateRequest(request);
-    if (!auth.success) {
-      return NextResponse.json(
-        { success: false, error: auth.error },
-        { status: auth.status || 401 },
-      );
-    }
-
-    if (!auth.userRole || !allowedRoles.includes(auth.userRole)) {
+    if (!payload || !allowedRoles.includes(payload.role)) {
       return NextResponse.json(
         { success: false, error: "Forbidden. Access denied." },
         { status: 403 },
@@ -34,24 +17,25 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const module = searchParams.get("module") as MarkedModule | null;
+    const module = searchParams.get("module");
     const dateFrom = searchParams.get("dateFrom");
     const dateTo = searchParams.get("dateTo");
 
-    const query: Record<string, any> = {};
+    let where: any = {};
     if (module && allowedModules.includes(module)) {
-      query.module = module;
+      where.module = module;
     }
 
     if (dateFrom || dateTo) {
-      query.transactionDate = {};
-      if (dateFrom) query.transactionDate.$gte = new Date(dateFrom);
-      if (dateTo) query.transactionDate.$lte = new Date(dateTo);
+      where.transactionDate = {};
+      if (dateFrom) where.transactionDate.gte = new Date(dateFrom);
+      if (dateTo) where.transactionDate.lte = new Date(dateTo);
     }
 
-    const marked = await MarkedTransaction.find(query)
-      .sort({ markedAt: -1 })
-      .lean();
+    const marked = await (prisma as any).markedTransaction.findMany({
+      where,
+      orderBy: { markedAt: "desc" },
+    });
 
     return NextResponse.json({ success: true, data: marked });
   } catch (error: any) {
@@ -64,17 +48,9 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    await dbConnect();
+    const payload = await getTokenPayload(request);
 
-    const auth = await authenticateRequest(request);
-    if (!auth.success) {
-      return NextResponse.json(
-        { success: false, error: auth.error },
-        { status: auth.status || 401 },
-      );
-    }
-
-    if (!auth.userRole || !allowedRoles.includes(auth.userRole)) {
+    if (!payload || !allowedRoles.includes(payload.role)) {
       return NextResponse.json(
         { success: false, error: "Forbidden. Access denied." },
         { status: 403 },
@@ -82,11 +58,9 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const module = body.module as MarkedModule;
+    const module = body.module;
     const transactionId = String(body.transactionId || "").trim();
-    const transactionDate = body.transactionDate
-      ? new Date(body.transactionDate)
-      : null;
+    const transactionDate = body.transactionDate ? new Date(body.transactionDate) : null;
     const notes = body.notes ? String(body.notes) : undefined;
 
     if (!allowedModules.includes(module)) {
@@ -110,18 +84,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const record = await MarkedTransaction.findOneAndUpdate(
-      { module, transactionId },
-      {
+    const record = await (prisma as any).markedTransaction.upsert({
+      where: { module_transactionId: { module, transactionId } },
+      create: {
         module,
         transactionId,
         transactionDate,
-        markedBy: auth.userId,
+        markedById: payload.id,
         markedAt: new Date(),
         notes,
       },
-      { upsert: true, new: true, setDefaultsOnInsert: true },
-    );
+      update: {
+        transactionDate,
+        markedById: payload.id,
+        markedAt: new Date(),
+        notes,
+      },
+    });
 
     return NextResponse.json({ success: true, data: record });
   } catch (error: any) {
@@ -134,17 +113,9 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    await dbConnect();
+    const payload = await getTokenPayload(request);
 
-    const auth = await authenticateRequest(request);
-    if (!auth.success) {
-      return NextResponse.json(
-        { success: false, error: auth.error },
-        { status: auth.status || 401 },
-      );
-    }
-
-    if (!auth.userRole || !allowedRoles.includes(auth.userRole)) {
+    if (!payload || !allowedRoles.includes(payload.role)) {
       return NextResponse.json(
         { success: false, error: "Forbidden. Access denied." },
         { status: 403 },
@@ -152,7 +123,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     const body = await request.json();
-    const module = body.module as MarkedModule;
+    const module = body.module;
     const transactionId = String(body.transactionId || "").trim();
 
     if (!allowedModules.includes(module)) {
@@ -169,7 +140,9 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    await MarkedTransaction.deleteOne({ module, transactionId });
+    await (prisma as any).markedTransaction.delete({
+      where: { module_transactionId: { module, transactionId } },
+    });
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

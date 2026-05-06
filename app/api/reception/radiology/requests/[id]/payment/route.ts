@@ -1,19 +1,12 @@
-// app/api/reception/radiology/requests/[id]/payment/route.ts
-
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { RadiologyService } from "@/lib/models/RadiologyService";
+import { prisma } from "@/lib/prisma";
 import { authenticateRequest, hasRequiredRole } from "@/lib/auth";
 
-// PUT: Update payment status for radiology request
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await dbConnect();
-    
-    // Authenticate request
     const auth = await authenticateRequest(request);
     if (!auth.success) {
       return NextResponse.json(
@@ -22,7 +15,6 @@ export async function PUT(
       );
     }
 
-    // Check if user is a receptionist or admin
     const allowedRoles = ["receptionist", "admin"];
     if (!hasRequiredRole(auth.userRole, allowedRoles)) {
       return NextResponse.json(
@@ -40,7 +32,6 @@ export async function PUT(
     const body = await request.json();
     const { billingStatus, paymentMethod, transactionId, notes } = body;
     
-    // Validate billing status
     const validBillingStatuses = ["pending", "billed", "paid"];
     if (!billingStatus || !validBillingStatuses.includes(billingStatus)) {
       return NextResponse.json(
@@ -52,8 +43,9 @@ export async function PUT(
       );
     }
     
-    // Find radiology request
-    const radiologyRequest = await RadiologyService.findById(requestId);
+    const radiologyRequest = await prisma.radiologyRequest.findUnique({
+      where: { id: requestId }
+    });
     
     if (!radiologyRequest) {
       return NextResponse.json(
@@ -62,7 +54,6 @@ export async function PUT(
       );
     }
     
-    // Check if request is cancelled
     if (radiologyRequest.status === "cancelled") {
       return NextResponse.json(
         { success: false, error: "Cannot update payment for cancelled request" },
@@ -70,7 +61,6 @@ export async function PUT(
       );
     }
     
-    // Validate payment status transitions
     const currentStatus = radiologyRequest.billingStatus;
     const validTransitions: Record<string, string[]> = {
       "pending": ["billed", "paid"],
@@ -88,13 +78,11 @@ export async function PUT(
       );
     }
     
-    // Update payment status
     const updateData: any = {
       billingStatus,
       updatedAt: new Date()
     };
     
-    // Add payment details if provided
     if (paymentMethod) {
       updateData.paymentMethod = paymentMethod;
     }
@@ -104,24 +92,20 @@ export async function PUT(
     }
     
     if (notes) {
-      updateData.paymentNotes = notes;
+      updateData.notes = notes;
     }
     
-    // Add payment processed by info
-    if (billingStatus === "paid") {
-      updateData.paymentProcessedBy = auth.userId;
-      updateData.paymentProcessedAt = new Date();
-    }
-    
-    const updatedRequest = await RadiologyService.findByIdAndUpdate(
-      requestId,
-      { $set: updateData },
-      { new: true }
-    )
-      .populate("patient", "name patientId phone")
-      .populate("referringDoctor", "name specialization")
-      .populate("radiologist", "name")
-      .populate("technician", "name");
+    const updatedRequest = await prisma.radiologyRequest.update({
+      where: { id: requestId },
+      data: updateData,
+      include: {
+        patient: { select: { name: true, patientId: true, phone: true } },
+        referringDoctor: { select: { name: true, specialization: true, department: true } },
+        radiologist: { select: { name: true } },
+        technician: { select: { name: true } },
+        department: { select: { name: true } }
+      }
+    });
     
     console.log(`Payment status updated for request ${requestId}: ${currentStatus} -> ${billingStatus} by ${auth.userName}`);
     
@@ -144,15 +128,11 @@ export async function PUT(
   }
 }
 
-// GET: Get billing details for a radiology request
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await dbConnect();
-    
-    // Authenticate request
     const auth = await authenticateRequest(request);
     if (!auth.success) {
       return NextResponse.json(
@@ -161,7 +141,6 @@ export async function GET(
       );
     }
 
-    // Check if user is a receptionist or admin
     const allowedRoles = ["receptionist", "admin"];
     if (!hasRequiredRole(auth.userRole, allowedRoles)) {
       return NextResponse.json(
@@ -177,14 +156,16 @@ export async function GET(
     
     const { id: requestId } = await params;
     
-    // Find radiology request with all details
-    const radiologyRequest = await RadiologyService.findById(requestId)
-      .populate("patient", "name patientId phone guardian dateOfBirth gender")
-      .populate("referringDoctor", "name specialization department")
-      .populate("radiologist", "name")
-      .populate("technician", "name")
-      .populate("department", "name")
-      .lean();
+    const radiologyRequest = await prisma.radiologyRequest.findUnique({
+      where: { id: requestId },
+      include: {
+        patient: { select: { name: true, patientId: true, phone: true, guardian: true, dateOfBirth: true, gender: true } },
+        referringDoctor: { select: { name: true, specialization: true, department: true } },
+        radiologist: { select: { name: true } },
+        technician: { select: { name: true } },
+        department: { select: { name: true } }
+      }
+    });
     
     if (!radiologyRequest) {
       return NextResponse.json(
@@ -193,7 +174,6 @@ export async function GET(
       );
     }
     
-    // Get pricing information based on service type
     const pricingInfo = getServicePricing(radiologyRequest.serviceType);
     
     return NextResponse.json({
@@ -217,7 +197,6 @@ export async function GET(
   }
 }
 
-// Helper function to get service pricing
 function getServicePricing(serviceType: string) {
   const pricingMap: Record<string, { basePrice: number; contrastPrice: number }> = {
     "x-ray": { basePrice: 500, contrastPrice: 0 },

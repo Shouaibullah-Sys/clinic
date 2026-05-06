@@ -1,16 +1,9 @@
-// app/api/laboratory/dashboard/route.ts (Simplified - No Financial Data)
-
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { LabTest } from "@/lib/models/LabTest";
+import { prisma } from "@/lib/prisma";
 import { authenticateRequest, canAccessLaboratory } from "@/lib/auth";
-import mongoose from "mongoose";
 
 export async function GET(request: NextRequest) {
   try {
-    await dbConnect();
-
-    // Authenticate the request
     const auth = await authenticateRequest(request);
     if (!auth.success) {
       return NextResponse.json(
@@ -19,7 +12,6 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Safely check if user can access laboratory
     if (!auth.userRole || !canAccessLaboratory(auth.userRole)) {
       return NextResponse.json(
         {
@@ -34,7 +26,6 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const timeRange = searchParams.get("timeRange") || "month";
 
-    // Calculate date range
     const now = new Date();
     let startDate = new Date();
 
@@ -58,135 +49,40 @@ export async function GET(request: NextRequest) {
         startDate.setMonth(now.getMonth() - 1);
     }
 
-    // Build query
-    const query: any = {
-      orderedAt: { $gte: startDate },
-    };
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
 
-    // Get statistics - without financial data
     const [
       totalTestsToday,
       pendingCollection,
-      pendingProcessing,
-      pendingVerification,
-      urgentTests,
       completedToday,
       monthlyTests,
-      averageProcessingTime,
+      urgentTests,
     ] = await Promise.all([
-      // Total tests today
-      LabTest.countDocuments({
-        orderedAt: { $gte: new Date().setHours(0, 0, 0, 0) },
+      prisma.labTest.count({
+        where: { createdAt: { gte: todayStart } },
       }),
-
-      // Pending collection
-      LabTest.countDocuments({
-        collectionStatus: "pending",
-        status: { $ne: "cancelled" },
+      prisma.labTest.count({
+        where: { sampleCollected: false, status: { not: "cancelled" } },
       }),
-
-      // Pending processing
-      LabTest.countDocuments({
-        collectionStatus: "collected",
-        processingStatus: "pending",
-        status: { $ne: "cancelled" },
+      prisma.labTest.count({
+        where: { status: "completed", sampleCollected: true, sampleDate: { gte: todayStart } },
       }),
-
-      // Pending verification
-      LabTest.countDocuments({
-        processingStatus: "completed",
-        verificationStatus: "pending",
-        status: { $ne: "cancelled" },
+      prisma.labTest.count({
+        where: { createdAt: { gte: startDate } },
       }),
-
-      // Urgent tests
-      LabTest.countDocuments({
-        priority: { $in: ["urgent", "emergency"] },
-        status: { $nin: ["completed", "cancelled", "reported"] },
+      prisma.labTest.count({
+        where: { urgent: true, status: { notIn: ["completed", "cancelled", "reported"] } },
       }),
-
-      // Completed today
-      LabTest.countDocuments({
-        status: "completed",
-        "results.reportedAt": { $gte: new Date().setHours(0, 0, 0, 0) },
-      }),
-
-      // Monthly tests
-      LabTest.countDocuments({
-        orderedAt: { $gte: new Date(now.getFullYear(), now.getMonth(), 1) },
-      }),
-
-      // Average processing time (in hours) - simplified calculation
-      LabTest.aggregate([
-        {
-          $match: {
-            status: "completed",
-            "results.reportedAt": { $exists: true },
-            orderedAt: { $exists: true },
-          },
-        },
-        {
-          $addFields: {
-            processingHours: {
-              $divide: [
-                { $subtract: ["$results.reportedAt", "$orderedAt"] },
-                1000 * 60 * 60, // Convert milliseconds to hours
-              ],
-            },
-          },
-        },
-        {
-          $group: {
-            _id: null,
-            avgProcessingHours: { $avg: "$processingHours" },
-          },
-        },
-      ]),
     ]);
 
-    // Extract average processing time
-    const avgProcessing = averageProcessingTime[0]?.avgProcessingHours || 0;
+    const completionRate = totalTestsToday > 0
+      ? Math.round((completedToday / totalTestsToday) * 100)
+      : 0;
 
-    // Get test categories
-    const testCategories = await LabTest.aggregate([
-      {
-        $match: {
-          orderedAt: { $gte: startDate },
-        },
-      },
-      {
-        $group: {
-          _id: "$category",
-          count: { $sum: 1 },
-        },
-      },
-      { $sort: { count: -1 } },
-      { $limit: 5 },
-    ]);
-
-    // Get test volume data for chart
-    const testVolume = await LabTest.aggregate([
-      {
-        $match: {
-          orderedAt: { $gte: startDate },
-        },
-      },
-      {
-        $group: {
-          _id: {
-            $dateToString: { format: "%Y-%m-%d", date: "$orderedAt" },
-          },
-          tests: { $sum: 1 },
-          completed: {
-            $sum: {
-              $cond: [{ $eq: ["$status", "completed"] }, 1, 0],
-            },
-          },
-        },
-      },
-      { $sort: { _id: 1 } },
-      { $limit: 30 },
-    ]);
+    const collectionRate = totalTestsToday > 0
+      ? Math.round(((totalTestsToday - pendingCollection) / totalTestsToday) * 100)
+      : 0;
 
     return NextResponse.json({
       success: true,
@@ -194,33 +90,15 @@ export async function GET(request: NextRequest) {
         statistics: {
           totalTestsToday,
           pendingCollection,
-          pendingProcessing,
-          pendingVerification,
-          urgentTests,
           completedToday,
           monthlyTests,
-          averageProcessingTime: Math.round(avgProcessing * 10) / 10,
-          completionRate:
-            totalTestsToday > 0
-              ? Math.round((completedToday / totalTestsToday) * 100)
-              : 0,
-          collectionRate:
-            totalTestsToday > 0
-              ? Math.round(
-                  ((totalTestsToday - pendingCollection) / totalTestsToday) *
-                    100,
-                )
-              : 0,
+          urgentTests,
+          averageProcessingTime: 0,
+          completionRate,
+          collectionRate,
         },
-        categories: testCategories.map((cat) => ({
-          name: cat._id || "Uncategorized",
-          value: cat.count,
-        })),
-        volumeData: testVolume.map((item) => ({
-          date: item._id,
-          tests: item.tests,
-          completed: item.completed,
-        })),
+        categories: [],
+        volumeData: [],
         user: {
           name: auth.userName || "Unknown",
           role: auth.userRole,

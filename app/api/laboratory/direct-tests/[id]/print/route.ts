@@ -1,28 +1,12 @@
-// app/api/laboratory/direct-tests/[id]/print/route.ts
-
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { LabTest } from "@/lib/models/LabTest";
-import { authenticateRequest, canAccessLaboratory } from "@/lib/auth";
-import mongoose from "mongoose";
+import { prisma } from "@/lib/prisma";
+import { authenticateRequest } from "@/lib/auth";
 
-/**
- * GET /api/laboratory/direct-tests/[id]/print
- *
- * Fetches direct test data for PDF generation/printing.
- * Returns the complete test object with all necessary data for generating a PDF report.
- *
- * This endpoint is used by the LabTestPDFGenerator component to retrieve test data
- * before generating the PDF on the client side.
- */
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await dbConnect();
-
-    // Authenticate the request
     const auth = await authenticateRequest(request);
     if (!auth.success) {
       return NextResponse.json(
@@ -31,8 +15,8 @@ export async function GET(
       );
     }
 
-    // Check if user can access laboratory
-    if (!canAccessLaboratory(auth.userRole)) {
+    const allowedRoles = ["lab_technician", "admin", "receptionist", "doctor"];
+    if (!allowedRoles.includes(auth.userRole!)) {
       return NextResponse.json(
         {
           success: false,
@@ -42,30 +26,30 @@ export async function GET(
       );
     }
 
-    // Unwrap the params promise
     const { id: testId } = await params;
 
-    console.log(
-      `Direct lab test print requested by ${auth.userRole} ${auth.userName}: ${testId}`,
-    );
-
-    // Find the test by ID with all necessary populated fields
-    const test = await LabTest.findById(testId)
-      .populate(
-        "patient",
-        "name patientId phone guardian dateOfBirth gender address refPerson passTskNo registrationNo",
-      )
-      .populate("doctor", "name specialization department licenseNumber")
-      .populate("createdBy", "name")
-      .populate("orderedBy", "name")
-      .populate("charges.collectedBy", "name")
-      .populate("collectionDetails.collectedBy", "name")
-      .populate("processingDetails.processedBy", "name")
-      .populate("verificationDetails.verifiedBy", "name")
-      .populate("paymentVerifiedBy", "name")
-      .populate("results.reportedBy", "name")
-      .populate("results.verifiedBy", "name")
-      .lean();
+    const test = await prisma.labTest.findUnique({
+      where: { id: testId },
+      include: {
+        patient: {
+          select: {
+            name: true,
+            patientId: true,
+            phone: true,
+            guardian: true,
+            dateOfBirth: true,
+            gender: true,
+            address: true,
+            refPerson: true,
+            passTskNo: true,
+            registrationNo: true,
+          },
+        },
+        doctor: { select: { name: true, specialization: true, department: true, licenseNumber: true } },
+        createdBy: { select: { name: true } },
+        orderedBy: { select: { name: true } },
+      },
+    });
 
     if (!test) {
       return NextResponse.json(
@@ -74,8 +58,7 @@ export async function GET(
       );
     }
 
-    // If user is doctor, check if they can access this test
-    if (auth.userRole === "doctor" && test.doctor?.toString() !== auth.userId) {
+    if (auth.userRole === "doctor" && test.doctorId !== auth.userId) {
       return NextResponse.json(
         {
           success: false,
@@ -85,12 +68,8 @@ export async function GET(
       );
     }
 
-    // Check if test has results (required for printing)
-    if (
-      !test.results ||
-      !test.results.parameters ||
-      test.results.parameters.length === 0
-    ) {
+    const results = test.results as any;
+    if (!results || !results.parameters || results.parameters.length === 0) {
       return NextResponse.json(
         {
           success: false,
@@ -117,15 +96,11 @@ export async function GET(
   }
 }
 
-// POST: Mark a direct lab test as printed
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await dbConnect();
-
-    // Authenticate the request
     const auth = await authenticateRequest(request);
     if (!auth.success) {
       return NextResponse.json(
@@ -134,9 +109,8 @@ export async function POST(
       );
     }
 
-    // Only laboratory staff and admin can mark tests as printed
     const allowedRoles = ["lab_technician", "admin"];
-    if (!auth.userRole || !allowedRoles.includes(auth.userRole)) {
+    if (!allowedRoles.includes(auth.userRole!)) {
       return NextResponse.json(
         {
           success: false,
@@ -146,11 +120,17 @@ export async function POST(
       );
     }
 
-    // Unwrap the params promise
     const { id: testId } = await params;
 
-    // Find the lab test
-    const labTest = await LabTest.findById(testId);
+    const labTest = await prisma.labTest.findUnique({
+      where: { id: testId },
+      include: {
+        patient: { select: { name: true, patientId: true, phone: true } },
+        createdBy: { select: { name: true } },
+        printedBy: { select: { name: true } },
+      },
+    });
+
     if (!labTest) {
       return NextResponse.json(
         { success: false, error: "Lab test not found" },
@@ -158,117 +138,68 @@ export async function POST(
       );
     }
 
-    // Debug logging
-    console.log(`[DEBUG] Print attempt for test ${labTest.testId}:`, {
-      isDirectTest: labTest.isDirectTest,
-      collectionStatus: labTest.collectionStatus,
-      readyForPrint: labTest.readyForPrint,
-      printedAt: labTest.printedAt,
-      status: labTest.status,
-    });
+    const results = labTest.results as any;
 
-    // Build detailed validation report
-    const validationReport = {
-      isDirectTest: labTest.isDirectTest,
-      collectionStatus: labTest.collectionStatus,
-      readyForPrint: labTest.readyForPrint,
-      printedAt: labTest.printedAt
-        ? new Date(labTest.printedAt).toISOString()
-        : null,
-      status: labTest.status,
-    };
-
-    console.log(`[DEBUG] Validation report:`, validationReport);
-
-    // Check which validation is failing
     if (!labTest.isDirectTest) {
-      console.log(`[DEBUG] Print failed: Not a direct test`);
       return NextResponse.json(
         {
           success: false,
           error: "This is not a direct lab test",
-          validation: validationReport,
         },
         { status: 400 },
       );
     }
 
     if (labTest.collectionStatus !== "collected") {
-      console.log(`[DEBUG] Print failed: Sample not collected`);
       return NextResponse.json(
         {
           success: false,
-          error:
-            "Cannot mark test as printed. Sample has not been collected yet.",
-          validation: validationReport,
+          error: "Cannot mark test as printed. Sample has not been collected yet.",
         },
         { status: 400 },
       );
     }
 
-    if (
-      !labTest.results ||
-      !labTest.results.parameters ||
-      labTest.results.parameters.length === 0
-    ) {
-      console.log(`[DEBUG] Print failed: Results are missing`);
+    if (!results || !results.parameters || results.parameters.length === 0) {
       return NextResponse.json(
         {
           success: false,
           error: "Cannot mark test as printed. Results are missing.",
-          validation: validationReport,
         },
         { status: 400 },
       );
     }
 
     if (labTest.printedAt) {
-      console.log(
-        `[DEBUG] Print failed: Already printed at ${labTest.printedAt}`,
-      );
       return NextResponse.json(
         {
           success: false,
           error: "Test has already been printed",
-          validation: validationReport,
         },
         { status: 400 },
       );
     }
 
-    // Mark the test as printed
-    labTest.printedAt = new Date();
-    labTest.printedBy = new mongoose.Types.ObjectId(auth.userId!);
+    const updatedTest = await prisma.labTest.update({
+      where: { id: testId },
+      data: {
+        printedAt: new Date(),
+        printedById: auth.userId!,
+      },
+      include: {
+        patient: { select: { name: true, patientId: true, phone: true } },
+        createdBy: { select: { name: true } },
+        printedBy: { select: { name: true } },
+      },
+    });
 
-    await labTest.save();
+    console.log(`[DEBUG] Print successful for test ${labTest.testId}`);
 
-    // Populate the response
-    try {
-      const populatedTest = await LabTest.findById(labTest._id)
-        .populate("patient", "name patientId phone")
-        .populate("createdBy", "name")
-        .populate("finalizedBy", "name")
-        .populate("printedBy", "name")
-        .populate("results.reportedBy", "name")
-        .populate("results.verifiedBy", "name")
-        .lean();
-
-      console.log(`[DEBUG] Print successful for test ${labTest.testId}`);
-
-      return NextResponse.json({
-        success: true,
-        data: populatedTest,
-        message: "Direct lab test marked as printed successfully",
-      });
-    } catch (populateError: any) {
-      console.error("[DEBUG] Populate error:", populateError);
-      // If populate fails, still return success without populated fields
-      return NextResponse.json({
-        success: true,
-        data: labTest.toObject(),
-        message: "Direct lab test marked as printed (populate failed)",
-      });
-    }
+    return NextResponse.json({
+      success: true,
+      data: updatedTest,
+      message: "Direct lab test marked as printed successfully",
+    });
   } catch (error: any) {
     console.error("Error marking direct lab test as printed:", error);
     return NextResponse.json(

@@ -1,13 +1,9 @@
 // app/api/debug/insert-templates/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { LabTestTemplate } from "@/lib/models/LabTestTemplate";
-import mongoose from "mongoose";
+import { prisma } from "@/lib/prisma";
 
 export async function POST(request: NextRequest) {
   try {
-    await dbConnect();
-
     const body = await request.json();
     const { templates } = body;
 
@@ -27,27 +23,27 @@ export async function POST(request: NextRequest) {
 
     for (const template of templates) {
       try {
-        // Check if already exists
-        const existing = await LabTestTemplate.findOne({
-          testCode: template.testCode.toUpperCase(),
+        const existing = await prisma.labTestTemplate.findUnique({
+          where: { testType: template.testType?.toUpperCase() },
         });
 
         if (existing) {
-          results.existing.push(template.testCode);
+          results.existing.push(template.testType);
           results.failed++;
           continue;
         }
 
-        // Create the template
-        await LabTestTemplate.create({
-          ...template,
-          testCode: template.testCode.toUpperCase(),
+        await prisma.labTestTemplate.create({
+          data: {
+            ...template,
+            testType: template.testType?.toUpperCase(),
+          },
         });
 
         results.success++;
       } catch (error: any) {
         results.failed++;
-        results.errors.push(`${template.testCode}: ${error.message}`);
+        results.errors.push(`${template.testType}: ${error.message}`);
       }
     }
 
@@ -65,15 +61,12 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// GET method to test the endpoint
 export async function GET() {
   try {
-    await dbConnect();
-
-    const templates = await LabTestTemplate.find({})
-      .select("testCode testName category active")
-      .sort({ category: 1, testName: 1 })
-      .lean();
+    const templates = await prisma.labTestTemplate.findMany({
+      select: { testType: true, testName: true, category: true, active: true },
+      orderBy: [{ category: "asc" }, { testName: "asc" }],
+    });
 
     return NextResponse.json({
       success: true,

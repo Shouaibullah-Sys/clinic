@@ -1,88 +1,84 @@
 // app/api/dashboard/admin/revenue-trend/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "@/lib/auth";
-import dbConnect from "@/lib/dbConnect";
-import { DailyRecord } from "@/lib/models/DailyRecord";
-import { Invoice } from "@/lib/models/Invoice";
-import { AdminExpense } from "@/lib/models/AdminExpense";
+import { prisma } from "@/lib/prisma";
+import { authenticateRequest } from "@/lib/auth";
+
+// Simple aggregation helper for SQLite
+function aggregateByDate<T extends { date: Date; amount?: number }>(
+  items: T[],
+  valueKey?: keyof T,
+): { date: string; total: number }[] {
+  const grouped = new Map<string, number>();
+  for (const item of items) {
+    const dateStr = item.date.toISOString().split("T")[0];
+    const value = valueKey && item[valueKey] ? Number(item[valueKey]) : 1;
+    grouped.set(dateStr, (grouped.get(dateStr) || 0) + value);
+  }
+  return Array.from(grouped.entries())
+    .map(([date, total]) => ({ date, total }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
 
 export async function GET(req: NextRequest) {
   try {
-    const session = await getServerSession(req);
-    if (!session || session.user.role !== "admin") {
+    const auth = await authenticateRequest(req);
+    if (!auth.success || auth.userRole !== "admin") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    await dbConnect();
-
-    // Last 30 days revenue trend
+    // Last 30 days
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    const revenueTrend = await DailyRecord.aggregate([
-      {
-        $match: {
-          date: { $gte: thirtyDaysAgo },
-          status: "paid",
+    // DailyRecord trend
+    const dailyRecords = await prisma.dailyRecord.findMany({
+      where: {
+        date: {
+          gte: thirtyDaysAgo,
         },
       },
-      {
-        $group: {
-          _id: { $dateToString: { format: "%Y-%m-%d", date: "$date" } },
-          total: { $sum: "$amount" },
-          count: { $sum: 1 },
-        },
-      },
-      {
-        $sort: { _id: 1 },
-      },
-      {
-        $limit: 30,
-      },
-    ]);
+    });
+
+    const revenueTrend = aggregateByDate(
+      dailyRecords.map((r) => ({ date: r.date, amount: r.totalRevenue })),
+      "amount",
+    );
 
     // Invoice trend
-    const invoiceTrend = await Invoice.aggregate([
-      {
-        $match: {
-          createdAt: { $gte: thirtyDaysAgo },
+    const invoices = await prisma.invoice.findMany({
+      where: {
+        createdAt: {
+          gte: thirtyDaysAgo,
         },
       },
-      {
-        $group: {
-          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
-          count: { $sum: 1 },
-          totalAmount: { $sum: "$totalAmount" },
-        },
+      select: {
+        createdAt: true,
+        total: true,
       },
-      {
-        $sort: { _id: 1 },
-      },
-      {
-        $limit: 30,
-      },
-    ]);
+    });
+
+    const invoiceTrend = aggregateByDate(
+      invoices.map((i) => ({ date: i.createdAt, amount: i.total })),
+      "amount",
+    );
 
     // Expense trend
-    const expenseTrend = await AdminExpense.aggregate([
-      {
-        $match: {
-          date: { $gte: thirtyDaysAgo },
+    const expenses = await prisma.adminExpense.findMany({
+      where: {
+        date: {
+          gte: thirtyDaysAgo,
         },
       },
-      {
-        $group: {
-          _id: { $dateToString: { format: "%Y-%m-%d", date: "$date" } },
-          total: { $sum: "$amount" },
-        },
+      select: {
+        date: true,
+        amount: true,
       },
-      {
-        $sort: { _id: 1 },
-      },
-      {
-        $limit: 30,
-      },
-    ]);
+    });
+
+    const expenseTrend = aggregateByDate(
+      expenses.map((e) => ({ date: e.date, amount: e.amount })),
+      "amount",
+    );
 
     return NextResponse.json({
       revenueTrend,

@@ -1,25 +1,21 @@
 // app/api/laboratory/tests/categories/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { LabTest } from "@/lib/models/LabTest";
-import { authenticateRequest, canAccessLaboratory } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { getTokenPayload } from "@/lib/auth/jwt";
 
 export async function GET(request: NextRequest) {
   try {
-    await dbConnect();
-    
-    // Authenticate the request
-    const auth = await authenticateRequest(request);
-    if (!auth.success) {
+    const payload = await getTokenPayload(request);
+    if (!payload) {
       return NextResponse.json(
-        { success: false, error: auth.error },
-        { status: auth.status || 401 }
+        { success: false, error: "Unauthorized" },
+        { status: 401 }
       );
     }
-    
-    // Check if user can access laboratory
-    if (!auth.userRole || !canAccessLaboratory(auth.userRole)) {
+
+    const allowedRoles = ["admin", "doctor", "lab_technician", "radiologist", "receptionist"];
+    if (!allowedRoles.includes(payload.role)) {
       return NextResponse.json(
         { 
           success: false, 
@@ -32,112 +28,101 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const timeRange = searchParams.get("timeRange") || "month";
     
-    console.log(`Test categories requested by ${auth.userRole} ${auth.userName}`);
-    
-    let dateFilter: any = {};
+    // Calculate date range
     const now = new Date();
+    let startDate = new Date();
     
-    // Set date range based on timeRange
     switch (timeRange) {
       case "today":
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        dateFilter.orderedAt = { $gte: today };
+        startDate.setHours(0, 0, 0, 0);
         break;
       case "week":
-        const weekAgo = new Date();
-        weekAgo.setDate(weekAgo.getDate() - 7);
-        dateFilter.orderedAt = { $gte: weekAgo };
+        startDate.setDate(startDate.getDate() - 7);
         break;
       case "month":
-        const monthAgo = new Date();
-        monthAgo.setMonth(monthAgo.getMonth() - 1);
-        dateFilter.orderedAt = { $gte: monthAgo };
+        startDate.setMonth(startDate.getMonth() - 1);
         break;
       case "quarter":
-        const quarterAgo = new Date();
-        quarterAgo.setMonth(quarterAgo.getMonth() - 3);
-        dateFilter.orderedAt = { $gte: quarterAgo };
+        startDate.setMonth(startDate.getMonth() - 3);
         break;
       case "year":
-        const yearAgo = new Date();
-        yearAgo.setFullYear(yearAgo.getFullYear() - 1);
-        dateFilter.orderedAt = { $gte: yearAgo };
+        startDate.setFullYear(startDate.getFullYear() - 1);
         break;
+      default:
+        startDate.setMonth(startDate.getMonth() - 1);
     }
-    
-    // Base query
-    let baseQuery: any = { ...dateFilter, status: { $ne: "cancelled" } };
-    
+
+    // Build query
+    const where: any = {
+      createdAt: { gte: startDate },
+      status: { not: "cancelled" },
+    };
+
     // If doctor is viewing, only show their tests
-    if (auth.userRole === "doctor") {
-      baseQuery.doctor = auth.userId;
+    if (payload.role === "doctor") {
+      where.doctorId = payload.id;
     }
-    
-    // Get tests grouped by category
-    const testsByCategory = await LabTest.aggregate([
-      { $match: baseQuery },
-      {
-        $group: {
-          _id: "$category",
-          count: { $sum: 1 },
-          totalRevenue: { $sum: "$charges.totalAmount" },
-          avgProcessingTime: { $avg: { $subtract: ["$completedAt", "$orderedAt"] } }
-        }
+
+    // Get tests
+    const tests = await prisma.labTest.findMany({
+      where,
+      select: {
+        category: true,
+        status: true,
+        priority: true,
+        charges: true,
+        createdAt: true,
       },
-      { $sort: { count: -1 } }
-    ]);
-    
-    // Get status distribution
-    const testsByStatus = await LabTest.aggregate([
-      { $match: baseQuery },
-      {
-        $group: {
-          _id: "$status",
-          count: { $sum: 1 }
-        }
-      },
-      { $sort: { count: -1 } }
-    ]);
-    
-    // Get priority distribution
-    const testsByPriority = await LabTest.aggregate([
-      { $match: baseQuery },
-      {
-        $group: {
-          _id: "$priority",
-          count: { $sum: 1 }
-        }
-      },
-      { $sort: { count: -1 } }
-    ]);
-    
-    // Format category data for charts with safe null handling
-    const categoryData = testsByCategory.map(cat => ({
-      name: cat._id 
-        ? cat._id.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())
-        : "Uncategorized",
-      value: cat.count,
-      revenue: cat.totalRevenue || 0,
-      avgProcessingTime: cat.avgProcessingTime ? Math.round(cat.avgProcessingTime / (1000 * 60 * 60)) : 0 // Convert to hours
-    }));
-    
-    // Format status data with safe null handling
-    const statusData = testsByStatus.map(status => ({
-      name: status._id 
-        ? status._id.charAt(0).toUpperCase() + status._id.slice(1)
-        : "Unknown",
-      value: status.count
-    }));
-    
-    // Format priority data with safe null handling - FIXED THIS LINE
-    const priorityData = testsByPriority.map(priority => ({
-      name: priority._id 
-        ? priority._id.charAt(0).toUpperCase() + priority._id.slice(1)
-        : "Not Specified",
-      value: priority.count
-    }));
-    
+    });
+
+    // Process data manually (Prisma doesn't have aggregate pipeline like MongoDB)
+    const categoryMap = new Map<string, { count: number; totalRevenue: number }>();
+    const statusMap = new Map<string, number>();
+    const priorityMap = new Map<string, number>();
+
+    tests.forEach(test => {
+      // Category aggregation
+      const cat = test.category || "Uncategorized";
+      const existing = categoryMap.get(cat) || { count: 0, totalRevenue: 0 };
+      existing.count += 1;
+      const charges = JSON.parse(test.charges || '{"totalAmount": 0}');
+      existing.totalRevenue += charges.totalAmount || 0;
+      categoryMap.set(cat, existing);
+
+      // Status aggregation
+      const status = test.status || "Unknown";
+      statusMap.set(status, (statusMap.get(status) || 0) + 1);
+
+      // Priority aggregation
+      const priority = test.priority || "Not Specified";
+      priorityMap.set(priority, (priorityMap.get(priority) || 0) + 1);
+    });
+
+    // Format category data
+    const categoryData = Array.from(categoryMap.entries()).map(([name, data]) => ({
+      name: name.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase()),
+      value: data.count,
+      revenue: data.totalRevenue,
+    })).sort((a, b) => b.value - a.value);
+
+    // Format status data
+    const statusData = Array.from(statusMap.entries()).map(([name, value]) => ({
+      name: name.charAt(0).toUpperCase() + name.slice(1),
+      value,
+    })).sort((a, b) => b.value - a.value);
+
+    // Format priority data
+    const priorityData = Array.from(priorityMap.entries()).map(([name, value]) => ({
+      name: name.charAt(0).toUpperCase() + name.slice(1),
+      value,
+    })).sort((a, b) => b.value - a.value);
+
+    const totalTests = tests.length;
+    const totalRevenue = tests.reduce((sum, test) => {
+      const charges = JSON.parse(test.charges || '{"totalAmount": 0}');
+      return sum + (charges.totalAmount || 0);
+    }, 0);
+
     return NextResponse.json({
       success: true,
       data: {
@@ -145,9 +130,9 @@ export async function GET(request: NextRequest) {
         statusData,
         priorityData,
         summary: {
-          totalCategories: testsByCategory.length,
-          totalTests: testsByCategory.reduce((sum, cat) => sum + cat.count, 0),
-          totalRevenue: testsByCategory.reduce((sum, cat) => sum + (cat.totalRevenue || 0), 0),
+          totalCategories: categoryMap.size,
+          totalTests,
+          totalRevenue,
           timeRange
         }
       }
@@ -159,7 +144,6 @@ export async function GET(request: NextRequest) {
       { 
         success: false, 
         error: error.message || "Failed to fetch test categories",
-        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
       },
       { status: 500 }
     );

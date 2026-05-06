@@ -1,16 +1,13 @@
 // app/api/warehouse/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { Warehouse } from "@/lib/models/Warehouse";
+import { prisma } from "@/lib/prisma";
 import { getTokenPayload } from "@/lib/auth/jwt";
 
-// GET: Get single warehouse medicine by ID
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await dbConnect();
     const payload = await getTokenPayload(request);
 
     if (!payload || !["admin", "pharmacy_head"].includes(payload.role)) {
@@ -21,7 +18,9 @@ export async function GET(
     }
 
     const { id } = await params;
-    const medicine = await Warehouse.findById(id).lean();
+    const medicine = await prisma.warehouse.findUnique({
+      where: { id },
+    });
 
     if (!medicine) {
       return NextResponse.json(
@@ -46,13 +45,11 @@ export async function GET(
   }
 }
 
-// PUT: Update warehouse medicine
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await dbConnect();
     const payload = await getTokenPayload(request);
 
     if (!payload || !["admin", "pharmacy_head"].includes(payload.role)) {
@@ -67,7 +64,9 @@ export async function PUT(
       body;
 
     const { id } = await params;
-    const medicine = await Warehouse.findById(id);
+    const medicine = await prisma.warehouse.findUnique({
+      where: { id },
+    });
 
     if (!medicine) {
       return NextResponse.json(
@@ -76,19 +75,21 @@ export async function PUT(
       );
     }
 
-    // Update fields
-    if (name !== undefined) medicine.name = name.trim();
-    if (genericName !== undefined) medicine.genericName = genericName?.trim();
-    if (category !== undefined) medicine.category = category;
-    if (manufacturer !== undefined) medicine.manufacturer = manufacturer.trim();
-    if (description !== undefined) medicine.description = description?.trim();
-    if (isActive !== undefined) medicine.isActive = isActive;
-
-    await medicine.save();
+    const updatedMedicine = await prisma.warehouse.update({
+      where: { id },
+      data: {
+        name: name !== undefined ? name.trim() : undefined,
+        genericName: genericName !== undefined ? genericName?.trim() : undefined,
+        category: category !== undefined ? category : undefined,
+        manufacturer: manufacturer !== undefined ? manufacturer.trim() : undefined,
+        description: description !== undefined ? description?.trim() : undefined,
+        isActive: isActive !== undefined ? isActive : undefined,
+      },
+    });
 
     return NextResponse.json({
       success: true,
-      data: medicine,
+      data: updatedMedicine,
       message: "Warehouse medicine updated successfully",
     });
   } catch (error: any) {
@@ -103,13 +104,11 @@ export async function PUT(
   }
 }
 
-// DELETE: Delete warehouse medicine
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await dbConnect();
     const payload = await getTokenPayload(request);
 
     if (!payload || payload.role !== "admin") {
@@ -123,7 +122,9 @@ export async function DELETE(
     }
 
     const { id } = await params;
-    const medicine = await Warehouse.findById(id);
+    const medicine = await prisma.warehouse.findUnique({
+      where: { id },
+    });
 
     if (!medicine) {
       return NextResponse.json(
@@ -132,10 +133,8 @@ export async function DELETE(
       );
     }
 
-    // Check if there are any batches for this medicine
-    const { WarehouseBatch } = await import("@/lib/models/WarehouseBatch");
-    const batchCount = await WarehouseBatch.countDocuments({
-      warehouse: id,
+    const batchCount = await prisma.medicineStock.count({
+      where: { medicineId: id },
     });
 
     if (batchCount > 0) {
@@ -148,7 +147,9 @@ export async function DELETE(
       );
     }
 
-    await Warehouse.findByIdAndDelete(id);
+    await prisma.warehouse.delete({
+      where: { id },
+    });
 
     return NextResponse.json({
       success: true,

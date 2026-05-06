@@ -1,10 +1,6 @@
-// app/api/admin/doctors/route.ts
-
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { User } from "@/lib/models/User";
+import { prisma } from "@/lib/prisma";
 import { jwtVerify } from "jose";
-import mongoose from "mongoose";
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-this";
 
@@ -18,7 +14,6 @@ async function verifyToken(token: string) {
   }
 }
 
-// Helper to authenticate admin
 async function authenticateAdmin(request: NextRequest) {
   const authHeader = request.headers.get("authorization");
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -27,29 +22,25 @@ async function authenticateAdmin(request: NextRequest) {
 
   const token = authHeader.split(" ")[1];
   const payload = await verifyToken(token);
-  
+
   if (!payload) {
     return { error: "Invalid or expired token.", status: 401 };
   }
 
   const userRole = payload.role as string;
-  
-  // Only admin can access
+
   if (userRole !== "admin") {
     return { error: "Forbidden. Admin access required.", status: 403 };
   }
 
-  return { 
-    userId: payload.id as string, 
-    userRole 
+  return {
+    userId: payload.id as string,
+    userRole,
   };
 }
 
-// GET: Get all doctors with filters
 export async function GET(request: NextRequest) {
   try {
-    await dbConnect();
-    
     const auth = await authenticateAdmin(request);
     if ("error" in auth) {
       return NextResponse.json(
@@ -57,7 +48,7 @@ export async function GET(request: NextRequest) {
         { status: auth.status }
       );
     }
-    
+
     const { searchParams } = new URL(request.url);
     const search = searchParams.get("search");
     const department = searchParams.get("department");
@@ -66,58 +57,61 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "20");
     const skip = (page - 1) * limit;
-    
-    // Build query
-    let query: any = { role: "doctor" };
-    
-    // Search filter
+
+    let where: any = { role: "doctor" };
+
     if (search) {
-      const searchRegex = new RegExp(search, "i");
-      query.$or = [
-        { name: searchRegex },
-        { email: searchRegex },
-        { specialization: searchRegex },
-        { licenseNumber: searchRegex },
-        { phone: searchRegex },
+      where.OR = [
+        { name: { contains: search } },
+        { email: { contains: search } },
+        { specialization: { contains: search } },
+        { licenseNumber: { contains: search } },
+        { phone: { contains: search } },
       ];
     }
-    
-    // Department filter
+
     if (department && department !== "all") {
-      query.department = department;
+      where.department = department;
     }
-    
-    // Active filter
+
     if (active === "true") {
-      query.active = true;
+      where.active = true;
     } else if (active === "false") {
-      query.active = false;
+      where.active = false;
     }
-    
-    // Approved filter
+
     if (approved === "true") {
-      query.approved = true;
+      where.approved = true;
     } else if (approved === "false") {
-      query.approved = false;
+      where.approved = false;
     }
-    
-    // Get unique departments for filter
-    const departments = await User.distinct("department", { role: "doctor" });
-    
+
     const [doctors, total] = await Promise.all([
-      User.find(query)
-        .select("-password") // Exclude password
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-      User.countDocuments(query),
+      prisma.user.findMany({
+        where,
+        select: { id: true, name: true, email: true, phone: true, department: true, specialization: true, licenseNumber: true, qualifications: true, experience: true, consultationFee: true, availability: true, approved: true, active: true, createdAt: true },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+      }),
+      prisma.user.count({ where }),
     ]);
-    
+
+    const departments = await prisma.user.findMany({
+      where: { role: "doctor", department: { not: null } },
+      select: { department: true },
+      distinct: ["department"],
+    });
+
+    const departmentList = departments
+      .map((d) => d.department)
+      .filter((d): d is string => !!d)
+      .sort();
+
     return NextResponse.json({
       success: true,
       data: doctors,
-      departments: departments.filter(Boolean), // Remove null/undefined
+      departments: departmentList,
       pagination: {
         page,
         limit,
@@ -125,7 +119,6 @@ export async function GET(request: NextRequest) {
         pages: Math.ceil(total / limit),
       },
     });
-    
   } catch (error) {
     console.error("Error fetching doctors:", error);
     return NextResponse.json(
@@ -135,11 +128,8 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST: Create new doctor (admin only)
 export async function POST(request: NextRequest) {
   try {
-    await dbConnect();
-    
     const auth = await authenticateAdmin(request);
     if ("error" in auth) {
       return NextResponse.json(
@@ -147,7 +137,7 @@ export async function POST(request: NextRequest) {
         { status: auth.status }
       );
     }
-    
+
     const body = await request.json();
     const {
       name,
@@ -161,131 +151,87 @@ export async function POST(request: NextRequest) {
       consultationFee,
       availability,
       biography,
-      password = "Doctor@123", // Default password
+      password = "Doctor@123",
     } = body;
-    
-    console.log("Creating new doctor with data:", { ...body, password: "[REDACTED]" });
-    
-    // Validate required fields
+
     if (!name || !email || !phone || !department || !specialization || !licenseNumber) {
       return NextResponse.json(
-        { 
-          success: false, 
-          error: "Missing required fields: name, email, phone, department, specialization, and licenseNumber are required" 
+        {
+          success: false,
+          error: "Missing required fields: name, email, phone, department, specialization, and licenseNumber are required",
         },
         { status: 400 }
       );
     }
-    
-    // Check if email already exists
-    const existingEmail = await User.findOne({ email: email.toLowerCase() });
+
+    const existingEmail = await prisma.user.findFirst({
+      where: { email: email.toLowerCase() },
+    });
+
     if (existingEmail) {
       return NextResponse.json(
         { success: false, error: "Email already exists" },
         { status: 409 }
       );
     }
-    
-    // Check if license number already exists
-    const existingLicense = await User.findOne({ licenseNumber });
+
+    const existingLicense = await prisma.user.findFirst({
+      where: { licenseNumber },
+    });
+
     if (existingLicense) {
       return NextResponse.json(
         { success: false, error: "License number already exists" },
         { status: 409 }
       );
     }
-    
-    // Parse qualifications if it's a string
-    let qualificationsArray: string[] = [];
-    if (qualifications) {
-      if (typeof qualifications === 'string') {
-        qualificationsArray = qualifications.split(',').map(q => q.trim()).filter(Boolean);
-      } else if (Array.isArray(qualifications)) {
-        qualificationsArray = qualifications;
-      }
-    }
-    
-    // Parse availability days if it's a string
-    let availabilityDays: string[] = [];
-    if (availability?.days) {
-      if (typeof availability.days === 'string') {
-        availabilityDays = availability.days.split(',').map((day: string) => day.trim().toLowerCase());
-      } else if (Array.isArray(availability.days)) {
-        availabilityDays = availability.days.map((day: string) => day.toLowerCase());
-      }
-    }
-    
-    // Create doctor
-    const doctorData: any = {
-      name: name.trim(),
-      email: email.toLowerCase().trim(),
-      phone: phone.trim(),
-      password,
-      role: "doctor",
-      department: department.trim(),
-      specialization: specialization.trim(),
-      licenseNumber: licenseNumber.trim(),
-      qualifications: qualificationsArray,
-      experience: experience ? parseInt(experience) : undefined,
-      consultationFee: consultationFee ? parseFloat(consultationFee) : undefined,
-      biography: biography?.trim(),
-      approved: true, // Auto-approve when created by admin
-      active: true,
-      joiningDate: new Date(),
-      permissions: [
-        "view_patients",
-        "create_prescriptions",
-        "view_appointments",
-        "update_medical_records",
-      ],
-    };
-    
-    // Add availability if provided
-    if (availability) {
-      doctorData.availability = {
-        days: availabilityDays,
-        startTime: availability.startTime || "09:00",
-        endTime: availability.endTime || "17:00",
-        breakStart: availability.breakStart,
-        breakEnd: availability.breakEnd,
-      };
-    }
-    
-    const doctor = new User(doctorData);
-    
-    await doctor.save();
-    
-    // Remove password from response
-    const doctorResponse = doctor.toObject();
-    delete doctorResponse.password;
-    
-    return NextResponse.json({
-      success: true,
-      data: doctorResponse,
-      message: "Doctor created successfully. Default password: Doctor@123"
-    }, { status: 201 });
-    
+
+    const qualificationsArray: string[] = typeof qualifications === "string"
+      ? qualifications.split(",").map((q: string) => q.trim()).filter(Boolean)
+      : Array.isArray(qualifications) ? qualifications : [];
+
+    const doctor = await prisma.user.create({
+      data: {
+        name: name.trim(),
+        email: email.toLowerCase().trim(),
+        phone: phone.trim(),
+        password,
+        role: "doctor",
+        department: department.trim(),
+        specialization: specialization.trim(),
+        licenseNumber: licenseNumber.trim(),
+        qualifications: typeof qualificationsArray === "string" ? qualificationsArray : JSON.stringify(qualificationsArray),
+        experience: experience ? parseInt(experience) : undefined,
+        consultationFee: consultationFee ? parseFloat(consultationFee) : undefined,
+        biography: biography?.trim(),
+        approved: true,
+        active: true,
+        joiningDate: new Date(),
+        permissions: "[]",
+        refreshTokens: "[]",
+      },
+    });
+
+    return NextResponse.json(
+      {
+        success: true,
+        data: doctor,
+        message: "Doctor created successfully. Default password: Doctor@123",
+      },
+      { status: 201 }
+    );
   } catch (error: any) {
     console.error("Error creating doctor:", error);
-    
-    // Handle duplicate key errors
-    if (error.code === 11000) {
-      const field = Object.keys(error.keyPattern)[0];
+
+    if (error.code === "P2002") {
       return NextResponse.json(
-        { 
-          success: false, 
-          error: `A doctor with this ${field} already exists`,
-          details: error.keyValue
-        },
+        { success: false, error: "A doctor with this email or license number already exists" },
         { status: 409 }
       );
     }
-    
+
     return NextResponse.json(
-      { 
-        success: false, 
-        error: error.message || "Failed to create doctor" 
-      },
+      { success: false, error: error.message || "Failed to create doctor" },
       { status: 500 }
     );
   }

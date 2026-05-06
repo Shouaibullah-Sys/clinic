@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { Prescription } from "@/lib/models/Prescription";
-import { MedicineStock } from "@/lib/models/MedicineStock";
+import { prisma } from "@/lib/prisma";
 import { getTokenPayload } from "@/lib/auth/jwt";
 
 export async function GET(req: NextRequest) {
-  await dbConnect();
   const payload = await getTokenPayload(req);
 
   if (!payload || !((payload.role === "pharmacist" || payload.role === "pharmacy_head") || payload.role === "admin")) {
@@ -17,49 +14,63 @@ export async function GET(req: NextRequest) {
     const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
     const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
 
-    // Get pending prescriptions
-    const pendingPrescriptions = await Prescription.countDocuments({
-      status: { $in: ["active", "pending"] },
-      dispensingStatus: { $in: ["pending", "partial"] }
+    const pendingPrescriptions = await prisma.prescription.count({
+      where: {
+        status: { in: ["active", "pending"] },
+        dispensingStatus: { in: ["pending", "partial"] },
+      },
     });
 
-    // Get low stock medicines
-    const lowStockMedicines = await MedicineStock.countDocuments({
-      currentQuantity: { $lt: 10 } // Assuming minimum stock is 10
+    const lowStockMedicines = await prisma.medicineStock.count({
+      where: {
+        currentQty: { lt: 10 },
+      },
     });
 
-    // Get dispensed today
-    const dispensedToday = await Prescription.countDocuments({
-      dispensingStatus: "full",
-      dispensedDate: {
-        $gte: startOfDay,
-        $lt: endOfDay
-      }
+    const dispensedToday = await prisma.prescription.count({
+      where: {
+        dispensingStatus: "full",
+        createdAt: {
+          gte: startOfDay,
+          lt: endOfDay,
+        },
+      },
     });
 
-    // Get today's revenue
-    const prescriptionsToday = await Prescription.find({
-      dispensingStatus: "full",
-      dispensedDate: {
-        $gte: startOfDay,
-        $lt: endOfDay
-      }
-    }).populate("medications.medicine", "sellingPrice");
+    const prescriptionsToday = await prisma.prescription.findMany({
+      where: {
+        dispensingStatus: "full",
+        createdAt: {
+          gte: startOfDay,
+          lt: endOfDay,
+        },
+      },
+    });
 
-    const totalRevenue = prescriptionsToday.reduce((total: number, prescription: any) => {
-      const prescriptionTotal = prescription.medications.reduce((medTotal: number, med: any) => {
-        return medTotal + (med.quantity * (med.medicine?.sellingPrice || 0));
-      }, 0);
+    const totalRevenue = prescriptionsToday.reduce((total, prescription) => {
+      const medications = JSON.parse(prescription.medications || "[]") as any[] || [];
+      const prescriptionTotal = medications.reduce(
+        (medTotal, med) => {
+          return medTotal + (med.quantity || 0) * (med.unitPrice || 0);
+        },
+        0,
+      );
       return total + prescriptionTotal;
     }, 0);
 
-    // Get active patients (patients with prescriptions in last 30 days)
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    const activePatients = await Prescription.distinct("patient", {
-      prescribedDate: { $gte: thirtyDaysAgo }
+    const activePatientPrescriptions = await prisma.prescription.findMany({
+      where: {
+        createdAt: { gte: thirtyDaysAgo },
+      },
+      select: {
+        patientId: true,
+      },
     });
+
+    const uniquePatientIds = [...new Set(activePatientPrescriptions.map((p) => p.patientId))];
 
     return NextResponse.json({
       success: true,
@@ -68,14 +79,14 @@ export async function GET(req: NextRequest) {
         lowStockMedicines,
         dispensedToday,
         totalRevenue: Math.round(totalRevenue),
-        activePatients: activePatients.length
-      }
+        activePatients: uniquePatientIds.length,
+      },
     });
   } catch (error) {
     console.error("Error fetching dashboard stats:", error);
     return NextResponse.json(
       { error: "Failed to fetch dashboard stats" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

@@ -1,25 +1,17 @@
-// app/api/dashboard/admin/cash-flow/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "@/lib/auth";
-import dbConnect from "@/lib/dbConnect";
-import { Payment } from "@/lib/models/Payment";
-import { AdminExpense } from "@/lib/models/AdminExpense";
-import { CashAtHand } from "@/lib/models/CashAtHand";
-import { DailyCashCollection } from "@/lib/models/DailyCashCollection";
+import { prisma } from "@/lib/prisma";
+import { getTokenPayload } from "@/lib/auth/jwt";
 
 export async function GET(req: NextRequest) {
   try {
-    const session = await getServerSession(req);
-    if (!session || session.user.role !== "admin") {
+    const payload = await getTokenPayload(req);
+    if (!payload || payload.role !== "admin") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
-    await dbConnect();
 
     const { searchParams } = new URL(req.url);
     const period = searchParams.get("period") || "today";
 
-    // Calculate date ranges
     const now = new Date();
     let startDate: Date;
     let endDate: Date;
@@ -27,11 +19,7 @@ export async function GET(req: NextRequest) {
     switch (period) {
       case "today":
         startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        endDate = new Date(
-          now.getFullYear(),
-          now.getMonth(),
-          now.getDate() + 1,
-        );
+        endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
         break;
       case "week":
         startDate = new Date(now);
@@ -52,231 +40,113 @@ export async function GET(req: NextRequest) {
         break;
       default:
         startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        endDate = new Date(
-          now.getFullYear(),
-          now.getMonth(),
-          now.getDate() + 1,
-        );
+        endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
     }
 
-    // Get cash inflows (payments)
-    const cashInflows = await Payment.aggregate([
-      {
-        $match: {
-          paymentDate: { $gte: startDate, $lt: endDate },
-          status: "completed",
-          paymentMethod: "cash",
-        },
+    const cashInflows = await prisma.payment.groupBy({
+      by: ["paymentDate"],
+      where: {
+        paymentDate: { gte: startDate, lt: endDate },
+        status: "completed",
+        paymentMethod: "cash",
       },
-      {
-        $group: {
-          _id: {
-            $dateToString: { format: "%Y-%m-%d", date: "$paymentDate" },
-          },
-          totalAmount: { $sum: "$amount" },
-          count: { $sum: 1 },
-        },
-      },
-      {
-        $sort: { _id: 1 },
-      },
-    ]);
+      _sum: { amount: true },
+      _count: { _all: true },
+      orderBy: { paymentDate: "asc" },
+    });
 
-    // Get cash outflows (expenses)
-    const cashOutflows = await AdminExpense.aggregate([
-      {
-        $match: {
-          date: { $gte: startDate, $lt: endDate },
-        },
+    const cashOutflows = await prisma.adminExpense.groupBy({
+      by: ["date"],
+      where: {
+        date: { gte: startDate, lt: endDate },
       },
-      {
-        $group: {
-          _id: {
-            $dateToString: { format: "%Y-%m-%d", date: "$date" },
-          },
-          totalAmount: { $sum: "$amount" },
-          count: { $sum: 1 },
-        },
+      _sum: { amount: true },
+      _count: { _all: true },
+      orderBy: { date: "asc" },
+    });
+
+    const cashAtHandTransactions = await prisma.cashAtHand.findMany({
+      where: {
+        date: { gte: startDate, lt: endDate },
+        verificationStatus: "active",
       },
-      {
-        $sort: { _id: 1 },
+      orderBy: { date: "desc" },
+      take: 50,
+    });
+
+    const dailyCashCollections = await prisma.dailyCashCollection.findMany({
+      where: {
+        date: { gte: startDate, lt: endDate },
       },
-    ]);
+      orderBy: { date: "desc" },
+      take: 30,
+    });
 
-    // Get cash at hand transactions
-    const cashAtHandTransactions = await CashAtHand.find({
-      date: { $gte: startDate, $lt: endDate },
-      status: "active",
-    })
-      .sort({ date: -1 })
-      .limit(50)
-      .populate("staff", "name email")
-      .lean();
-
-    // Get daily cash collections
-    const dailyCashCollections = await DailyCashCollection.find({
-      date: { $gte: startDate, $lt: endDate },
-    })
-      .sort({ date: -1 })
-      .limit(30)
-      .populate("staff", "name email")
-      .populate("reviewedBy", "name email")
-      .lean();
-
-    // Calculate total cash inflows and outflows
-    const totalCashInflows = cashInflows.reduce(
-      (sum: number, item: any) => sum + item.totalAmount,
-      0,
-    );
-    const totalCashOutflows = cashOutflows.reduce(
-      (sum: number, item: any) => sum + item.totalAmount,
-      0,
-    );
+    const totalCashInflows = cashInflows.reduce((sum, item) => sum + (item._sum?.amount || 0), 0);
+    const totalCashOutflows = cashOutflows.reduce((sum, item) => sum + (item._sum?.amount || 0), 0);
     const netCashFlow = totalCashInflows - totalCashOutflows;
 
-    // Get opening balance (from previous day's closing)
     let openingBalance = 0;
     if (period === "today") {
       const yesterday = new Date(now);
       yesterday.setDate(now.getDate() - 1);
-      const yesterdayStart = new Date(
-        yesterday.getFullYear(),
-        yesterday.getMonth(),
-        yesterday.getDate(),
-      );
-      const yesterdayEnd = new Date(
-        yesterday.getFullYear(),
-        yesterday.getMonth(),
-        yesterday.getDate() + 1,
-      );
-
-      const yesterdayClosing = await CashAtHand.findOne({
-        date: { $gte: yesterdayStart, $lt: yesterdayEnd },
-        transactionType: "closing",
-        status: "active",
-      }).sort({ date: -1 });
-
-      openingBalance = yesterdayClosing?.declaredAmount || 0;
+      const yesterdayClosing = await prisma.cashAtHand.findFirst({
+        where: {
+          date: { gte: yesterday, lt: now },
+          verificationStatus: "active",
+        },
+        orderBy: { date: "desc" },
+      });
+      openingBalance = yesterdayClosing?.balance || 0;
     }
 
-    // Calculate closing balance
     const closingBalance = openingBalance + netCashFlow;
 
-    // Build daily cash flow statement
-    const cashFlowMap = new Map();
+    const dailyCashFlow = cashInflows.map((item) => ({
+      date: item.paymentDate?.toISOString().split("T")[0] || "",
+      inflow: item._sum?.amount || 0,
+      outflow: 0,
+      netFlow: item._sum?.amount || 0,
+    }));
 
-    cashInflows.forEach((item: any) => {
-      cashFlowMap.set(item._id, {
-        date: item._id,
-        inflow: item.totalAmount,
-        outflow: 0,
-        netFlow: item.totalAmount,
-      });
-    });
-
-    cashOutflows.forEach((item: any) => {
-      if (cashFlowMap.has(item._id)) {
-        const existing = cashFlowMap.get(item._id);
-        existing.outflow = item.totalAmount;
-        existing.netFlow = existing.inflow - item.totalAmount;
-      } else {
-        cashFlowMap.set(item._id, {
-          date: item._id,
-          inflow: 0,
-          outflow: item.totalAmount,
-          netFlow: -item.totalAmount,
-        });
-      }
-    });
-
-    const dailyCashFlow = Array.from(cashFlowMap.values()).sort((a, b) =>
-      a.date.localeCompare(b.date),
+    const cashCollectionSummary = dailyCashCollections.reduce(
+      (acc, collection) => ({
+        totalCollected: acc.totalCollected + collection.collectedAmount,
+        totalExpected: acc.totalExpected + collection.totalExpectedAmount,
+        totalDeclared: acc.totalDeclared + collection.totalDeclaredAmount,
+        totalDiscrepancy: acc.totalDiscrepancy + collection.discrepancy,
+        totalDiscounts: acc.totalDiscounts + collection.totalDiscounts,
+        totalExpenses: acc.totalExpenses + collection.totalExpenses,
+        count: acc.count + 1,
+      }),
+      { totalCollected: 0, totalExpected: 0, totalDeclared: 0, totalDiscrepancy: 0, totalDiscounts: 0, totalExpenses: 0, count: 0 },
     );
 
-    // Get cash collection summary
-    const cashCollectionSummary = await DailyCashCollection.aggregate([
-      {
-        $match: {
-          date: { $gte: startDate, $lt: endDate },
-        },
-      },
-      {
-        $group: {
-          _id: null,
-          totalCollected: { $sum: "$collectedAmount" },
-          totalExpected: { $sum: "$totalExpectedAmount" },
-          totalDeclared: { $sum: "$totalDeclaredAmount" },
-          totalDiscrepancy: { $sum: "$discrepancy" },
-          totalDiscounts: { $sum: "$totalDiscounts" },
-          totalExpenses: { $sum: "$totalExpenses" },
-          count: { $sum: 1 },
-        },
-      },
-    ]);
+    const cashCollectionByShift = dailyCashCollections.reduce((acc: any, collection) => {
+      const key = collection.shift || "unknown";
+      if (!acc[key]) acc[key] = { shift: key, totalCollected: 0, totalExpected: 0, totalDiscrepancy: 0, count: 0 };
+      acc[key].totalCollected += collection.collectedAmount;
+      acc[key].totalExpected += collection.totalExpectedAmount;
+      acc[key].totalDiscrepancy += collection.discrepancy;
+      acc[key].count += 1;
+      return acc;
+    }, {});
 
-    const collectionData = cashCollectionSummary[0] || {
-      totalCollected: 0,
-      totalExpected: 0,
-      totalDeclared: 0,
-      totalDiscrepancy: 0,
-      totalDiscounts: 0,
-      totalExpenses: 0,
-      count: 0,
-    };
+    const discrepancies = dailyCashCollections.filter(c => c.discrepancy !== 0);
 
-    // Get cash collection by shift
-    const cashCollectionByShift = await DailyCashCollection.aggregate([
-      {
-        $match: {
-          date: { $gte: startDate, $lt: endDate },
-        },
-      },
-      {
-        $group: {
-          _id: "$shift",
-          totalCollected: { $sum: "$collectedAmount" },
-          totalExpected: { $sum: "$totalExpectedAmount" },
-          totalDiscrepancy: { $sum: "$discrepancy" },
-          count: { $sum: 1 },
-        },
-      },
-    ]);
-
-    // Get discrepancy tracking
-    const discrepancies = await DailyCashCollection.find({
-      date: { $gte: startDate, $lt: endDate },
-      discrepancy: { $ne: 0 },
-    })
-      .sort({ date: -1 })
-      .limit(20)
-      .populate("staff", "name email")
-      .lean();
-
-    // Get cash at hand summary
-    const cashAtHandSummary = await CashAtHand.aggregate([
-      {
-        $match: {
-          date: { $gte: startDate, $lt: endDate },
-          status: "active",
-        },
-      },
-      {
-        $group: {
-          _id: "$transactionType",
-          totalAmount: { $sum: "$amount" },
-          count: { $sum: 1 },
-        },
-      },
-    ]);
+    const cashAtHandSummary = cashAtHandTransactions.reduce((acc: any, tx) => {
+      const particular = tx.particular || "other";
+      if (!acc[particular]) acc[particular] = { particular, total: 0, count: 0 };
+      acc[particular].total += tx.credit - tx.debit;
+      acc[particular].count += 1;
+      return acc;
+    }, {});
 
     return NextResponse.json({
       success: true,
       data: {
         period,
-        dateRange: {
-          startDate,
-          endDate,
-        },
+        dateRange: { startDate, endDate },
         summary: {
           openingBalance,
           totalCashInflows,
@@ -286,60 +156,15 @@ export async function GET(req: NextRequest) {
         },
         dailyCashFlow,
         cashAtHand: {
-          transactions: cashAtHandTransactions.map((tx: any) => ({
-            id: tx._id.toString(),
-            transactionId: tx.transactionId,
-            transactionType: tx.transactionType,
-            amount: tx.amount,
-            declaredAmount: tx.declaredAmount,
-            calculatedTotal: tx.calculatedTotal,
-            variance: tx.variance,
-            shift: tx.shift,
-            cashierName: tx.cashierName,
-            source: tx.source,
-            destination: tx.destination,
-            verificationStatus: tx.verificationStatus,
-            date: tx.date,
-            createdAt: tx.createdAt,
-          })),
-          summary: cashAtHandSummary,
+          transactions: cashAtHandTransactions,
+          summary: Object.values(cashAtHandSummary),
         },
         cashCollection: {
-          summary: collectionData,
-          byShift: cashCollectionByShift,
-          collections: dailyCashCollections.map((collection: any) => ({
-            id: collection._id.toString(),
-            collectionId: collection.collectionId,
-            staff: collection.staff,
-            staffName: collection.staffName,
-            shift: collection.shift,
-            date: collection.date,
-            totalExpectedAmount: collection.totalExpectedAmount,
-            totalDeclaredAmount: collection.totalDeclaredAmount,
-            discrepancy: collection.discrepancy,
-            discrepancyPercentage: collection.discrepancyPercentage,
-            collectedAmount: collection.collectedAmount,
-            totalDiscounts: collection.totalDiscounts,
-            totalExpenses: collection.totalExpenses,
-            status: collection.status,
-            submittedAt: collection.submittedAt,
-            reviewedBy: collection.reviewedBy,
-            reviewedAt: collection.reviewedAt,
-          })),
+          summary: cashCollectionSummary,
+          byShift: Object.values(cashCollectionByShift),
+          collections: dailyCashCollections,
         },
-        discrepancies: discrepancies.map((d: any) => ({
-          id: d._id.toString(),
-          collectionId: d.collectionId,
-          staff: d.staff,
-          staffName: d.staffName,
-          shift: d.shift,
-          date: d.date,
-          totalExpectedAmount: d.totalExpectedAmount,
-          totalDeclaredAmount: d.totalDeclaredAmount,
-          discrepancy: d.discrepancy,
-          discrepancyPercentage: d.discrepancyPercentage,
-          status: d.status,
-        })),
+        discrepancies,
       },
     });
   } catch (error) {

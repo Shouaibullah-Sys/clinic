@@ -1,16 +1,10 @@
-// app/api/laboratory/templates/route.ts
-
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { LabTestTemplate } from "@/lib/models/LabTestTemplate";
-import { authenticateRequest, hasRequiredRole } from "@/lib/auth";
-import mongoose from "mongoose";
+import { prisma } from "@/lib/prisma";
+import { authenticateRequest } from "@/lib/auth";
+import { transformLabTestTemplateForAPI, transformLabTestTemplatesForAPI, transformLabTestTemplateForDB } from "@/lib/prisma";
 
-// GET: Fetch all lab test templates (with optional filtering)
 export async function GET(request: NextRequest) {
   try {
-    await dbConnect();
-
     const auth = await authenticateRequest(request);
     if (!auth.success) {
       return NextResponse.json(
@@ -20,33 +14,25 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const category = searchParams.get("category");
-    const active = searchParams.get("active");
     const search = searchParams.get("search");
 
-    // Build query
-    const query: any = {};
-
-    if (category) {
-      query.category = category;
-    }
-
-    if (active !== null) {
-      query.active = active === "true";
-    }
+    let where: any = {};
 
     if (search) {
-      query.$or = [
-        { testName: { $regex: search, $options: "i" } },
-        { testCode: { $regex: search, $options: "i" } },
-        { description: { $regex: search, $options: "i" } },
+      where.OR = [
+        { testName: { contains: search, mode: "insensitive" } },
+        { testType: { contains: search, mode: "insensitive" } },
+        { instruction: { contains: search, mode: "insensitive" } },
       ];
     }
 
-    const templates = await LabTestTemplate.find(query)
-      .populate("createdBy", "name email")
-      .sort({ category: 1, testName: 1 })
-      .lean();
+    let templates = await prisma.labTestTemplate.findMany({
+      where,
+      orderBy: { tests: "asc" },
+    });
+
+    // Transform to frontend-compatible format
+    templates = transformLabTestTemplatesForAPI(templates);
 
     return NextResponse.json({
       success: true,
@@ -65,11 +51,8 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST: Create a new lab test template
 export async function POST(request: NextRequest) {
   try {
-    await dbConnect();
-
     const auth = await authenticateRequest(request);
     if (!auth.success) {
       return NextResponse.json(
@@ -78,9 +61,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Only lab technicians, doctors, and admins can create templates
     const allowedRoles = ["lab_technician", "doctor", "admin"];
-    if (!hasRequiredRole(auth.userRole, allowedRoles)) {
+    if (!allowedRoles.includes(auth.userRole!)) {
       return NextResponse.json(
         {
           success: false,
@@ -92,43 +74,20 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const {
-      testCode,
-      testName,
-      category,
-      description,
-      specimenType,
-      containerType,
-      sampleVolume,
-      fastingRequired,
-      preparationInstructions,
-      turnaroundTime,
-      basePrice,
-      active = true,
-      parameters,
-    } = body;
+    const { testName, testCode, category, description, instruction, preparationInstructions, basePrice, active = true, parameters, specimenType, containerType, sampleVolume, fastingRequired, turnaroundTime = 24 } = body;
 
-    // Validate required fields
-    if (
-      !testCode ||
-      !testName ||
-      !category ||
-      !turnaroundTime ||
-      basePrice === undefined
-    ) {
+    if (!testName || !category) {
       return NextResponse.json(
         {
           success: false,
-          error:
-            "Missing required fields: testCode, testName, category, turnaroundTime, and basePrice are required.",
+          error: "Missing required fields: testName and category are required.",
         },
         { status: 400 },
       );
     }
 
-    // Check if test code already exists
-    const existingTemplate = await LabTestTemplate.findOne({
-      testCode: testCode.toUpperCase(),
+    const existingTemplate = await prisma.labTestTemplate.findFirst({
+      where: { testType: (testCode || testName).toUpperCase().replace(/\s+/g, "_") },
     });
     if (existingTemplate) {
       return NextResponse.json(
@@ -137,33 +96,35 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create the template
-    const template = await LabTestTemplate.create({
-      testCode: testCode.toUpperCase(),
+    // Transform to DB format
+    const dbData = transformLabTestTemplateForDB({
+      testCode: testCode || testName,
       testName,
+      tests: body.tests || testName,
       category,
-      description,
-      specimenType: specimenType || [],
-      containerType: containerType || [],
-      sampleVolume,
-      fastingRequired: fastingRequired || false,
-      preparationInstructions,
-      turnaroundTime,
-      basePrice,
+      description: description || '',
+      preparationInstructions: body.preparationInstructions || instruction || description || '',
+      basePrice: basePrice || 0,
       active,
       parameters: parameters || [],
-      createdBy: new mongoose.Types.ObjectId(auth.userId),
+      specimenType: specimenType || [],
+      containerType: containerType || [],
+      sampleVolume: sampleVolume || '',
+      fastingRequired: fastingRequired !== undefined ? fastingRequired : false,
+      turnaroundTime,
     });
 
-    // Populate for response
-    const populatedTemplate = await LabTestTemplate.findById(template._id)
-      .populate("createdBy", "name email")
-      .lean();
+    const template = await prisma.labTestTemplate.create({
+      data: dbData,
+    });
+
+    // Transform back to API format
+    const transformedTemplate = transformLabTestTemplateForAPI(template);
 
     return NextResponse.json(
       {
         success: true,
-        data: populatedTemplate,
+        data: transformedTemplate,
         message: "Lab test template created successfully",
       },
       { status: 201 },
@@ -171,19 +132,9 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error("Error creating lab test template:", error);
 
-    // Handle validation errors
-    if (error.name === "ValidationError") {
-      const errors = Object.values(error.errors).map((err: any) => err.message);
+    if (error.code === "P2002") {
       return NextResponse.json(
-        { success: false, error: "Validation failed", details: errors },
-        { status: 400 },
-      );
-    }
-
-    // Handle duplicate key errors
-    if (error.code === 11000) {
-      return NextResponse.json(
-        { success: false, error: "Duplicate test code detected" },
+        { success: false, error: "Duplicate test name detected" },
         { status: 409 },
       );
     }

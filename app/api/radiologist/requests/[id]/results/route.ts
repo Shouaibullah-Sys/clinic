@@ -1,21 +1,14 @@
 // app/api/radiologist/requests/[id]/results/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { RadiologyService } from "@/lib/models/RadiologyService";
-import "@/lib/models/Patient";
-import "@/lib/models/User";
+import { prisma } from "@/lib/prisma";
 import { authenticateRequest, hasRequiredRole } from "@/lib/auth";
-import mongoose from "mongoose";
 
-// PUT: Submit radiology results (findings, impression, recommendations)
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await dbConnect();
-
     const auth = await authenticateRequest(request);
     if (!auth.success) {
       return NextResponse.json(
@@ -24,9 +17,7 @@ export async function PUT(
       );
     }
 
-    // Only radiologists and admins can submit results
-    const allowedRoles = ["radiologist", "admin"];
-    if (!hasRequiredRole(auth.userRole, allowedRoles)) {
+    if (!hasRequiredRole(auth.userRole, ["radiologist", "admin"])) {
       return NextResponse.json(
         { success: false, error: "Forbidden. Only radiologists can submit results." },
         { status: 403 }
@@ -54,8 +45,9 @@ export async function PUT(
 
     console.log(`Submitting results for radiology request ${requestId} by ${auth.userName}`);
 
-    // Find the request
-    const requestDoc = await RadiologyService.findById(requestId);
+    const requestDoc = await prisma.radiologyRequest.findUnique({
+      where: { id: requestId },
+    });
     
     if (!requestDoc) {
       return NextResponse.json(
@@ -64,7 +56,6 @@ export async function PUT(
       );
     }
 
-    // Check if request is in progress
     if (requestDoc.status !== "in-progress" && requestDoc.status !== "scheduled") {
       return NextResponse.json(
         { 
@@ -76,7 +67,6 @@ export async function PUT(
       );
     }
 
-    // Check if report is already completed
     if (requestDoc.reportStatus === "completed" && reportAction !== "amend") {
       return NextResponse.json(
         { success: false, error: "Report has already been completed" },
@@ -84,7 +74,6 @@ export async function PUT(
       );
     }
 
-    // Validate required fields
     if (!findings || !impression) {
       return NextResponse.json(
         { success: false, error: "Findings and impression are required" },
@@ -99,15 +88,18 @@ export async function PUT(
           ? "final"
           : "draft";
 
-    // Update legacy fields for backward compatibility
-    requestDoc.findings = findings;
-    requestDoc.impression = impression;
-    
-    if (recommendations) {
-      requestDoc.recommendations = recommendations;
-    }
+    const previousVersion = (requestDoc.report as any)?.version || 1;
 
-    // Add images if provided
+    const updateData: any = {
+      findings: findings,
+      impression: impression,
+      recommendations: recommendations,
+      reportStatus: reportStatus || "completed",
+      status: status || "completed",
+      reportGeneratedById: auth.userId,
+      reportGeneratedAt: new Date(),
+    };
+
     if (images && Array.isArray(images) && images.length > 0) {
       const newImages = images.map((img: any) => ({
         imageId: img.imageId || `IMG${Date.now()}`,
@@ -115,110 +107,56 @@ export async function PUT(
         view: img.view || "",
         description: img.description || "",
         takenAt: new Date(),
-        takenBy: new mongoose.Types.ObjectId(auth.userId)
+        takenById: auth.userId,
       }));
-      
-      requestDoc.images = [...(requestDoc.images || []), ...newImages];
+      updateData.images = [...(requestDoc.images || []), ...newImages];
     }
 
-    // Update report status
-    if (reportStatus) {
-      requestDoc.reportStatus = reportStatus;
-    } else {
-      requestDoc.reportStatus = "completed";
-    }
-
-    // Update status if provided
-    if (status) {
-      requestDoc.status = status;
-    } else {
-      requestDoc.status = "completed";
-    }
-
-    const previousVersion = requestDoc.report?.version || 1;
-    requestDoc.report = {
-      clinicalIndication:
-        clinicalIndication ??
-        requestDoc.report?.clinicalIndication ??
-        "",
-      technique: technique ?? requestDoc.report?.technique ?? "",
-      comparison: comparison ?? requestDoc.report?.comparison ?? "",
-      findings: findings ?? requestDoc.report?.findings ?? "",
-      impression: impression ?? requestDoc.report?.impression ?? "",
-      recommendations:
-        recommendations ??
-        requestDoc.report?.recommendations ??
-        "",
-      criticalFindings:
-        typeof criticalFindings === "boolean"
-          ? criticalFindings
-          : (requestDoc.report?.criticalFindings ?? false),
-      criticalFindingsDetails:
-        criticalFindingsDetails ??
-        requestDoc.report?.criticalFindingsDetails ??
-        "",
+    updateData.report = {
+      clinicalIndication: clinicalIndication ?? (requestDoc.report as any)?.clinicalIndication ?? "",
+      technique: technique ?? (requestDoc.report as any)?.technique ?? "",
+      comparison: comparison ?? (requestDoc.report as any)?.comparison ?? "",
+      findings: findings,
+      impression: impression,
+      recommendations: recommendations ?? (requestDoc.report as any)?.recommendations ?? "",
+      criticalFindings: typeof criticalFindings === "boolean" ? criticalFindings : (requestDoc.report as any)?.criticalFindings ?? false,
+      criticalFindingsDetails: criticalFindingsDetails ?? (requestDoc.report as any)?.criticalFindingsDetails ?? "",
       criticalCommunication: {
-        communicated:
-          criticalCommunication?.communicated ??
-          requestDoc.report?.criticalCommunication?.communicated ??
-          false,
-        communicatedTo:
-          criticalCommunication?.communicatedTo ??
-          requestDoc.report?.criticalCommunication?.communicatedTo ??
-          "",
-        communicatedAt:
-          criticalCommunication?.communicatedAt
-            ? new Date(criticalCommunication.communicatedAt)
-            : requestDoc.report?.criticalCommunication?.communicatedAt,
-        method:
-          criticalCommunication?.method ??
-          requestDoc.report?.criticalCommunication?.method ??
-          "",
-        notes:
-          criticalCommunication?.notes ??
-          requestDoc.report?.criticalCommunication?.notes ??
-          "",
+        communicated: criticalCommunication?.communicated ?? (requestDoc.report as any)?.criticalCommunication?.communicated ?? false,
+        communicatedTo: criticalCommunication?.communicatedTo ?? (requestDoc.report as any)?.criticalCommunication?.communicatedTo ?? "",
+        communicatedAt: criticalCommunication?.communicatedAt ? new Date(criticalCommunication.communicatedAt) : (requestDoc.report as any)?.criticalCommunication?.communicatedAt,
+        method: criticalCommunication?.method ?? (requestDoc.report as any)?.criticalCommunication?.method ?? "",
+        notes: criticalCommunication?.notes ?? (requestDoc.report as any)?.criticalCommunication?.notes ?? "",
       },
-      status: nextReportStatus as "draft" | "final" | "amended",
+      status: nextReportStatus,
       version: reportAction === "amend" ? previousVersion + 1 : previousVersion,
-      amendmentReason:
-        reportAction === "amend"
-          ? amendmentReason || "Report amendment"
-          : requestDoc.report?.amendmentReason || "",
-      finalizedBy:
-        reportAction === "finalize"
-          ? new mongoose.Types.ObjectId(auth.userId)
-          : requestDoc.report?.finalizedBy,
-      finalizedAt:
-        reportAction === "finalize"
-          ? new Date()
-          : requestDoc.report?.finalizedAt,
+      amendmentReason: reportAction === "amend" ? amendmentReason || "Report amendment" : (requestDoc.report as any)?.amendmentReason || "",
+      finalizedBy: reportAction === "finalize" ? auth.userId : (requestDoc.report as any)?.finalizedBy,
+      finalizedAt: reportAction === "finalize" ? new Date() : (requestDoc.report as any)?.finalizedAt,
     };
 
-    // Set report generation details
-    requestDoc.reportGeneratedBy = new mongoose.Types.ObjectId(auth.userId);
-    requestDoc.reportGeneratedAt = new Date();
+    if (requestDoc.status === "scheduled") {
+      updateData.status = "in-progress";
+      if (!requestDoc.radiologistId) {
+        updateData.radiologistId = auth.userId;
+      }
+    }
 
-    // Set performed date if not already set
     if (!requestDoc.performedDate) {
-      requestDoc.performedDate = new Date();
+      updateData.performedDate = new Date();
     }
 
-    // Assign radiologist if not already assigned
-    if (!requestDoc.radiologist) {
-      requestDoc.radiologist = new mongoose.Types.ObjectId(auth.userId);
-    }
-
-    await requestDoc.save();
-
-    // Populate for response
-    const updatedRequest = await RadiologyService.findById(requestId)
-      .populate("patient", "name patientId")
-      .populate("referringDoctor", "name")
-      .populate("radiologist", "name")
-      .populate("technician", "name")
-      .populate("reportGeneratedBy", "name")
-      .lean();
+    const updatedRequest = await prisma.radiologyRequest.update({
+      where: { id: requestId },
+      data: updateData,
+      include: {
+        patient: { select: { name: true, patientId: true } },
+        referringDoctor: { select: { name: true } },
+        radiologist: { select: { name: true } },
+        technician: { select: { name: true } },
+        reportGeneratedBy: { select: { name: true } },
+      },
+    });
 
     return NextResponse.json({
       success: true,

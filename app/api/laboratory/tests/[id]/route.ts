@@ -1,19 +1,12 @@
-// app/api/laboratory/tests/[id]/route.ts
-
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { LabTest } from "@/lib/models/LabTest";
+import { prisma } from "@/lib/prisma";
 import { authenticateRequest, canAccessLaboratory } from "@/lib/auth";
-import mongoose from "mongoose";
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await dbConnect();
-
-    // Authenticate the request
     const auth = await authenticateRequest(request);
     if (!auth.success) {
       return NextResponse.json(
@@ -22,7 +15,6 @@ export async function GET(
       );
     }
 
-    // Check if user can access laboratory
     if (!canAccessLaboratory(auth.userRole)) {
       return NextResponse.json(
         {
@@ -33,33 +25,15 @@ export async function GET(
       );
     }
 
-    // Unwrap the params promise
     const { id: testId } = await params;
 
     console.log(
       `Lab test requested by ${auth.userRole} ${auth.userName}: ${testId}`,
     );
 
-    if (!mongoose.Types.ObjectId.isValid(testId)) {
-      return NextResponse.json(
-        { success: false, error: "Invalid lab test id" },
-        { status: 400 },
-      );
-    }
-
-    // Find the test by ID
-    const test = await LabTest.findById(testId)
-      .populate("patient", "name patientId phone guardian dateOfBirth gender")
-      .populate("doctor", "name specialization department licenseNumber")
-      .populate("orderedBy", "name")
-      .populate("charges.collectedBy", "name")
-      .populate("collectionDetails.collectedBy", "name")
-      .populate("processingDetails.processedBy", "name")
-      .populate("verificationDetails.verifiedBy", "name")
-      .populate("paymentVerifiedBy", "name")
-      .populate("results.reportedBy", "name")
-      .populate("results.verifiedBy", "name")
-      .lean();
+    const test = await prisma.labTest.findUnique({
+      where: { id: testId },
+    });
 
     if (!test) {
       return NextResponse.json(
@@ -68,11 +42,9 @@ export async function GET(
       );
     }
 
-    // If user is doctor, check if they can access this test
     if (
       auth.userRole === "doctor" &&
-      test.doctor &&
-      test.doctor.toString() !== auth.userId
+      test.doctorId !== auth.userId
     ) {
       return NextResponse.json(
         {
@@ -84,13 +56,11 @@ export async function GET(
     }
 
     const normalizedTest =
-      test.collectionStatus === "collected" &&
-      test.processingStatus === "pending"
+      test.sampleCollected === true &&
+      test.status !== "reported"
         ? {
             ...test,
-            processingStatus: "completed",
-            status:
-              test.status === "collected" ? "completed" : (test.status as any),
+            status: test.status === "collected" ? "completed" : test.status,
           }
         : test;
 

@@ -1,13 +1,6 @@
-// app/api/appointments/route.ts
-
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { Appointment } from "@/lib/models/Appointment";
-import { Patient } from "@/lib/models/Patient";
-import { User } from "@/lib/models/User";
+import { prisma } from "@/lib/prisma";
 import { jwtVerify } from "jose";
-import { buildMarkedOnlyQuery } from "@/lib/utils/markedTransactions";
-import mongoose from "mongoose";
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-this";
 
@@ -21,12 +14,37 @@ async function verifyToken(token: string) {
   }
 }
 
-// POST: Create new appointment
+async function checkAvailability(
+  doctorId: string,
+  startTime: Date,
+  duration: number,
+) {
+  const endTime = new Date(startTime);
+  endTime.setMinutes(endTime.getMinutes() + duration);
+
+  const conflicting = await prisma.appointment.findFirst({
+    where: {
+      doctorId,
+      status: { notIn: ["cancelled", "no-show"] },
+      OR: [
+        { startTime: { lt: endTime, gte: startTime } },
+        { endTime: { gt: startTime, lte: endTime } },
+        { startTime: { gte: startTime }, endTime: { lte: endTime } },
+        { startTime: { lte: startTime }, endTime: { gte: endTime } },
+      ],
+    },
+  });
+  return !conflicting;
+}
+
+function calculateEndtime(startTime: Date, duration: number) {
+  const endtime = new Date(startTime);
+  endtime.setMinutes(endtime.getMinutes() + duration);
+  return endtime;
+}
+
 export async function POST(request: NextRequest) {
   try {
-    await dbConnect();
-
-    // Authentication
     const authHeader = request.headers.get("authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return NextResponse.json(
@@ -48,7 +66,6 @@ export async function POST(request: NextRequest) {
     const userId = payload.id as string;
     const userRole = payload.role as string;
 
-    // Authorization
     if (!["admin", "receptionist", "doctor"].includes(userRole)) {
       return NextResponse.json(
         {
@@ -76,7 +93,6 @@ export async function POST(request: NextRequest) {
       doctorFee,
     } = body;
 
-    // Validation
     if (!patientId || !doctorId || !startTime || !reason) {
       return NextResponse.json(
         {
@@ -88,8 +104,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if patient exists
-    const patient = await Patient.findById(patientId);
+    const patient = await prisma.patient.findUnique({
+      where: { id: patientId },
+    });
     if (!patient) {
       return NextResponse.json(
         { success: false, error: "Patient not found" },
@@ -97,11 +114,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if doctor exists and is active
-    const doctor = await User.findOne({
-      _id: doctorId,
-      role: "doctor",
-      active: true,
+    const doctor = await prisma.user.findFirst({
+      where: { id: doctorId, role: "doctor", active: true },
     });
     if (!doctor) {
       return NextResponse.json(
@@ -110,15 +124,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Parse times
-    let appointmentStartTime = new Date(startTime);
-    let appointmentEndTime = endTime
+    const appointmentStartTime = new Date(startTime);
+    const appointmentEndTime = endTime
       ? new Date(endTime)
-      : new Date(appointmentStartTime.getTime() + duration * 60000);
+      : calculateEndtime(appointmentStartTime, duration);
     const requestedStartTime = new Date(appointmentStartTime);
     let autoAdjusted = false;
 
-    // Validate appointment time
     const now = new Date();
     if (appointmentStartTime < now) {
       return NextResponse.json(
@@ -127,34 +139,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check availability
-    const isAvailable = await Appointment.checkAvailability(
+    const isAvailable = await checkAvailability(
       doctorId,
       appointmentStartTime,
       duration,
-      undefined,
     );
 
     if (!isAvailable) {
       const maxSlotsToCheck = 30;
       const slotIntervalMinutes = 20;
-      const startDay = new Date(appointmentStartTime);
-      startDay.setHours(0, 0, 0, 0);
-      const endDay = new Date(startDay);
-      endDay.setHours(23, 59, 59, 999);
 
       let foundSlot: Date | null = null;
       for (let i = 1; i <= maxSlotsToCheck; i++) {
         const candidateStart = new Date(
           appointmentStartTime.getTime() + i * slotIntervalMinutes * 60000,
         );
-        if (candidateStart > endDay) break;
-
-        const available = await Appointment.checkAvailability(
+        const available = await checkAvailability(
           doctorId,
           candidateStart,
           duration,
-          undefined,
         );
         if (available) {
           foundSlot = candidateStart;
@@ -170,13 +173,9 @@ export async function POST(request: NextRequest) {
       }
 
       autoAdjusted = true;
-      appointmentStartTime = foundSlot;
-      appointmentEndTime = new Date(
-        appointmentStartTime.getTime() + duration * 60000,
-      );
+      appointmentStartTime.setTime(foundSlot.getTime());
     }
 
-    // Generate appointment ID
     const date = new Date();
     const year = date.getFullYear().toString().slice(-2);
     const month = (date.getMonth() + 1).toString().padStart(2, "0");
@@ -184,23 +183,19 @@ export async function POST(request: NextRequest) {
     const random = Math.floor(100 + Math.random() * 900);
     const appointmentId = `APT${year}${month}${day}${random}`;
 
-    // Get or generate auto number
     let finalAutoNumber = autoNumber;
     if (!finalAutoNumber) {
       const appointmentDate = new Date(appointmentStartTime);
       appointmentDate.setHours(0, 0, 0, 0);
-      const count = await Appointment.getAppointmentCountByDate(
-        doctorId,
-        appointmentDate,
-      );
+      const count = await prisma.appointment.count({
+        where: { doctorId, date: appointmentDate },
+      });
       finalAutoNumber = (count + 1).toString().padStart(3, "0");
     }
 
-    // Resolve consultation fee override
     let resolvedConsultationFee: number | undefined = undefined;
     if (consultationFee !== undefined || doctorFee !== undefined) {
-      const rawFee =
-        consultationFee !== undefined ? consultationFee : doctorFee;
+      const rawFee = consultationFee !== undefined ? consultationFee : doctorFee;
       const parsedFee = parseFloat(rawFee);
       if (isNaN(parsedFee) || parsedFee < 0) {
         return NextResponse.json(
@@ -212,60 +207,69 @@ export async function POST(request: NextRequest) {
         );
       }
       resolvedConsultationFee = parsedFee;
-    } else if (doctor.consultationFee !== undefined) {
+    } else if (doctor.consultationFee !== undefined && doctor.consultationFee !== null) {
       resolvedConsultationFee = doctor.consultationFee;
     }
 
-    // Create appointment
-    const appointmentData = {
-      appointmentId,
-      patient: new mongoose.Types.ObjectId(patientId),
-      doctor: new mongoose.Types.ObjectId(doctorId),
-      department: doctor.department,
-      appointmentType: appointmentType || "consultation",
-      date: new Date(appointmentStartTime.setHours(0, 0, 0, 0)),
-      startTime: appointmentStartTime,
-      endTime: appointmentEndTime,
-      duration,
-      autoNumber: finalAutoNumber,
-      status: "scheduled",
-      reason: reason.trim(),
-      symptoms: symptoms?.trim(),
-      priority: priority || "medium",
-      notes: notes?.trim(),
-      createdBy: new mongoose.Types.ObjectId(userId),
-      ...(resolvedConsultationFee !== undefined && {
-        consultationFee: resolvedConsultationFee,
-        doctorFee: resolvedConsultationFee,
-      }),
-    };
+    const appointmentDate = new Date(appointmentStartTime);
+    appointmentDate.setHours(0, 0, 0, 0);
 
-    const appointment = new Appointment(appointmentData);
-    await appointment.save();
+    const appointment = await prisma.appointment.create({
+      data: {
+        appointmentId,
+        patientId,
+        doctorId,
+        department: doctor.department || undefined,
+        appointmentType: appointmentType || "consultation",
+        date: appointmentDate,
+        startTime: appointmentStartTime,
+        endTime: appointmentEndTime,
+        duration,
+        autoNumber: finalAutoNumber,
+        status: "scheduled",
+        reason: reason.trim(),
+        symptoms: symptoms?.trim() || undefined,
+        priority: priority || "medium",
+        notes: notes?.trim() || undefined,
+        createdById: userId,
+        ...(resolvedConsultationFee !== undefined && {
+          consultationFee: resolvedConsultationFee,
+          doctorFee: resolvedConsultationFee,
+        }),
+      },
+    });
 
-    // Populate response
-    await appointment.populate([
-      { path: "patient", select: "name phone guardian patientId" },
-      { path: "doctor", select: "name specialization department" },
-      { path: "createdBy", select: "name" },
-    ]);
+    const populatedAppointment = await prisma.appointment.findUnique({
+      where: { id: appointment.id },
+      include: {
+        patient: { select: { name: true, phone: true, patientId: true } },
+        doctor: { select: { name: true, specialization: true, department: true } },
+      },
+    });
+
+    if (!populatedAppointment) {
+      return NextResponse.json(
+        { success: false, error: "Failed to create appointment" },
+        { status: 500 },
+      );
+    }
 
     return NextResponse.json(
       {
         success: true,
         data: {
-          id: appointment._id.toString(),
-          appointmentId: appointment.appointmentId,
-          autoNumber: appointment.autoNumber,
-          patient: appointment.patient,
-          doctor: appointment.doctor,
-          startTime: appointment.startTime,
-          endTime: appointment.endTime,
-          duration: appointment.duration,
-          appointmentType: appointment.appointmentType,
-          status: appointment.status,
-          reason: appointment.reason,
-          priority: appointment.priority,
+          id: populatedAppointment.id,
+          appointmentId: populatedAppointment.appointmentId,
+          autoNumber: populatedAppointment.autoNumber,
+          patient: populatedAppointment.patient,
+          doctor: populatedAppointment.doctor,
+          startTime: populatedAppointment.startTime,
+          endTime: populatedAppointment.endTime,
+          duration: populatedAppointment.duration,
+          appointmentType: populatedAppointment.appointmentType,
+          status: populatedAppointment.status,
+          reason: populatedAppointment.reason,
+          priority: populatedAppointment.priority,
           autoAdjusted,
           requestedStartTime: autoAdjusted ? requestedStartTime : undefined,
         },
@@ -286,12 +290,8 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// GET: Get appointments with filters
 export async function GET(request: NextRequest) {
   try {
-    await dbConnect();
-
-    // Authentication
     const authHeader = request.headers.get("authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return NextResponse.json(
@@ -322,216 +322,78 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get("limit") || "50");
     const skip = (page - 1) * limit;
 
-    let query: any = {};
+    let where: any = {};
 
-    // Filter by date range (startDate and endDate)
     if (startDate && endDate) {
       const start = new Date(startDate);
       start.setHours(0, 0, 0, 0);
       const end = new Date(endDate);
       end.setHours(23, 59, 59, 999);
-      query.startTime = { $gte: start, $lte: end };
-    }
-    // Filter by single date (backward compatibility)
-    else if (date) {
+      where.startTime = { gte: start, lte: end };
+    } else if (date) {
       const start = new Date(date);
       start.setHours(0, 0, 0, 0);
       const end = new Date(date);
       end.setHours(23, 59, 59, 999);
-      query.startTime = { $gte: start, $lte: end };
+      where.startTime = { gte: start, lte: end };
     }
 
-    // Filter by doctor
     if (doctorId) {
-      query.doctor = doctorId;
+      where.doctorId = doctorId;
     }
 
-    // Filter by patient
     if (patientId) {
-      query.patient = patientId;
+      where.patientId = patientId;
     }
 
-    // Filter by status
     if (status) {
-      query.status = status;
+      where.status = status;
     }
 
-    const { query: finalQuery } = await buildMarkedOnlyQuery({
-      userId: payload.id as string,
-      module: "appointment",
-      baseQuery: query,
-    });
-
-    // Get appointments
-    let appointments;
-    let total;
+    let appointments: any[] = [];
+    let total = 0;
 
     if (search) {
-      // Use aggregation with $lookup for search functionality
-      const searchRegex = new RegExp(search, "i");
-      const pipeline: any[] = [
-        {
-          $lookup: {
-            from: "patients",
-            localField: "patient",
-            foreignField: "_id",
-            as: "patient",
-          },
+      const searchWhere = {
+        ...where,
+        patient: {
+          name: { contains: search },
         },
-        {
-          $lookup: {
-            from: "users",
-            localField: "doctor",
-            foreignField: "_id",
-            as: "doctor",
-          },
-        },
-        {
-          $unwind: {
-            path: "$patient",
-            preserveNullAndEmptyArrays: true,
-          },
-        },
-        {
-          $unwind: {
-            path: "$doctor",
-            preserveNullAndEmptyArrays: true,
-          },
-        },
-        {
-          $match: {
-            $and: [
-              finalQuery,
-              {
-                $or: [
-                  { "patient.name": searchRegex },
-                  { "patient.phone": searchRegex },
-                  { "patient.patientId": searchRegex },
-                  { appointmentId: searchRegex },
-                  { "doctor.name": searchRegex },
-                  { reason: searchRegex },
-                ],
-              },
-            ],
-          },
-        },
-        {
-          $sort: { startTime: 1 },
-        },
-        {
-          $skip: skip,
-        },
-        {
-          $limit: limit,
-        },
-        {
-          $project: {
-            _id: 1,
-            appointmentId: 1,
-            autoNumber: 1,
-            patient: {
-              _id: "$patient._id",
-              name: "$patient.name",
-              phone: "$patient.phone",
-              patientId: "$patient.patientId",
-            },
-            doctor: {
-              _id: "$doctor._id",
-              name: "$doctor.name",
-              specialization: "$doctor.specialization",
-              department: "$doctor.department",
-            },
-            date: 1,
-            startTime: 1,
-            endTime: 1,
-            duration: 1,
-            appointmentType: 1,
-            status: 1,
-            reason: 1,
-            priority: 1,
-            notes: 1,
-            checkInTime: 1,
-            checkOutTime: 1,
-            createdAt: 1,
-            updatedAt: 1,
-          },
-        },
-      ];
+        OR: [
+          { patient: { name: { contains: search } } },
+          { patient: { phone: { contains: search } } },
+          { patient: { patientId: { contains: search } } },
+          { appointmentId: { contains: search } },
+          { doctor: { name: { contains: search } } },
+          { reason: { contains: search } },
+        ],
+      };
 
-      // Get total count for search
-      const countPipeline: any[] = [
-        {
-          $lookup: {
-            from: "patients",
-            localField: "patient",
-            foreignField: "_id",
-            as: "patient",
-          },
+      appointments = await prisma.appointment.findMany({
+        where: searchWhere,
+        include: {
+          patient: { select: { name: true, phone: true, patientId: true } },
+          doctor: { select: { name: true, specialization: true, department: true } },
         },
-        {
-          $lookup: {
-            from: "users",
-            localField: "doctor",
-            foreignField: "_id",
-            as: "doctor",
-          },
-        },
-        {
-          $unwind: {
-            path: "$patient",
-            preserveNullAndEmptyArrays: true,
-          },
-        },
-        {
-          $unwind: {
-            path: "$doctor",
-            preserveNullAndEmptyArrays: true,
-          },
-        },
-        {
-          $match: {
-            $and: [
-              finalQuery,
-              {
-                $or: [
-                  { "patient.name": searchRegex },
-                  { "patient.phone": searchRegex },
-                  { "patient.patientId": searchRegex },
-                  { appointmentId: searchRegex },
-                  { "doctor.name": searchRegex },
-                  { reason: searchRegex },
-                ],
-              },
-            ],
-          },
-        },
-        {
-          $count: "total",
-        },
-      ];
+        orderBy: { startTime: "asc" },
+        skip,
+        take: limit,
+      });
 
-      const [appointmentsResult, countResult] = await Promise.all([
-        Appointment.aggregate(pipeline),
-        Appointment.aggregate(countPipeline),
-      ]);
-
-      appointments = appointmentsResult;
-      total = countResult[0]?.total || 0;
+      total = await prisma.appointment.count({ where: searchWhere });
     } else {
-      // Regular query without search
-      const [appointmentsResult, totalResult] = await Promise.all([
-        Appointment.find(finalQuery)
-          .populate("patient", "name phone patientId")
-          .populate("doctor", "name specialization department")
-          .sort({ startTime: 1 })
-          .skip(skip)
-          .limit(limit)
-          .lean(),
-        Appointment.countDocuments(finalQuery),
-      ]);
+      appointments = await prisma.appointment.findMany({
+        where,
+        include: {
+          patient: { select: { name: true, phone: true, patientId: true } },
+          doctor: { select: { name: true, specialization: true, department: true } },
+        },
+        orderBy: { startTime: "asc" },
+        skip,
+        take: limit,
+      });
 
-      appointments = appointmentsResult;
-      total = totalResult;
+      total = await prisma.appointment.count({ where });
     }
 
     return NextResponse.json({

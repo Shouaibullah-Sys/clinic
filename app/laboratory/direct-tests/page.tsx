@@ -68,7 +68,7 @@ import {
 } from "@/components/ui/pagination";
 
 interface DirectLabTest {
-  _id: string;
+  id: string;
   testId: string;
   testName: string;
   category: string;
@@ -371,12 +371,12 @@ export default function DirectTestsPage() {
   };
 
   const handlePrintPDF = async (test: DirectLabTest) => {
-    setPrintingId(test._id);
+    setPrintingId(test.id);
 
     try {
       // Fetch the complete test data from the API for PDF generation
       const response = await fetch(
-        `/api/laboratory/direct-tests/${test._id}/print`,
+        `/api/laboratory/direct-tests/${test.id}/print`,
         {
           method: "GET",
           headers: {
@@ -401,7 +401,7 @@ export default function DirectTestsPage() {
 
       // Mark only the first successful print
       if (!test.printedAt) {
-        await fetch(`/api/laboratory/direct-tests/${test._id}/print`, {
+        await fetch(`/api/laboratory/direct-tests/${test.id}/print`, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${accessToken}`,
@@ -448,10 +448,10 @@ export default function DirectTestsPage() {
   };
 
   const handlePrintPaymentSlip = async (test: DirectLabTest) => {
-    setPrintingSlipId(test._id);
+    setPrintingSlipId(test.id);
 
     try {
-      const response = await fetch(`/api/laboratory/direct-tests/${test._id}`, {
+      const response = await fetch(`/api/laboratory/direct-tests/${test.id}`, {
         method: "GET",
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -784,7 +784,7 @@ export default function DirectTestsPage() {
                 ) : (
                   paginatedTests.map((test) => (
                     <TableRow
-                      key={test._id}
+                      key={test.id}
                       className={
                         test.priority === "emergency"
                           ? "hover:bg-red-100"
@@ -872,7 +872,7 @@ export default function DirectTestsPage() {
                             asChild
                             className="h-8 px-3"
                           >
-                            <Link href={`/laboratory/direct-tests/${test._id}`}>
+                            <Link href={`/laboratory/direct-tests/${test.id}`}>
                               <Eye className="h-3 w-3 mr-1" />
                               View
                             </Link>
@@ -884,7 +884,7 @@ export default function DirectTestsPage() {
                             className="h-8 px-3"
                           >
                             <Link
-                              href={`/laboratory/direct-tests/${test._id}?edit=1`}
+                              href={`/laboratory/direct-tests/${test.id}?edit=1`}
                             >
                               <Pencil className="h-3 w-3 mr-1" />
                               Edit
@@ -895,10 +895,10 @@ export default function DirectTestsPage() {
                               variant="outline"
                               size="sm"
                               onClick={() => handlePrintPaymentSlip(test)}
-                              disabled={printingSlipId === test._id}
+                              disabled={printingSlipId === test.id}
                               className="h-8 px-3"
                             >
-                              {printingSlipId === test._id ? (
+                              {printingSlipId === test.id ? (
                                 <>Printing...</>
                               ) : (
                                 <>
@@ -912,10 +912,10 @@ export default function DirectTestsPage() {
                             <Button
                               size="sm"
                               onClick={() => handlePrintPDF(test)}
-                              disabled={printingId === test._id}
+                              disabled={printingId === test.id}
                               className="h-8 px-3 bg-green-600 hover:bg-green-700"
                             >
-                              {printingId === test._id ? (
+                              {printingId === test.id ? (
                                 <>Printing...</>
                               ) : (
                                 <>
@@ -965,7 +965,7 @@ export default function DirectTestsPage() {
         ) : (
           paginatedTests.map((test) => (
             <Card
-              key={test._id}
+              key={test.id}
               className={`
                 overflow-hidden
                 ${test.priority === "emergency" ? "border-red-200 bg-red-50/30" : ""}
@@ -1072,7 +1072,7 @@ export default function DirectTestsPage() {
                     asChild
                     className="flex-1"
                   >
-                    <Link href={`/laboratory/direct-tests/${test._id}`}>
+                    <Link href={`/laboratory/direct-tests/${test.id}`}>
                       <Eye className="h-4 w-4 mr-1" />
                       View Details
                     </Link>
@@ -1083,7 +1083,7 @@ export default function DirectTestsPage() {
                     asChild
                     className="flex-1"
                   >
-                    <Link href={`/laboratory/direct-tests/${test._id}?edit=1`}>
+                    <Link href={`/laboratory/direct-tests/${test.id}?edit=1`}>
                       <Pencil className="h-4 w-4 mr-1" />
                       Edit
                     </Link>
@@ -1093,10 +1093,10 @@ export default function DirectTestsPage() {
                       variant="outline"
                       size="sm"
                       onClick={() => handlePrintPaymentSlip(test)}
-                      disabled={printingSlipId === test._id}
+                      disabled={printingSlipId === test.id}
                       className="flex-1"
                     >
-                      {printingSlipId === test._id ? (
+                      {printingSlipId === test.id ? (
                         <>Printing...</>
                       ) : (
                         <>
@@ -1110,10 +1110,10 @@ export default function DirectTestsPage() {
                     <Button
                       size="sm"
                       onClick={() => handlePrintPDF(test)}
-                      disabled={printingId === test._id}
+                      disabled={printingId === test.id}
                       className="flex-1 bg-green-600 hover:bg-green-700"
                     >
-                      {printingId === test._id ? (
+                      {printingId === test.id ? (
                         <>Printing...</>
                       ) : (
                         <>

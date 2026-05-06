@@ -1,21 +1,12 @@
-// app/api/laboratory/direct-tests/[id]/payment/route.ts
-
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { LabTest } from "@/lib/models/LabTest";
-import { Payment } from "@/lib/models/Payment";
+import { prisma } from "@/lib/prisma";
 import { authenticateRequest } from "@/lib/auth";
-import mongoose from "mongoose";
 
-// POST: Process payment for a direct lab test
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await dbConnect();
-
-    // Authenticate the request
     const auth = await authenticateRequest(request);
     if (!auth.success) {
       return NextResponse.json(
@@ -24,9 +15,8 @@ export async function POST(
       );
     }
 
-    // Only receptionists and admin can process payments
     const allowedRoles = ["receptionist", "admin"];
-    if (!auth.userRole || !allowedRoles.includes(auth.userRole)) {
+    if (!allowedRoles.includes(auth.userRole!)) {
       return NextResponse.json(
         {
           success: false,
@@ -36,11 +26,13 @@ export async function POST(
       );
     }
 
-    // Unwrap the params promise
     const { id: testId } = await params;
 
-    // Find the lab test
-    const labTest = await LabTest.findById(testId);
+    const labTest = await prisma.labTest.findUnique({
+      where: { id: testId },
+      include: { patient: true },
+    });
+
     if (!labTest) {
       return NextResponse.json(
         { success: false, error: "Lab test not found" },
@@ -48,7 +40,6 @@ export async function POST(
       );
     }
 
-    // Verify this is a direct test
     if (!labTest.isDirectTest) {
       return NextResponse.json(
         { success: false, error: "This is not a direct lab test" },
@@ -56,8 +47,8 @@ export async function POST(
       );
     }
 
-    // Check if payment is already completed
-    if (labTest.charges.paymentStatus === "paid") {
+    const charges = labTest.charges as any;
+    if (charges.paymentStatus === "paid") {
       return NextResponse.json(
         { success: false, error: "Payment has already been processed" },
         { status: 400 },
@@ -66,7 +57,6 @@ export async function POST(
 
     const body = await request.json();
 
-    // Validate required fields
     if (!body.amount || typeof body.amount !== "number") {
       return NextResponse.json(
         { success: false, error: "Payment amount is required" },
@@ -81,7 +71,6 @@ export async function POST(
       );
     }
 
-    // Validate payment method
     const validPaymentMethods = [
       "cash",
       "card",
@@ -97,9 +86,8 @@ export async function POST(
       );
     }
 
-    // Validate amount
-    const totalAmount = labTest.charges.totalAmount;
-    const paidAmount = labTest.charges.paid || 0;
+    const totalAmount = charges.basePrice || 0;
+    const paidAmount = charges.paid || 0;
     const dueAmount = totalAmount - paidAmount;
 
     if (body.amount <= 0) {
@@ -119,101 +107,56 @@ export async function POST(
       );
     }
 
-    // Validate discount if provided
-    let discountAmount = 0;
-    if (body.discount !== undefined && body.discount !== null) {
-      if (typeof body.discount !== "number" || body.discount < 0) {
-        return NextResponse.json(
-          { success: false, error: "Discount must be a non-negative number" },
-          { status: 400 },
-        );
-      }
-      discountAmount = body.discount;
-    }
-
-    // Calculate new payment status
     const newPaidAmount = paidAmount + body.amount;
     const newDueAmount = totalAmount - newPaidAmount;
-    let newPaymentStatus: "pending" | "partial" | "paid" | "cancelled" =
-      "partial";
+    let newPaymentStatus: "pending" | "partial" | "paid" | "cancelled" = "partial";
 
     if (newDueAmount <= 0) {
       newPaymentStatus = "paid";
     } else if (newPaidAmount > 0) {
       newPaymentStatus = "partial";
-    } else {
-      newPaymentStatus = "pending";
     }
 
-    // Debug logging before payment verification
-    console.log(`[DEBUG] Payment processing for test ${labTest.testId}:`, {
-      totalAmount,
-      paidAmount,
-      bodyAmount: body.amount,
-      newPaidAmount,
-      newDueAmount,
-      newPaymentStatus,
-      currentPaymentVerified: labTest.paymentVerified,
+    const payment = await prisma.payment.create({
+      data: {
+        paymentId: `PAY${Date.now().toString().slice(-6)}`,
+        patientId: labTest.patientId,
+        paymentMethod: body.paymentMethod,
+        amount: body.amount,
+        taxAmount: 0,
+        discountAmount: body.discount || 0,
+        netAmount: body.amount - (body.discount || 0),
+        status: "completed",
+        paymentDate: new Date(),
+        receivedById: auth.userId!,
+        department: "laboratory",
+        serviceType: "direct_lab_test",
+        notes: body.notes,
+      },
     });
 
-    // Create payment record
-    const paymentData = {
-      patient: labTest.patient,
-      paymentMethod: body.paymentMethod,
-      amount: body.amount,
-      taxAmount: 0,
-      discountAmount: discountAmount,
-      netAmount: body.amount - discountAmount,
-      status: "completed",
-      paymentDate: new Date(),
-      collectedBy: new mongoose.Types.ObjectId(auth.userId!),
-      department: "laboratory",
-      serviceType: "direct_lab_test",
-      notes: body.notes,
-      // Additional fields for card payments
-      ...(body.paymentMethod === "card" && {
-        cardType: body.cardType,
-        cardLastFour: body.cardLastFour,
-      }),
-      // Transaction ID if provided
-      ...(body.transactionId && { transactionId: body.transactionId }),
-    };
-
-    const payment = new Payment(paymentData);
-    await payment.save();
-
-    // Update lab test charges
-    labTest.charges.paid = newPaidAmount;
-    labTest.charges.due = Math.max(0, newDueAmount);
-    labTest.charges.paymentStatus = newPaymentStatus;
-    labTest.charges.paymentMethod = body.paymentMethod;
-    labTest.charges.paymentDate = new Date();
-    labTest.charges.collectedBy = new mongoose.Types.ObjectId(auth.userId!);
-    labTest.charges.discount = labTest.charges.discount + discountAmount;
-
-    // If payment is fully paid, verify payment
-    if (newPaymentStatus === "paid") {
-      labTest.paymentVerified = true;
-      labTest.paymentVerifiedBy = new mongoose.Types.ObjectId(auth.userId!);
-      labTest.paymentVerifiedAt = new Date();
-      console.log(
-        `[DEBUG] Payment verified for test ${labTest.testId}: paymentVerified set to true`,
-      );
-    } else {
-      console.log(
-        `[DEBUG] Payment NOT verified for test ${labTest.testId}: paymentStatus is ${newPaymentStatus}, not 'paid'`,
-      );
-    }
-
-    await labTest.save();
-
-    // Populate the response
-    const populatedTest = await LabTest.findById(labTest._id)
-      .populate("patient", "name patientId phone")
-      .populate("createdBy", "name")
-      .populate("charges.collectedBy", "name")
-      .populate("paymentVerifiedBy", "name")
-      .lean();
+    const updatedLabTest = await prisma.labTest.update({
+      where: { id: testId },
+      data: {
+        charges: {
+          ...charges,
+          paid: newPaidAmount,
+          due: Math.max(0, newDueAmount),
+          paymentStatus: newPaymentStatus,
+          paymentMethod: body.paymentMethod,
+          paymentDate: new Date(),
+          collectedById: auth.userId!,
+          discount: (charges.discount || 0) + (body.discount || 0),
+        },
+        paymentVerified: newPaymentStatus === "paid",
+        paymentVerifiedById: newPaymentStatus === "paid" ? auth.userId! : null,
+        paymentVerifiedAt: newPaymentStatus === "paid" ? new Date() : null,
+      },
+      include: {
+        patient: { select: { name: true, patientId: true, phone: true } },
+        createdBy: { select: { name: true } },
+      },
+    });
 
     console.log(
       `Payment processed for direct lab test ${labTest.testId}: ${body.amount} ${body.paymentMethod} by ${auth.userName}`,
@@ -222,7 +165,7 @@ export async function POST(
     return NextResponse.json({
       success: true,
       data: {
-        labTest: populatedTest,
+        labTest: updatedLabTest,
         payment: {
           paymentId: payment.paymentId,
           amount: payment.amount,

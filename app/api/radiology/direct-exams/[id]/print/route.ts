@@ -1,20 +1,14 @@
 // app/api/radiology/direct-exams/[id]/print/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { RadiologyExam } from "@/lib/models/RadiologyExam";
+import { prisma } from "@/lib/prisma";
 import { authenticateRequest } from "@/lib/auth";
-import mongoose from "mongoose";
 
-// POST: Mark a direct radiology exam as printed
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await dbConnect();
-
-    // Authenticate the request
     const auth = await authenticateRequest(request);
     if (!auth.success) {
       return NextResponse.json(
@@ -23,7 +17,6 @@ export async function POST(
       );
     }
 
-    // Only radiology staff, radiologists, and admin can mark exams as printed
     const allowedRoles = [
       "radiology_technician",
       "radiologist",
@@ -40,11 +33,12 @@ export async function POST(
       );
     }
 
-    // Unwrap the params promise
     const { id: examId } = await params;
 
-    // Find the radiology exam
-    const radiologyExam = await RadiologyExam.findById(examId);
+    const radiologyExam = await prisma.radiologyExam.findUnique({
+      where: { id: examId },
+    });
+
     if (!radiologyExam) {
       return NextResponse.json(
         { success: false, error: "Radiology exam not found" },
@@ -52,7 +46,6 @@ export async function POST(
       );
     }
 
-    // Verify this is a direct exam
     if (!radiologyExam.isDirectExam) {
       return NextResponse.json(
         { success: false, error: "This is not a direct radiology exam" },
@@ -60,7 +53,6 @@ export async function POST(
       );
     }
 
-    // Check if exam is finalized
     if (!radiologyExam.finalized) {
       return NextResponse.json(
         {
@@ -71,7 +63,6 @@ export async function POST(
       );
     }
 
-    // Check if exam is ready for print
     if (!radiologyExam.readyForPrint) {
       return NextResponse.json(
         {
@@ -82,7 +73,6 @@ export async function POST(
       );
     }
 
-    // Check if exam has already been printed
     if (radiologyExam.printedAt) {
       return NextResponse.json(
         { success: false, error: "Exam has already been printed" },
@@ -90,21 +80,13 @@ export async function POST(
       );
     }
 
-    // Mark the exam as printed
-    radiologyExam.printedAt = new Date();
-    radiologyExam.printedBy = new mongoose.Types.ObjectId(auth.userId!);
-
-    await radiologyExam.save();
-
-    // Populate the response
-    const populatedExam = await RadiologyExam.findById(radiologyExam._id)
-      .populate("patient", "name patientId phone")
-      .populate("createdBy", "name")
-      .populate("finalizedBy", "name")
-      .populate("printedBy", "name")
-      .populate("results.reportedBy", "name")
-      .populate("results.verifiedBy", "name")
-      .lean();
+    const updatedExam = await prisma.radiologyExam.update({
+      where: { id: examId },
+      data: {
+        printedAt: new Date(),
+        printedById: auth.userId!,
+      },
+    });
 
     console.log(
       `Direct radiology exam ${radiologyExam.examId} marked as printed by ${auth.userName}`,
@@ -112,7 +94,7 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
-      data: populatedExam,
+      data: updatedExam,
       message: "Direct radiology exam marked as printed successfully",
     });
   } catch (error: any) {

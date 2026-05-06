@@ -1,29 +1,25 @@
 // app/api/laboratory/templates/[id]/status/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { LabTestTemplate } from "@/lib/models/LabTestTemplate";
-import { authenticateRequest, hasRequiredRole } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { getTokenPayload } from "@/lib/auth/jwt";
+import { hasRequiredRole } from "@/lib/auth";
 
-// PUT: Toggle the active status of a lab test template
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await dbConnect();
-
-    const auth = await authenticateRequest(request);
-    if (!auth.success) {
+    const payload = await getTokenPayload(request);
+    if (!payload) {
       return NextResponse.json(
-        { success: false, error: auth.error },
-        { status: auth.status || 401 },
+        { success: false, error: "Unauthorized" },
+        { status: 401 },
       );
     }
 
-    // Only lab technicians, doctors, and admins can toggle template status
     const allowedRoles = ["lab_technician", "doctor", "admin"];
-    if (!hasRequiredRole(auth.userRole, allowedRoles)) {
+    if (!hasRequiredRole(payload.role, allowedRoles)) {
       return NextResponse.json(
         {
           success: false,
@@ -36,8 +32,9 @@ export async function PUT(
 
     const { id } = await params;
 
-    // Check if template exists
-    const existingTemplate = await LabTestTemplate.findById(id);
+    const existingTemplate = await prisma.labTestTemplate.findUnique({
+      where: { id },
+    });
     if (!existingTemplate) {
       return NextResponse.json(
         { success: false, error: "Lab test template not found" },
@@ -45,29 +42,23 @@ export async function PUT(
       );
     }
 
-    // Parse the request body to get the active status
     let newActiveStatus: boolean;
     try {
       const body = await request.json();
-      // Use the provided active status, or toggle if not provided
-      newActiveStatus =
-        body.active !== undefined ? body.active : !existingTemplate.active;
+      newActiveStatus = body.active !== undefined ? body.active : !existingTemplate.active;
     } catch {
-      // If no body provided, toggle the status
       newActiveStatus = !existingTemplate.active;
     }
 
-    // Update the active status
-    const updatedTemplate = await LabTestTemplate.findByIdAndUpdate(
-      id,
-      { $set: { active: newActiveStatus } },
-      { new: true, runValidators: true },
-    ).populate("createdBy", "name email");
+    const updatedTemplate = await prisma.labTestTemplate.update({
+      where: { id },
+      data: { active: newActiveStatus },
+    });
 
     return NextResponse.json({
       success: true,
       data: updatedTemplate,
-      message: `Lab test template ${updatedTemplate?.active ? "activated" : "deactivated"} successfully`,
+      message: `Lab test template ${updatedTemplate.active ? "activated" : "deactivated"} successfully`,
     });
   } catch (error: any) {
     console.error("Error toggling lab test template status:", error);
@@ -81,7 +72,6 @@ export async function PUT(
   }
 }
 
-// PATCH: Also support PATCH method for toggling status
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },

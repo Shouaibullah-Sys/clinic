@@ -1,12 +1,8 @@
 // app/api/pharmacy/discharge-cards/[cardId]/dispense/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { DischargeCard } from "@/lib/models/DischargeCard";
-import { MedicineStock } from "@/lib/models/MedicineStock";
-import { MedicineIssue } from "@/lib/models/MedicineIssue";
+import { prisma } from "@/lib/prisma";
 import { getTokenPayload } from "@/lib/auth/jwt";
-import mongoose from "mongoose";
 
 interface MedicineToDispense {
   medicineId: string;
@@ -20,7 +16,6 @@ export async function POST(
   { params }: { params: Promise<{ cardId: string }> },
 ) {
   try {
-    await dbConnect();
     const payload = await getTokenPayload(req);
 
     if (
@@ -37,7 +32,6 @@ export async function POST(
       dispensedBy: string;
     };
 
-    // Validate required fields
     if (!dispensedBy) {
       return NextResponse.json(
         { error: "dispensedBy is required" },
@@ -62,10 +56,18 @@ export async function POST(
     console.log("🔄 Dispensing discharge card:", cardId);
     console.log("Items to dispense:", medicinesToDispense);
 
-    // Find discharge card with patient populated
-    const dischargeCard = await DischargeCard.findById(cardId)
-      .populate("patient", "name patientId")
-      .populate("doctor", "name");
+    const dischargeCard = await prisma.dischargeCard.findUnique({
+      where: { id: cardId },
+      include: {
+        patient: {
+          select: {
+            id: true,
+            name: true,
+            patientId: true,
+          },
+        },
+      },
+    });
 
     if (!dischargeCard) {
       return NextResponse.json(
@@ -74,8 +76,8 @@ export async function POST(
       );
     }
 
-    // Check if medicines have been paid
-    if (!dischargeCard.billing?.medicinesPaid) {
+    const billing = JSON.parse(dischargeCard.billing || "{}");
+    if (!billing.medicinesPaid) {
       return NextResponse.json(
         {
           error:
@@ -85,12 +87,8 @@ export async function POST(
       );
     }
 
-    // Get patient name
-    const patientName =
-      (dischargeCard.patient as any)?.name || "Unknown Patient";
-    console.log("Patient name:", patientName);
+    const patientName = dischargeCard.patient?.name || "Unknown Patient";
 
-    // Check if already fully dispensed
     if (dischargeCard.pharmacyDispensingStatus === "full") {
       return NextResponse.json(
         { error: "Discharge card medicines already fully dispensed" },
@@ -98,37 +96,32 @@ export async function POST(
       );
     }
 
-    // Get the current dispensing status
-    let currentPreOpDispensed =
-      dischargeCard.preOpMedicines?.filter((m) => m.dispensed).length || 0;
-    let currentPostOpDispensed =
-      dischargeCard.postOpMedicines?.filter((m) => m.dispensed).length || 0;
-    let currentDischargeDispensed =
-      dischargeCard.dischargeMedicines?.filter((m) => m.dispensed).length || 0;
+    // Parse medicine arrays
+    const preOpMedicines = JSON.parse(dischargeCard.preOpMedicines || "[]");
+    const postOpMedicines = JSON.parse(dischargeCard.postOpMedicines || "[]");
+    const dischargeMedicines = JSON.parse(dischargeCard.dischargeMedicines || "[]");
+
+    let currentPreOpDispensed = preOpMedicines.filter((m: any) => m.dispensed).length;
+    let currentPostOpDispensed = postOpMedicines.filter((m: any) => m.dispensed).length;
+    let currentDischargeDispensed = dischargeMedicines.filter((m: any) => m.dispensed).length;
 
     const processedItems: any[] = [];
-    const dispensedByObjId =
-      typeof dispensedBy === "string"
-        ? new mongoose.Types.ObjectId(dispensedBy)
-        : dispensedBy;
 
-    // Process each medicine to dispense
     for (const item of medicinesToDispense) {
       let medicineArray: any[] = [];
       let arrayName = "";
 
-      // Get the correct medicine array based on type
       switch (item.type) {
         case "preOp":
-          medicineArray = dischargeCard.preOpMedicines || [];
+          medicineArray = preOpMedicines;
           arrayName = "preOpMedicines";
           break;
         case "postOp":
-          medicineArray = dischargeCard.postOpMedicines || [];
+          medicineArray = postOpMedicines;
           arrayName = "postOpMedicines";
           break;
         case "discharge":
-          medicineArray = dischargeCard.dischargeMedicines || [];
+          medicineArray = dischargeMedicines;
           arrayName = "dischargeMedicines";
           break;
         default:
@@ -138,7 +131,6 @@ export async function POST(
           );
       }
 
-      // Check if the medicine exists at the given index
       if (!medicineArray[item.index]) {
         return NextResponse.json(
           {
@@ -150,7 +142,6 @@ export async function POST(
 
       const medicineData = medicineArray[item.index];
 
-      // Check if already dispensed
       if (medicineData.dispensed) {
         console.log(
           `Medicine ${medicineData.name} already dispensed, skipping`,
@@ -158,9 +149,10 @@ export async function POST(
         continue;
       }
 
-      // If medicine has a stock reference, update stock
-      if (medicineData.medicine) {
-        const medicine = await MedicineStock.findById(medicineData.medicine);
+      if (medicineData.medicineId) {
+        const medicine = await prisma.medicineStock.findUnique({
+          where: { id: medicineData.medicineId },
+        });
         if (!medicine) {
           return NextResponse.json(
             {
@@ -170,41 +162,40 @@ export async function POST(
           );
         }
 
-        // Validate stock
-        if (medicine.currentQuantity < item.quantity) {
+        if (medicine.currentQty < item.quantity) {
           return NextResponse.json(
             {
-              error: `Insufficient stock for ${medicine.name}. Available: ${medicine.currentQuantity}, Requested: ${item.quantity}`,
+              error: `Insufficient stock for ${medicine.name}. Available: ${medicine.currentQty}, Requested: ${item.quantity}`,
             },
             { status: 400 },
           );
         }
 
-        // Update stock quantity
-        const oldQuantity = medicine.currentQuantity;
-        medicine.currentQuantity -= item.quantity;
-        await medicine.save();
-
-        console.log(
-          `📉 Updated ${medicine.name} stock: ${oldQuantity} → ${medicine.currentQuantity}`,
-        );
-
-        // Create medicine issue record
-        const medicineIssue = new MedicineIssue({
-          medicineId: medicine._id,
-          quantity: item.quantity,
-          issueDate: new Date(),
-          issuedTo: patientName,
-          issuedBy: dispensedBy,
-          prescriptionId: dischargeCard.dischargeId,
+        const oldQuantity = medicine.currentQty;
+        await prisma.medicineStock.update({
+          where: { id: medicine.id },
+          data: { currentQty: oldQuantity - item.quantity },
         });
 
-        await medicineIssue.save();
+        console.log(
+          `📉 Updated ${medicine.name} stock: ${oldQuantity} → ${oldQuantity - item.quantity}`,
+        );
+
+        await prisma.medicineIssue.create({
+          data: {
+            medicineId: medicine.id,
+            quantity: item.quantity,
+            issuedTo: patientName,
+            issuedById: dispensedBy,
+            prescriptionId: dischargeCard.dischargeId,
+          },
+        });
+
         console.log(`📝 Created MedicineIssue record for ${medicine.name}`);
 
         processedItems.push({
           medicine: medicineData.name,
-          medicineId: medicine._id.toString(),
+          medicineId: medicine.id,
           quantity: item.quantity,
           type: item.type,
           form: medicine.form || "N/A",
@@ -215,10 +206,9 @@ export async function POST(
           total: item.quantity * medicineData.unitPrice,
         });
       } else {
-        // Medicine without stock reference (legacy data)
         processedItems.push({
           medicine: medicineData.name,
-          medicineId: medicineData.medicine?.toString() || "N/A",
+          medicineId: medicineData.medicineId || "N/A",
           quantity: item.quantity,
           type: item.type,
           form: "N/A",
@@ -230,23 +220,11 @@ export async function POST(
         });
       }
 
-      // Mark the medicine as dispensed in the discharge card
-      const updateField = `${arrayName}.${item.index}.dispensed`;
-      const updateDateField = `${arrayName}.${item.index}.dispensedDate`;
-      const updateByField = `${arrayName}.${item.index}.dispensedBy`;
+      // Mark medicine as dispensed
+      medicineArray[item.index].dispensed = true;
+      medicineArray[item.index].dispensedDate = new Date().toISOString();
+      medicineArray[item.index].dispensedBy = dispensedBy;
 
-      await DischargeCard.updateOne(
-        { _id: cardId },
-        {
-          $set: {
-            [updateField]: true,
-            [updateDateField]: new Date(),
-            [updateByField]: dispensedByObjId,
-          },
-        },
-      );
-
-      // Update counter
       switch (item.type) {
         case "preOp":
           currentPreOpDispensed++;
@@ -260,10 +238,20 @@ export async function POST(
       }
     }
 
-    // Calculate totals for the discharge card
-    const totalPreOp = dischargeCard.preOpMedicines?.length || 0;
-    const totalPostOp = dischargeCard.postOpMedicines?.length || 0;
-    const totalDischarge = dischargeCard.dischargeMedicines?.length || 0;
+    // Update discharge card with new medicine arrays
+    await prisma.dischargeCard.update({
+      where: { id: cardId },
+      data: {
+        preOpMedicines: JSON.stringify(preOpMedicines),
+        postOpMedicines: JSON.stringify(postOpMedicines),
+        dischargeMedicines: JSON.stringify(dischargeMedicines),
+        pharmacyDispensingStatus: "partial", // Will update below
+      },
+    });
+
+    const totalPreOp = preOpMedicines.length;
+    const totalPostOp = postOpMedicines.length;
+    const totalDischarge = dischargeMedicines.length;
     const totalMedicines = totalPreOp + totalPostOp + totalDischarge;
 
     const totalDispensed =
@@ -271,7 +259,6 @@ export async function POST(
       currentPostOpDispensed +
       currentDischargeDispensed;
 
-    // Determine new dispensing status
     let newStatus: "pending" | "partial" | "full" = "pending";
     if (totalDispensed === 0) {
       newStatus = "pending";
@@ -281,17 +268,14 @@ export async function POST(
       newStatus = "full";
     }
 
-    // Update discharge card dispensing status
-    await DischargeCard.updateOne(
-      { _id: cardId },
-      {
-        $set: {
-          pharmacyDispensingStatus: newStatus,
-          pharmacyDispensedDate: new Date(),
-          pharmacyDispensedBy: dispensedByObjId,
-        },
+    await prisma.dischargeCard.update({
+      where: { id: cardId },
+      data: {
+        pharmacyDispensingStatus: newStatus,
+        pharmacyDispensedDate: new Date(),
+        pharmacyDispensedBy: dispensedBy,
       },
-    );
+    });
 
     console.log("✅ Dispensing completed successfully. Status:", newStatus);
 
@@ -299,7 +283,7 @@ export async function POST(
       success: true,
       data: {
         dischargeCard: {
-          _id: dischargeCard._id,
+          id: dischargeCard.id,
           dischargeId: dischargeCard.dischargeId,
           patient: dischargeCard.patient,
           pharmacyDispensingStatus: newStatus,
@@ -319,11 +303,6 @@ export async function POST(
     });
   } catch (error: any) {
     console.error("❌ Error dispensing discharge card medicines:", error);
-
-    if (error.errors) {
-      console.error("Validation errors:", error.errors);
-    }
-
     return NextResponse.json(
       {
         error: error.message || "Failed to dispense medicines",

@@ -88,7 +88,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface Doctor {
-  _id: string;
+  id: string;
   name: string;
   email: string;
   phone: string;
@@ -314,7 +314,7 @@ export default function DoctorsManagementPage() {
       setUpdatingDoctor(true);
       setError(null);
       
-      const response = await fetch(`/api/admin/doctors/${editingDoctor._id}`, {
+      const response = await fetch(`/api/admin/doctors/${editingDoctor.id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -356,7 +356,7 @@ export default function DoctorsManagementPage() {
     try {
       setDeleting(true);
       
-      const response = await fetch(`/api/admin/doctors/${deletingDoctor._id}`, {
+      const response = await fetch(`/api/admin/doctors/${deletingDoctor.id}`, {
         method: "DELETE",
         headers: {
           "Content-Type": "application/json",
@@ -984,7 +984,7 @@ export default function DoctorsManagementPage() {
                 </TableHeader>
                 <TableBody>
                   {doctors.map((doctor) => (
-                    <TableRow key={doctor._id}>
+                    <TableRow key={doctor.id}>
                       <TableCell>
                         <div className="flex items-center gap-3">
                           <div className="p-2 bg-blue-100 rounded-lg">

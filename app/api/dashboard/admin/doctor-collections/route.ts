@@ -1,25 +1,7 @@
-// app/api/dashboard/admin/doctor-collections/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { Appointment } from "@/lib/models/Appointment";
-import { DischargeCard } from "@/lib/models/DischargeCard";
-import { User } from "@/lib/models/User";
-import { Patient } from "@/lib/models/Patient";
-import { jwtVerify } from "jose";
+import { prisma } from "@/lib/prisma";
+import { getTokenPayload } from "@/lib/auth/jwt";
 
-const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-this";
-
-async function verifyToken(token: string) {
-  try {
-    const secret = new TextEncoder().encode(JWT_SECRET);
-    const { payload } = await jwtVerify(token, secret);
-    return payload;
-  } catch (error) {
-    return null;
-  }
-}
-
-// Helper function to get date range based on period
 function getDateRange(period: string, startDate?: string, endDate?: string) {
   const now = new Date();
   let start: Date;
@@ -71,33 +53,19 @@ function getDateRange(period: string, startDate?: string, endDate?: string) {
   return { start, end, type: period };
 }
 
-// GET: Get doctor-wise collection summary
 export async function GET(request: NextRequest) {
   try {
-    await dbConnect();
-
-    // Authentication
-    const authHeader = request.headers.get("authorization");
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized. No token provided." },
-        { status: 401 },
-      );
-    }
-
-    const token = authHeader.split(" ")[1];
-    const payload = await verifyToken(token);
+    const payload = await getTokenPayload(request);
 
     if (!payload) {
       return NextResponse.json(
-        { success: false, error: "Invalid or expired token." },
+        { success: false, error: "Unauthorized" },
         { status: 401 },
       );
     }
 
     const userRole = payload.role as string;
 
-    // Only admin can access this endpoint
     if (userRole !== "admin") {
       return NextResponse.json(
         { success: false, error: "Forbidden. Admin access required." },
@@ -105,7 +73,6 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Parse query parameters
     const { searchParams } = new URL(request.url);
     const period = searchParams.get("period") || "today";
     const department = searchParams.get("department");
@@ -113,34 +80,25 @@ export async function GET(request: NextRequest) {
     const startDate = searchParams.get("startDate");
     const endDate = searchParams.get("endDate");
 
-    // Get date range
-    const dateRange = getDateRange(
-      period,
-      startDate || undefined,
-      endDate || undefined,
-    );
+    const dateRange = getDateRange(period, startDate || undefined, endDate || undefined);
 
-    // Build doctor filter
-    const doctorFilter: any = { role: "doctor", active: true };
+    let where: any = { role: "doctor", active: true };
     if (department && department !== "all") {
-      doctorFilter.department = department;
+      where.department = department;
     }
     if (doctorId) {
-      doctorFilter._id = doctorId;
+      where.id = doctorId;
     }
 
-    // Get all active doctors
-    const doctors = await User.find(doctorFilter)
-      .select("_id name department specialization consultationFee")
-      .lean();
+    const doctors = await prisma.user.findMany({
+      where,
+      select: { id: true, name: true, department: true, specialization: true, consultationFee: true },
+    });
 
-    console.log("[DoctorCollections] Found", doctors.length, "active doctors");
-
-    // Create a map for quick doctor lookup
-    const doctorMap = new Map();
-    doctors.forEach((doc: any) => {
-      doctorMap.set(doc._id.toString(), {
-        doctorId: doc._id.toString(),
+    const doctorMap = new Map<string, any>();
+    doctors.forEach((doc) => {
+      doctorMap.set(doc.id, {
+        doctorId: doc.id,
         doctorName: doc.name,
         department: doc.department || "N/A",
         specialization: doc.specialization || "N/A",
@@ -153,233 +111,86 @@ export async function GET(request: NextRequest) {
       });
     });
 
-    // Aggregate appointments - Use startTime for date filtering
-    // Include multiple statuses since appointments may not be checked out properly
-    // "scheduled" appointments are still valid patient visits that should be counted
-    const appointmentMatch: any = {
-      status: {
-        $in: [
-          "completed",
-          "checked-in",
-          "in-progress",
-          "scheduled",
-          "confirmed",
-        ],
-      },
-      startTime: { $gte: dateRange.start, $lte: dateRange.end },
+    const appointmentWhere: any = {
+      status: { in: ["completed", "checked-in", "in-progress", "scheduled", "confirmed"] },
+      startTime: { gte: dateRange.start, lte: dateRange.end },
     };
     if (doctorId) {
-      appointmentMatch.doctor = doctorId;
+      appointmentWhere.doctorId = doctorId;
     }
 
-    console.warn(
-      "DEBUG: Appointment match query:",
-      JSON.stringify(appointmentMatch, null, 2),
-    );
-
-    console.log(
-      "[DoctorCollections] Appointment match query:",
-      JSON.stringify(appointmentMatch, null, 2),
-    );
-
-    // Debug: Check total appointments in date range regardless of status
-    // Using startTime instead of date for more reliable filtering
-    const debugAppointments = await Appointment.find({
-      startTime: { $gte: dateRange.start, $lte: dateRange.end },
-    })
-      .select("status date startTime doctor consultationFee")
-      .limit(10)
-      .lean();
-
-    console.log(
-      `[DoctorCollections] Total appointments in date range: ${debugAppointments.length}`,
-    );
-    const statusCounts: Record<string, number> = {};
-    debugAppointments.forEach((apt: any) => {
-      statusCounts[apt.status] = (statusCounts[apt.status] || 0) + 1;
+    const appointments = await prisma.appointment.findMany({
+      where: appointmentWhere,
+      select: { doctorId: true, consultationFee: true, doctorFee: true },
     });
-    console.log("[DoctorCollections] Appointments by status:", statusCounts);
 
-    // Debug: Check some sample appointments
-    if (debugAppointments.length > 0) {
-      console.log(
-        "[DoctorCollections] Sample appointments:",
-        debugAppointments.slice(0, 3),
-      );
-    }
+    const apptAgg = new Map<string, { count: number; revenue: number }>();
+    appointments.forEach((apt) => {
+      const docId = apt.doctorId;
+      if (!apptAgg.has(docId)) {
+        apptAgg.set(docId, { count: 0, revenue: 0 });
+      }
+      const data = apptAgg.get(docId)!;
+      data.count += 1;
+      data.revenue += apt.consultationFee || apt.doctorFee || 0;
+    });
 
-    const appointmentAggregation = await Appointment.aggregate([
-      { $match: appointmentMatch },
-      {
-        $lookup: {
-          from: "users",
-          localField: "doctor",
-          foreignField: "_id",
-          as: "doctorInfo",
-        },
-      },
-      { $unwind: { path: "$doctorInfo", preserveNullAndEmptyArrays: true } },
-      {
-        $group: {
-          _id: "$doctor",
-          appointmentCount: { $sum: 1 },
-          appointmentRevenue: {
-            $sum: {
-              $cond: [
-                { $eq: ["$appointmentType", "emergency"] },
-                { $ifNull: ["$doctorInfo.consultationFee", 0] },
-                { $ifNull: ["$doctorInfo.consultationFee", 0] },
-              ],
-            },
-          },
-        },
-      },
-    ]);
-
-    console.log(
-      "[DoctorCollections] Appointment aggregation result:",
-      appointmentAggregation,
-    );
-
-    // Update doctor map with appointment data
-    appointmentAggregation.forEach((apt: any) => {
-      const doctorIdStr = apt._id?.toString();
-      if (doctorIdStr && doctorMap.has(doctorIdStr)) {
-        const doctorData = doctorMap.get(doctorIdStr);
-        doctorData.appointmentCount = apt.appointmentCount || 0;
-        doctorData.appointmentRevenue = apt.appointmentRevenue || 0;
+    apptAgg.forEach((data, docId) => {
+      if (doctorMap.has(docId)) {
+        const doc = doctorMap.get(docId);
+        doc.appointmentCount = data.count;
+        doc.appointmentRevenue = data.revenue;
       }
     });
 
-    // Aggregate discharge cards (operations)
-    const dischargeMatch: any = {
-      status: { $in: ["paid", "completed"] },
-      dischargeDate: { $gte: dateRange.start, $lte: dateRange.end },
+    const dischargeWhere: any = {
+      status: { in: ["paid", "completed"] },
+      dischargeDate: { gte: dateRange.start, lte: dateRange.end },
     };
     if (doctorId) {
-      dischargeMatch.doctor = doctorId;
+      dischargeWhere.doctorId = doctorId;
     }
 
-    const dischargeAggregation = await DischargeCard.aggregate([
-      { $match: dischargeMatch },
-      {
-        $group: {
-          _id: "$doctor",
-          operationCount: { $sum: 1 },
-          operationRevenue: { $sum: "$billing.paidAmount" },
-        },
-      },
-    ]);
+    const dischargeCards = await prisma.dischargeCard.findMany({
+      where: dischargeWhere,
+    });
 
-    // Update doctor map with discharge data
-    dischargeAggregation.forEach((discharge: any) => {
-      const doctorIdStr = discharge._id?.toString();
-      if (doctorIdStr && doctorMap.has(doctorIdStr)) {
-        const doctorData = doctorMap.get(doctorIdStr);
-        doctorData.operationCount = discharge.operationCount || 0;
-        doctorData.operationRevenue = discharge.operationRevenue || 0;
+    const disAgg = new Map<string, { count: number; revenue: number }>();
+    dischargeCards.forEach((card) => {
+      const billing = typeof card.billing === "string" ? JSON.parse(card.billing) : card.billing;
+      const docId = card.doctorId;
+      if (docId && !disAgg.has(docId)) {
+        disAgg.set(docId, { count: 0, revenue: 0 });
+      }
+      if (docId) {
+        const data = disAgg.get(docId)!;
+        data.count += 1;
+        data.revenue += billing?.paidAmount || 0;
       }
     });
 
-    // Calculate totals and convert to array
+    disAgg.forEach((data, docId) => {
+      if (doctorMap.has(docId)) {
+        const doc = doctorMap.get(docId);
+        doc.operationCount = data.count;
+        doc.operationRevenue = data.revenue;
+      }
+    });
+
     const byDoctor = Array.from(doctorMap.values())
-      // FIX: Show ALL doctors, not just those with activity
-      // .filter((doc: any) => {
-      //   // Only include doctors who have some activity
-      //   return doc.appointmentCount > 0 || doc.operationCount > 0;
-      // })
-      .map((doc: any) => {
+      .map((doc) => {
         doc.totalCollection = doc.appointmentRevenue + doc.operationRevenue;
         return doc;
       })
-      .sort((a: any, b: any) => b.totalCollection - a.totalCollection);
+      .sort((a, b) => b.totalCollection - a.totalCollection);
 
-    console.log(
-      "[DoctorCollections] Returning",
-      byDoctor.length,
-      "doctors in collection summary",
-    );
-
-    // Calculate summary
     const summary = {
-      totalAppointments: byDoctor.reduce(
-        (sum: number, doc: any) => sum + doc.appointmentCount,
-        0,
-      ),
-      totalAppointmentRevenue: byDoctor.reduce(
-        (sum: number, doc: any) => sum + doc.appointmentRevenue,
-        0,
-      ),
-      totalOperations: byDoctor.reduce(
-        (sum: number, doc: any) => sum + doc.operationCount,
-        0,
-      ),
-      totalOperationRevenue: byDoctor.reduce(
-        (sum: number, doc: any) => sum + doc.operationRevenue,
-        0,
-      ),
-      grandTotal: byDoctor.reduce(
-        (sum: number, doc: any) => sum + doc.totalCollection,
-        0,
-      ),
+      totalAppointments: byDoctor.reduce((sum, doc) => sum + doc.appointmentCount, 0),
+      totalAppointmentRevenue: byDoctor.reduce((sum, doc) => sum + doc.appointmentRevenue, 0),
+      totalOperations: byDoctor.reduce((sum, doc) => sum + doc.operationCount, 0),
+      totalOperationRevenue: byDoctor.reduce((sum, doc) => sum + doc.operationRevenue, 0),
+      grandTotal: byDoctor.reduce((sum, doc) => sum + doc.totalCollection, 0),
     };
-
-    // If a specific doctor is selected, get detailed breakdown
-    let detailedAppointments: any[] = [];
-    let detailedOperations: any[] = [];
-
-    if (doctorId) {
-      // Get detailed appointments for the selected doctor
-      // Include all non-cancelled statuses
-      const appointments = await Appointment.find({
-        doctor: doctorId,
-        status: {
-          $in: [
-            "completed",
-            "checked-in",
-            "in-progress",
-            "scheduled",
-            "confirmed",
-          ],
-        },
-        startTime: { $gte: dateRange.start, $lte: dateRange.end },
-      })
-        .populate("patient", "name phone")
-        .sort({ startTime: -1 })
-        .lean();
-
-      detailedAppointments = appointments.map((apt: any) => ({
-        appointmentId: apt._id,
-        date: apt.startTime || apt.date,
-        patientName: apt.patient?.name || "N/A",
-        patientPhone: apt.patient?.phone || "N/A",
-        appointmentType: apt.appointmentType || "regular",
-        fee: apt.doctorFee || apt.consultationFee || 0,
-        status: apt.status,
-      }));
-
-      // Get detailed operations (discharge cards) for the selected doctor
-      const dischargeCards = await DischargeCard.find({
-        doctor: doctorId,
-        status: { $in: ["paid", "completed"] },
-        dischargeDate: { $gte: dateRange.start, $lte: dateRange.end },
-      })
-        .populate("patient", "name phone")
-        .sort({ dischargeDate: -1 })
-        .lean();
-
-      detailedOperations = dischargeCards.map((card: any) => ({
-        dischargeCardId: card._id,
-        dischargeId: card.dischargeId,
-        date: card.dischargeDate,
-        patientName: card.patient?.name || "N/A",
-        patientPhone: card.patient?.phone || "N/A",
-        totalAmount: card.billing?.totalAmount || 0,
-        paidAmount: card.billing?.paidAmount || 0,
-        discount: card.billing?.discount || 0,
-        status: card.status,
-      }));
-    }
 
     return NextResponse.json({
       success: true,
@@ -391,14 +202,6 @@ export async function GET(request: NextRequest) {
           startDate: dateRange.start,
           endDate: dateRange.end,
         },
-        // Include detailed breakdown when a specific doctor is selected
-        ...(doctorId && {
-          doctorDetails: doctorMap.has(doctorId)
-            ? doctorMap.get(doctorId)
-            : null,
-          detailedAppointments,
-          detailedOperations,
-        }),
       },
     });
   } catch (error: any) {

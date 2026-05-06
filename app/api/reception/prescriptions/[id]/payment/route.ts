@@ -1,21 +1,14 @@
 // app/api/reception/prescriptions/[id]/payment/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { Prescription } from "@/lib/models/Prescription";
-import { Payment } from "@/lib/models/Payment";
+import { prisma } from "@/lib/prisma";
 import { authenticateRequest } from "@/lib/auth";
-import mongoose from "mongoose";
 
-// PUT: Process payment for a prescription
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await dbConnect();
-
-    // Authenticate the request
     const auth = await authenticateRequest(request);
     if (!auth.success) {
       return NextResponse.json(
@@ -24,7 +17,6 @@ export async function PUT(
       );
     }
 
-    // Only receptionists and admin can process payments
     const allowedRoles = ["receptionist", "admin"];
     if (!auth.userRole || !allowedRoles.includes(auth.userRole)) {
       return NextResponse.json(
@@ -36,11 +28,12 @@ export async function PUT(
       );
     }
 
-    // Unwrap the params promise
     const { id: prescriptionId } = await params;
 
-    // Find the prescription
-    const prescription = await Prescription.findById(prescriptionId);
+    const prescription = await prisma.prescription.findUnique({
+      where: { id: prescriptionId },
+    });
+
     if (!prescription) {
       return NextResponse.json(
         { success: false, error: "Prescription not found" },
@@ -48,7 +41,6 @@ export async function PUT(
       );
     }
 
-    // Check if prescription is cancelled or expired
     if (
       prescription.status === "cancelled" ||
       prescription.status === "expired"
@@ -62,7 +54,6 @@ export async function PUT(
       );
     }
 
-    // Check if payment is already verified
     if (prescription.paymentVerified) {
       return NextResponse.json(
         { success: false, error: "Payment has already been verified" },
@@ -72,7 +63,6 @@ export async function PUT(
 
     const body = await request.json();
 
-    // Validate required fields
     if (!body.amount || typeof body.amount !== "number") {
       return NextResponse.json(
         { success: false, error: "Payment amount is required" },
@@ -87,7 +77,6 @@ export async function PUT(
       );
     }
 
-    // Validate payment method
     const validPaymentMethods = [
       "cash",
       "card",
@@ -103,9 +92,9 @@ export async function PUT(
       );
     }
 
-    // Validate amount
-    const totalAmount = prescription.charges.totalAmount;
-    const paidAmount = prescription.charges.paid || 0;
+    const charges = prescription.charges as any;
+    const totalAmount = charges.totalAmount || 0;
+    const paidAmount = charges.paid || 0;
     const dueAmount = totalAmount - paidAmount;
 
     if (body.amount <= 0) {
@@ -125,7 +114,6 @@ export async function PUT(
       );
     }
 
-    // Validate discount if provided
     let discountAmount = 0;
     if (body.discount !== undefined && body.discount !== null) {
       if (typeof body.discount !== "number" || body.discount < 0) {
@@ -137,7 +125,6 @@ export async function PUT(
       discountAmount = body.discount;
     }
 
-    // Calculate new payment status
     const newPaidAmount = paidAmount + body.amount;
     const newDueAmount = totalAmount - newPaidAmount;
     let newPaymentStatus: "unpaid" | "partial" | "paid" | "cancelled" =
@@ -151,7 +138,6 @@ export async function PUT(
       newPaymentStatus = "unpaid";
     }
 
-    // Debug logging before payment verification
     console.log(
       `[DEBUG] Payment processing for prescription ${prescription.prescriptionId}:`,
       {
@@ -165,78 +151,65 @@ export async function PUT(
       },
     );
 
-    // Create payment record
-    const paymentData = {
-      patient: prescription.patient,
+    const payment = await prisma.payment.create({
+      data: {
+        patientId: prescription.patientId,
+        paymentMethod: body.paymentMethod,
+        amount: body.amount,
+        taxAmount: 0,
+        discountAmount: discountAmount,
+        netAmount: body.amount - discountAmount,
+        status: "completed",
+        paymentDate: new Date(),
+        receivedById: auth.userId!,
+        department: "pharmacy",
+        serviceType: "prescription",
+        notes: body.notes,
+        ...(body.paymentMethod === "card" && {
+          cardType: body.cardType,
+          cardLastFour: body.cardLastFour,
+        }),
+        ...(body.transactionId && { transactionId: body.transactionId }),
+      },
+    });
+
+    const newCharges = {
+      ...charges,
+      paid: newPaidAmount,
+      due: Math.max(0, newDueAmount),
+      paymentStatus: newPaymentStatus,
       paymentMethod: body.paymentMethod,
-      amount: body.amount,
-      taxAmount: 0,
-      discountAmount: discountAmount,
-      netAmount: body.amount - discountAmount,
-      status: "completed",
       paymentDate: new Date(),
-      collectedBy: new mongoose.Types.ObjectId(auth.userId!),
-      department: "pharmacy",
-      serviceType: "prescription",
-      notes: body.notes,
-      // Additional fields for card payments
-      ...(body.paymentMethod === "card" && {
-        cardType: body.cardType,
-        cardLastFour: body.cardLastFour,
-      }),
-      // Transaction ID if provided
-      ...(body.transactionId && { transactionId: body.transactionId }),
+      collectedBy: auth.userId!,
+      discount: (charges.discount || 0) + discountAmount,
     };
 
-    const payment = new Payment(paymentData);
-    await payment.save();
-
-    // Update prescription charges
-    prescription.charges.paid = newPaidAmount;
-    prescription.charges.due = Math.max(0, newDueAmount);
-    prescription.charges.paymentStatus = newPaymentStatus;
-    prescription.charges.paymentMethod = body.paymentMethod;
-    prescription.charges.paymentDate = new Date();
-    prescription.charges.collectedBy = new mongoose.Types.ObjectId(
-      auth.userId!,
-    );
-    prescription.charges.discount =
-      prescription.charges.discount + discountAmount;
-
-    // Update top-level payment status
+    let updatedPrescription: any;
     if (newPaymentStatus === "paid") {
-      prescription.paymentStatus = "paid";
-    } else if (newPaymentStatus === "partial") {
-      prescription.paymentStatus = "partial";
-    } else {
-      prescription.paymentStatus = "unpaid";
-    }
-
-    // If payment is fully paid, verify payment using the static method
-    if (newPaymentStatus === "paid") {
-      await Prescription.verifyPayment(
-        prescription._id.toString(),
-        auth.userId!,
-        body.notes,
-      );
+      updatedPrescription = await prisma.prescription.update({
+        where: { id: prescriptionId },
+        data: {
+          charges: newCharges,
+          paymentStatus: "paid",
+          paymentVerified: true,
+          paymentVerifiedAt: new Date(),
+        },
+      });
       console.log(
         `[DEBUG] Payment verified for prescription ${prescription.prescriptionId}: paymentVerified set to true`,
       );
     } else {
+      updatedPrescription = await prisma.prescription.update({
+        where: { id: prescriptionId },
+        data: {
+          charges: newCharges,
+          paymentStatus: newPaymentStatus,
+        },
+      });
       console.log(
         `[DEBUG] Payment NOT verified for prescription ${prescription.prescriptionId}: paymentStatus is ${newPaymentStatus}, not 'paid'`,
       );
     }
-
-    await prescription.save();
-
-    // Populate the response
-    const populatedPrescription = await Prescription.findById(prescription._id)
-      .populate("patient", "name patientId phone")
-      .populate("doctor", "name")
-      .populate("charges.collectedBy", "name")
-      .populate("paymentVerifiedBy", "name")
-      .lean();
 
     console.log(
       `Payment processed for prescription ${prescription.prescriptionId}: ${body.amount} ${body.paymentMethod} by ${auth.userName}`,
@@ -245,7 +218,7 @@ export async function PUT(
     return NextResponse.json({
       success: true,
       data: {
-        prescription: populatedPrescription,
+        prescription: updatedPrescription,
         payment: {
           paymentId: payment.paymentId,
           amount: payment.amount,
@@ -267,15 +240,11 @@ export async function PUT(
   }
 }
 
-// GET: Get payment details for a prescription
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await dbConnect();
-
-    // Authenticate the request
     const auth = await authenticateRequest(request);
     if (!auth.success) {
       return NextResponse.json(
@@ -284,7 +253,6 @@ export async function GET(
       );
     }
 
-    // Only receptionists and admin can view payment details
     const allowedRoles = ["receptionist", "admin"];
     if (!auth.userRole || !allowedRoles.includes(auth.userRole)) {
       return NextResponse.json(
@@ -296,16 +264,29 @@ export async function GET(
       );
     }
 
-    // Unwrap the params promise
     const { id: prescriptionId } = await params;
 
-    // Find the prescription with populated fields
-    const prescription = await Prescription.findById(prescriptionId)
-      .populate("patient", "name patientId phone guardian dateOfBirth gender")
-      .populate("doctor", "name specialization")
-      .populate("charges.collectedBy", "name")
-      .populate("paymentVerifiedBy", "name")
-      .lean();
+    const prescription = await prisma.prescription.findUnique({
+      where: { id: prescriptionId },
+      include: {
+        patient: {
+          select: {
+            name: true,
+            patientId: true,
+            phone: true,
+            guardian: true,
+            dateOfBirth: true,
+            gender: true,
+          },
+        },
+        doctor: {
+          select: {
+            name: true,
+            specialization: true,
+          },
+        },
+      },
+    });
 
     if (!prescription) {
       return NextResponse.json(

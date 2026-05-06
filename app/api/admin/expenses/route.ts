@@ -1,39 +1,18 @@
 // app/api/admin/expenses/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { AdminExpense } from "@/lib/models/AdminExpense";
+import { prisma } from "@/lib/prisma";
+import { getTokenPayload } from "@/lib/auth/jwt";
 
-// Helper function to get user info from request
-async function getUserInfo(request: NextRequest) {
-  let userId = request.headers.get("x-user-id");
-  let userRole = request.headers.get("x-user-role");
-  let userName = request.headers.get("x-user-name");
-
-  return { userId, userRole, userName };
-}
-
-// GET: Get daily expenses (admin view - can see all expenses)
 export async function GET(request: NextRequest) {
   try {
-    await dbConnect();
-
-    const { userId, userRole } = await getUserInfo(request);
-
-    if (!userId || !userRole) {
+    const user = await getTokenPayload(request);
+    if (!user || user.role !== "admin") {
       return NextResponse.json(
-        { success: false, error: "Unauthorized" },
-        { status: 401 },
-      );
-    }
-
-    if (userRole !== "admin") {
-      return NextResponse.json(
-        { success: false, error: "Forbidden - Admin access only" },
+        { success: false, error: "Admin access required" },
         { status: 403 },
       );
     }
 
-    // Parse query parameters
     const { searchParams } = new URL(request.url);
     const startDate = searchParams.get("startDate");
     const endDate = searchParams.get("endDate");
@@ -41,56 +20,60 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get("limit") || "50");
     const page = parseInt(searchParams.get("page") || "1");
 
-    // Build query
-    const query: any = {};
+    const where: any = {};
 
-    // Filter by date range
     if (startDate && endDate) {
-      const start = new Date(startDate);
-      const end = new Date(endDate);
-      end.setHours(23, 59, 59, 999);
-      query.date = { $gte: start, $lte: end };
+      where.date = { gte: new Date(startDate), lte: new Date(endDate) };
     }
 
-    // Filter by category
     if (category) {
-      query.category = category;
+      where.category = category;
     }
 
     const skip = (page - 1) * limit;
 
-    const expenses = await AdminExpense.find(query)
-      .populate("admin", "name email")
-      .sort({ date: -1 })
-      .skip(skip)
-      .limit(limit);
+    const expenses = await prisma.expense.findMany({
+      where,
+      orderBy: { date: "desc" },
+      skip,
+      take: limit,
+    });
 
-    const total = await AdminExpense.countDocuments(query);
+    const total = await prisma.expense.count({ where });
 
-    // Get summary stats
     let summary = null;
     if (startDate && endDate) {
       const start = new Date(startDate);
       const end = new Date(endDate);
-      const summaryData = await AdminExpense.getExpenseSummary(start, end);
+      const expensesInRange = await prisma.expense.findMany({
+        where: { date: { gte: start, lte: end } },
+      });
+      
+      const totalExpenses = expensesInRange.reduce((sum, e) => sum + e.amount, 0);
+      const byCategory: Record<string, number> = {};
+      expensesInRange.forEach(e => {
+        const cat = e.category || "uncategorized";
+        byCategory[cat] = (byCategory[cat] || 0) + e.amount;
+      });
+
       summary = {
-        totalExpenses: summaryData.totalExpenses,
-        byCategory: summaryData.summary,
-        expenseCount: summaryData.expenseCount,
+        totalExpenses,
+        byCategory,
+        expenseCount: expensesInRange.length,
       };
     }
 
     return NextResponse.json({
       success: true,
-      data: expenses.map((expense: any) => ({
-        id: expense._id.toString(),
+      data: expenses.map((expense) => ({
+        id: expense.id,
         expenseId: expense.expenseId,
-        admin: expense.admin,
-        adminName: expense.adminName,
+        createdBy: expense.createdById,
         date: expense.date,
         category: expense.category,
         description: expense.description,
         amount: expense.amount,
+        paymentMethod: expense.paymentMethod,
         receiptNumber: expense.receiptNumber,
         notes: expense.notes,
         createdAt: expense.createdAt,
@@ -113,23 +96,12 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST: Create a new daily expense (admin can create expenses)
 export async function POST(request: NextRequest) {
   try {
-    await dbConnect();
-
-    const { userId, userRole, userName } = await getUserInfo(request);
-
-    if (!userId || !userRole) {
+    const user = await getTokenPayload(request);
+    if (!user || user.role !== "admin") {
       return NextResponse.json(
-        { success: false, error: "Unauthorized" },
-        { status: 401 },
-      );
-    }
-
-    if (userRole !== "admin") {
-      return NextResponse.json(
-        { success: false, error: "Forbidden - Admin access only" },
+        { success: false, error: "Admin access required" },
         { status: 403 },
       );
     }
@@ -145,7 +117,6 @@ export async function POST(request: NextRequest) {
       staffId,
     } = body;
 
-    // Validate required fields
     if (!category || !description || amount === undefined) {
       return NextResponse.json(
         { success: false, error: "Missing required fields" },
@@ -153,7 +124,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate category
     const validCategories = [
       "supplies",
       "maintenance",
@@ -169,7 +139,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate expense ID
     const dateObj = new Date();
     const year = dateObj.getFullYear().toString().slice(-2);
     const month = (dateObj.getMonth() + 1).toString().padStart(2, "0");
@@ -177,25 +146,25 @@ export async function POST(request: NextRequest) {
     const random = Math.floor(1000 + Math.random() * 9000);
     const expenseId = `ADM${year}${month}${day}${random}`;
 
-    const expense = await AdminExpense.create({
-      expenseId,
-      admin: staffId || userId,
-      adminName: userName || "Unknown",
-      date: date ? new Date(date) : new Date(),
-      category,
-      description,
-      amount: parseFloat(amount),
-      receiptNumber,
-      notes,
+    const expense = await prisma.expense.create({
+      data: {
+        expenseId,
+        createdById: staffId || user.id,
+        date: date ? new Date(date) : new Date(),
+        category,
+        description,
+        amount: parseFloat(amount),
+        receiptNumber,
+        notes,
+      },
     });
 
     return NextResponse.json({
       success: true,
       data: {
-        id: expense._id.toString(),
+        id: expense.id,
         expenseId: expense.expenseId,
-        admin: expense.admin,
-        adminName: expense.adminName,
+        createdBy: expense.createdById,
         date: expense.date,
         category: expense.category,
         description: expense.description,

@@ -1,13 +1,6 @@
-// app/api/dashboard/admin/revenue-breakdown/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth";
-import dbConnect from "@/lib/dbConnect";
-import { Payment } from "@/lib/models/Payment";
-import { LabTest } from "@/lib/models/LabTest";
-import { RadiologyExam } from "@/lib/models/RadiologyExam";
-import { DischargeCard } from "@/lib/models/DischargeCard";
-import { Prescription } from "@/lib/models/Prescription";
-import { Appointment } from "@/lib/models/Appointment";
+import { prisma } from "@/lib/prisma";
 
 export async function GET(req: NextRequest) {
   try {
@@ -16,12 +9,9 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    await dbConnect();
-
     const { searchParams } = new URL(req.url);
     const period = searchParams.get("period") || "today";
 
-    // Calculate date ranges
     const now = new Date();
     let startDate: Date;
     let endDate: Date;
@@ -29,11 +19,7 @@ export async function GET(req: NextRequest) {
     switch (period) {
       case "today":
         startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        endDate = new Date(
-          now.getFullYear(),
-          now.getMonth(),
-          now.getDate() + 1,
-        );
+        endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
         break;
       case "week":
         startDate = new Date(now);
@@ -54,234 +40,178 @@ export async function GET(req: NextRequest) {
         break;
       default:
         startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        endDate = new Date(
-          now.getFullYear(),
-          now.getMonth(),
-          now.getDate() + 1,
-        );
+        endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
     }
 
     // Get consultation revenue from payments
-    const consultationRevenue = await Payment.aggregate([
-      {
-        $match: {
-          paymentDate: { $gte: startDate, $lt: endDate },
-          status: "completed",
-          department: "consultation",
-        },
+    const consultationPayments = await prisma.payment.findMany({
+      where: {
+        paymentDate: { gte: startDate, lt: endDate },
+        status: "completed",
+        department: "consultation",
       },
-      {
-        $group: {
-          _id: null,
-          totalRevenue: { $sum: "$amount" },
-          totalNetAmount: { $sum: "$netAmount" },
-          totalDiscount: { $sum: { $ifNull: ["$discountAmount", 0] } },
-          count: { $sum: 1 },
-        },
-      },
-    ]);
+    });
 
-    const consultationData = consultationRevenue[0] || {
-      totalRevenue: 0,
-      totalNetAmount: 0,
-      totalDiscount: 0,
-      count: 0,
-    };
+    const consultationData = consultationPayments.reduce(
+      (acc, p) => ({
+        totalRevenue: acc.totalRevenue + p.amount,
+        totalNetAmount: acc.totalNetAmount + (p.netAmount || 0),
+        totalDiscount: acc.totalDiscount + (p.discountAmount || 0),
+        count: acc.count + 1,
+      }),
+      { totalRevenue: 0, totalNetAmount: 0, totalDiscount: 0, count: 0 }
+    );
 
     // Get laboratory revenue
-    const labRevenue = await LabTest.aggregate([
-      {
-        $match: {
-          createdAt: { $gte: startDate, $lt: endDate },
-          "charges.paymentStatus": "paid",
-          status: { $ne: "cancelled" },
-        },
+    const labTests = await prisma.labTest.findMany({
+      where: {
+        createdAt: { gte: startDate, lt: endDate },
+        status: { not: "cancelled" },
       },
-      {
-        $group: {
-          _id: null,
-          totalRevenue: { $sum: "$charges.totalAmount" },
-          totalPaid: { $sum: "$charges.paid" },
-          totalDiscount: { $sum: "$charges.discount" },
-          count: { $sum: 1 },
-        },
-      },
-    ]);
+    });
 
-    const labData = labRevenue[0] || {
-      totalRevenue: 0,
-      totalPaid: 0,
-      totalDiscount: 0,
-      count: 0,
-    };
+    const labData = labTests.reduce((acc, test) => {
+      const charges = typeof test.charges === "string" ? JSON.parse(test.charges) : test.charges;
+      if (charges?.paymentStatus === "paid") {
+        return {
+          totalRevenue: acc.totalRevenue + (charges?.totalAmount || test.totalAmount || 0),
+          totalPaid: acc.totalPaid + (charges?.paid || test.paid || 0),
+          totalDiscount: acc.totalDiscount + (charges?.discount || test.discount || 0),
+          count: acc.count + 1,
+        };
+      }
+      return acc;
+    }, { totalRevenue: 0, totalPaid: 0, totalDiscount: 0, count: 0 });
 
     // Get radiology revenue
-    const radiologyRevenue = await RadiologyExam.aggregate([
-      {
-        $match: {
-          createdAt: { $gte: startDate, $lt: endDate },
-          "charges.paymentStatus": "paid",
-          status: { $ne: "cancelled" },
-        },
+    const radiologyExams = await prisma.radiologyExam.findMany({
+      where: {
+        createdAt: { gte: startDate, lt: endDate },
+        status: { not: "cancelled" },
       },
-      {
-        $group: {
-          _id: null,
-          totalRevenue: { $sum: "$charges.totalAmount" },
-          totalPaid: { $sum: "$charges.paid" },
-          totalDiscount: { $sum: "$charges.discount" },
-          count: { $sum: 1 },
-        },
-      },
-    ]);
+    });
 
-    const radiologyData = radiologyRevenue[0] || {
-      totalRevenue: 0,
-      totalPaid: 0,
-      totalDiscount: 0,
-      count: 0,
-    };
+    const radiologyData = radiologyExams.reduce((acc, exam) => {
+      const charges = typeof exam.charges === "string" ? JSON.parse(exam.charges) : exam.charges;
+      if (charges?.paymentStatus === "paid") {
+        return {
+          totalRevenue: acc.totalRevenue + (charges?.totalAmount || exam.totalAmount || 0),
+          totalPaid: acc.totalPaid + (charges?.paid || exam.paid || 0),
+          totalDiscount: acc.totalDiscount + (charges?.discount || exam.discount || 0),
+          count: acc.count + 1,
+        };
+      }
+      return acc;
+    }, { totalRevenue: 0, totalPaid: 0, totalDiscount: 0, count: 0 });
 
-    // Get pharmacy revenue
-    const pharmacyRevenue = await Prescription.aggregate([
-      {
-        $match: {
-          dispensingStatus: "full",
-          dispensedDate: { $gte: startDate, $lt: endDate },
-        },
+    // Get pharmacy revenue - using charges.totalAmount from prescriptions
+    const prescriptions = await prisma.prescription.findMany({
+      where: {
+        dispensingStatus: "full",
+        createdAt: { gte: startDate, lt: endDate },
       },
-      {
-        $group: {
-          _id: null,
-          totalRevenue: { $sum: "$totalAmount" },
-          count: { $sum: 1 },
-        },
-      },
-    ]);
+    });
 
-    const pharmacyData = pharmacyRevenue[0] || {
-      totalRevenue: 0,
-      count: 0,
-    };
+    const pharmacyData = prescriptions.reduce((acc, p) => {
+      const charges = typeof p.charges === "string" ? JSON.parse(p.charges) : p.charges;
+      const total = charges?.totalAmount || 0;
+      return {
+        totalRevenue: acc.totalRevenue + total,
+        count: acc.count + 1,
+      };
+    }, { totalRevenue: 0, count: 0 });
 
     // Get admissions revenue
-    const admissionsRevenue = await Payment.aggregate([
-      {
-        $match: {
-          paymentDate: { $gte: startDate, $lt: endDate },
-          status: "completed",
-          department: "admission",
-        },
+    const admissionPayments = await prisma.payment.findMany({
+      where: {
+        paymentDate: { gte: startDate, lt: endDate },
+        status: "completed",
+        department: "admission",
       },
-      {
-        $group: {
-          _id: null,
-          totalRevenue: { $sum: "$amount" },
-          totalNetAmount: { $sum: "$netAmount" },
-          totalDiscount: { $sum: { $ifNull: ["$discountAmount", 0] } },
-          count: { $sum: 1 },
-        },
-      },
-    ]);
+    });
 
-    const admissionsData = admissionsRevenue[0] || {
-      totalRevenue: 0,
-      totalNetAmount: 0,
-      totalDiscount: 0,
-      count: 0,
-    };
+    const admissionsData = admissionPayments.reduce(
+      (acc, p) => ({
+        totalRevenue: acc.totalRevenue + p.amount,
+        totalNetAmount: acc.totalNetAmount + (p.netAmount || 0),
+        totalDiscount: acc.totalDiscount + (p.discountAmount || 0),
+        count: acc.count + 1,
+      }),
+      { totalRevenue: 0, totalNetAmount: 0, totalDiscount: 0, count: 0 }
+    );
 
     // Get discharge card revenue
-    const dischargeRevenue = await DischargeCard.aggregate([
-      {
-        $match: {
-          createdAt: { $gte: startDate, $lt: endDate },
-          "billing.paymentStatus": "paid",
-          status: { $ne: "cancelled" },
-        },
+    const dischargeCards = await prisma.dischargeCard.findMany({
+      where: {
+        createdAt: { gte: startDate, lt: endDate },
+        status: { not: "cancelled" },
       },
-      {
-        $group: {
-          _id: null,
-          totalRevenue: { $sum: "$billing.totalAmount" },
-          totalPaid: { $sum: "$billing.paidAmount" },
-          totalDiscount: { $sum: "$billing.discountAmount" },
-          count: { $sum: 1 },
-        },
-      },
-    ]);
+    });
 
-    const dischargeData = dischargeRevenue[0] || {
-      totalRevenue: 0,
-      totalPaid: 0,
-      totalDiscount: 0,
-      count: 0,
-    };
+    const dischargeData = dischargeCards.reduce((acc, card) => {
+      const billing = typeof card.billing === "string" ? JSON.parse(card.billing) : card.billing;
+      if (billing?.paymentStatus === "paid") {
+        return {
+          totalRevenue: acc.totalRevenue + (billing?.totalAmount || 0),
+          totalPaid: acc.totalPaid + (billing?.paidAmount || 0),
+          totalDiscount: acc.totalDiscount + (billing?.discountAmount || 0),
+          count: acc.count + 1,
+        };
+      }
+      return acc;
+    }, { totalRevenue: 0, totalPaid: 0, totalDiscount: 0, count: 0 });
 
     // Get revenue by payment method
-    const revenueByPaymentMethod = await Payment.aggregate([
-      {
-        $match: {
-          paymentDate: { $gte: startDate, $lt: endDate },
-          status: "completed",
-        },
+    const allPayments = await prisma.payment.findMany({
+      where: {
+        paymentDate: { gte: startDate, lt: endDate },
+        status: "completed",
       },
-      {
-        $group: {
-          _id: "$paymentMethod",
-          totalRevenue: { $sum: "$amount" },
-          count: { $sum: 1 },
-        },
-      },
-      {
-        $sort: { totalRevenue: -1 },
-      },
-    ]);
+    });
+
+    const paymentMethodMap = allPayments.reduce((acc: any, p) => {
+      const method = p.paymentMethod || "unknown";
+      if (!acc[method]) {
+        acc[method] = { totalRevenue: 0, count: 0 };
+      }
+      acc[method].totalRevenue += p.amount;
+      acc[method].count += 1;
+      return acc;
+    }, {});
+
+    const revenueByPaymentMethod = Object.entries(paymentMethodMap)
+      .map(([method, data]: any) => ({ _id: method, ...data }))
+      .sort((a: any, b: any) => b.totalRevenue - a.totalRevenue);
 
     // Get daily revenue trend for charts
-    const dailyRevenueTrend = await Payment.aggregate([
-      {
-        $match: {
-          paymentDate: { $gte: startDate, $lt: endDate },
-          status: "completed",
-        },
-      },
-      {
-        $group: {
-          _id: {
-            $dateToString: { format: "%Y-%m-%d", date: "$paymentDate" },
-          },
-          totalRevenue: { $sum: "$amount" },
-          count: { $sum: 1 },
-        },
-      },
-      {
-        $sort: { _id: 1 },
-      },
-    ]);
+    const dailyRevenueMap: any = {};
+    allPayments.forEach((p) => {
+      const dateStr = p.paymentDate.toISOString().split("T")[0];
+      if (!dailyRevenueMap[dateStr]) {
+        dailyRevenueMap[dateStr] = { _id: dateStr, totalRevenue: 0, count: 0 };
+      }
+      dailyRevenueMap[dateStr].totalRevenue += p.amount;
+      dailyRevenueMap[dateStr].count += 1;
+    });
+
+    const dailyRevenueTrend = Object.values(dailyRevenueMap).sort((a: any, b: any) =>
+      a._id.localeCompare(b._id)
+    );
 
     // Get top services by revenue
-    const topServices = await Payment.aggregate([
-      {
-        $match: {
-          paymentDate: { $gte: startDate, $lt: endDate },
-          status: "completed",
-        },
-      },
-      {
-        $group: {
-          _id: "$serviceType",
-          totalRevenue: { $sum: "$amount" },
-          count: { $sum: 1 },
-        },
-      },
-      {
-        $sort: { totalRevenue: -1 },
-      },
-      {
-        $limit: 10,
-      },
-    ]);
+    const serviceTypeMap: any = {};
+    allPayments.forEach((p) => {
+      const type = p.serviceType || "other";
+      if (!serviceTypeMap[type]) {
+        serviceTypeMap[type] = { _id: type, totalRevenue: 0, count: 0 };
+      }
+      serviceTypeMap[type].totalRevenue += p.amount;
+      serviceTypeMap[type].count += 1;
+    });
+
+    const topServices = Object.values(serviceTypeMap)
+      .sort((a: any, b: any) => b.totalRevenue - a.totalRevenue)
+      .slice(0, 10);
 
     // Calculate totals
     const totalRevenue =
@@ -301,7 +231,6 @@ export async function GET(req: NextRequest) {
 
     const netRevenue = totalRevenue - totalDiscounts;
 
-    // Revenue breakdown by department
     const revenueByDepartment = [
       {
         department: "Consultation",
@@ -309,10 +238,7 @@ export async function GET(req: NextRequest) {
         netRevenue: consultationData.totalNetAmount,
         discount: consultationData.totalDiscount,
         count: consultationData.count,
-        percentage:
-          totalRevenue > 0
-            ? (consultationData.totalRevenue / totalRevenue) * 100
-            : 0,
+        percentage: totalRevenue > 0 ? (consultationData.totalRevenue / totalRevenue) * 100 : 0,
       },
       {
         department: "Laboratory",
@@ -320,8 +246,7 @@ export async function GET(req: NextRequest) {
         netRevenue: labData.totalPaid,
         discount: labData.totalDiscount,
         count: labData.count,
-        percentage:
-          totalRevenue > 0 ? (labData.totalRevenue / totalRevenue) * 100 : 0,
+        percentage: totalRevenue > 0 ? (labData.totalRevenue / totalRevenue) * 100 : 0,
       },
       {
         department: "Radiology",
@@ -329,10 +254,7 @@ export async function GET(req: NextRequest) {
         netRevenue: radiologyData.totalPaid,
         discount: radiologyData.totalDiscount,
         count: radiologyData.count,
-        percentage:
-          totalRevenue > 0
-            ? (radiologyData.totalRevenue / totalRevenue) * 100
-            : 0,
+        percentage: totalRevenue > 0 ? (radiologyData.totalRevenue / totalRevenue) * 100 : 0,
       },
       {
         department: "Pharmacy",
@@ -340,10 +262,7 @@ export async function GET(req: NextRequest) {
         netRevenue: pharmacyData.totalRevenue,
         discount: 0,
         count: pharmacyData.count,
-        percentage:
-          totalRevenue > 0
-            ? (pharmacyData.totalRevenue / totalRevenue) * 100
-            : 0,
+        percentage: totalRevenue > 0 ? (pharmacyData.totalRevenue / totalRevenue) * 100 : 0,
       },
       {
         department: "Admissions",
@@ -351,10 +270,7 @@ export async function GET(req: NextRequest) {
         netRevenue: admissionsData.totalNetAmount,
         discount: admissionsData.totalDiscount,
         count: admissionsData.count,
-        percentage:
-          totalRevenue > 0
-            ? (admissionsData.totalRevenue / totalRevenue) * 100
-            : 0,
+        percentage: totalRevenue > 0 ? (admissionsData.totalRevenue / totalRevenue) * 100 : 0,
       },
       {
         department: "Discharge/Operations",
@@ -362,10 +278,7 @@ export async function GET(req: NextRequest) {
         netRevenue: dischargeData.totalPaid,
         discount: dischargeData.totalDiscount,
         count: dischargeData.count,
-        percentage:
-          totalRevenue > 0
-            ? (dischargeData.totalRevenue / totalRevenue) * 100
-            : 0,
+        percentage: totalRevenue > 0 ? (dischargeData.totalRevenue / totalRevenue) * 100 : 0,
       },
     ];
 
@@ -399,7 +312,7 @@ export async function GET(req: NextRequest) {
     console.error("Error fetching revenue breakdown:", error);
     return NextResponse.json(
       { error: "Internal server error" },
-      { status: 500 },
+      { status: 500 }
     );
   }
 }

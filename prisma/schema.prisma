@@ -1,0 +1,958 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id                            String                @id @default(cuid())
+  email                         String                @unique
+  password                      String
+  name                          String
+  role                          String
+  phone                         String
+  avatar                        String?
+  approved                      Boolean               @default(false)
+  active                        Boolean               @default(true)
+  employeeId                    String?
+  department                    String?
+  designation                   String?
+  specialization                String?
+  licenseNumber                 String?
+  qualifications                String?
+  experience                    Int?
+  consultationFee               Float?
+  availability                  String?
+  biography                     String?
+  joiningDate                   DateTime?
+  address                       String?
+  gender                        String?
+  permissions                   String
+  refreshTokens                 String
+  markedOnlyAccess              Boolean               @default(false)
+  createdAt                     DateTime              @default(now())
+  updatedAt                     DateTime              @updatedAt
+  admissions                    Admission[]           @relation("AdmissionDoctorRelation")
+  updatedAppointments           Appointment[]         @relation("UpdatedByRelation")
+  createdAppointments           Appointment[]         @relation("CreatedByRelation")
+  appointments                  Appointment[]
+  cashCollectionsAsReviewer     DailyCashCollection[] @relation("CashCollectionReviewedByRelation")
+  cashCollectionsAsStaff        DailyCashCollection[] @relation("CashCollectionStaffRelation")
+  dischargeCards                DischargeCard[]
+  discountRequestedRequests     DiscountRequest[]     @relation("DiscountRequestedBy")
+  discountApprovedRequests      DiscountRequest[]     @relation("DiscountApprovedBy")
+   labTestsOrderedBy             LabTest[]             @relation("LabTestOrderedByRelation")
+  labTestsPrintedBy             LabTest[]             @relation("LabTestPrintedByRelation")
+  labTestsAsCreator             LabTest[]             @relation("LabTestCreatedByRelation")
+  labTestsAsDoctor              LabTest[]             @relation("LabTestDoctorRelation")
+  labTestTemplatesCreated       LabTestTemplate[]     @relation("LabTestTemplateCreatedBy")
+  markedTransactions            MarkedTransaction[]
+  medicalRecordsAsDoctor        MedicalRecord[]       @relation("MedicalRecordDoctorRelation")
+  medicineIssues                MedicineIssue[]
+  collectedPayments             Payment[]
+  pharmacySales                 PharmacySale[]
+  discountDispensedMedicines    PrescribedMedicine[]  @relation("PrescribedMedicineDispensedBy")
+  prescribedMedicines           PrescribedMedicine[]
+  prescriptionsPricingFinalized Prescription[]        @relation("PrescriptionPricingFinalizedByRelation")
+  prescriptionsAsDoctor         Prescription[]        @relation("PrescriptionDoctorRelation")
+  radiologyExamsReported        RadiologyExam[]       @relation("RadiologyExamReportedByRelation")
+  radiologyExamsPrinted         RadiologyExam[]       @relation("RadiologyExamPrintedByRelation")
+  radiologyExamsCreated         RadiologyExam[]       @relation("RadiologyExamCreatedByRelation")
+  radiologyExamsAsDoctor        RadiologyExam[]       @relation("RadiologyExamDoctorRelation")
+  reportedRadiologyRequests     RadiologyRequest[]    @relation("ReportGeneratedByRelation")
+  technicianRequests            RadiologyRequest[]    @relation("TechnicianRelation")
+  radiologistRequests           RadiologyRequest[]    @relation("RadiologistRelation")
+  referredDoctorRequests        RadiologyRequest[]    @relation("ReferringDoctorRelation")
+  radiologyTemplates            RadiologyTemplate[]
+  receivedTransfers             WarehouseTransfer[]   @relation("ReceivedByRelation")
+  transferredTransfers          WarehouseTransfer[]   @relation("TransferedByRelation")
+}
+
+model Patient {
+  id                  String               @id @default(cuid())
+  patientId           String               @unique
+  name                String
+  phone               String?
+  email               String?
+  guardian            String?
+  refPerson           String?
+  passTskNo           String?
+  registrationNo      String?
+  dateOfBirth         DateTime
+  gender              String
+  address             String?
+  emergencyContact    String?
+  bloodGroup          String?
+  allergies           String?
+  medicalHistory      String?
+  active              Boolean              @default(true)
+  createdById         String
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  admissions          Admission[]
+  appointments        Appointment[]
+  billings            Billing[]
+  dischargeCards      DischargeCard[]
+  discountRequests    DiscountRequest[]
+  invoices            Invoice[]
+  labTests            LabTest[]
+  medicalRecords      MedicalRecord[]
+  payments            Payment[]
+  pharmacySales       PharmacySale[]
+  prescribedMedicines PrescribedMedicine[]
+  prescriptions       Prescription[]
+  radiologyExams      RadiologyExam[]
+  radiologyRequests   RadiologyRequest[]
+}
+
+model Appointment {
+  id                  String               @id @default(cuid())
+  appointmentId       String               @unique
+  patientId           String
+  doctorId            String
+  department          String?
+  appointmentType     String
+  date                DateTime
+  startTime           DateTime
+  endTime             DateTime
+  duration            Int
+  autoNumber          String               @unique
+  status              String               @default("scheduled")
+  reason              String
+  symptoms            String?
+  priority            String               @default("medium")
+  notes               String?
+  consultationFee     Float?
+  doctorFee           Float?
+  checkInTime         DateTime?
+  checkOutTime        DateTime?
+  waitingTime         Int?
+  consultationTime    Int?
+  referralSource      String?
+  previousAppointment String?
+  rescheduledFrom     String?
+  cancelledBy         String?
+  cancelledReason     String?
+  cancelledAt         DateTime?
+  labTests            String               @default("[]")
+  createdById         String
+  updatedById         String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  updatedBy           User?                @relation("UpdatedByRelation", fields: [updatedById], references: [id])
+  createdBy           User                 @relation("CreatedByRelation", fields: [createdById], references: [id])
+  doctor              User                 @relation(fields: [doctorId], references: [id])
+  patient             Patient              @relation(fields: [patientId], references: [id])
+  labTestRequests     LabTest[]
+  medicalRecords      MedicalRecord[]
+  payments            Payment[]
+  prescribedMedicines PrescribedMedicine[]
+  prescriptions       Prescription[]
+  radiologyExams      RadiologyExam[]
+}
+
+model Billing {
+  id            String    @id @default(cuid())
+  billId        String    @unique
+  patientId     String
+  department    String
+  services      String
+  totalAmount   Float
+  discount      Float     @default(0)
+  tax           Float     @default(0)
+  due           Float     @default(0)
+  paid          Float     @default(0)
+  paymentStatus String    @default("pending")
+  paymentMethod String?
+  transactionId String?
+  payments      String    @default("[]")
+  charges       String    @default("[]")
+  createdById   String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  dueDate       DateTime?
+  patient       Patient   @relation(fields: [patientId], references: [id])
+}
+
+model Prescription {
+  id                   String       @id @default(cuid())
+  prescriptionId       String       @unique
+  patientId            String
+  doctorId             String
+  appointmentId        String?
+  diagnosis            String?
+  notes                String?
+  instructions         String?
+  date                 DateTime     @default(now())
+  expiryDate           DateTime?
+  followUpDate         DateTime?
+  status               String       @default("active")
+  medications          String       @default("[]")
+  dispensingStatus     String       @default("pending")
+  paymentStatus        String       @default("unpaid")
+  paymentMethod        String?
+  amountPaid           Float        @default(0)
+  charges              String       @default("{}")
+  paymentVerified      Boolean      @default(false)
+  paymentVerifiedById  String?
+  paymentVerifiedAt    DateTime?
+  pricingFinalized     Boolean      @default(false)
+  pricingFinalizedById String?
+  pricingFinalizedAt   DateTime?
+  createdById          String
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+  pricingFinalizedBy   User?        @relation("PrescriptionPricingFinalizedByRelation", fields: [pricingFinalizedById], references: [id])
+  appointment          Appointment? @relation(fields: [appointmentId], references: [id])
+  doctor               User         @relation("PrescriptionDoctorRelation", fields: [doctorId], references: [id])
+  patient              Patient      @relation(fields: [patientId], references: [id])
+}
+
+model Medicine {
+  id           String          @id @default(cuid())
+  medicineId   String          @unique
+  name         String
+  company      String?
+  category     String?
+  group        String?
+  unit         String?
+  packing      String?
+  costPrice    Float?
+  sellPrice    Float?
+  rack         String?
+  openingQty   Int             @default(0)
+  reorderLevel Int             @default(0)
+  expiryDate   DateTime?
+  totalQty     Int             @default(0)
+  currentQty   Int             @default(0)
+  damageQty    Int             @default(0)
+  active       Boolean         @default(true)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  stockItems   MedicineStock[]
+}
+
+model MedicineStock {
+  id               String          @id @default(cuid())
+  medicineId       String
+  batchNo          String
+  warehouseBatchId String?
+  expiryDate       DateTime?
+  inwardQty        Int
+  outwardQty       Int             @default(0)
+  returnQty        Int             @default(0)
+  damageQty        Int             @default(0)
+  costPrice        Float?
+  sellPrice        Float?
+  MRP              Float?
+  totalQty         Int             @default(0)
+  currentQty       Int             @default(0)
+  name             String?
+  form             String?
+  dosage           String?
+  frequency        String?
+  route            String?
+  supplier         String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  medicineIssues   MedicineIssue[]
+  medicine         Medicine        @relation(fields: [medicineId], references: [id])
+}
+
+model PrescribedMedicine {
+  id               String      @id @default(cuid())
+  medicineId       String      @unique
+  appointmentId    String
+  patientId        String
+  name             String
+  genericName      String?
+  form             String
+  dosage           String
+  frequency        String
+  route            String
+  duration         String
+  quantity         Int
+  price            Float
+  total            Float
+  status           String      @default("prescribed")
+  prescribedBy     String
+  prescribedAt     DateTime    @default(now())
+  dispensedBy      String?
+  dispensedAt      DateTime?
+  notes            String?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  dispensedByUser  User?       @relation("PrescribedMedicineDispensedBy", fields: [dispensedBy], references: [id])
+  prescribedByUser User        @relation(fields: [prescribedBy], references: [id])
+  patient          Patient     @relation(fields: [patientId], references: [id])
+  appointment      Appointment @relation(fields: [appointmentId], references: [id])
+}
+
+model LabTest {
+  id                  String       @id @default(cuid())
+  testId              String       @unique
+  testName            String?
+  description         String?
+  patientId           String
+  doctorId            String
+  appointmentId       String?
+  category            String?
+  tests               String
+  testsConducted      String       @default("[]")
+  results             String       @default("{}")
+  normalRange         String       @default("[]")
+  unit                String       @default("[]")
+  method              String?
+  sampleCollected     Boolean      @default(false)
+  sampleDate          DateTime?
+  reportedDate        DateTime?
+  status              String       @default("pending")
+  priority            String       @default("routine")
+  urgent              Boolean      @default(false)
+  totalAmount         Float
+  discount            Float        @default(0)
+  paid                Float        @default(0)
+  due                 Float        @default(0)
+  createdById         String
+  charges             String       @default("{}")
+  discountedPrice     Float?
+  price               Float?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+  isDirectTest        Boolean      @default(false)
+  directBatchId       String?
+  doctorName          String?
+  specimenType        String?
+  collectionStatus    String       @default("pending")
+  processingStatus    String       @default("pending")
+  verificationStatus  String       @default("pending")
+  finalized           Boolean      @default(false)
+  readyForPrint       Boolean      @default(false)
+  createdAtDirect     DateTime?
+  printedAt           DateTime?
+  printedById         String?
+  testParameters      String       @default("{}")
+  orderedById         String?
+  orderedAt           DateTime?
+  paymentVerified     Boolean      @default(false)
+  paymentVerifiedById String?
+  paymentVerifiedAt   DateTime?
+  notes               String?
+  patientSnapshot     String       @default("{}")
+  orderedBy           User?        @relation("LabTestOrderedByRelation", fields: [orderedById], references: [id])
+  printedBy           User?        @relation("LabTestPrintedByRelation", fields: [printedById], references: [id])
+  createdBy           User         @relation("LabTestCreatedByRelation", fields: [createdById], references: [id])
+  appointment         Appointment? @relation(fields: [appointmentId], references: [id])
+  doctor              User         @relation("LabTestDoctorRelation", fields: [doctorId], references: [id])
+  patient             Patient      @relation(fields: [patientId], references: [id])
+}
+
+model LabTestTemplate {
+  id             String   @id @default(cuid())
+  testName       String?
+  testType       String   @unique
+  category       String?
+  tests          String
+  instruction    String?   // preparation instructions
+  description    String?   // test description
+  basePrice      Float?
+  specimenType   String?
+  turnaroundTime Int?
+  active         Boolean  @default(true)
+  parameters     String   @default("[]")
+  containerType  String?  // JSON array of container types
+  sampleVolume   String?  // e.g., "3 mL"
+  fastingRequired Boolean  @default(false)
+  createdById    String?
+  createdBy      User?    @relation("LabTestTemplateCreatedBy", fields: [createdById], references: [id])
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model RadiologyService {
+  id          String   @id @default(cuid())
+  serviceId   String   @unique
+  name        String
+  category    String?
+  subCategory String?
+  cost        Float?
+  price       Float
+  discount    Float    @default(0)
+  tax         Float    @default(0)
+  reportDays  Int      @default(1)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model RadiologyTemplate {
+  id                         String   @id @default(cuid())
+  templateCode               String   @unique
+  name                       String
+  examName                   String
+  serviceType                String
+  category                   String?
+  bodyPart                   String?
+  views                      String   @default("[]")
+  description                String?
+  contrastRequired           Boolean  @default(false)
+  contrastType               String?
+  preparationInstructions    String?
+  duration                   Int
+  basePrice                  Float
+  active                     Boolean  @default(true)
+  parameters                 String   @default("[]")
+  clinicalIndicationTemplate String?
+  techniqueTemplate          String?
+  comparisonTemplate         String?
+  findingsTemplate           String?
+  impressionTemplate         String?
+  recommendationTemplate     String?
+  criticalFindingsChecklist  String   @default("[]")
+  createdById                String
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+  createdBy                  User     @relation(fields: [createdById], references: [id])
+}
+
+model RadiologyExam {
+  id                  String       @id @default(cuid())
+  examId              String       @unique
+  patientId           String
+  doctorId            String
+  visitId             String?
+  category            String?
+  serviceId           String
+  appointmentId       String?
+  date                DateTime
+  status              String       @default("pending")
+  reportDate          DateTime?
+  findings            String?
+  impression          String?
+  recommendation      String?
+  templateId          String?
+  content             String?
+  images              String       @default("[]")
+  priorHistory        String?
+  clinicalNotes       String?
+  totalAmount         Float
+  discount            Float        @default(0)
+  paid                Float        @default(0)
+  due                 Float        @default(0)
+  createdById         String
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+  paymentVerified     Boolean      @default(false)
+  paymentVerifiedById String?
+  paymentVerifiedAt   DateTime?
+  finalized           Boolean      @default(false)
+  readyForPrint       Boolean      @default(false)
+  printedAt           DateTime?
+  printedById         String?
+  isDirectExam        Boolean      @default(false)
+  results             String?
+  reportedById        String?
+  reportedAt          DateTime?
+  completedAt         DateTime?
+  charges             String       @default("{}")
+  reportedBy          User?        @relation("RadiologyExamReportedByRelation", fields: [reportedById], references: [id])
+  printedBy           User?        @relation("RadiologyExamPrintedByRelation", fields: [printedById], references: [id])
+  createdBy           User         @relation("RadiologyExamCreatedByRelation", fields: [createdById], references: [id])
+  appointment         Appointment? @relation(fields: [appointmentId], references: [id])
+  doctor              User         @relation("RadiologyExamDoctorRelation", fields: [doctorId], references: [id])
+  patient             Patient      @relation(fields: [patientId], references: [id])
+}
+
+model MedicalRecord {
+  id             String       @id @default(cuid())
+  recordId       String       @unique
+  patientId      String
+  doctorId       String
+  recordType     String
+  appointmentId  String?
+  date           DateTime
+  chiefComplaint String?
+  history        String?
+  examination    String?
+  diagnosis      String?
+  treatment      String?
+  advice         String?
+  nextVisit      DateTime?
+  vitals         String?
+  notes          String?
+  createdById    String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  appointment    Appointment? @relation(fields: [appointmentId], references: [id])
+  doctor         User         @relation("MedicalRecordDoctorRelation", fields: [doctorId], references: [id])
+  patient        Patient      @relation(fields: [patientId], references: [id])
+}
+
+model TestResult {
+  id          String   @id @default(cuid())
+  testId      String   @unique
+  patientId   String
+  labTestId   String?
+  templateId  String?
+  results     String
+  normalRange String?
+  unit        String?
+  comment     String?
+  isAbnormal  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model PharmacySale {
+  id            String    @id @default(cuid())
+  saleId        String    @unique
+  patientId     String?
+  customerName  String
+  customerPhone String
+  invoiceNumber String
+  saleDate      DateTime
+  items         String
+  subtotal      Float
+  discount      Float     @default(0)
+  totalAmount   Float
+  amountPaid    Float     @default(0)
+  balance       Float     @default(0)
+  paymentMethod String?
+  paymentStatus String    @default("completed")
+  soldById      String
+  notes         String?
+  createdById   String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  payments      Payment[]
+  soldBy        User      @relation(fields: [soldById], references: [id])
+  patient       Patient?  @relation(fields: [patientId], references: [id])
+}
+
+model MedicineIssue {
+  id             String        @id @default(cuid())
+  medicineId     String
+  quantity       Int
+  issueDate      DateTime      @default(now())
+  issuedTo       String
+  issuedById     String
+  prescriptionId String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  issuedBy       User          @relation(fields: [issuedById], references: [id])
+  medicine       MedicineStock @relation(fields: [medicineId], references: [id])
+}
+
+model Admission {
+  id            String    @id @default(cuid())
+  admissionId   String    @unique
+  patientId     String
+  doctorId      String
+  admissionType String
+  ward          String?
+  roomNo        String?
+  bedNo         String?
+  admissionDate DateTime
+  dischargeDate DateTime?
+  status        String    @default("admitted")
+  reason        String?
+  diagnosis     String?
+  treatment     String?
+  createdById   String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  doctor        User      @relation("AdmissionDoctorRelation", fields: [doctorId], references: [id])
+  patient       Patient   @relation(fields: [patientId], references: [id])
+}
+
+model Session {
+  id             String   @id @default(cuid())
+  sessionId      String   @unique
+  patientId      String
+  doctorId       String
+  visitDate      DateTime
+  status         String   @default("open")
+  vitals         String?
+  chiefComplaint String?
+  history        String?
+  examination    String?
+  diagnosis      String?
+  treatment      String?
+  advice         String?
+  createdById    String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Payment {
+  id               String        @id @default(cuid())
+  paymentId        String        @unique
+  patientId        String?
+  invoiceId        String?
+  appointmentId    String?
+  paymentMethod    String
+  cardType         String?
+  cardLastFour     String?
+  transactionId    String?
+  amount           Float
+  taxAmount        Float         @default(0)
+  discountAmount   Float         @default(0)
+  netAmount        Float         @default(0)
+  status           String        @default("pending")
+  paymentDate      DateTime      @default(now())
+  receivedById     String
+  department       String?
+  serviceType      String?
+  notes            String?
+  refundedAmount   Float         @default(0)
+  refundedDate     DateTime?
+  refundedBy       String?
+  refundReason     String?
+  insuranceClaimId String?
+  insuranceStatus  String?
+  pharmacySaleId   String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  pharmacySale     PharmacySale? @relation(fields: [pharmacySaleId], references: [id])
+  receivedBy       User          @relation(fields: [receivedById], references: [id])
+  appointment      Appointment?  @relation(fields: [appointmentId], references: [id])
+  invoice          Invoice?      @relation(fields: [invoiceId], references: [id])
+  patient          Patient?      @relation(fields: [patientId], references: [id])
+}
+
+model Invoice {
+  id          String    @id @default(cuid())
+  invoiceId   String    @unique
+  patientId   String
+  invoiceDate DateTime
+  dueDate     DateTime?
+  subtotal    Float
+  tax         Float     @default(0)
+  discount    Float     @default(0)
+  total       Float
+  paid        Float     @default(0)
+  due         Float     @default(0)
+  status      String    @default("pending")
+  items       String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  patient     Patient   @relation(fields: [patientId], references: [id])
+  payments    Payment[]
+}
+
+model DischargeCard {
+  id                       String    @id @default(cuid())
+  dischargeId              String    @unique
+  patientId                String
+  doctorId                 String?
+  operationName            String?
+  operationDate            DateTime?
+  diagnosis                String?
+  preOpMedicines           String    @default("[]")
+  postOpMedicines          String    @default("[]")
+  dischargeMedicines       String    @default("[]")
+  billing                  String    @default("{}")
+  pharmacyDispensingStatus String    @default("pending")
+  pharmacyDispensedDate    DateTime?
+  pharmacyDispensedBy      String?
+  status                   String    @default("active")
+  createdById              String
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+  dischargeDate            DateTime?
+  doctor                   User?     @relation(fields: [doctorId], references: [id])
+  patient                  Patient   @relation(fields: [patientId], references: [id])
+}
+
+model DailyRecord {
+  id                String   @id @default(cuid())
+  date              DateTime @unique
+  totalAppointments Int      @default(0)
+  newPatients       Int      @default(0)
+  totalRevenue      Float    @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model Expense {
+  id            String   @id @default(cuid())
+  expenseId     String   @unique
+  description   String
+  amount        Float
+  category      String?
+  date          DateTime
+  paymentMethod String?
+  receiptNumber String?
+  notes         String?
+  createdById   String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model AdminExpense {
+  id            String   @id @default(cuid())
+  expenseId     String   @unique
+  description   String
+  amount        Float
+  category      String?
+  date          DateTime
+  paymentMethod String?
+  receiptNumber String?
+  status        String   @default("approved")
+  notes         String?
+  createdById   String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model ReceptionExpense {
+  id            String   @id @default(cuid())
+  expenseId     String   @unique
+  description   String
+  amount        Float
+  category      String?
+  date          DateTime
+  paymentMethod String?
+  receiptNumber String?
+  status        String   @default("pending")
+  notes         String?
+  createdById   String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model DiscountRequest {
+  id                  String    @id @default(cuid())
+  requestId           String    @unique
+  patientId           String?
+  amount              Float
+  reason              String?
+  status              String    @default("pending")
+  approvedAt          DateTime?
+  approvedAmount      Float?
+  approvedById        String?
+  notes               String?
+  reviewNotes         String?
+  discountPercentage  Float?
+  requestCategory     String?
+  requestedById       String?
+  requestedAt         DateTime  @default(now())
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  discountId          String?   @unique
+  approvedPercentage  Float?
+  invoiceId           String?
+  appointmentId       String?
+  originalAmount      Float?
+  supportingDocuments String    @default("[]")
+  appliedToInvoice    Boolean   @default(false)
+  appliedAt           DateTime?
+  appliedById         String?
+  reviewedById        String?
+  reviewedAt          DateTime?
+  patient             Patient?  @relation(fields: [patientId], references: [id])
+  approvedBy          User?     @relation("DiscountApprovedBy", fields: [approvedById], references: [id])
+  requestedBy         User?     @relation("DiscountRequestedBy", fields: [requestedById], references: [id])
+
+  @@index([patientId])
+  @@index([requestedById])
+  @@index([status])
+  @@index([requestedAt])
+}
+
+model DailyCashCollection {
+  id                    String    @id @default(cuid())
+  collectionId          String    @unique
+  staffId               String
+  staffName             String
+  shift                 String
+  date                  DateTime
+  totalExpectedAmount   Float
+  totalDeclaredAmount   Float
+  discrepancy           Float     @default(0)
+  discrepancyPercentage Float     @default(0)
+  cashFromAppointments  Float     @default(0)
+  cashFromLab           Float     @default(0)
+  cashFromRadiology     Float     @default(0)
+  cashFromDischarge     Float     @default(0)
+  totalDiscounts        Float     @default(0)
+  totalExpenses         Float     @default(0)
+  transactionIds        String    @default("[]")
+  status                String    @default("submitted")
+  submittedAt           DateTime  @default(now())
+  reviewedById          String?
+  reviewedByName        String?
+  reviewedAt            DateTime?
+  approvalNotes         String?
+  collectedAmount       Float
+  collectedAt           DateTime?
+  notes                 String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  reviewedBy            User?     @relation("CashCollectionReviewedByRelation", fields: [reviewedById], references: [id])
+  staff                 User      @relation("CashCollectionStaffRelation", fields: [staffId], references: [id])
+}
+
+model CashAtHand {
+  id                 String   @id @default(cuid())
+  transactionId      String   @unique
+  date               DateTime
+  particular         String
+  debit              Float    @default(0)
+  credit             Float    @default(0)
+  balance            Float
+  paymentMethod      String?
+  referenceId        String?
+  verificationStatus String   @default("pending")
+  collectionId       String?
+  notes              String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model Warehouse {
+  id           String           @id @default(cuid())
+  warehouseId  String           @unique
+  name         String
+  genericName  String?
+  category     String?
+  manufacturer String?
+  description  String?
+  location     String?
+  manager      String?
+  isActive     Boolean          @default(true)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  batches      WarehouseBatch[]
+}
+
+model WarehouseBatch {
+  id               String    @id @default(cuid())
+  batchId          String    @unique
+  warehouseId      String
+  batchNumber      String
+  lotNumber        String?
+  form             String?
+  dosage           String?
+  frequency        String?
+  route            String?
+  expiryDate       DateTime?
+  quantity         Int       @default(0)
+  originalQuantity Int       @default(0)
+  unitCost         Float?
+  supplier         String?
+  location         String?
+  status           String    @default("available")
+  notes            String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  warehouse        Warehouse @relation(fields: [warehouseId], references: [id])
+}
+
+model WarehouseTransfer {
+  id              String   @id @default(cuid())
+  transferId      String   @unique
+  items           String
+  transferredById String
+  receivedById    String?
+  notes           String?
+  status          String   @default("completed")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  receivedBy      User?    @relation("ReceivedByRelation", fields: [receivedById], references: [id])
+  transferredBy   User     @relation("TransferedByRelation", fields: [transferredById], references: [id])
+}
+
+model APILog {
+  id           String   @id @default(cuid())
+  method       String
+  path         String
+  statusCode   Int
+  responseTime Int?
+  userId       String?
+  body         String?
+  createdAt    DateTime @default(now())
+}
+
+model AppSetting {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String
+  description String?
+  updatedAt   DateTime @updatedAt
+}
+
+model ServiceDepartment {
+  id                String             @id @default(cuid())
+  name              String             @unique
+  code              String?
+  description       String?
+  active            Boolean            @default(true)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  radiologyRequests RadiologyRequest[]
+}
+
+model RadiologyRequest {
+  id                  String             @id @default(cuid())
+  serviceId           String             @unique
+  patientId           String
+  departmentId        String?
+  templateId          String?
+  serviceType         String
+  bodyPart            String
+  view                String
+  contrastUsed        Boolean            @default(false)
+  contrastType        String?
+  referringDoctorId   String
+  radiologistId       String?
+  technicianId        String?
+  appointmentId       String?
+  requestDate         DateTime
+  scheduledDate       DateTime
+  performedDate       DateTime?
+  images              String             @default("[]")
+  findings            String?
+  impression          String?
+  recommendations     String?
+  reportStatus        String             @default("pending")
+  reportGeneratedById String?
+  reportGeneratedAt   DateTime?
+  reviewedBy          String?
+  reviewedAt          DateTime?
+  approvedBy          String?
+  approvedAt          DateTime?
+  priority            String             @default("routine")
+  status              String             @default("scheduled")
+  billingStatus       String             @default("pending")
+  charges             String             @default("{}")
+  paymentVerified     Boolean            @default(false)
+  paymentVerifiedBy   String?
+  paymentVerifiedAt   DateTime?
+  notes               String?
+  report              String             @default("{}")
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  reportGeneratedBy   User?              @relation("ReportGeneratedByRelation", fields: [reportGeneratedById], references: [id])
+  technician          User?              @relation("TechnicianRelation", fields: [technicianId], references: [id])
+  radiologist         User?              @relation("RadiologistRelation", fields: [radiologistId], references: [id])
+  referringDoctor     User               @relation("ReferringDoctorRelation", fields: [referringDoctorId], references: [id])
+  department          ServiceDepartment? @relation(fields: [departmentId], references: [id])
+  patient             Patient            @relation(fields: [patientId], references: [id])
+}
+
+model MarkedTransaction {
+  id              String   @id @default(cuid())
+  module          String
+  transactionId   String
+  transactionDate DateTime
+  markedById      String
+  markedAt        DateTime @default(now())
+  notes           String?
+  markedBy        User     @relation(fields: [markedById], references: [id])
+
+  @@index([module, transactionId])
+  @@index([module, transactionDate])
+}

@@ -1719,6 +1719,12 @@ export default function CreateDirectTestPage() {
     registrationNo: "",
   });
   const [newPatientAge, setNewPatientAge] = useState("");
+  const [patientErrors, setPatientErrors] = useState<{
+    name?: string;
+    phone?: string;
+    gender?: string;
+    age?: string;
+  }>({});
 
   const [templateLabTests, setTemplateLabTests] = useState<LabTestCategory[]>(
     [],
@@ -2019,20 +2025,39 @@ export default function CreateDirectTestPage() {
   const handleCreatePatient = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!newPatient.name || !newPatient.gender || !newPatientAge) {
-      toast.error("Name, gender, and age are required");
+    const errors: typeof patientErrors = {};
+    if (!newPatient.name.trim()) {
+      errors.name = "Name is required";
+    }
+    if (!newPatient.gender) {
+      errors.gender = "Gender is required";
+    }
+    if (!newPatientAge) {
+      errors.age = "Age is required";
+    } else {
+      const ageValue = Number(newPatientAge);
+      if (Number.isNaN(ageValue) || ageValue <= 0 || ageValue >= 130) {
+        errors.age = "Please enter a valid age (1-129)";
+      }
+    }
+    if (newPatient.phone.trim()) {
+      const phoneDigits = newPatient.phone.replace(/\D/g, "");
+      if (phoneDigits.length > 0 && phoneDigits.length < 10) {
+        errors.phone = "Phone number must be at least 10 digits";
+      }
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setPatientErrors(errors);
       return;
     }
+    setPatientErrors({});
 
     try {
       setCreatingPatient(true);
 
       let derivedDateOfBirth: string | undefined = undefined;
       const ageValue = Number(newPatientAge);
-      if (Number.isNaN(ageValue) || ageValue <= 0 || ageValue >= 130) {
-        toast.error("Please enter a valid age");
-        return;
-      }
       const today = new Date();
       const dob = new Date(today.getFullYear() - ageValue, 0, 1);
       derivedDateOfBirth = dob.toISOString().slice(0, 10);
@@ -2101,6 +2126,7 @@ export default function CreateDirectTestPage() {
         registrationNo: "",
       });
       setNewPatientAge("");
+      setPatientErrors({});
     } catch (err: any) {
       toast.error(err.message || "Failed to create patient");
     } finally {
@@ -3033,12 +3059,16 @@ export default function CreateDirectTestPage() {
                 <Input
                   id="patientName"
                   value={newPatient.name}
-                  onChange={(e) =>
-                    setNewPatient({ ...newPatient, name: e.target.value })
-                  }
+                  onChange={(e) => {
+                    setNewPatient({ ...newPatient, name: e.target.value });
+                    setPatientErrors((prev) => ({ ...prev, name: undefined }));
+                  }}
                   placeholder="Enter patient name"
-                  required
+                  className={patientErrors.name ? "border-red-500" : ""}
                 />
+                {patientErrors.name && (
+                  <p className="text-sm text-red-500">{patientErrors.name}</p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -3047,11 +3077,16 @@ export default function CreateDirectTestPage() {
                   id="patientPhone"
                   type="tel"
                   value={newPatient.phone}
-                  onChange={(e) =>
-                    setNewPatient({ ...newPatient, phone: e.target.value })
-                  }
+                  onChange={(e) => {
+                    setNewPatient({ ...newPatient, phone: e.target.value });
+                    setPatientErrors((prev) => ({ ...prev, phone: undefined }));
+                  }}
                   placeholder="Enter phone number"
+                  className={patientErrors.phone ? "border-red-500" : ""}
                 />
+                {patientErrors.phone && (
+                  <p className="text-sm text-red-500">{patientErrors.phone}</p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -3073,11 +3108,15 @@ export default function CreateDirectTestPage() {
                 </Label>
                 <Select
                   value={newPatient.gender}
-                  onValueChange={(value) =>
-                    setNewPatient({ ...newPatient, gender: value })
-                  }
+                  onValueChange={(value) => {
+                    setNewPatient({ ...newPatient, gender: value });
+                    setPatientErrors((prev) => ({ ...prev, gender: undefined }));
+                  }}
                 >
-                  <SelectTrigger id="patientGender">
+                  <SelectTrigger
+                    id="patientGender"
+                    className={patientErrors.gender ? "border-red-500" : ""}
+                  >
                     <SelectValue placeholder="Select gender" />
                   </SelectTrigger>
                   <SelectContent>
@@ -3086,6 +3125,9 @@ export default function CreateDirectTestPage() {
                     <SelectItem value="other">Other</SelectItem>
                   </SelectContent>
                 </Select>
+                {patientErrors.gender && (
+                  <p className="text-sm text-red-500">{patientErrors.gender}</p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -3098,10 +3140,16 @@ export default function CreateDirectTestPage() {
                   min="0"
                   max="130"
                   value={newPatientAge}
-                  onChange={(e) => setNewPatientAge(e.target.value)}
+                  onChange={(e) => {
+                    setNewPatientAge(e.target.value);
+                    setPatientErrors((prev) => ({ ...prev, age: undefined }));
+                  }}
                   placeholder="Enter age in years"
-                  required
+                  className={patientErrors.age ? "border-red-500" : ""}
                 />
+                {patientErrors.age && (
+                  <p className="text-sm text-red-500">{patientErrors.age}</p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -3210,7 +3258,10 @@ export default function CreateDirectTestPage() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setShowCreatePatientDialog(false)}
+                onClick={() => {
+                  setShowCreatePatientDialog(false);
+                  setPatientErrors({});
+                }}
                 disabled={creatingPatient}
               >
                 Cancel

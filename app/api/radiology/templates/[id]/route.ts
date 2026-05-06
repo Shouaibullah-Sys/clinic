@@ -1,9 +1,8 @@
 // app/api/radiology/templates/[id]/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { RadiologyTemplate } from "@/lib/models/RadiologyTemplate";
-import { authenticateRequest, hasRequiredRole } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { getTokenPayload } from "@/lib/auth/jwt";
 
 // GET: Fetch a single radiology template by ID
 export async function GET(
@@ -11,21 +10,28 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await dbConnect();
-
-    const auth = await authenticateRequest(request);
-    if (!auth.success) {
+    const payload = await getTokenPayload(request);
+    if (!payload) {
       return NextResponse.json(
-        { success: false, error: auth.error },
-        { status: auth.status || 401 },
+        { success: false, error: "Unauthorized" },
+        { status: 401 },
       );
     }
 
     const { id } = await params;
 
-    const template = await RadiologyTemplate.findById(id)
-      .populate("createdBy", "name email")
-      .lean();
+    const template = await prisma.radiologyTemplate.findUnique({
+      where: { id },
+      include: {
+        createdBy: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
+    });
 
     if (!template) {
       return NextResponse.json(
@@ -56,19 +62,17 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await dbConnect();
-
-    const auth = await authenticateRequest(request);
-    if (!auth.success) {
+    const payload = await getTokenPayload(request);
+    if (!payload) {
       return NextResponse.json(
-        { success: false, error: auth.error },
-        { status: auth.status || 401 },
+        { success: false, error: "Unauthorized" },
+        { status: 401 },
       );
     }
 
     // Only radiologists, doctors, and admins can update templates
     const allowedRoles = ["radiologist", "doctor", "admin"];
-    if (!hasRequiredRole(auth.userRole, allowedRoles)) {
+    if (!allowedRoles.includes(payload.role)) {
       return NextResponse.json(
         {
           success: false,
@@ -83,7 +87,9 @@ export async function PUT(
     const body = await request.json();
 
     // Check if template exists
-    const existingTemplate = await RadiologyTemplate.findById(id);
+    const existingTemplate = await prisma.radiologyTemplate.findUnique({
+      where: { id },
+    });
     if (!existingTemplate) {
       return NextResponse.json(
         { success: false, error: "Radiology template not found" },
@@ -96,9 +102,11 @@ export async function PUT(
       body.templateCode &&
       body.templateCode !== existingTemplate.templateCode
     ) {
-      const duplicateTemplate = await RadiologyTemplate.findOne({
-        templateCode: body.templateCode.toUpperCase(),
-        _id: { $ne: id },
+      const duplicateTemplate = await prisma.radiologyTemplate.findFirst({
+        where: {
+          templateCode: body.templateCode.toUpperCase(),
+          id: { not: id },
+        },
       });
       if (duplicateTemplate) {
         return NextResponse.json(
@@ -117,7 +125,7 @@ export async function PUT(
       updateData.serviceType = body.serviceType;
     if (body.category !== undefined) updateData.category = body.category;
     if (body.bodyPart !== undefined) updateData.bodyPart = body.bodyPart;
-    if (body.views !== undefined) updateData.views = body.views;
+    if (body.views !== undefined) updateData.views = JSON.stringify(body.views);
     if (body.description !== undefined)
       updateData.description = body.description;
     if (body.contrastRequired !== undefined)
@@ -129,7 +137,7 @@ export async function PUT(
     if (body.duration !== undefined) updateData.duration = body.duration;
     if (body.basePrice !== undefined) updateData.basePrice = body.basePrice;
     if (body.active !== undefined) updateData.active = body.active;
-    if (body.parameters !== undefined) updateData.parameters = body.parameters;
+    if (body.parameters !== undefined) updateData.parameters = JSON.stringify(body.parameters);
     if (body.clinicalIndicationTemplate !== undefined)
       updateData.clinicalIndicationTemplate = body.clinicalIndicationTemplate;
     if (body.techniqueTemplate !== undefined)
@@ -143,13 +151,21 @@ export async function PUT(
     if (body.recommendationTemplate !== undefined)
       updateData.recommendationTemplate = body.recommendationTemplate;
     if (body.criticalFindingsChecklist !== undefined)
-      updateData.criticalFindingsChecklist = body.criticalFindingsChecklist;
+      updateData.criticalFindingsChecklist = JSON.stringify(body.criticalFindingsChecklist);
 
-    const updatedTemplate = await RadiologyTemplate.findByIdAndUpdate(
-      id,
-      { $set: updateData },
-      { new: true, runValidators: true },
-    ).populate("createdBy", "name email");
+    const updatedTemplate = await prisma.radiologyTemplate.update({
+      where: { id },
+      data: updateData,
+      include: {
+        createdBy: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
+    });
 
     return NextResponse.json({
       success: true,
@@ -158,24 +174,6 @@ export async function PUT(
     });
   } catch (error: any) {
     console.error("Error updating radiology template:", error);
-
-    // Handle validation errors
-    if (error.name === "ValidationError") {
-      const errors = Object.values(error.errors).map((err: any) => err.message);
-      return NextResponse.json(
-        { success: false, error: "Validation failed", details: errors },
-        { status: 400 },
-      );
-    }
-
-    // Handle duplicate key errors
-    if (error.code === 11000) {
-      return NextResponse.json(
-        { success: false, error: "Duplicate template code detected" },
-        { status: 409 },
-      );
-    }
-
     return NextResponse.json(
       {
         success: false,
@@ -192,18 +190,16 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await dbConnect();
-
-    const auth = await authenticateRequest(request);
-    if (!auth.success) {
+    const payload = await getTokenPayload(request);
+    if (!payload) {
       return NextResponse.json(
-        { success: false, error: auth.error },
-        { status: auth.status || 401 },
+        { success: false, error: "Unauthorized" },
+        { status: 401 },
       );
     }
 
     // Only admins can delete templates
-    if (auth.userRole !== "admin") {
+    if (payload.role !== "admin") {
       return NextResponse.json(
         {
           success: false,
@@ -215,7 +211,9 @@ export async function DELETE(
 
     const { id } = await params;
 
-    const template = await RadiologyTemplate.findById(id);
+    const template = await prisma.radiologyTemplate.findUnique({
+      where: { id },
+    });
     if (!template) {
       return NextResponse.json(
         { success: false, error: "Radiology template not found" },
@@ -223,7 +221,9 @@ export async function DELETE(
       );
     }
 
-    await RadiologyTemplate.findByIdAndDelete(id);
+    await prisma.radiologyTemplate.delete({
+      where: { id },
+    });
 
     return NextResponse.json({
       success: true,

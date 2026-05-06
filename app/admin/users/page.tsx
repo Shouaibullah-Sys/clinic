@@ -190,7 +190,7 @@ export default function AdminUsersPage() {
                   selectedUser
                     ? ({
                         ...selectedUser,
-                        _id: selectedUser._id.toString(),
+                        _id: selectedUser._id?.toString(),
                         joiningDate: selectedUser.joiningDate
                           ? (typeof selectedUser.joiningDate === 'string'
                               ? selectedUser.joiningDate

@@ -1,31 +1,31 @@
-// app/api/laboratory/templates/[id]/route.ts
-
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { LabTestTemplate } from "@/lib/models/LabTestTemplate";
-import { authenticateRequest, hasRequiredRole } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { getTokenPayload } from "@/lib/auth/jwt";
+import { transformLabTestTemplateForAPI, transformLabTestTemplateForDB } from "@/lib/prisma";
 
-// GET: Fetch a single lab test template by ID
+const hasRequiredRole = (userRole: string | undefined, allowedRoles: string[]) => {
+  if (!userRole) return false;
+  return allowedRoles.includes(userRole);
+};
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await dbConnect();
-
-    const auth = await authenticateRequest(request);
-    if (!auth.success) {
+    const payload = await getTokenPayload(request);
+    if (!payload) {
       return NextResponse.json(
-        { success: false, error: auth.error },
-        { status: auth.status || 401 },
+        { success: false, error: "Unauthorized" },
+        { status: 401 },
       );
     }
 
     const { id } = await params;
 
-    const template = await LabTestTemplate.findById(id)
-      .populate("createdBy", "name email")
-      .lean();
+    const template = await prisma.labTestTemplate.findUnique({
+      where: { id },
+    });
 
     if (!template) {
       return NextResponse.json(
@@ -34,9 +34,12 @@ export async function GET(
       );
     }
 
+    // Transform to frontend-compatible format
+    const transformedTemplate = transformLabTestTemplateForAPI(template);
+
     return NextResponse.json({
       success: true,
-      data: template,
+      data: transformedTemplate,
     });
   } catch (error: any) {
     console.error("Error fetching lab test template:", error);
@@ -50,25 +53,21 @@ export async function GET(
   }
 }
 
-// PUT: Update a lab test template
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await dbConnect();
-
-    const auth = await authenticateRequest(request);
-    if (!auth.success) {
+    const payload = await getTokenPayload(request);
+    if (!payload) {
       return NextResponse.json(
-        { success: false, error: auth.error },
-        { status: auth.status || 401 },
+        { success: false, error: "Unauthorized" },
+        { status: 401 },
       );
     }
 
-    // Only lab technicians, doctors, and admins can update templates
     const allowedRoles = ["lab_technician", "doctor", "admin"];
-    if (!hasRequiredRole(auth.userRole, allowedRoles)) {
+    if (!hasRequiredRole(payload.role, allowedRoles)) {
       return NextResponse.json(
         {
           success: false,
@@ -82,8 +81,9 @@ export async function PUT(
     const { id } = await params;
     const body = await request.json();
 
-    // Check if template exists
-    const existingTemplate = await LabTestTemplate.findById(id);
+    const existingTemplate = await prisma.labTestTemplate.findUnique({
+      where: { id },
+    });
     if (!existingTemplate) {
       return NextResponse.json(
         { success: false, error: "Lab test template not found" },
@@ -91,11 +91,13 @@ export async function PUT(
       );
     }
 
-    // If updating test code, check for duplicates
-    if (body.testCode && body.testCode !== existingTemplate.testCode) {
-      const duplicateTemplate = await LabTestTemplate.findOne({
-        testCode: body.testCode.toUpperCase(),
-        _id: { $ne: id },
+    let testCode = body.testCode;
+    if (body.testCode && body.testCode !== existingTemplate.testType) {
+      const duplicateTemplate = await prisma.labTestTemplate.findFirst({
+        where: {
+          testType: body.testCode,
+          NOT: { id },
+        },
       });
       if (duplicateTemplate) {
         return NextResponse.json(
@@ -105,61 +107,37 @@ export async function PUT(
       }
     }
 
-    // Update the template
-    const updateData: any = {};
-    if (body.testCode !== undefined)
-      updateData.testCode = body.testCode.toUpperCase();
-    if (body.testName !== undefined) updateData.testName = body.testName;
-    if (body.category !== undefined) updateData.category = body.category;
-    if (body.description !== undefined)
-      updateData.description = body.description;
-    if (body.specimenType !== undefined)
-      updateData.specimenType = body.specimenType;
-    if (body.containerType !== undefined)
-      updateData.containerType = body.containerType;
-    if (body.sampleVolume !== undefined)
-      updateData.sampleVolume = body.sampleVolume;
-    if (body.fastingRequired !== undefined)
-      updateData.fastingRequired = body.fastingRequired;
-    if (body.preparationInstructions !== undefined)
-      updateData.preparationInstructions = body.preparationInstructions;
-    if (body.turnaroundTime !== undefined)
-      updateData.turnaroundTime = body.turnaroundTime;
-    if (body.basePrice !== undefined) updateData.basePrice = body.basePrice;
-    if (body.active !== undefined) updateData.active = body.active;
-    if (body.parameters !== undefined) updateData.parameters = body.parameters;
+    // Transform to DB format for update (exclude testCode/testType - not editable)
+    const updateData = transformLabTestTemplateForDB({
+      testName: body.testName,
+      category: body.category,
+      description: body.description,
+      preparationInstructions: body.preparationInstructions,
+      parameters: body.parameters,
+      specimenType: body.specimenType,
+      containerType: body.containerType,
+      sampleVolume: body.sampleVolume,
+      fastingRequired: body.fastingRequired,
+      turnaroundTime: body.turnaroundTime,
+      active: body.active,
+      basePrice: body.basePrice,
+    });
 
-    const updatedTemplate = await LabTestTemplate.findByIdAndUpdate(
-      id,
-      { $set: updateData },
-      { new: true, runValidators: true },
-    ).populate("createdBy", "name email");
+    const updatedTemplate = await prisma.labTestTemplate.update({
+      where: { id },
+      data: updateData,
+    });
+
+    // Transform back to frontend format
+    const transformedTemplate = transformLabTestTemplateForAPI(updatedTemplate);
 
     return NextResponse.json({
       success: true,
-      data: updatedTemplate,
+      data: transformedTemplate,
       message: "Lab test template updated successfully",
     });
   } catch (error: any) {
     console.error("Error updating lab test template:", error);
-
-    // Handle validation errors
-    if (error.name === "ValidationError") {
-      const errors = Object.values(error.errors).map((err: any) => err.message);
-      return NextResponse.json(
-        { success: false, error: "Validation failed", details: errors },
-        { status: 400 },
-      );
-    }
-
-    // Handle duplicate key errors
-    if (error.code === 11000) {
-      return NextResponse.json(
-        { success: false, error: "Duplicate test code detected" },
-        { status: 409 },
-      );
-    }
-
     return NextResponse.json(
       {
         success: false,
@@ -170,25 +148,21 @@ export async function PUT(
   }
 }
 
-// DELETE: Delete a lab test template
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await dbConnect();
-
-    const auth = await authenticateRequest(request);
-    if (!auth.success) {
+    const payload = await getTokenPayload(request);
+    if (!payload) {
       return NextResponse.json(
-        { success: false, error: auth.error },
-        { status: auth.status || 401 },
+        { success: false, error: "Unauthorized" },
+        { status: 401 },
       );
     }
 
-    // Only admins and lab technicians can delete templates
     const allowedRoles = ["admin", "lab_technician"];
-    if (!hasRequiredRole(auth.userRole, allowedRoles)) {
+    if (!hasRequiredRole(payload.role, allowedRoles)) {
       return NextResponse.json(
         {
           success: false,
@@ -201,7 +175,9 @@ export async function DELETE(
 
     const { id } = await params;
 
-    const template = await LabTestTemplate.findById(id);
+    const template = await prisma.labTestTemplate.findUnique({
+      where: { id },
+    });
     if (!template) {
       return NextResponse.json(
         { success: false, error: "Lab test template not found" },
@@ -209,7 +185,9 @@ export async function DELETE(
       );
     }
 
-    await LabTestTemplate.findByIdAndDelete(id);
+    await prisma.labTestTemplate.delete({
+      where: { id },
+    });
 
     return NextResponse.json({
       success: true,

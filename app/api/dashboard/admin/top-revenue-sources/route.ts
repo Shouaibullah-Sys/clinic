@@ -1,15 +1,6 @@
-// app/api/dashboard/admin/top-revenue-sources/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth";
-import dbConnect from "@/lib/dbConnect";
-import { Payment } from "@/lib/models/Payment";
-import { LabTest } from "@/lib/models/LabTest";
-import { RadiologyExam } from "@/lib/models/RadiologyExam";
-import { DischargeCard } from "@/lib/models/DischargeCard";
-import { Prescription } from "@/lib/models/Prescription";
-import { Appointment } from "@/lib/models/Appointment";
-import { User } from "@/lib/models/User";
-import { Patient } from "@/lib/models/Patient";
+import { prisma } from "@/lib/prisma";
 
 export async function GET(req: NextRequest) {
   try {
@@ -18,14 +9,11 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    await dbConnect();
-
     const { searchParams } = new URL(req.url);
-    const type = searchParams.get("type") || "service"; // service, doctor, patient
+    const type = searchParams.get("type") || "service";
     const limit = parseInt(searchParams.get("limit") || "10");
     const period = searchParams.get("period") || "today";
 
-    // Calculate date ranges
     const now = new Date();
     let startDate: Date;
     let endDate: Date;
@@ -33,11 +21,7 @@ export async function GET(req: NextRequest) {
     switch (period) {
       case "today":
         startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        endDate = new Date(
-          now.getFullYear(),
-          now.getMonth(),
-          now.getDate() + 1,
-        );
+        endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
         break;
       case "week":
         startDate = new Date(now);
@@ -58,11 +42,7 @@ export async function GET(req: NextRequest) {
         break;
       default:
         startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        endDate = new Date(
-          now.getFullYear(),
-          now.getMonth(),
-          now.getDate() + 1,
-        );
+        endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
     }
 
     let result: any = {
@@ -74,400 +54,141 @@ export async function GET(req: NextRequest) {
 
     switch (type) {
       case "service":
-        // Get top services by revenue
-        const topServices = await Payment.aggregate([
-          {
-            $match: {
-              paymentDate: { $gte: startDate, $lt: endDate },
-              status: "completed",
-              serviceType: { $exists: true, $ne: null },
-            },
-          },
-          {
-            $group: {
-              _id: "$serviceType",
-              totalRevenue: { $sum: "$amount" },
-              totalDiscounts: { $sum: { $ifNull: ["$discountAmount", 0] } },
-              count: { $sum: 1 },
-            },
-          },
-          {
-            $sort: { totalRevenue: -1 },
-          },
-          {
-            $limit: limit,
-          },
-        ]);
+        const serviceMap = new Map<string, { totalRevenue: number; totalDiscounts: number; count: number }>();
 
-        // Get top lab tests
-        const topLabTests = await LabTest.aggregate([
-          {
-            $match: {
-              createdAt: { $gte: startDate, $lt: endDate },
-              "charges.paymentStatus": "paid",
-              status: { $ne: "cancelled" },
-            },
+        const payments = await prisma.payment.findMany({
+          where: {
+            paymentDate: { gte: startDate, lt: endDate },
+            status: "completed",
+            serviceType: { not: null },
           },
-          {
-            $group: {
-              _id: "$testName",
-              totalRevenue: { $sum: "$charges.totalAmount" },
-              totalDiscounts: { $sum: "$charges.discount" },
-              count: { $sum: 1 },
-            },
-          },
-          {
-            $sort: { totalRevenue: -1 },
-          },
-          {
-            $limit: limit,
-          },
-        ]);
+        });
 
-        // Get top radiology exams
-        const topRadiologyExams = await RadiologyExam.aggregate([
-          {
-            $match: {
-              createdAt: { $gte: startDate, $lt: endDate },
-              "charges.paymentStatus": "paid",
-              status: { $ne: "cancelled" },
-            },
-          },
-          {
-            $group: {
-              _id: "$examName",
-              totalRevenue: { $sum: "$charges.totalAmount" },
-              totalDiscounts: { $sum: "$charges.discount" },
-              count: { $sum: 1 },
-            },
-          },
-          {
-            $sort: { totalRevenue: -1 },
-          },
-          {
-            $limit: limit,
-          },
-        ]);
+        payments.forEach((p) => {
+          const key = p.serviceType || "unknown";
+          const existing = serviceMap.get(key) || { totalRevenue: 0, totalDiscounts: 0, count: 0 };
+          existing.totalRevenue += p.amount;
+          existing.totalDiscounts += p.discountAmount || 0;
+          existing.count += 1;
+          serviceMap.set(key, existing);
+        });
 
-        // Get top operations
-        const topOperations = await DischargeCard.aggregate([
-          {
-            $match: {
-              createdAt: { $gte: startDate, $lt: endDate },
-              "billing.paymentStatus": "paid",
-              status: { $ne: "cancelled" },
-            },
+        const labTests = await prisma.labTest.findMany({
+          where: {
+            createdAt: { gte: startDate, lt: endDate },
+            status: { not: "cancelled" },
           },
-          {
-            $group: {
-              _id: "$operationName",
-              totalRevenue: { $sum: "$billing.totalAmount" },
-              totalDiscounts: { $sum: "$billing.discountAmount" },
-              count: { $sum: 1 },
-            },
-          },
-          {
-            $sort: { totalRevenue: -1 },
-          },
-          {
-            $limit: limit,
-          },
-        ]);
+        });
 
-        // Get top medicines
-        const topMedicines = await Prescription.aggregate([
-          {
-            $match: {
-              dispensingStatus: "full",
-              dispensedDate: { $gte: startDate, $lt: endDate },
-            },
+        labTests.forEach((t) => {
+          const charges = typeof t.charges === "string" ? JSON.parse(t.charges) : t.charges;
+          if (charges?.paymentStatus === "paid") {
+            const key = t.testName || "Unknown";
+            const existing = serviceMap.get(key) || { totalRevenue: 0, totalDiscounts: 0, count: 0 };
+            existing.totalRevenue += charges.totalAmount || 0;
+            existing.totalDiscounts += charges.discount || 0;
+            existing.count += 1;
+            serviceMap.set(key, existing);
+          }
+        });
+
+        const radiologyExams = await prisma.radiologyExam.findMany({
+          where: {
+            createdAt: { gte: startDate, lt: endDate },
+            status: { not: "cancelled" },
           },
-          {
-            $unwind: "$medications",
+        });
+
+        radiologyExams.forEach((e) => {
+          const charges = typeof e.charges === "string" ? JSON.parse(e.charges) : e.charges;
+          if (charges?.paymentStatus === "paid") {
+            const key = "Radiology";
+            const existing = serviceMap.get(key) || { totalRevenue: 0, totalDiscounts: 0, count: 0 };
+            existing.totalRevenue += charges.totalAmount || 0;
+            existing.totalDiscounts += charges.discount || 0;
+            existing.count += 1;
+            serviceMap.set(key, existing);
+          }
+        });
+
+        const dischargeCards = await prisma.dischargeCard.findMany({
+          where: {
+            createdAt: { gte: startDate, lt: endDate },
+            status: { not: "cancelled" },
           },
-          {
-            $group: {
-              _id: "$medications.name",
-              totalRevenue: {
-                $sum: {
-                  $multiply: ["$medications.quantity", "$medications.price"],
-                },
-              },
-              count: { $sum: 1 },
-            },
-          },
-          {
-            $sort: { totalRevenue: -1 },
-          },
-          {
-            $limit: limit,
-          },
-        ]);
+        });
+
+        dischargeCards.forEach((dc) => {
+          const billing = typeof dc.billing === "string" ? JSON.parse(dc.billing) : dc.billing;
+          if (billing?.paymentStatus === "paid") {
+            const key = dc.operationName || "Operation";
+            const existing = serviceMap.get(key) || { totalRevenue: 0, totalDiscounts: 0, count: 0 };
+            existing.totalRevenue += billing.totalAmount || 0;
+            existing.totalDiscounts += billing.discountAmount || 0;
+            existing.count += 1;
+            serviceMap.set(key, existing);
+          }
+        });
 
         result.data = {
-          services: topServices.map((s: any) => ({
-            name: s._id,
-            totalRevenue: s.totalRevenue,
-            totalDiscounts: s.totalDiscounts,
-            netRevenue: s.totalRevenue - s.totalDiscounts,
-            count: s.count,
-            averageValue: s.count > 0 ? s.totalRevenue / s.count : 0,
-          })),
-          labTests: topLabTests.map((t: any) => ({
-            name: t._id,
-            totalRevenue: t.totalRevenue,
-            totalDiscounts: t.totalDiscounts,
-            netRevenue: t.totalRevenue - t.totalDiscounts,
-            count: t.count,
-            averageValue: t.count > 0 ? t.totalRevenue / t.count : 0,
-          })),
-          radiologyExams: topRadiologyExams.map((e: any) => ({
-            name: e._id,
-            totalRevenue: e.totalRevenue,
-            totalDiscounts: e.totalDiscounts,
-            netRevenue: e.totalRevenue - e.totalDiscounts,
-            count: e.count,
-            averageValue: e.count > 0 ? e.totalRevenue / e.count : 0,
-          })),
-          operations: topOperations.map((o: any) => ({
-            name: o._id,
-            totalRevenue: o.totalRevenue,
-            totalDiscounts: o.totalDiscounts,
-            netRevenue: o.totalRevenue - o.totalDiscounts,
-            count: o.count,
-            averageValue: o.count > 0 ? o.totalRevenue / o.count : 0,
-          })),
-          medicines: topMedicines.map((m: any) => ({
-            name: m._id,
-            totalRevenue: m.totalRevenue,
-            count: m.count,
-            averageValue: m.count > 0 ? m.totalRevenue / m.count : 0,
-          })),
+          services: Array.from(serviceMap.entries())
+            .map(([name, data]) => ({
+              name,
+              totalRevenue: data.totalRevenue,
+              netRevenue: data.totalRevenue - data.totalDiscounts,
+              count: data.count,
+            }))
+            .sort((a, b) => b.totalRevenue - a.totalRevenue)
+            .slice(0, limit),
         };
-
         break;
 
       case "doctor":
-        // Get top doctors by revenue
-        const topDoctors = await Payment.aggregate([
-          {
-            $match: {
-              paymentDate: { $gte: startDate, $lt: endDate },
-              status: "completed",
-              department: "consultation",
-            },
-          },
-          {
-            $lookup: {
-              from: "appointments",
-              localField: "appointment",
-              foreignField: "_id",
-              as: "appointment",
-            },
-          },
-          {
-            $unwind: {
-              path: "$appointment",
-              preserveNullAndEmptyArrays: true,
-            },
-          },
-          {
-            $group: {
-              _id: "$appointment.doctor",
-              totalRevenue: { $sum: "$amount" },
-              totalDiscounts: { $sum: { $ifNull: ["$discountAmount", 0] } },
-              count: { $sum: 1 },
-            },
-          },
-          {
-            $lookup: {
-              from: "users",
-              localField: "_id",
-              foreignField: "_id",
-              as: "doctor",
-            },
-          },
-          {
-            $unwind: "$doctor",
-          },
-          {
-            $project: {
-              doctorId: "$_id",
-              doctorName: "$doctor.name",
-              specialization: "$doctor.specialization",
-              consultationFee: "$doctor.consultationFee",
-              totalRevenue: 1,
-              totalDiscounts: 1,
-              count: 1,
-            },
-          },
-          {
-            $sort: { totalRevenue: -1 },
-          },
-          {
-            $limit: limit,
-          },
-        ]);
+        const doctorAppointmentMap = new Map<string, { totalRevenue: number; totalDiscounts: number; count: number }>();
 
-        // Get top doctors by operations
-        const topDoctorsByOperations = await DischargeCard.aggregate([
-          {
-            $match: {
-              createdAt: { $gte: startDate, $lt: endDate },
-              "billing.paymentStatus": "paid",
-              status: { $ne: "cancelled" },
-            },
+        const appointments = await prisma.appointment.findMany({
+          where: {
+            startTime: { gte: startDate, lte: endDate },
+            status: { in: ["completed", "checked-in", "in-progress", "scheduled", "confirmed"] },
           },
-          {
-            $group: {
-              _id: "$doctor",
-              totalRevenue: { $sum: "$billing.totalAmount" },
-              totalDiscounts: { $sum: "$billing.discountAmount" },
-              count: { $sum: 1 },
-            },
-          },
-          {
-            $lookup: {
-              from: "users",
-              localField: "_id",
-              foreignField: "_id",
-              as: "doctor",
-            },
-          },
-          {
-            $unwind: "$doctor",
-          },
-          {
-            $project: {
-              doctorId: "$_id",
-              doctorName: "$doctor.name",
-              specialization: "$doctor.specialization",
-              totalRevenue: 1,
-              totalDiscounts: 1,
-              count: 1,
-            },
-          },
-          {
-            $sort: { totalRevenue: -1 },
-          },
-          {
-            $limit: limit,
-          },
-        ]);
+          include: { doctor: { select: { id: true, name: true, specialization: true, consultationFee: true } } },
+        });
+
+        appointments.forEach((apt) => {
+          if (apt.doctorId && apt.doctor) {
+            const existing = doctorAppointmentMap.get(apt.doctorId) || {
+              totalRevenue: 0,
+              totalDiscounts: 0,
+              count: 0,
+            };
+            existing.totalRevenue += apt.consultationFee || apt.doctorFee || 0;
+            existing.count += 1;
+            doctorAppointmentMap.set(apt.doctorId, existing);
+          }
+        });
 
         result.data = {
-          consultations: topDoctors.map((d: any) => ({
-            doctorId: d.doctorId,
-            doctorName: d.doctorName,
-            specialization: d.specialization,
-            consultationFee: d.consultationFee,
-            totalRevenue: d.totalRevenue,
-            totalDiscounts: d.totalDiscounts,
-            netRevenue: d.totalRevenue - d.totalDiscounts,
-            count: d.count,
-            averageValue: d.count > 0 ? d.totalRevenue / d.count : 0,
-          })),
-          operations: topDoctorsByOperations.map((d: any) => ({
-            doctorId: d.doctorId,
-            doctorName: d.doctorName,
-            specialization: d.specialization,
-            totalRevenue: d.totalRevenue,
-            totalDiscounts: d.totalDiscounts,
-            netRevenue: d.totalRevenue - d.totalDiscounts,
-            count: d.count,
-            averageValue: d.count > 0 ? d.totalRevenue / d.count : 0,
-          })),
+          consultations: Array.from(doctorAppointmentMap.entries())
+            .map(([doctorId, data]) => {
+              const doc = appointments.find((a) => a.doctorId === doctorId)?.doctor;
+              return {
+                doctorId,
+                doctorName: doc?.name || "Unknown",
+                specialization: doc?.specialization || "N/A",
+                consultationFee: doc?.consultationFee || 0,
+                totalRevenue: data.totalRevenue,
+                netRevenue: data.totalRevenue - data.totalDiscounts,
+                count: data.count,
+              };
+            })
+            .sort((a, b) => b.totalRevenue - a.totalRevenue)
+            .slice(0, limit),
         };
-
-        break;
-
-      case "patient":
-        // Get top patients by revenue
-        const topPatients = await Patient.aggregate([
-          {
-            $lookup: {
-              from: "payments",
-              localField: "_id",
-              foreignField: "patient",
-              as: "payments",
-            },
-          },
-          {
-            $lookup: {
-              from: "invoices",
-              localField: "_id",
-              foreignField: "patient",
-              as: "invoices",
-            },
-          },
-          {
-            $lookup: {
-              from: "billings",
-              localField: "_id",
-              foreignField: "patient",
-              as: "billings",
-            },
-          },
-          {
-            $project: {
-              name: 1,
-              patientId: 1,
-              phone: 1,
-              email: 1,
-              totalRevenue: {
-                $add: [
-                  { $sum: "$payments.amount" },
-                  { $sum: "$invoices.totalAmount" },
-                  { $sum: "$billings.totalAmount" },
-                ],
-              },
-              totalDiscounts: {
-                $add: [
-                  { $sum: "$payments.discountAmount" },
-                  { $sum: "$invoices.discountAmount" },
-                  { $sum: "$billings.discount" },
-                ],
-              },
-              transactionCount: {
-                $add: [
-                  { $size: "$payments" },
-                  { $size: "$invoices" },
-                  { $size: "$billings" },
-                ],
-              },
-            },
-          },
-          {
-            $match: {
-              totalRevenue: { $gt: 0 },
-            },
-          },
-          {
-            $sort: { totalRevenue: -1 },
-          },
-          {
-            $limit: limit,
-          },
-        ]);
-
-        result.data = topPatients.map((p: any) => ({
-          patientId: p.patientId,
-          patientName: p.name,
-          phone: p.phone,
-          email: p.email,
-          totalRevenue: p.totalRevenue,
-          totalDiscounts: p.totalDiscounts || 0,
-          netRevenue: p.totalRevenue - (p.totalDiscounts || 0),
-          transactionCount: p.transactionCount,
-          averageValue:
-            p.transactionCount > 0 ? p.totalRevenue / p.transactionCount : 0,
-        }));
-
         break;
 
       default:
         return NextResponse.json(
-          { error: "Invalid type. Use 'service', 'doctor', or 'patient'" },
+          { error: "Invalid type. Use 'service' or 'doctor'" },
           { status: 400 },
         );
     }
@@ -478,9 +199,6 @@ export async function GET(req: NextRequest) {
     });
   } catch (error) {
     console.error("Error fetching top revenue sources:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

@@ -1,9 +1,6 @@
-// app/api/doctor/appointments/route.ts
-
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { Appointment } from "@/lib/models/Appointment";
-import { jwtVerify } from "jose";
+import { prisma } from "@/lib/prisma";
+import { getTokenPayload } from "@/lib/auth/jwt";
 import {
   startOfDay,
   endOfDay,
@@ -15,98 +12,82 @@ import {
   isBefore,
 } from "date-fns";
 
-const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-this";
-
-async function verifyToken(token: string) {
-  try {
-    const secret = new TextEncoder().encode(JWT_SECRET);
-    const { payload } = await jwtVerify(token, secret);
-    return payload;
-  } catch (error) {
-    return null;
-  }
-}
-
 export async function GET(request: NextRequest) {
   try {
-    await dbConnect();
-
-    // Authentication
-    const authHeader = request.headers.get("authorization");
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    const user = await getTokenPayload(request);
+    if (!user || user.role !== "doctor") {
       return NextResponse.json(
-        { success: false, error: "Unauthorized. No token provided." },
-        { status: 401 },
+        { success: false, error: "Doctor access required" },
+        { status: 403 }
       );
     }
 
-    const token = authHeader.split(" ")[1];
-    const payload = await verifyToken(token);
-
-    if (!payload) {
-      return NextResponse.json(
-        { success: false, error: "Invalid or expired token." },
-        { status: 401 },
-      );
-    }
-
-    const userId = payload.id as string;
-    const userRole = payload.role as string;
-
-    // Only doctors can access
-    if (userRole !== "doctor") {
-      return NextResponse.json(
-        { success: false, error: "Forbidden. Doctor access required." },
-        { status: 403 },
-      );
-    }
-
-    // Get query params for filtering
     const { searchParams } = new URL(request.url);
     const dateFilter = searchParams.get("date") || "all";
     const statusFilter = searchParams.get("status") || "all";
 
-    // Build query
-    const query: any = {
-      doctor: userId,
-      status: { $nin: ["cancelled", "no-show"] },
-    };
-
     const today = new Date();
+    let startTimeFilter: Date | undefined;
+    let endTimeFilter: Date | undefined;
 
     switch (dateFilter) {
       case "today":
-        query.startTime = { $gte: startOfDay(today), $lte: endOfDay(today) };
+        startTimeFilter = startOfDay(today);
+        endTimeFilter = endOfDay(today);
         break;
       case "week":
-        query.startTime = { $gte: startOfWeek(today), $lte: endOfWeek(today) };
+        startTimeFilter = startOfWeek(today);
+        endTimeFilter = endOfWeek(today);
         break;
       case "month":
-        query.startTime = {
-          $gte: startOfMonth(today),
-          $lte: endOfMonth(today),
-        };
+        startTimeFilter = startOfMonth(today);
+        endTimeFilter = endOfMonth(today);
         break;
       case "past":
-        query.startTime = { $lt: startOfDay(today) };
+        startTimeFilter = undefined;
+        endTimeFilter = startOfDay(today);
         break;
       case "future":
-        query.startTime = { $gt: endOfDay(today) };
+        startTimeFilter = endOfDay(today);
+        endTimeFilter = undefined;
         break;
       default:
-        // All dates - no date filter
         break;
+    }
+
+    const where: any = {
+      doctorId: user.id,
+      status: { notIn: ["cancelled", "no-show"] },
+    };
+
+    if (startTimeFilter && endTimeFilter) {
+      where.startTime = { gte: startTimeFilter, lte: endTimeFilter };
+    } else if (endTimeFilter) {
+      where.startTime = { lt: endTimeFilter };
+    } else if (startTimeFilter) {
+      where.startTime = { gte: startTimeFilter };
     }
 
     if (statusFilter !== "all") {
-      query.status = statusFilter;
+      where.status = statusFilter;
     }
 
-    // Get appointments for this doctor
-    const appointments = await Appointment.find(query)
-      .populate("patient", "name phone guardian patientId dateOfBirth gender")
-      .sort({ startTime: 1 })
-      .lean();
+    const appointments = await prisma.appointment.findMany({
+      where,
+      orderBy: { startTime: "asc" },
+      include: {
+        patient: {
+          select: {
+            id: true,
+            name: true,
+            phone: true,
+            patientId: true,
+            dateOfBirth: true,
+            gender: true,
+          },
+        },
+      },
+    });
 
     return NextResponse.json({
       success: true,
@@ -115,11 +96,8 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     console.error("Error fetching doctor appointments:", error);
     return NextResponse.json(
-      {
-        success: false,
-        error: error.message || "Failed to fetch appointments",
-      },
-      { status: 500 },
+      { success: false, error: error.message || "Failed to fetch appointments" },
+      { status: 500 }
     );
   }
 }

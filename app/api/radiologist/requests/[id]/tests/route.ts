@@ -1,21 +1,14 @@
 // app/api/radiologist/requests/[id]/tests/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { RadiologyService } from "@/lib/models/RadiologyService";
-import "@/lib/models/Patient";
-import "@/lib/models/User";
+import { prisma } from "@/lib/prisma";
 import { authenticateRequest, hasRequiredRole } from "@/lib/auth";
-import mongoose from "mongoose";
 
-// PUT: Add tests and parameters to radiology request
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await dbConnect();
-
     const auth = await authenticateRequest(request);
     if (!auth.success) {
       return NextResponse.json(
@@ -24,9 +17,7 @@ export async function PUT(
       );
     }
 
-    // Only radiologists and admins can add tests and parameters
-    const allowedRoles = ["radiologist", "admin"];
-    if (!hasRequiredRole(auth.userRole, allowedRoles)) {
+    if (!hasRequiredRole(auth.userRole, ["radiologist", "admin"])) {
       return NextResponse.json(
         { success: false, error: "Forbidden. Only radiologists can add tests and parameters." },
         { status: 403 }
@@ -39,8 +30,9 @@ export async function PUT(
 
     console.log(`Adding tests/parameters to radiology request ${requestId} by ${auth.userName}`);
 
-    // Find the request
-    const requestDoc = await RadiologyService.findById(requestId);
+    const requestDoc = await prisma.radiologyRequest.findUnique({
+      where: { id: requestId },
+    });
     
     if (!requestDoc) {
       return NextResponse.json(
@@ -49,7 +41,6 @@ export async function PUT(
       );
     }
 
-    // Check if request is in progress
     if (requestDoc.status !== "in-progress" && requestDoc.status !== "scheduled") {
       return NextResponse.json(
         { 
@@ -61,13 +52,10 @@ export async function PUT(
       );
     }
 
-    // Update the request with tests and parameters
-    // Note: RadiologyService model doesn't have a dedicated tests/parameters field,
-    // so we'll store them in the notes field or add them as custom data
-    const additionalData: any = {};
+    const updateData: any = {};
     
     if (tests && Array.isArray(tests) && tests.length > 0) {
-      additionalData.tests = tests.map((test: any) => ({
+      updateData.tests = tests.map((test: any) => ({
         name: test.name || "",
         description: test.description || "",
         performed: test.performed || false,
@@ -77,7 +65,7 @@ export async function PUT(
     }
 
     if (parameters && Array.isArray(parameters) && parameters.length > 0) {
-      additionalData.parameters = parameters.map((param: any) => ({
+      updateData.parameters = parameters.map((param: any) => ({
         name: param.name || "",
         value: param.value || "",
         unit: param.unit || "",
@@ -86,38 +74,27 @@ export async function PUT(
       }));
     }
 
-    // Store additional data in notes (as JSON string) or add to the document
-    // Since the model doesn't have these fields, we'll add them dynamically
-    if (Object.keys(additionalData).length > 0) {
-      // Add custom data to the document
-      (requestDoc as any).customData = {
-        ...(requestDoc as any).customData,
-        ...additionalData
-      };
-    }
-
-    // Add notes if provided
     if (notes) {
-      requestDoc.notes = notes;
+      updateData.notes = notes;
     }
 
-    // Update status to in-progress if it was scheduled
     if (requestDoc.status === "scheduled") {
-      requestDoc.status = "in-progress";
-      if (!requestDoc.radiologist) {
-        requestDoc.radiologist = new mongoose.Types.ObjectId(auth.userId);
+      updateData.status = "in-progress";
+      if (!requestDoc.radiologistId) {
+        updateData.radiologistId = auth.userId;
       }
     }
 
-    await requestDoc.save();
-
-    // Populate for response
-    const updatedRequest = await RadiologyService.findById(requestId)
-      .populate("patient", "name patientId")
-      .populate("referringDoctor", "name")
-      .populate("radiologist", "name")
-      .populate("technician", "name")
-      .lean();
+    const updatedRequest = await prisma.radiologyRequest.update({
+      where: { id: requestId },
+      data: updateData,
+      include: {
+        patient: { select: { name: true, patientId: true } },
+        referringDoctor: { select: { name: true } },
+        radiologist: { select: { name: true } },
+        technician: { select: { name: true } },
+      },
+    });
 
     return NextResponse.json({
       success: true,

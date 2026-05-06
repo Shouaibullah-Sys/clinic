@@ -1,24 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { LabTest } from "@/lib/models/LabTest";
-import { LabTestTemplate } from "@/lib/models/LabTestTemplate";
-import { Appointment } from "@/lib/models/Appointment";
-import { jwtVerify } from "jose";
-import mongoose from "mongoose";
+import { prisma } from "@/lib/prisma";
+import { getTokenPayload } from "@/lib/auth/jwt";
 
-const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-this";
-
-async function verifyToken(token: string) {
-  try {
-    const secret = new TextEncoder().encode(JWT_SECRET);
-    const { payload } = await jwtVerify(token, secret);
-    return payload;
-  } catch (error) {
-    return null;
-  }
-}
-
-// GET: Get lab tests for a patient
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -26,31 +9,17 @@ export async function GET(
   try {
     const { id: patientId } = await params;
 
-    await dbConnect();
-
-    // Authentication
-    const authHeader = request.headers.get("authorization");
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    const payload = await getTokenPayload(request);
+    if (!payload) {
       return NextResponse.json(
         { success: false, error: "Unauthorized. No token provided." },
         { status: 401 },
       );
     }
 
-    const token = authHeader.split(" ")[1];
-    const payload = await verifyToken(token);
+    const userId = payload.id;
+    const userRole = payload.role;
 
-    if (!payload) {
-      return NextResponse.json(
-        { success: false, error: "Invalid or expired token." },
-        { status: 401 },
-      );
-    }
-
-    const userId = payload.id as string;
-    const userRole = payload.role as string;
-
-    // Only doctors can access
     if (userRole !== "doctor") {
       return NextResponse.json(
         { success: false, error: "Forbidden. Doctor access required." },
@@ -58,22 +27,33 @@ export async function GET(
       );
     }
 
-    const doctorId = new mongoose.Types.ObjectId(userId);
-
-    // Get lab tests for this patient requested by this doctor.
-    // `orderedBy` is included as fallback for older records where `doctor` may be missing.
-    const labTests = await LabTest.find({
-      patient: patientId,
-      $or: [{ doctor: doctorId }, { orderedBy: doctorId }],
-    })
-      .select(
-        "_id testId testName category orderedAt status collectionStatus processingStatus verificationStatus priority instructions results reportedAt completedAt charges price discountedPrice",
-      )
-      .populate("doctor", "name")
-      .populate("orderedBy", "name")
-      .populate("appointment", "appointmentId date")
-      .sort({ orderedAt: -1 })
-      .lean();
+    const labTests = await prisma.labTest.findMany({
+      where: {
+        patientId: patientId,
+        OR: [{ doctorId: userId }, { orderedById: userId }],
+      },
+      select: {
+        id: true,
+        testId: true,
+        testName: true,
+        category: true,
+        createdAt: true,
+        status: true,
+        collectionStatus: true,
+        processingStatus: true,
+        verificationStatus: true,
+        priority: true,
+        notes: true,
+        testParameters: true,
+        charges: true,
+        price: true,
+        discountedPrice: true,
+        doctor: { select: { name: true } },
+        orderedBy: { select: { name: true } },
+        appointment: { select: { appointmentId: true, date: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    });
 
     return NextResponse.json({
       success: true,
@@ -88,7 +68,6 @@ export async function GET(
   }
 }
 
-// POST: Order a new lab test for a patient
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -96,35 +75,17 @@ export async function POST(
   try {
     const { id: patientId } = await params;
 
-    await dbConnect();
-
-    // Authentication
-    const authHeader = request.headers.get("authorization");
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    const payload = await getTokenPayload(request);
+    if (!payload) {
       return NextResponse.json(
         { success: false, error: "Unauthorized. No token provided." },
         { status: 401 },
       );
     }
 
-    const token = authHeader.split(" ")[1];
-    const payload = await verifyToken(token);
+    const userId = payload.id;
+    const userRole = payload.role;
 
-    if (!payload) {
-      return NextResponse.json(
-        { success: false, error: "Invalid or expired token." },
-        { status: 401 },
-      );
-    }
-
-    const userId = payload.id as string;
-    const userRole = payload.role as string;
-
-    console.log(
-      `Ordering lab test for patient ${patientId} by doctor ${userId}`,
-    );
-
-    // Only doctors can order lab tests
     if (!["doctor", "admin"].includes(userRole)) {
       return NextResponse.json(
         {
@@ -145,19 +106,16 @@ export async function POST(
       notes,
     } = body;
 
-    // Validation - either templateId or (testName + category) must be provided
     if (!templateId && (!testName || !category)) {
       return NextResponse.json(
         {
           success: false,
-          error:
-            "Either templateId or (testName and category) must be provided",
+          error: "Either templateId or (testName and category) must be provided",
         },
         { status: 400 },
       );
     }
 
-    // Get template data if templateId is provided
     let template = null;
     let priceNum = 0;
     let description = notes?.trim();
@@ -165,7 +123,7 @@ export async function POST(
     let specimenType = "other";
 
     if (templateId) {
-      template = await LabTestTemplate.findById(templateId);
+      template = await prisma.labTestTemplate.findUnique({ where: { id: templateId } });
       if (!template) {
         return NextResponse.json(
           {
@@ -176,20 +134,16 @@ export async function POST(
         );
       }
 
-      // Use template data
-      priceNum = template.basePrice;
-      description = template.description || notes?.trim();
-      instructions = template.preparationInstructions || notes?.trim();
-      specimenType = template.specimenType?.[0] || "other";
+      priceNum = template.basePrice || 0;
+      description = template.instruction || notes?.trim();
+      instructions = template.instruction || notes?.trim();
+      const params = template.specimenType ? JSON.parse(template.specimenType) : [];
+      specimenType = params[0] || "other";
     } else {
-      // Set default price (will be updated by receptionist)
       priceNum = 0;
-
-      // Use consolidated notes field for both description and instructions
       description = notes?.trim();
       instructions = notes?.trim();
 
-      // Automatically derive specimen type from category
       const categoryToSpecimenMap: { [key: string]: string } = {
         hematology: "blood",
         blood_test: "blood",
@@ -205,12 +159,10 @@ export async function POST(
       specimenType = categoryToSpecimenMap[category] || "other";
     }
 
-    // Check if appointment exists and belongs to patient (if provided)
     let appointment = null;
     if (appointmentId) {
-      appointment = await Appointment.findOne({
-        _id: appointmentId,
-        patient: patientId,
+      appointment = await prisma.appointment.findFirst({
+        where: { id: appointmentId, patientId: patientId },
       });
 
       if (!appointment) {
@@ -224,88 +176,61 @@ export async function POST(
       }
     }
 
-    const doctorId = new mongoose.Types.ObjectId(userId);
+    const date = new Date();
+    const year = date.getFullYear().toString().slice(-2);
+    const month = (date.getMonth() + 1).toString().padStart(2, "0");
+    const random = Math.floor(100 + Math.random() * 900);
+    const newTestId = `TEST${year}${month}${random}`;
 
-    // Use template data if available, otherwise use provided values
     const finalTestName = template ? template.testName : testName.trim();
     const finalCategory = template ? template.category : category;
 
-    // Create lab test object
+    const charges = {
+      basePrice: priceNum,
+      tax: 0,
+      discount: 0,
+      otherCharges: 0,
+      totalAmount: priceNum,
+      paid: 0,
+      due: priceNum,
+      paymentStatus: "pending",
+    };
+
     const labTestData: any = {
-      patient: patientId,
-      doctor: doctorId,
+      testId: newTestId,
+      patientId,
+      doctorId: userId,
       testName: finalTestName,
       category: finalCategory,
       description: description,
       price: priceNum,
       priority,
       notes: notes?.trim(),
-      instructions: instructions,
-      orderedBy: doctorId,
-      orderedAt: new Date(),
-      status: "ordered",
+      orderedById: userId,
       collectionStatus: "pending",
       processingStatus: "pending",
       verificationStatus: "pending",
       paymentVerified: false,
-      charges: {
-        basePrice: priceNum,
-        tax: 0,
-        discount: 0,
-        otherCharges: 0,
-        totalAmount: priceNum,
-        paid: 0,
-        due: priceNum,
-        paymentStatus: "pending",
-      },
+      charges: JSON.stringify(charges),
+      testParameters: template?.parameters
+        ? JSON.stringify(
+            JSON.parse(template.parameters).map((param: any) => ({
+              name: param.parameterName,
+              value: "",
+              unit: param.unit,
+              normalRange: param.normalRange,
+              flag: "normal",
+              remarks: "",
+            })),
+          )
+        : JSON.stringify([]),
     };
 
-    // Add appointment if provided
     if (appointmentId) {
-      labTestData.appointment = appointmentId;
+      labTestData.appointmentId = appointmentId;
     }
 
-    // Always include specimen type
-    labTestData.specimen = {
-      type: specimenType,
-    };
-
-    // Add parameters from template if available
-    if (template && template.parameters && template.parameters.length > 0) {
-      labTestData.results = {
-        parameters: template.parameters.map((param: any) => ({
-          name: param.parameterName,
-          value: "",
-          unit: param.unit,
-          normalRange: param.normalRange,
-          flag: "normal",
-          remarks: "",
-        })),
-      };
-    }
-
-    // Create and save lab test
-    const labTest = new LabTest(labTestData);
-    await labTest.save();
-
-    // If appointment exists, update it to reference this lab test
-    if (appointmentId && appointment) {
-      await Appointment.findByIdAndUpdate(
-        appointmentId,
-        { $addToSet: { labTests: labTest._id } },
-        { new: true },
-      );
-    }
-
-    // Populate response data
-    await labTest.populate([
-      { path: "patient", select: "name patientId" },
-      { path: "doctor", select: "name specialization" },
-      { path: "orderedBy", select: "name" },
-      ...(appointmentId
-        ? [{ path: "appointment", select: "appointmentId date" }]
-        : []),
-    ]);
+    const labTest = await prisma.labTest.create({ data: labTestData });
 
     console.log(
       `Lab test ordered successfully: ${labTest.testId} for appointment: ${appointmentId || "No appointment linked"}`,
@@ -321,24 +246,6 @@ export async function POST(
     );
   } catch (error: any) {
     console.error("Error ordering lab test:", error);
-
-    // Handle validation errors
-    if (error.name === "ValidationError") {
-      const errors = Object.values(error.errors).map((err: any) => err.message);
-      return NextResponse.json(
-        { success: false, error: "Validation failed", details: errors },
-        { status: 400 },
-      );
-    }
-
-    // Handle duplicate key errors
-    if (error.code === 11000) {
-      return NextResponse.json(
-        { success: false, error: "Duplicate test ID detected" },
-        { status: 409 },
-      );
-    }
-
     return NextResponse.json(
       { success: false, error: error.message || "Failed to order lab test" },
       { status: 500 },

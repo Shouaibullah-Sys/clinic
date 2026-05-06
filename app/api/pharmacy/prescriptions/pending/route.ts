@@ -1,16 +1,13 @@
 // app/api/pharmacy/prescriptions/pending/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import PharmacySale from "@/lib/models/PharmacySale";
+import { prisma } from "@/lib/prisma";
 import { authenticateRequest } from "@/lib/auth";
 import { buildMarkedOnlyQuery } from "@/lib/utils/markedTransactions";
 
 // GET: List pending pharmacy payments
 export async function GET(request: NextRequest) {
   try {
-    await dbConnect();
-
     // Authenticate the request
     const auth = await authenticateRequest(request);
     if (!auth.success) {
@@ -42,27 +39,25 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get("status") || "pending";
 
     // Build query
-    const query: Record<string, unknown> = {
-      status,
-    };
+    let where: any = {};
 
-    if (status === "all") {
-      delete query.status;
+    if (status !== "all") {
+      where.status = status;
     }
 
     if (paymentStatus === "unpaid") {
-      query.paymentStatus = { $in: ["pending", "partial"] };
+      where.paymentStatus = { in: ["pending", "partial"] };
     } else if (paymentStatus !== "all") {
-      query.paymentStatus = paymentStatus;
+      where.paymentStatus = paymentStatus;
     }
 
     // Add search filter if provided
     if (search) {
-      query.$or = [
-        { saleId: { $regex: search, $options: "i" } },
-        { invoiceNumber: { $regex: search, $options: "i" } },
-        { customerName: { $regex: search, $options: "i" } },
-        { customerPhone: { $regex: search, $options: "i" } },
+      where.OR = [
+        { saleId: { contains: search, mode: "insensitive" } },
+        { invoiceNumber: { contains: search, mode: "insensitive" } },
+        { customerName: { contains: search, mode: "insensitive" } },
+        { customerPhone: { contains: search, mode: "insensitive" } },
       ];
     }
 
@@ -72,18 +67,19 @@ export async function GET(request: NextRequest) {
     const { query: finalQuery } = await buildMarkedOnlyQuery({
       userId: auth.userId!,
       module: "pharmacy",
-      baseQuery: query,
+      baseQuery: where,
     });
 
     // Fetch pending sales
     const [sales, total] = await Promise.all([
-      PharmacySale.find(finalQuery)
-        .populate("soldBy", "name")
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-      PharmacySale.countDocuments(finalQuery),
+      prisma.pharmacySale.findMany({
+        where: finalQuery,
+        include: { soldBy: { select: { name: true } } },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+      }),
+      prisma.pharmacySale.count({ where: finalQuery }),
     ]);
 
     // Calculate pagination info

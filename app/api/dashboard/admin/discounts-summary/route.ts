@@ -1,12 +1,6 @@
-// app/api/dashboard/admin/discounts-summary/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth";
-import dbConnect from "@/lib/dbConnect";
-import { DiscountRequest } from "@/lib/models/DiscountRequest";
-import { Payment } from "@/lib/models/Payment";
-import { LabTest } from "@/lib/models/LabTest";
-import { RadiologyExam } from "@/lib/models/RadiologyExam";
-import { DischargeCard } from "@/lib/models/DischargeCard";
+import { prisma } from "@/lib/prisma";
 
 export async function GET(req: NextRequest) {
   try {
@@ -15,12 +9,9 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    await dbConnect();
-
     const { searchParams } = new URL(req.url);
     const period = searchParams.get("period") || "today";
 
-    // Calculate date ranges
     const now = new Date();
     let startDate: Date;
     let endDate: Date;
@@ -28,11 +19,7 @@ export async function GET(req: NextRequest) {
     switch (period) {
       case "today":
         startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        endDate = new Date(
-          now.getFullYear(),
-          now.getMonth(),
-          now.getDate() + 1,
-        );
+        endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
         break;
       case "week":
         startDate = new Date(now);
@@ -53,253 +40,113 @@ export async function GET(req: NextRequest) {
         break;
       default:
         startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        endDate = new Date(
-          now.getFullYear(),
-          now.getMonth(),
-          now.getDate() + 1,
-        );
+        endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
     }
 
     // Get discount requests by status
-    const discountsByStatus = await DiscountRequest.aggregate([
-      {
-        $match: {
-          requestedAt: { $gte: startDate, $lt: endDate },
-        },
-      },
-      {
-        $group: {
-          _id: "$status",
-          count: { $sum: 1 },
-          totalRequestedAmount: { $sum: "$requestedAmount" },
-          totalApprovedAmount: { $sum: { $ifNull: ["$approvedAmount", 0] } },
-        },
-      },
-    ]);
+    const discountRequests = await prisma.discountRequest.findMany({
+      where: { createdAt: { gte: startDate, lt: endDate } },
+    });
 
-    // Get discounts by category
-    const discountsByCategory = await DiscountRequest.aggregate([
-      {
-        $match: {
-          requestedAt: { $gte: startDate, $lt: endDate },
-          status: "approved",
-        },
-      },
-      {
-        $group: {
-          _id: "$requestCategory",
-          count: { $sum: 1 },
-          totalAmount: { $sum: "$approvedAmount" },
-        },
-      },
-      {
-        $sort: { totalAmount: -1 },
-      },
-    ]);
+    const discountsByStatusMap = new Map<string, { count: number; totalRequestedAmount: number; totalApprovedAmount: number }>();
+    discountRequests.forEach((d) => {
+      const existing = discountsByStatusMap.get(d.status) || { count: 0, totalRequestedAmount: 0, totalApprovedAmount: 0 };
+      existing.count += 1;
+      existing.totalRequestedAmount += d.amount || 0;
+      existing.totalApprovedAmount += d.approvedAmount || 0;
+      discountsByStatusMap.set(d.status, existing);
+    });
 
-    // Get discounts by approver
-    const discountsByApprover = await DiscountRequest.aggregate([
-      {
-        $match: {
-          requestedAt: { $gte: startDate, $lt: endDate },
-          status: "approved",
-          approvedBy: { $exists: true },
-        },
-      },
-      {
-        $group: {
-          _id: "$approvedBy",
-          approverName: { $first: "$reviewedByName" },
-          count: { $sum: 1 },
-          totalAmount: { $sum: "$approvedAmount" },
-        },
-      },
-      {
-        $sort: { totalAmount: -1 },
-      },
-      {
-        $limit: 10,
-      },
-    ]);
-
-    // Get pending discount requests
-    const pendingDiscounts = await DiscountRequest.find({
-      status: "pending",
-    })
-      .sort({ requestedAt: -1 })
-      .limit(20)
-      .populate("patient", "name patientId phone")
-      .populate("requestedBy", "name role")
-      .lean();
-
-    // Get recent approved discounts
-    const recentApprovedDiscounts = await DiscountRequest.find({
-      status: "approved",
-      approvedAt: { $gte: startDate, $lt: endDate },
-    })
-      .sort({ approvedAt: -1 })
-      .limit(20)
-      .populate("patient", "name patientId phone")
-      .populate("requestedBy", "name role")
-      .populate("approvedBy", "name role")
-      .lean();
-
-    // Get daily discount trend
-    const dailyDiscountTrend = await DiscountRequest.aggregate([
-      {
-        $match: {
-          approvedAt: { $gte: startDate, $lt: endDate },
-          status: "approved",
-        },
-      },
-      {
-        $group: {
-          _id: {
-            $dateToString: { format: "%Y-%m-%d", date: "$approvedAt" },
-          },
-          totalAmount: { $sum: "$approvedAmount" },
-          count: { $sum: 1 },
-        },
-      },
-      {
-        $sort: { _id: 1 },
-      },
-    ]);
+    const discountsByStatus = Array.from(discountsByStatusMap.entries()).map(([status, data]) => ({
+      _id: status,
+      count: data.count,
+      totalRequestedAmount: data.totalRequestedAmount,
+      totalApprovedAmount: data.totalApprovedAmount,
+    }));
 
     // Get discounts from payments
-    const paymentDiscounts = await Payment.aggregate([
-      {
-        $match: {
-          paymentDate: { $gte: startDate, $lt: endDate },
-          status: "completed",
-          discountAmount: { $gt: 0 },
-        },
+    const payments = await prisma.payment.findMany({
+      where: {
+        paymentDate: { gte: startDate, lt: endDate },
+        status: "completed",
+        discountAmount: { gt: 0 },
       },
-      {
-        $group: {
-          _id: null,
-          totalDiscountAmount: { $sum: "$discountAmount" },
-          count: { $sum: 1 },
-        },
-      },
-    ]);
+    });
+
+    const totalDiscountsFromPayments = payments.reduce((sum, p) => sum + (p.discountAmount || 0), 0);
+    const totalRevenue = payments.reduce((sum, p) => sum + p.amount, 0);
 
     // Get discounts from lab tests
-    const labDiscounts = await LabTest.aggregate([
-      {
-        $match: {
-          createdAt: { $gte: startDate, $lt: endDate },
-          "charges.discount": { $gt: 0 },
-        },
+    const labTests = await prisma.labTest.findMany({
+      where: {
+        createdAt: { gte: startDate, lt: endDate },
       },
-      {
-        $group: {
-          _id: null,
-          totalDiscountAmount: { $sum: "$charges.discount" },
-          count: { $sum: 1 },
-        },
-      },
-    ]);
+    });
+
+    const totalDiscountsFromLab = labTests.reduce((sum, t) => {
+      const charges = typeof t.charges === "string" ? JSON.parse(t.charges) : t.charges;
+      return sum + (charges?.discount || 0);
+    }, 0);
 
     // Get discounts from radiology exams
-    const radiologyDiscounts = await RadiologyExam.aggregate([
-      {
-        $match: {
-          createdAt: { $gte: startDate, $lt: endDate },
-          "charges.discount": { $gt: 0 },
-        },
+    const radiologyExams = await prisma.radiologyExam.findMany({
+      where: {
+        createdAt: { gte: startDate, lt: endDate },
       },
-      {
-        $group: {
-          _id: null,
-          totalDiscountAmount: { $sum: "$charges.discount" },
-          count: { $sum: 1 },
-        },
-      },
-    ]);
+    });
+
+    const totalDiscountsFromRadiology = radiologyExams.reduce((sum, e) => {
+      const charges = typeof e.charges === "string" ? JSON.parse(e.charges) : e.charges;
+      return sum + (charges?.discount || 0);
+    }, 0);
 
     // Get discounts from discharge cards
-    const dischargeDiscounts = await DischargeCard.aggregate([
-      {
-        $match: {
-          createdAt: { $gte: startDate, $lt: endDate },
-          "billing.discountAmount": { $gt: 0 },
-        },
+    const dischargeCards = await prisma.dischargeCard.findMany({
+      where: {
+        createdAt: { gte: startDate, lt: endDate },
       },
-      {
-        $group: {
-          _id: null,
-          totalDiscountAmount: { $sum: "$billing.discountAmount" },
-          count: { $sum: 1 },
-        },
-      },
-    ]);
+    });
+
+    const totalDiscountsFromDischarge = dischargeCards.reduce((sum, dc) => {
+      const billing = typeof dc.billing === "string" ? JSON.parse(dc.billing) : dc.billing;
+      return sum + (billing?.discountAmount || 0);
+    }, 0);
 
     // Calculate totals
-    const totalApprovedDiscounts =
-      discountsByStatus.find((d: any) => d._id === "approved")
-        ?.totalApprovedAmount || 0;
-    const totalPendingDiscounts =
-      discountsByStatus.find((d: any) => d._id === "pending")
-        ?.totalRequestedAmount || 0;
-    const totalRejectedDiscounts =
-      discountsByStatus.find((d: any) => d._id === "rejected")
-        ?.totalRequestedAmount || 0;
+    const totalApprovedDiscounts = discountsByStatus.find((d) => d._id === "approved")?.totalApprovedAmount || 0;
+    const totalPendingDiscounts = discountsByStatus.find((d) => d._id === "pending")?.totalRequestedAmount || 0;
+    const totalRejectedDiscounts = discountsByStatus.find((d) => d._id === "rejected")?.totalRequestedAmount || 0;
 
-    const totalDiscountsFromPayments =
-      paymentDiscounts[0]?.totalDiscountAmount || 0;
-    const totalDiscountsFromLab = labDiscounts[0]?.totalDiscountAmount || 0;
-    const totalDiscountsFromRadiology =
-      radiologyDiscounts[0]?.totalDiscountAmount || 0;
-    const totalDiscountsFromDischarge =
-      dischargeDiscounts[0]?.totalDiscountAmount || 0;
+    const totalAllDiscounts = totalApprovedDiscounts + totalDiscountsFromPayments + totalDiscountsFromLab + totalDiscountsFromRadiology + totalDiscountsFromDischarge;
+    const discountPercentage = totalRevenue > 0 ? (totalAllDiscounts / totalRevenue) * 100 : 0;
 
-    const totalAllDiscounts =
-      totalApprovedDiscounts +
-      totalDiscountsFromPayments +
-      totalDiscountsFromLab +
-      totalDiscountsFromRadiology +
-      totalDiscountsFromDischarge;
+    // Get pending and recent approved discounts
+    const pendingDiscounts = await prisma.discountRequest.findMany({
+      where: { status: "pending" },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+    });
 
-    // Get discount percentage of revenue
-    const totalRevenue = await Payment.aggregate([
-      {
-        $match: {
-          paymentDate: { $gte: startDate, $lt: endDate },
-          status: "completed",
-        },
-      },
-      {
-        $group: {
-          _id: null,
-          totalRevenue: { $sum: "$amount" },
-        },
-      },
-    ]);
-
-    const revenue = totalRevenue[0]?.totalRevenue || 0;
-    const discountPercentage =
-      revenue > 0 ? (totalAllDiscounts / revenue) * 100 : 0;
+    const recentApprovedDiscounts = await prisma.discountRequest.findMany({
+      where: { status: "approved", approvedAt: { gte: startDate, lt: endDate } },
+      orderBy: { approvedAt: "desc" },
+      take: 20,
+    });
 
     return NextResponse.json({
       success: true,
       data: {
         period,
-        dateRange: {
-          startDate,
-          endDate,
-        },
+        dateRange: { startDate, endDate },
         summary: {
           totalApprovedDiscounts,
           totalPendingDiscounts,
           totalRejectedDiscounts,
           totalAllDiscounts,
-          totalRevenue: revenue,
+          totalRevenue,
           discountPercentage,
         },
         byStatus: discountsByStatus,
-        byCategory: discountsByCategory,
-        byApprover: discountsByApprover,
         bySource: {
           discountRequests: totalApprovedDiscounts,
           payments: totalDiscountsFromPayments,
@@ -307,33 +154,21 @@ export async function GET(req: NextRequest) {
           radiologyExams: totalDiscountsFromRadiology,
           dischargeCards: totalDiscountsFromDischarge,
         },
-        dailyTrend: dailyDiscountTrend,
-        pendingDiscounts: pendingDiscounts.map((d: any) => ({
-          id: d._id.toString(),
-          discountId: d.discountId,
-          patient: d.patient,
-          patientName: d.patient?.name,
-          requestedBy: d.requestedBy,
-          requestedByName: d.requestedBy?.name,
-          requestedAmount: d.requestedAmount,
+        pendingDiscounts: pendingDiscounts.map((d) => ({
+          id: d.id,
+          discountId: d.requestId,
+          requestedAmount: d.amount || 0,
           discountPercentage: d.discountPercentage,
           reason: d.reason,
           requestCategory: d.requestCategory,
           status: d.status,
           requestedAt: d.requestedAt,
-          expiryDate: d.expiryDate,
         })),
-        recentApprovedDiscounts: recentApprovedDiscounts.map((d: any) => ({
-          id: d._id.toString(),
-          discountId: d.discountId,
-          patient: d.patient,
-          patientName: d.patient?.name,
-          requestedBy: d.requestedBy,
-          requestedByName: d.requestedBy?.name,
-          approvedBy: d.approvedBy,
-          approvedByName: d.approvedBy?.name,
-          requestedAmount: d.requestedAmount,
-          approvedAmount: d.approvedAmount,
+        recentApprovedDiscounts: recentApprovedDiscounts.map((d) => ({
+          id: d.id,
+          discountId: d.requestId,
+          requestedAmount: d.amount || 0,
+          approvedAmount: d.approvedAmount || 0,
           discountPercentage: d.discountPercentage,
           reason: d.reason,
           requestCategory: d.requestCategory,
@@ -346,9 +181,6 @@ export async function GET(req: NextRequest) {
     });
   } catch (error) {
     console.error("Error fetching discounts summary:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

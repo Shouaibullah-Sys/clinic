@@ -1,46 +1,29 @@
 // app/api/pharmacy/prescriptions/[id]/finalize/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import PharmacySale from "@/lib/models/PharmacySale";
-import { authenticateRequest } from "@/lib/auth";
-import mongoose from "mongoose";
+import { prisma } from "@/lib/prisma";
+import { getTokenPayload } from "@/lib/auth/jwt";
 
-// PATCH: Finalize a pharmacy sale
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await dbConnect();
+    const payload = await getTokenPayload(request);
 
-    // Authenticate the request
-    const auth = await authenticateRequest(request);
-    if (!auth.success) {
+    if (!payload || !["pharmacist", "pharmacy_head", "admin"].includes(payload.role)) {
       return NextResponse.json(
-        { success: false, error: auth.error },
-        { status: auth.status || 401 },
-      );
-    }
-
-    // Only pharmacists, pharmacy heads, and admin can finalize sales
-    const allowedRoles = ["pharmacist", "pharmacy_head", "admin"];
-    if (!auth.userRole || !allowedRoles.includes(auth.userRole)) {
-      return NextResponse.json(
-        {
-          success: false,
-          error:
-            "Forbidden. Only pharmacists and pharmacy heads can finalize sales.",
-        },
+        { success: false, error: "Forbidden. Only pharmacists and pharmacy heads can finalize sales." },
         { status: 403 },
       );
     }
 
-    // Unwrap the params promise
     const { id: saleId } = await params;
 
-    // Find the pharmacy sale
-    const sale = await PharmacySale.findById(saleId);
+    const sale = await (prisma as any).pharmacySale.findUnique({
+      where: { id: saleId },
+    });
+
     if (!sale) {
       return NextResponse.json(
         { success: false, error: "Pharmacy sale not found" },
@@ -48,7 +31,6 @@ export async function PATCH(
       );
     }
 
-    // Check if sale is already finalized
     if (sale.status === "completed") {
       return NextResponse.json(
         { success: false, error: "Sale has already been finalized" },
@@ -56,7 +38,6 @@ export async function PATCH(
       );
     }
 
-    // Check if sale is cancelled
     if (sale.status === "cancelled") {
       return NextResponse.json(
         { success: false, error: "Cannot finalize a cancelled sale" },
@@ -64,7 +45,6 @@ export async function PATCH(
       );
     }
 
-    // Check if payment is verified (paid or partial with zero balance)
     if (sale.paymentStatus !== "paid" && sale.balance > 0) {
       return NextResponse.json(
         {
@@ -77,7 +57,6 @@ export async function PATCH(
 
     const body = await request.json();
 
-    // Validate status if provided
     if (body.status && body.status !== "completed") {
       return NextResponse.json(
         { success: false, error: "Status must be 'completed'" },
@@ -85,29 +64,25 @@ export async function PATCH(
       );
     }
 
-    // Finalize the sale
-    sale.status = "completed";
-    sale.finalizedAt = new Date();
-    sale.finalizedBy = new mongoose.Types.ObjectId(auth.userId!);
+    const updatedSale = await (prisma as any).pharmacySale.update({
+      where: { id: saleId },
+      data: {
+        status: "completed",
+        finalizedAt: new Date(),
+        finalizedById: payload.id,
+        notes: body.notes || sale.notes,
+      },
+      include: {
+        soldBy: { select: { name: true } },
+        finalizedBy: { select: { name: true } },
+      },
+    });
 
-    // Add notes if provided
-    if (body.notes) {
-      sale.notes = body.notes;
-    }
-
-    await sale.save();
-
-    // Populate the response
-    const populatedSale = await PharmacySale.findById(sale._id)
-      .populate("soldBy", "name")
-      .populate("finalizedBy", "name")
-      .lean();
-
-    console.log(`Pharmacy sale ${sale.saleId} finalized by ${auth.userName}`);
+    console.log(`Pharmacy sale ${sale.saleId} finalized by ${payload.name}`);
 
     return NextResponse.json({
       success: true,
-      data: populatedSale,
+      data: updatedSale,
       message: "Sale finalized successfully",
     });
   } catch (error: any) {

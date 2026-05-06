@@ -1,21 +1,14 @@
 // app/api/radiologist/requests/[id]/status/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { RadiologyService } from "@/lib/models/RadiologyService";
-import "@/lib/models/Patient";
-import "@/lib/models/User";
+import { prisma } from "@/lib/prisma";
 import { authenticateRequest, hasRequiredRole } from "@/lib/auth";
-import mongoose from "mongoose";
 
-// PUT: Update radiology request status
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await dbConnect();
-
     const auth = await authenticateRequest(request);
     if (!auth.success) {
       return NextResponse.json(
@@ -24,9 +17,7 @@ export async function PUT(
       );
     }
 
-    // Only radiologists and admins can update request status
-    const allowedRoles = ["radiologist", "admin"];
-    if (!hasRequiredRole(auth.userRole, allowedRoles)) {
+    if (!hasRequiredRole(auth.userRole, ["radiologist", "admin"])) {
       return NextResponse.json(
         { success: false, error: "Forbidden. Only radiologists can update request status." },
         { status: 403 }
@@ -39,8 +30,9 @@ export async function PUT(
 
     console.log(`Updating radiology request ${requestId} status to ${status} by ${auth.userName}`);
 
-    // Find the request
-    const requestDoc = await RadiologyService.findById(requestId);
+    const requestDoc = await prisma.radiologyRequest.findUnique({
+      where: { id: requestId },
+    });
     
     if (!requestDoc) {
       return NextResponse.json(
@@ -49,7 +41,6 @@ export async function PUT(
       );
     }
 
-    // Validate status transition
     const validStatuses = ["scheduled", "in-progress", "completed", "cancelled"];
     if (!validStatuses.includes(status)) {
       return NextResponse.json(
@@ -58,7 +49,6 @@ export async function PUT(
       );
     }
 
-    // Check if status transition is valid
     const currentStatus = requestDoc.status;
     const validTransitions: Record<string, string[]> = {
       "scheduled": ["in-progress", "cancelled"],
@@ -80,7 +70,6 @@ export async function PUT(
       );
     }
 
-    // Check payment verification for routine tests before starting
     if (status === "in-progress" && requestDoc.priority === "routine" && requestDoc.billingStatus === "pending") {
       return NextResponse.json(
         { success: false, error: "Payment must be verified before starting the procedure" },
@@ -88,33 +77,32 @@ export async function PUT(
       );
     }
 
-    // Update the request
-    requestDoc.status = status;
-    
-    // Assign radiologist if starting the procedure
-    if (status === "in-progress" && !requestDoc.radiologist) {
-      requestDoc.radiologist = new mongoose.Types.ObjectId(auth.userId);
+    const updateData: any = {
+      status: status,
+    };
+
+    if (status === "in-progress" && !requestDoc.radiologistId) {
+      updateData.radiologistId = auth.userId;
     }
 
-    // Set performed date when completed
     if (status === "completed") {
-      requestDoc.performedDate = new Date();
+      updateData.performedDate = new Date();
     }
 
-    // Add notes if provided
     if (notes) {
-      requestDoc.notes = notes;
+      updateData.notes = notes;
     }
 
-    await requestDoc.save();
-
-    // Populate for response
-    const updatedRequest = await RadiologyService.findById(requestId)
-      .populate("patient", "name patientId")
-      .populate("referringDoctor", "name")
-      .populate("radiologist", "name")
-      .populate("technician", "name")
-      .lean();
+    const updatedRequest = await prisma.radiologyRequest.update({
+      where: { id: requestId },
+      data: updateData,
+      include: {
+        patient: { select: { name: true, patientId: true } },
+        referringDoctor: { select: { name: true } },
+        radiologist: { select: { name: true } },
+        technician: { select: { name: true } },
+      },
+    });
 
     return NextResponse.json({
       success: true,

@@ -1,51 +1,22 @@
 // app/api/appointments/[id]/checkout/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { Appointment } from "@/lib/models/Appointment";
-import { jwtVerify } from "jose";
-
-const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-this";
-
-async function verifyToken(token: string) {
-  try {
-    const secret = new TextEncoder().encode(JWT_SECRET);
-    const { payload } = await jwtVerify(token, secret);
-    return payload;
-  } catch (error) {
-    return null;
-  }
-}
+import { prisma } from "@/lib/prisma";
+import { getTokenPayload } from "@/lib/auth/jwt";
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await dbConnect();
-
-    const authHeader = request.headers.get("authorization");
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    const payload = await getTokenPayload(request);
+    if (!payload) {
       return NextResponse.json(
         { success: false, error: "Unauthorized. No token provided." },
         { status: 401 },
       );
     }
 
-    const token = authHeader.split(" ")[1];
-    const payload = await verifyToken(token);
-
-    if (!payload) {
-      return NextResponse.json(
-        { success: false, error: "Invalid or expired token." },
-        { status: 401 },
-      );
-    }
-
-    const userId = payload.id as string;
-    const userRole = payload.role as string;
-
-    // Only admin, receptionist, and doctors can check out patients
-    if (!["admin", "receptionist", "doctor"].includes(userRole)) {
+    if (!["admin", "receptionist", "doctor"].includes(payload.role)) {
       return NextResponse.json(
         {
           success: false,
@@ -56,12 +27,14 @@ export async function POST(
     }
 
     const { id } = await params;
-    const appointmentId = id;
 
-    // Check if appointment exists
-    const appointment = await Appointment.findById(appointmentId)
-      .populate("patient", "name phone")
-      .populate("doctor", "name");
+    const appointment = await prisma.appointment.findUnique({
+      where: { id },
+      include: {
+        patient: { select: { name: true, phone: true } },
+        doctor: { select: { name: true } },
+      },
+    });
 
     if (!appointment) {
       return NextResponse.json(
@@ -70,8 +43,7 @@ export async function POST(
       );
     }
 
-    // Check if appointment can be checked out
-    if (appointment.status !== "checked-in") {
+    if (appointment.status !== "checked_in") {
       return NextResponse.json(
         {
           success: false,
@@ -81,8 +53,7 @@ export async function POST(
       );
     }
 
-    // Check if user is the doctor or has permission
-    if (userRole === "doctor" && appointment.doctor.toString() !== userId) {
+    if (payload.role === "doctor" && appointment.doctorId !== payload.id) {
       return NextResponse.json(
         {
           success: false,
@@ -93,12 +64,21 @@ export async function POST(
       );
     }
 
-    // Check out patient
-    await appointment.checkOut();
+    const updatedAppointment = await prisma.appointment.update({
+      where: { id },
+      data: {
+        status: "completed",
+        checkOutTime: new Date(),
+      },
+      include: {
+        patient: { select: { name: true, phone: true } },
+        doctor: { select: { name: true } },
+      },
+    });
 
     return NextResponse.json({
       success: true,
-      data: appointment,
+      data: updatedAppointment,
       message: "Patient checked out successfully",
     });
   } catch (error: any) {

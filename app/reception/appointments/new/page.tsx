@@ -108,7 +108,6 @@ const appointmentSchema = z.object({
   appointmentDate: z
     .string()
     .refine((date) => isValid(new Date(date)), "Invalid date"),
-  reason: z.string().min(10, "Reason must be at least 10 characters"),
   appointmentType: z.enum([
     "consultation",
     "followup",
@@ -122,7 +121,7 @@ const appointmentSchema = z.object({
 
 // Types
 interface Patient {
-  _id: string;
+  id: string;
   name: string;
   phone?: string;
   guardian?: string;
@@ -133,7 +132,7 @@ interface Patient {
 }
 
 interface Doctor {
-  _id: string;
+  id: string;
   name: string;
   specialization: string;
   department: string;
@@ -194,9 +193,7 @@ export default function NewAppointmentPage() {
   const [searchResults, setSearchResults] = useState<Patient[]>([]);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
-  const [selectedDoctor, setSelectedDoctor] = useState<string | undefined>(
-    undefined,
-  );
+  const [selectedDoctor, setSelectedDoctor] = useState<string>("");
   const [appointmentDate, setAppointmentDate] = useState<string>(
     format(new Date(), "yyyy-MM-dd"),
   );
@@ -204,7 +201,6 @@ export default function NewAppointmentPage() {
   const [appointmentType, setAppointmentType] =
     useState<string>("consultation");
   const [priority, setPriority] = useState<string>("medium");
-  const [reason, setReason] = useState<string>("");
   const [symptoms, setSymptoms] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
   const [autoNumber, setAutoNumber] = useState<string>("");
@@ -293,9 +289,8 @@ export default function NewAppointmentPage() {
     if (selectedPatient) progress += 30;
     if (selectedDoctor) progress += 30;
     if (appointmentDate) progress += 20;
-    if (reason.trim().length >= 10) progress += 20;
     setCompletionProgress(Math.min(progress, 100));
-  }, [selectedPatient, selectedDoctor, appointmentDate, reason]);
+  }, [selectedPatient, selectedDoctor, appointmentDate]);
 
   // Update active section based on progress
   useEffect(() => {
@@ -357,6 +352,7 @@ export default function NewAppointmentPage() {
       if (data.success) {
         console.log("Doctors loaded:", data.data);
         setDoctors(data.data);
+        console.log("Number of doctors:", data.data.length);
       } else {
         console.error("Failed to load doctors:", data.error);
         toast.error("Failed to load doctors");
@@ -489,7 +485,7 @@ export default function NewAppointmentPage() {
 
       if (data.success) {
         const newPatient: Patient = {
-          _id: data.data.id || data.data._id,
+          id: data.data.id || data.data._id,
           name: data.data.name,
           phone: data.data.phone,
           guardian: data.data.guardian,
@@ -527,7 +523,7 @@ export default function NewAppointmentPage() {
         if (data.error && data.error.includes("already exists") && data.data) {
           // Auto-select existing patient
           const existingPatient: Patient = {
-            _id: data.data.id,
+            id: data.data.id,
             name: data.data.name,
             phone: data.data.phone,
             patientId: data.data.patientId || "N/A",
@@ -559,10 +555,9 @@ export default function NewAppointmentPage() {
     try {
       // Validate form
       const validationData = {
-        patientId: selectedPatient?._id || "",
+        patientId: selectedPatient?.id || "",
         doctorId: selectedDoctor || "",
         appointmentDate,
-        reason,
         appointmentType,
         priority: isEmergency ? "emergency" : priority,
       };
@@ -613,14 +608,14 @@ export default function NewAppointmentPage() {
       const endTime = addMinutes(appointmentDateTime, duration);
 
       const appointmentData = {
-        patientId: selectedPatient!._id,
+        patientId: selectedPatient!.id,
         doctorId: selectedDoctor || "",
         startTime: appointmentDateTime.toISOString(),
         endTime: endTime.toISOString(),
         duration,
         appointmentType,
-        reason: reason.trim(),
         symptoms: symptoms.trim(),
+        reason: symptoms.trim() || "Appointment scheduled",
         priority: isEmergency ? "emergency" : priority,
         notes: notes.trim(),
         autoNumber,
@@ -689,19 +684,20 @@ export default function NewAppointmentPage() {
     return (
       selectedPatient &&
       selectedDoctor &&
-      appointmentDate &&
-      reason.trim().length >= 10
+      appointmentDate
     );
   };
 
-  const handleDoctorSelect = (doctorId: string) => {
+  const handleDoctorSelect = useCallback((doctorId: string) => {
     console.log("Doctor selected:", doctorId);
+    console.log("Doctors available:", doctors.map(d => ({ id: d.id, name: d.name })));
     setSelectedDoctor(doctorId);
-    const doctor = doctors.find((d) => d._id === doctorId);
+    const doctor = doctors.find((d) => d.id === doctorId);
+    console.log("Found doctor:", doctor);
     if (doctor?.consultationFee !== undefined) {
       setConsultationFee(String(doctor.consultationFee));
     }
-  };
+  }, [doctors]);
 
   const handleSearchKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") {
@@ -750,7 +746,7 @@ export default function NewAppointmentPage() {
     }
   };
 
-  const selectedDoctorInfo = doctors.find((d) => d._id === selectedDoctor);
+  const selectedDoctorInfo = doctors.find((d) => d.id === selectedDoctor);
   useEffect(() => {
     if (selectedDoctorInfo?.consultationFee !== undefined) {
       setConsultationFee(String(selectedDoctorInfo.consultationFee));
@@ -765,6 +761,10 @@ export default function NewAppointmentPage() {
     selectedDoctorInfo,
   );
 
+  // Debug validation
+  console.log("Validation checks - selectedPatient:", !!selectedPatient, "selectedDoctor:", !!selectedDoctor, "appointmentDate:", !!appointmentDate, "isFormValid:", isFormValid());
+  console.log("loadingDoctors:", loadingDoctors);
+
   // Quick action handlers
   const handleQuickAction = (action: string) => {
     switch (action) {
@@ -778,15 +778,12 @@ export default function NewAppointmentPage() {
         break;
       case "followup":
         setAppointmentType("followup");
-        setReason("Routine follow-up appointment");
         break;
       case "checkup":
         setAppointmentType("checkup");
-        setReason("Annual health check-up");
         break;
       case "consultation":
         setAppointmentType("consultation");
-        setReason("General medical consultation");
         break;
     }
   };
@@ -820,20 +817,15 @@ export default function NewAppointmentPage() {
   const handleTemplateSelect = (template: string) => {
     switch (template) {
       case "general":
-        setReason("General medical consultation for ongoing health concerns");
         setSymptoms("");
         break;
       case "followup":
         setAppointmentType("followup");
-        setReason(
-          "Follow-up appointment to monitor progress and adjust treatment plan",
-        );
         break;
       case "emergency":
         setIsEmergency(true);
         setPriority("emergency");
         setAppointmentType("emergency");
-        setReason("Emergency medical attention required");
         break;
     }
   };
@@ -851,12 +843,12 @@ export default function NewAppointmentPage() {
         <div className="px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <Button
-                variant="ghost"
-                onClick={() => router.push("/reception/appointments")}
-                className="gap-2"
-                size="lg"
-              >
+                  <Button
+                    type="submit"
+                    disabled={!isFormValid() || loading}
+                    className="w-full"
+                    size="lg"
+                  >
                 <ArrowLeft className="h-5 w-5" />
                 <span className="hidden sm:inline">Back</span>
               </Button>
@@ -1049,9 +1041,7 @@ export default function NewAppointmentPage() {
                     <div>
                       <h3 className="font-semibold">Details</h3>
                       <p className="text-sm text-muted-foreground">
-                        {reason
-                          ? "Complete details"
-                          : "Add appointment details"}
+                        Add appointment details
                       </p>
                     </div>
                   </div>
@@ -1617,7 +1607,7 @@ export default function NewAppointmentPage() {
                           <div className="max-h-80 overflow-y-auto divide-y">
                             {searchResults.map((patient) => (
                               <div
-                                key={patient._id}
+                                key={patient.id}
                                 className="p-4 hover:bg-accent transition-colors cursor-pointer"
                                 onClick={() => handleSelectPatient(patient)}
                               >
@@ -1809,7 +1799,7 @@ export default function NewAppointmentPage() {
                           </Button>
                         </div>
                         <Select
-                          value={selectedDoctor || ""}
+                          value={selectedDoctor}
                           onValueChange={handleDoctorSelect}
                           required
                           disabled={loadingDoctors}
@@ -1817,7 +1807,7 @@ export default function NewAppointmentPage() {
                           <SelectTrigger>
                             <SelectValue placeholder="Choose a doctor..." />
                           </SelectTrigger>
-                          <SelectContent className="max-h-60">
+                          <SelectContent className="max-h-60 z-[100]">
                             {loadingDoctors ? (
                               <div className="p-6 text-center">
                                 <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
@@ -1828,8 +1818,8 @@ export default function NewAppointmentPage() {
                             ) : (
                               doctors.map((doctor) => (
                                 <SelectItem
-                                  key={doctor._id}
-                                  value={doctor._id}
+                                  key={doctor.id}
+                                  value={doctor.id}
                                   className="py-2"
                                 >
                                   <div className="flex items-center gap-3">
@@ -2106,33 +2096,7 @@ export default function NewAppointmentPage() {
                       </div>
                     </div>
 
-                    {/* Reason */}
-                    <div className="space-y-3">
-                      <Label htmlFor="reason" className="font-semibold">
-                        Reason for Appointment *
-                      </Label>
-                      <Textarea
-                        id="reason"
-                        placeholder="Please describe the reason for the appointment in detail..."
-                        value={reason}
-                        onChange={(e) => setReason(e.target.value)}
-                        required
-                        rows={3}
-                        className="min-h-25 resize-y"
-                      />
-                      <div className="flex items-center justify-between text-sm text-muted-foreground">
-                        <span>Detailed description helps doctor prepare</span>
-                        <span
-                          className={
-                            reason.length < 10
-                              ? "text-destructive font-medium"
-                              : ""
-                          }
-                        >
-                          {reason.length}/500 characters
-                        </span>
-                      </div>
-                    </div>
+
 
                     {/* Symptoms */}
                     <div className="space-y-3">
@@ -2245,9 +2209,8 @@ export default function NewAppointmentPage() {
                         variant="secondary"
                         onClick={() => {
                           setSelectedPatient(null);
-                          setSelectedDoctor(undefined);
+                          setSelectedDoctor("");
                           setAppointmentDate(format(new Date(), "yyyy-MM-dd"));
-                          setReason("");
                           setSymptoms("");
                           setNotes("");
                           setAutoNumber("");
@@ -2278,11 +2241,6 @@ export default function NewAppointmentPage() {
                         {!selectedDoctor && (
                           <li className="flex items-center gap-1">
                             • Choose a doctor
-                          </li>
-                        )}
-                        {reason.length < 10 && (
-                          <li className="flex items-center gap-1">
-                            • Provide detailed reason ({reason.length}/10)
                           </li>
                         )}
                       </ul>

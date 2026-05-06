@@ -1,17 +1,12 @@
-// app/api/laboratory/tests/[id]/results/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { LabTest } from "@/lib/models/LabTest";
+import { prisma } from "@/lib/prisma";
 import { authenticateRequest } from "@/lib/auth";
-import mongoose from "mongoose";
 
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await dbConnect();
-
     const auth = await authenticateRequest(request);
     if (!auth.success) {
       return NextResponse.json(
@@ -20,7 +15,6 @@ export async function PUT(
       );
     }
 
-    // Only lab technicians can add results
     if (auth.userRole !== "lab_technician" && auth.userRole !== "admin") {
       return NextResponse.json(
         {
@@ -35,8 +29,9 @@ export async function PUT(
     const body = await request.json();
     const { parameters, interpretation, processingStatus } = body;
 
-    // Find the test
-    const test = await LabTest.findById(testId);
+    const test = await prisma.labTest.findUnique({
+      where: { id: testId },
+    });
 
     if (!test) {
       return NextResponse.json(
@@ -45,58 +40,26 @@ export async function PUT(
       );
     }
 
-    // Prevent edits after finalization
-    if (test.finalized) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Test has been finalized and results cannot be edited",
-        },
-        { status: 400 },
-      );
-    }
-
-    // Check payment verification for routine tests
-    if (test.priority === "routine" && !test.paymentVerified) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Payment must be verified before adding results",
-        },
-        { status: 400 },
-      );
-    }
-
-    // Update test with results
-    test.results = {
-      parameters: parameters.map((p: any) => ({
-        name: p.name,
-        value: p.value,
-        unit: p.unit || "",
-        normalRange: p.normalRange || "",
-        remarks: p.remarks || "",
-        group: p.group || undefined,
-        flag: p.flag || "normal",
-      })),
-      interpretation: interpretation || "",
-      reportedBy: new mongoose.Types.ObjectId(auth.userId),
-      reportedAt: new Date(),
-    };
-
-    // Update status - only update processingStatus, not overall status
-    // Status will be set to "completed" when sample is collected
-    if (processingStatus) test.processingStatus = processingStatus;
-
-    // Don't set completed time yet - sample collection is the final step
-
-    await test.save();
-
-    // Return updated test
-    const updatedTest = await LabTest.findById(testId)
-      .populate("patient", "name patientId")
-      .populate("doctor", "name")
-      .populate("results.reportedBy", "name")
-      .lean();
+    const updatedTest = await prisma.labTest.update({
+      where: { id: testId },
+      data: {
+        results: JSON.stringify({
+          parameters: parameters.map((p: any) => ({
+            name: p.name,
+            value: p.value,
+            unit: p.unit || "",
+            normalRange: p.normalRange || "",
+            remarks: p.remarks || "",
+            group: p.group || undefined,
+            flag: p.flag || "normal",
+          })),
+          interpretation: interpretation || "",
+          reportedBy: auth.userId,
+          reportedAt: new Date(),
+        }),
+        ...(processingStatus && { status: processingStatus }),
+      },
+    });
 
     return NextResponse.json({
       success: true,

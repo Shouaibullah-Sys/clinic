@@ -1,75 +1,54 @@
 // app/api/admin/users/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { User } from "@/lib/models/User";
-import dbConnect from "@/lib/dbConnect";
+import { prisma } from "@/lib/prisma";
 import { CreateUserSchema } from "@/lib/schemas/userSchema";
-import { jwtVerify } from "jose";
-
-const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-this";
-
-async function verifyToken(token: string) {
-  try {
-    const secret = new TextEncoder().encode(JWT_SECRET);
-    const { payload } = await jwtVerify(token, secret);
-    return payload;
-  } catch (error) {
-    return null;
-  }
-}
-
-// Helper to authenticate admin
-async function authenticateAdmin(request: NextRequest) {
-  const authHeader = request.headers.get("authorization");
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return { error: "Unauthorized. No token provided.", status: 401 };
-  }
-
-  const token = authHeader.split(" ")[1];
-  const payload = await verifyToken(token);
-
-  if (!payload) {
-    return { error: "Invalid or expired token.", status: 401 };
-  }
-
-  const userRole = payload.role as string;
-
-  // Only admin can access
-  if (userRole !== "admin") {
-    return { error: "Forbidden. Admin access required.", status: 403 };
-  }
-
-  return {
-    userId: payload.id as string,
-    userRole,
-  };
-}
-
-// Type for user data without sensitive information
-type SafeUserData = Omit<
-  InstanceType<typeof User>,
-  "password" | "refreshTokens"
->;
+import { getTokenPayload } from "@/lib/auth/jwt";
 
 export async function GET(request: NextRequest) {
   console.log("GET /api/admin/users called");
-  await dbConnect();
 
   try {
-    const auth = await authenticateAdmin(request);
-    if ("error" in auth) {
+    const user = await getTokenPayload(request);
+    if (!user || user.role !== "admin") {
       return NextResponse.json(
-        { success: false, error: auth.error },
-        { status: auth.status },
+        { success: false, error: "Admin access required" },
+        { status: 403 },
       );
     }
 
     console.log("Querying users from database");
-    const users: SafeUserData[] = await User.find(
-      {},
-      "-password -refreshTokens",
-    );
+    const users = await prisma.user.findMany({
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        phone: true,
+        avatar: true,
+        approved: true,
+        active: true,
+        employeeId: true,
+        department: true,
+        designation: true,
+        specialization: true,
+        licenseNumber: true,
+        qualifications: true,
+        experience: true,
+        consultationFee: true,
+        availability: true,
+        biography: true,
+        joiningDate: true,
+        address: true,
+        gender: true,
+        permissions: true,
+        markedOnlyAccess: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
     console.log("Found users count:", users.length);
-    return NextResponse.json({ success: true, data: users });
+    const usersWithId = users.map(user => ({ ...user, _id: user.id }));
+    return NextResponse.json({ success: true, data: usersWithId });
   } catch (error: unknown) {
     console.error("Failed to fetch users:", error);
     const errorMessage =
@@ -82,20 +61,17 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  await dbConnect();
-
   try {
-    const auth = await authenticateAdmin(request);
-    if ("error" in auth) {
+    const user = await getTokenPayload(request);
+    if (!user || user.role !== "admin") {
       return NextResponse.json(
-        { success: false, error: auth.error },
-        { status: auth.status },
+        { success: false, error: "Admin access required" },
+        { status: 403 },
       );
     }
 
     const body = await request.json();
 
-    // For POST (create), password is required
     const validation = CreateUserSchema.safeParse(body);
 
     if (!validation.success) {
@@ -108,8 +84,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if email exists
-    const existingUser = await User.findOne({ email: body.email });
+    const existingUser = await prisma.user.findUnique({
+      where: { email: body.email },
+    });
     if (existingUser) {
       return NextResponse.json(
         { success: false, error: "Email already exists" },
@@ -117,14 +94,36 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const newUser = await User.create({
-      ...body,
-      password: body.password,
+    const newUser = await prisma.user.create({
+      data: {
+        email: body.email,
+        password: body.password,
+        name: body.name,
+        role: body.role,
+        phone: body.phone,
+        avatar: body.avatar,
+        approved: body.approved ?? true,
+        active: body.active ?? true,
+        employeeId: body.employeeId,
+        department: body.department,
+        designation: body.designation,
+        specialization: body.specialization,
+        licenseNumber: body.licenseNumber,
+        qualifications: body.qualifications,
+        experience: body.experience,
+        consultationFee: body.consultationFee,
+        availability: body.availability,
+        biography: body.biography,
+        joiningDate: body.joiningDate ? new Date(body.joiningDate) : undefined,
+        address: body.address,
+        gender: body.gender,
+        permissions: body.permissions ?? "[]",
+        refreshTokens: "[]",
+        markedOnlyAccess: body.markedOnlyAccess ?? false,
+      },
     });
 
-    // Exclude password and refresh tokens
-    const userObject = newUser.toObject();
-    const { password, refreshTokens, ...userWithoutSensitive } = userObject;
+    const { password, refreshTokens, ...userWithoutSensitive } = newUser;
     return NextResponse.json(
       { success: true, data: userWithoutSensitive },
       { status: 201 },

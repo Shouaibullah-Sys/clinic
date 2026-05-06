@@ -1,8 +1,5 @@
-// app/api/pharmacy/prescriptions/route.ts - UPDATED for PharmacySale
 import { NextRequest, NextResponse } from "next/server";
-import PharmacySale from "@/lib/models/PharmacySale";
-import { MedicineStock } from "@/lib/models/MedicineStock";
-import dbConnect from "@/lib/dbConnect";
+import { prisma } from "@/lib/prisma";
 import { getTokenPayload } from "@/lib/auth/jwt";
 import { z } from "zod";
 
@@ -27,7 +24,6 @@ const PharmacySaleSchema = z.object({
 });
 
 export async function GET(req: NextRequest) {
-  await dbConnect();
   const payload = await getTokenPayload(req);
 
   if (
@@ -44,34 +40,26 @@ export async function GET(req: NextRequest) {
     const search = searchParams.get("search") || "";
     const skip = (page - 1) * limit;
 
-    // Build query for search functionality
-    let query = {};
+    let where: any = {};
     if (search) {
-      query = {
-        $or: [
-          { invoiceNumber: { $regex: search, $options: "i" } },
-          { customerName: { $regex: search, $options: "i" } },
-          { customerPhone: { $regex: search, $options: "i" } },
-          { saleId: { $regex: search, $options: "i" } },
+      where = {
+        OR: [
+          { invoiceNumber: { contains: search, mode: "insensitive" } },
+          { customerName: { contains: search, mode: "insensitive" } },
+          { customerPhone: { contains: search, mode: "insensitive" } },
+          { saleId: { contains: search, mode: "insensitive" } },
         ],
       };
     }
 
-    // Use regular query with pagination for better TypeScript compatibility
-    const sales = await PharmacySale.find(query)
-      .populate({
-        path: "items.medicine",
-        select:
-          "name form dosage frequency route currentQuantity sellingPrice unitPrice",
-        model: "MedicineStock", // Explicitly specify the model
-      })
-      .populate("soldBy", "name")
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit);
+    const sales = await prisma.pharmacySale.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip,
+      take: limit,
+    });
 
-    // Get total count for pagination
-    const total = await PharmacySale.countDocuments(query);
+    const total = await prisma.pharmacySale.count({ where });
 
     return NextResponse.json(
       {
@@ -96,7 +84,6 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  await dbConnect();
   const payload = await getTokenPayload(req);
 
   if (
@@ -120,12 +107,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Calculate subtotal and process each medication
     let subtotal = 0;
     const processedItems = [];
 
     for (const item of validation.data.items) {
-      const medicine = await MedicineStock.findById(item.medicine);
+      const medicine = await prisma.medicineStock.findUnique({
+        where: { id: item.medicine },
+      });
       if (!medicine) {
         return NextResponse.json(
           { error: `Medicine not found: ${item.medicine}` },
@@ -133,14 +121,13 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      if (medicine.currentQuantity < item.quantity) {
+      if (medicine.currentQty < item.quantity) {
         return NextResponse.json(
-          { error: `Insufficient stock for ${medicine.name}` },
+          { error: `Insufficient stock for ${medicine.name || medicine.medicineId}` },
           { status: 400 },
         );
       }
 
-      // Calculate item total price with discount
       const itemTotal =
         item.unitPrice * item.quantity * (1 - item.discount / 100);
       subtotal += itemTotal;
@@ -155,10 +142,8 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Calculate balance
     const balance = validation.data.totalAmount - validation.data.amountPaid;
 
-    // Determine payment status
     let paymentStatus: "pending" | "partial" | "paid" = "pending";
     if (validation.data.amountPaid >= validation.data.totalAmount) {
       paymentStatus = "paid";
@@ -166,7 +151,6 @@ export async function POST(req: NextRequest) {
       paymentStatus = "partial";
     }
 
-    // Generate saleId explicitly (guaranteed to run)
     const date = new Date();
     const year = date.getFullYear().toString().slice(-2);
     const month = (date.getMonth() + 1).toString().padStart(2, "0");
@@ -174,22 +158,24 @@ export async function POST(req: NextRequest) {
     const random = Math.floor(1000 + Math.random() * 9000);
     const saleId = `SALES${year}${month}${day}${random}`;
 
-    // Create pharmacy sale
-    const newSale = await PharmacySale.create({
-      saleId, // Explicitly set saleId
-      customerName: validation.data.customerName,
-      customerPhone: validation.data.customerPhone,
-      invoiceNumber: validation.data.invoiceNumber,
-      items: processedItems,
-      subtotal: subtotal,
-      totalAmount: validation.data.totalAmount,
-      amountPaid: validation.data.amountPaid,
-      balance: balance,
-      paymentMethod: validation.data.paymentMethod,
-      paymentStatus: paymentStatus,
-      status: validation.data.status,
-      soldBy: payload.id,
-      notes: validation.data.notes,
+    const newSale = await prisma.pharmacySale.create({
+      data: {
+        saleId,
+        customerName: validation.data.customerName,
+        customerPhone: validation.data.customerPhone,
+        invoiceNumber: validation.data.invoiceNumber,
+        items: JSON.stringify(processedItems),
+        subtotal: subtotal,
+        totalAmount: validation.data.totalAmount,
+        amountPaid: validation.data.amountPaid,
+        balance: balance,
+        paymentMethod: validation.data.paymentMethod,
+        paymentStatus: paymentStatus,
+        soldById: payload.id,
+        notes: validation.data.notes,
+        saleDate: new Date(),
+        createdById: payload.id,
+      },
     });
 
     return NextResponse.json(newSale, { status: 201 });

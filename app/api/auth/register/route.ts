@@ -1,11 +1,9 @@
-// app/api/auth/register/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { User, ensureUserOptionalUniqueIndexes } from "@/lib/models/User";
+import bcrypt from "bcryptjs";
+import { prisma } from "@/lib/prisma";
 import jwt from "jsonwebtoken";
 import { z } from "zod";
 
-// Zod schema for registration validation
 const registerSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
   email: z.string().email("Invalid email address"),
@@ -21,250 +19,35 @@ const registerSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
-  if (!process.env.JWT_SECRET) {
-    return NextResponse.json(
-      { error: "Server configuration error" },
-      { status: 500 }
-    );
-  }
-
+  if (!process.env.JWT_SECRET) return NextResponse.json({ error: "Server config error" }, { status: 500 });
   try {
     const body = await request.json();
-    
-    // Validate input
-    const validationResult = registerSchema.safeParse(body);
-    
-    if (!validationResult.success) {
-      const errors = validationResult.error.issues.map(err => ({
-        field: err.path.join('.'),
-        message: err.message
-      }));
-      
-      return NextResponse.json(
-        { 
-          error: "Validation failed", 
-          details: errors 
-        },
-        { status: 400 }
-      );
-    }
-
-    const { 
-      name, 
-      email, 
-      password, 
-      phone, 
-      role,
-      department,
-      designation,
-      employeeId,
-      gender,
-      address,
-      avatar 
-    } = validationResult.data;
-
-    await dbConnect();
-    try {
-      await ensureUserOptionalUniqueIndexes();
-    } catch (indexError) {
-      // Do not fail registration if index sync fails in production.
-      console.warn("Index sync skipped during registration:", indexError);
-    }
-
-    // Check if user already exists
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return NextResponse.json(
-        { error: "User already exists with this email" },
-        { status: 409 }
-      );
-    }
-
-    // Check if employeeId already exists
-    if (employeeId) {
-      const existingEmployee = await User.findOne({ employeeId });
-      if (existingEmployee) {
-        return NextResponse.json(
-          { error: "Employee ID already exists" },
-          { status: 409 }
-        );
-      }
-    }
-
-    // Generate employee ID if not provided
-    const generatedEmployeeId = employeeId || generateEmployeeId(role);
-    
-    // Set default designation if not provided
-    const defaultDesignation = designation || getDefaultDesignation(role);
-    
-    // Set default department if not provided
-    const defaultDepartment = department || getDefaultDepartment(role);
-
-    // Create new user with all required fields
-    const user = new User({
-      name,
-      email,
-      password,
-      phone,
-      role,
-      employeeId: generatedEmployeeId,
-      designation: defaultDesignation,
-      department: defaultDepartment,
-      gender: gender || "other",
-      address: address || "",
-      avatar: avatar || "",
-      approved: role === "admin" ? true : false, // Admins auto-approved
-      active: true,
-      joiningDate: new Date(),
-      refreshTokens: [],
+    const v = registerSchema.safeParse(body);
+    if (!v.success) return NextResponse.json({ error: "Validation failed", details: v.error.issues }, { status: 400 });
+    const { name, email, password, phone, role, department, designation, employeeId, gender, address, avatar } = v.data;
+    if (await prisma.user.findUnique({ where: { email } })) return NextResponse.json({ error: "Email already exists" }, { status: 409 });
+    if (employeeId && await prisma.user.findFirst({ where: { employeeId } })) return NextResponse.json({ error: "Employee ID already exists" }, { status: 409 });
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+    const genEmpId = employeeId || `${({ admin: "ADM", doctor: "DOC", nurse: "NUR", staff: "STF", receptionist: "REC" }[role] || "EMP")}${new Date().getFullYear().toString().slice(-2)}${Math.floor(1000 + Math.random() * 9000)}`;
+    const dept = department || ({ admin: "Administration", doctor: "General Medicine", nurse: "Nursing", staff: "Support Services", receptionist: "Front Desk" }[role] || "General");
+    const desig = designation || ({ admin: "Administrator", doctor: "Medical Doctor", nurse: "Registered Nurse", staff: "Hospital Staff", receptionist: "Receptionist" }[role] || "Employee");
+    const user = await prisma.user.create({
+      data: { name, email: email.toLowerCase(), password: hashedPassword, phone, role, employeeId: genEmpId, designation: desig, department: dept, gender: gender || "other", address: address || "", avatar: avatar || "", approved: role === "admin", active: true, joiningDate: new Date(), refreshTokens: "[]", permissions: "[]" },
     });
-
-    await user.save();
-
-    // Create tokens for immediate login after registration
-    const accessToken = jwt.sign(
-      {
-        id: user._id,
-        role: user.role,
-        email: user.email,
-        employeeId: user.employeeId,
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: "15m" }
-    );
-
-    const refreshToken = jwt.sign(
-      {
-        id: user._id,
-        type: "refresh",
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: "7d" }
-    );
-
-    // Store refresh token in database
-    user.refreshTokens.push(refreshToken);
-    await user.save();
-
+    const accessToken = jwt.sign({ id: user.id, role: user.role, email: user.email, employeeId: user.employeeId }, process.env.JWT_SECRET, { expiresIn: "24h" });
+    const refreshToken = jwt.sign({ id: user.id, type: "refresh" }, process.env.JWT_SECRET, { expiresIn: "7d" });
+    await prisma.user.update({ where: { id: user.id }, data: { refreshTokens: JSON.stringify([refreshToken]) } });
     const response = NextResponse.json({
-      message: role === "admin" 
-        ? "Registration successful! You can now login." 
-        : "Registration successful! Account pending admin approval.",
-      user: {
-        _id: user._id.toString(),
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        phone: user.phone,
-        employeeId: user.employeeId,
-        designation: user.designation,
-        department: user.department,
-        gender: user.gender,
-        approved: user.approved,
-        active: user.active,
-        joiningDate: user.joiningDate,
-      },
-      accessToken,
-      refreshToken,
+      message: role === "admin" ? "Registration successful!" : "Registration successful! Account pending approval.",
+      user: { _id: user.id, name: user.name, email: user.email, role: user.role, phone: user.phone, employeeId: user.employeeId, designation: user.designation, department: user.department, gender: user.gender, approved: user.approved, active: user.active, joiningDate: user.joiningDate },
+      accessToken, refreshToken,
     });
-
-    // Set HTTP-only cookies
-    response.cookies.set("accessToken", accessToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 15 * 60, // 15 minutes
-      path: "/",
-    });
-
-    response.cookies.set("refreshToken", refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 7 * 24 * 60 * 60, // 7 days
-      path: "/",
-    });
-
+    response.cookies.set("accessToken", accessToken, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", maxAge: 86400, path: "/" });
+    response.cookies.set("refreshToken", refreshToken, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", maxAge: 604800, path: "/" });
     return response;
-  } catch (error: any) {
+  } catch (error) {
     console.error("Registration error:", error);
-    
-    // Handle MongoDB duplicate key errors
-    if (error.code === 11000) {
-      const field = Object.keys(error.keyPattern)[0];
-      if (field === "licenseNumber") {
-        return NextResponse.json(
-          { error: "License number already exists (if provided)." },
-          { status: 409 }
-        );
-      }
-
-      return NextResponse.json(
-        { error: `${field} already exists` },
-        { status: 409 }
-      );
-    }
-    
-    // Handle validation errors
-    if (error.name === 'ValidationError') {
-      const errors = Object.values(error.errors).map((err: any) => ({
-        field: err.path,
-        message: err.message
-      }));
-      
-      return NextResponse.json(
-        { 
-          error: "Validation failed", 
-          details: errors 
-        },
-        { status: 400 }
-      );
-    }
-
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
-}
-
-// Helper function to generate employee ID
-function generateEmployeeId(role: string): string {
-  const prefix = getRolePrefix(role);
-  const year = new Date().getFullYear().toString().slice(-2);
-  const random = Math.floor(1000 + Math.random() * 9000);
-  return `${prefix}${year}${random}`;
-}
-
-function getRolePrefix(role: string): string {
-  const prefixes: Record<string, string> = {
-    admin: "ADM",
-    doctor: "DOC",
-    nurse: "NUR",
-    staff: "STF",
-    receptionist: "REC",
-  };
-  return prefixes[role] || "EMP";
-}
-
-function getDefaultDesignation(role: string): string {
-  const designations: Record<string, string> = {
-    admin: "Administrator",
-    doctor: "Medical Doctor",
-    nurse: "Registered Nurse",
-    staff: "Hospital Staff",
-    receptionist: "Receptionist",
-  };
-  return designations[role] || "Employee";
-}
-
-function getDefaultDepartment(role: string): string {
-  const departments: Record<string, string> = {
-    admin: "Administration",
-    doctor: "General Medicine",
-    nurse: "Nursing",
-    staff: "Support Services",
-    receptionist: "Front Desk",
-  };
-  return departments[role] || "General";
 }

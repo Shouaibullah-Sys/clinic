@@ -1,21 +1,14 @@
 // app/api/radiology/records/[id]/print/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { RadiologyExam } from "@/lib/models/RadiologyExam";
-import { RadiologyService } from "@/lib/models/RadiologyService";
+import { prisma } from "@/lib/prisma";
 import { authenticateRequest } from "@/lib/auth";
-import mongoose from "mongoose";
 
-// POST: Mark a radiology record as printed
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await dbConnect();
-
-    // Authenticate the request
     const auth = await authenticateRequest(request);
     if (!auth.success) {
       return NextResponse.json(
@@ -24,7 +17,6 @@ export async function POST(
       );
     }
 
-    // Only radiology staff, radiologists, doctors, and admin can mark records as printed
     const allowedRoles = [
       "radiology_technician",
       "radiologist",
@@ -43,15 +35,17 @@ export async function POST(
       );
     }
 
-    // Unwrap the params promise
     const { id: examId } = await params;
 
-    // Find the radiology exam - try both collections
-    let radiologyExam = await RadiologyExam.findById(examId);
+    let radiologyExam = await prisma.radiologyExam.findUnique({
+      where: { id: examId },
+    });
 
     if (!radiologyExam) {
-      // Try RadiologyService
-      const serviceRecord = await RadiologyService.findById(examId);
+      const serviceRecord = await prisma.radiologyRequest.findUnique({
+        where: { id: examId },
+      });
+
       if (!serviceRecord) {
         return NextResponse.json(
           { success: false, error: "Radiology record not found" },
@@ -59,7 +53,6 @@ export async function POST(
         );
       }
 
-      // For RadiologyService, handle print differently
       if (!serviceRecord.paymentVerified) {
         return NextResponse.json(
           {
@@ -70,11 +63,11 @@ export async function POST(
         );
       }
 
-      // RadiologyService uses reportStatus instead of finalized
+      const reportStatus = serviceRecord.reportStatus as string;
       if (
-        serviceRecord.reportStatus !== "completed" &&
-        serviceRecord.reportStatus !== "reviewed" &&
-        serviceRecord.reportStatus !== "approved"
+        reportStatus !== "completed" &&
+        reportStatus !== "reviewed" &&
+        reportStatus !== "approved"
       ) {
         return NextResponse.json(
           {
@@ -85,21 +78,18 @@ export async function POST(
         );
       }
 
-      // Mark as printed for RadiologyService
-      serviceRecord.reportGeneratedAt = new Date();
-      serviceRecord.reportGeneratedBy = new mongoose.Types.ObjectId(
-        auth.userId!,
-      );
-      await serviceRecord.save();
-
-      // Populate and return
-      const populatedService = await RadiologyService.findById(
-        serviceRecord._id,
-      )
-        .populate("patient", "name patientId phone")
-        .populate("radiologist", "name")
-        .populate("reportGeneratedBy", "name")
-        .lean();
+      const updatedService = await prisma.radiologyRequest.update({
+        where: { id: examId },
+        data: {
+          reportGeneratedAt: new Date(),
+          reportGeneratedById: auth.userId!,
+        },
+        include: {
+          patient: { select: { name: true, patientId: true, phone: true } },
+          radiologist: { select: { name: true } },
+          reportGeneratedBy: { select: { name: true } },
+        },
+      });
 
       console.log(
         `Radiology service ${serviceRecord.serviceId} marked as printed by ${auth.userName}`,
@@ -107,12 +97,11 @@ export async function POST(
 
       return NextResponse.json({
         success: true,
-        data: populatedService,
+        data: updatedService,
         message: "Radiology record marked as printed successfully",
       });
     }
 
-    // Check if payment is verified
     if (!radiologyExam.paymentVerified) {
       return NextResponse.json(
         {
@@ -123,7 +112,6 @@ export async function POST(
       );
     }
 
-    // Check if exam is finalized
     if (!radiologyExam.finalized) {
       return NextResponse.json(
         {
@@ -134,7 +122,6 @@ export async function POST(
       );
     }
 
-    // Check if exam is ready for print
     if (!radiologyExam.readyForPrint) {
       return NextResponse.json(
         {
@@ -145,21 +132,13 @@ export async function POST(
       );
     }
 
-    // Mark the record as printed (allow reprinting)
-    radiologyExam.printedAt = new Date();
-    radiologyExam.printedBy = new mongoose.Types.ObjectId(auth.userId!);
-
-    await radiologyExam.save();
-
-    // Populate the response
-    const populatedExam = await RadiologyExam.findById(radiologyExam._id)
-      .populate("patient", "name patientId phone")
-      .populate("createdBy", "name")
-      .populate("finalizedBy", "name")
-      .populate("printedBy", "name")
-      .populate("results.reportedBy", "name")
-      .populate("results.verifiedBy", "name")
-      .lean();
+    const updatedExam = await prisma.radiologyExam.update({
+      where: { id: examId },
+      data: {
+        printedAt: new Date(),
+        printedById: auth.userId!,
+      },
+    });
 
     console.log(
       `Radiology record ${radiologyExam.examId} marked as printed by ${auth.userName}`,
@@ -167,7 +146,7 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
-      data: populatedExam,
+      data: updatedExam,
       message: "Radiology record marked as printed successfully",
     });
   } catch (error: any) {

@@ -1,14 +1,6 @@
-// app/api/dashboard/admin/profit-loss/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth";
-import dbConnect from "@/lib/dbConnect";
-import { Payment } from "@/lib/models/Payment";
-import { AdminExpense } from "@/lib/models/AdminExpense";
-import { DiscountRequest } from "@/lib/models/DiscountRequest";
-import { LabTest } from "@/lib/models/LabTest";
-import { RadiologyExam } from "@/lib/models/RadiologyExam";
-import { DischargeCard } from "@/lib/models/DischargeCard";
-import { Prescription } from "@/lib/models/Prescription";
+import { prisma } from "@/lib/prisma";
 
 export async function GET(req: NextRequest) {
   try {
@@ -17,12 +9,9 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    await dbConnect();
-
     const { searchParams } = new URL(req.url);
     const period = searchParams.get("period") || "today";
 
-    // Calculate date ranges
     const now = new Date();
     let startDate: Date;
     let endDate: Date;
@@ -30,11 +19,7 @@ export async function GET(req: NextRequest) {
     switch (period) {
       case "today":
         startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        endDate = new Date(
-          now.getFullYear(),
-          now.getMonth(),
-          now.getDate() + 1,
-        );
+        endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
         break;
       case "week":
         startDate = new Date(now);
@@ -55,213 +40,195 @@ export async function GET(req: NextRequest) {
         break;
       default:
         startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        endDate = new Date(
-          now.getFullYear(),
-          now.getMonth(),
-          now.getDate() + 1,
-        );
+        endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
     }
 
-    // Get revenue from all sources
-    const consultationRevenue = await Payment.aggregate([
-      {
-        $match: {
-          paymentDate: { $gte: startDate, $lt: endDate },
-          status: "completed",
-          department: "consultation",
-        },
+    // Get consultation revenue
+    const consultationPayments = await prisma.payment.findMany({
+      where: {
+        paymentDate: { gte: startDate, lt: endDate },
+        status: "completed",
+        department: "consultation",
       },
-      {
-        $group: {
-          _id: null,
-          totalRevenue: { $sum: "$amount" },
-          totalDiscount: { $sum: { $ifNull: ["$discountAmount", 0] } },
-        },
-      },
-    ]);
+    });
 
-    const labRevenue = await LabTest.aggregate([
-      {
-        $match: {
-          createdAt: { $gte: startDate, $lt: endDate },
-          "charges.paymentStatus": "paid",
-          status: { $ne: "cancelled" },
-        },
-      },
-      {
-        $group: {
-          _id: null,
-          totalRevenue: { $sum: "$charges.totalAmount" },
-          totalDiscount: { $sum: "$charges.discount" },
-        },
-      },
-    ]);
+    const consultationRevenue = consultationPayments.reduce(
+      (acc, p) => ({
+        totalRevenue: acc.totalRevenue + p.amount,
+        totalDiscount: acc.totalDiscount + (p.discountAmount || 0),
+      }),
+      { totalRevenue: 0, totalDiscount: 0 }
+    );
 
-    const radiologyRevenue = await RadiologyExam.aggregate([
-      {
-        $match: {
-          createdAt: { $gte: startDate, $lt: endDate },
-          "charges.paymentStatus": "paid",
-          status: { $ne: "cancelled" },
-        },
+    // Get lab revenue
+    const labTests = await prisma.labTest.findMany({
+      where: {
+        createdAt: { gte: startDate, lt: endDate },
+        status: { not: "cancelled" },
       },
-      {
-        $group: {
-          _id: null,
-          totalRevenue: { $sum: "$charges.totalAmount" },
-          totalDiscount: { $sum: "$charges.discount" },
-        },
-      },
-    ]);
+    });
 
-    const pharmacyRevenue = await Prescription.aggregate([
-      {
-        $match: {
-          dispensingStatus: "full",
-          dispensedDate: { $gte: startDate, $lt: endDate },
-        },
-      },
-      {
-        $group: {
-          _id: null,
-          totalRevenue: { $sum: "$totalAmount" },
-        },
-      },
-    ]);
+    const labRevenue = labTests.reduce((acc, test) => {
+      const charges = typeof test.charges === "string" ? JSON.parse(test.charges) : test.charges;
+      if (charges?.paymentStatus === "paid") {
+        return {
+          totalRevenue: acc.totalRevenue + (charges?.totalAmount || test.totalAmount || 0),
+          totalDiscount: acc.totalDiscount + (charges?.discount || test.discount || 0),
+        };
+      }
+      return acc;
+    }, { totalRevenue: 0, totalDiscount: 0 });
 
-    const admissionsRevenue = await Payment.aggregate([
-      {
-        $match: {
-          paymentDate: { $gte: startDate, $lt: endDate },
-          status: "completed",
-          department: "admission",
-        },
+    // Get radiology revenue
+    const radiologyExams = await prisma.radiologyExam.findMany({
+      where: {
+        createdAt: { gte: startDate, lt: endDate },
+        status: { not: "cancelled" },
       },
-      {
-        $group: {
-          _id: null,
-          totalRevenue: { $sum: "$amount" },
-          totalDiscount: { $sum: { $ifNull: ["$discountAmount", 0] } },
-        },
-      },
-    ]);
+    });
 
-    const dischargeRevenue = await DischargeCard.aggregate([
-      {
-        $match: {
-          createdAt: { $gte: startDate, $lt: endDate },
-          "billing.paymentStatus": "paid",
-          status: { $ne: "cancelled" },
-        },
+    const radiologyRevenue = radiologyExams.reduce((acc, exam) => {
+      const charges = typeof exam.charges === "string" ? JSON.parse(exam.charges) : exam.charges;
+      if (charges?.paymentStatus === "paid") {
+        return {
+          totalRevenue: acc.totalRevenue + (charges?.totalAmount || exam.totalAmount || 0),
+          totalDiscount: acc.totalDiscount + (charges?.discount || exam.discount || 0),
+        };
+      }
+      return acc;
+    }, { totalRevenue: 0, totalDiscount: 0 });
+
+    // Get pharmacy revenue
+    const prescriptions = await prisma.prescription.findMany({
+      where: {
+        dispensingStatus: "full",
+        createdAt: { gte: startDate, lt: endDate },
       },
-      {
-        $group: {
-          _id: null,
-          totalRevenue: { $sum: "$billing.totalAmount" },
-          totalDiscount: { $sum: "$billing.discountAmount" },
-        },
+    });
+
+    const pharmacyRevenue = prescriptions.reduce((acc, p) => {
+      const charges = typeof p.charges === "string" ? JSON.parse(p.charges) : p.charges;
+      return {
+        totalRevenue: acc.totalRevenue + (charges?.totalAmount || 0),
+      };
+    }, { totalRevenue: 0 });
+
+    // Get admissions revenue
+    const admissionPayments = await prisma.payment.findMany({
+      where: {
+        paymentDate: { gte: startDate, lt: endDate },
+        status: "completed",
+        department: "admission",
       },
-    ]);
+    });
+
+    const admissionsRevenue = admissionPayments.reduce(
+      (acc, p) => ({
+        totalRevenue: acc.totalRevenue + p.amount,
+        totalDiscount: acc.totalDiscount + (p.discountAmount || 0),
+      }),
+      { totalRevenue: 0, totalDiscount: 0 }
+    );
+
+    // Get discharge revenue
+    const dischargeCards = await prisma.dischargeCard.findMany({
+      where: {
+        createdAt: { gte: startDate, lt: endDate },
+        status: { not: "cancelled" },
+      },
+    });
+
+    const dischargeRevenue = dischargeCards.reduce((acc, card) => {
+      const billing = typeof card.billing === "string" ? JSON.parse(card.billing) : card.billing;
+      if (billing?.paymentStatus === "paid") {
+        return {
+          totalRevenue: acc.totalRevenue + (billing?.totalAmount || 0),
+          totalDiscount: acc.totalDiscount + (billing?.discountAmount || 0),
+        };
+      }
+      return acc;
+    }, { totalRevenue: 0, totalDiscount: 0 });
 
     // Get approved discounts
-    const approvedDiscounts = await DiscountRequest.aggregate([
-      {
-        $match: {
-          status: "approved",
-          approvedAt: { $gte: startDate, $lt: endDate },
-        },
+    const approvedDiscounts = await prisma.discountRequest.findMany({
+      where: {
+        status: "approved",
+        approvedAt: { gte: startDate, lt: endDate },
       },
-      {
-        $group: {
-          _id: null,
-          totalDiscountAmount: { $sum: "$approvedAmount" },
-        },
-      },
-    ]);
+    });
+
+    const totalApprovedDiscounts = approvedDiscounts.reduce(
+      (sum, d) => sum + (d.approvedAmount || 0),
+      0
+    );
 
     // Get expenses by category
-    const expensesByCategory = await AdminExpense.aggregate([
-      {
-        $match: {
-          date: { $gte: startDate, $lt: endDate },
-        },
+    const adminExpenses = await prisma.adminExpense.findMany({
+      where: {
+        date: { gte: startDate, lt: endDate },
       },
-      {
-        $group: {
-          _id: "$category",
-          totalAmount: { $sum: "$amount" },
-        },
-      },
-    ]);
+    });
+
+    const expensesByCategoryMap = new Map<string, number>();
+    adminExpenses.forEach((e) => {
+      const category = e.category || "other";
+      expensesByCategoryMap.set(category, (expensesByCategoryMap.get(category) || 0) + e.amount);
+    });
+
+    const expensesByCategory = Array.from(expensesByCategoryMap.entries()).map(
+      ([category, totalAmount]) => ({ _id: category, totalAmount })
+    );
 
     // Calculate totals
     const totalRevenue =
-      (consultationRevenue[0]?.totalRevenue || 0) +
-      (labRevenue[0]?.totalRevenue || 0) +
-      (radiologyRevenue[0]?.totalRevenue || 0) +
-      (pharmacyRevenue[0]?.totalRevenue || 0) +
-      (admissionsRevenue[0]?.totalRevenue || 0) +
-      (dischargeRevenue[0]?.totalRevenue || 0);
+      consultationRevenue.totalRevenue +
+      labRevenue.totalRevenue +
+      radiologyRevenue.totalRevenue +
+      pharmacyRevenue.totalRevenue +
+      admissionsRevenue.totalRevenue +
+      dischargeRevenue.totalRevenue;
 
     const totalDiscounts =
-      (consultationRevenue[0]?.totalDiscount || 0) +
-      (labRevenue[0]?.totalDiscount || 0) +
-      (radiologyRevenue[0]?.totalDiscount || 0) +
-      (admissionsRevenue[0]?.totalDiscount || 0) +
-      (dischargeRevenue[0]?.totalDiscount || 0) +
-      (approvedDiscounts[0]?.totalDiscountAmount || 0);
+      consultationRevenue.totalDiscount +
+      labRevenue.totalDiscount +
+      radiologyRevenue.totalDiscount +
+      admissionsRevenue.totalDiscount +
+      dischargeRevenue.totalDiscount +
+      totalApprovedDiscounts;
 
     const netRevenue = totalRevenue - totalDiscounts;
-
-    const totalExpenses = expensesByCategory.reduce(
-      (sum: number, item: any) => sum + item.totalAmount,
-      0,
-    );
-
+    const totalExpenses = expensesByCategory.reduce((sum, item) => sum + item.totalAmount, 0);
     const netProfit = netRevenue - totalExpenses;
-    const profitMargin =
-      totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
+    const profitMargin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
 
     // Build P&L statement
     const profitLossStatement = {
       revenue: {
-        consultation: consultationRevenue[0]?.totalRevenue || 0,
-        laboratory: labRevenue[0]?.totalRevenue || 0,
-        radiology: radiologyRevenue[0]?.totalRevenue || 0,
-        pharmacy: pharmacyRevenue[0]?.totalRevenue || 0,
-        admissions: admissionsRevenue[0]?.totalRevenue || 0,
-        discharge: dischargeRevenue[0]?.totalRevenue || 0,
+        consultation: consultationRevenue.totalRevenue,
+        laboratory: labRevenue.totalRevenue,
+        radiology: radiologyRevenue.totalRevenue,
+        pharmacy: pharmacyRevenue.totalRevenue,
+        admissions: admissionsRevenue.totalRevenue,
+        discharge: dischargeRevenue.totalRevenue,
         total: totalRevenue,
       },
       discounts: {
-        consultation: consultationRevenue[0]?.totalDiscount || 0,
-        laboratory: labRevenue[0]?.totalDiscount || 0,
-        radiology: radiologyRevenue[0]?.totalDiscount || 0,
-        admissions: admissionsRevenue[0]?.totalDiscount || 0,
-        discharge: dischargeRevenue[0]?.totalDiscount || 0,
-        approved: approvedDiscounts[0]?.totalDiscountAmount || 0,
+        consultation: consultationRevenue.totalDiscount,
+        laboratory: labRevenue.totalDiscount,
+        radiology: radiologyRevenue.totalDiscount,
+        admissions: admissionsRevenue.totalDiscount,
+        discharge: dischargeRevenue.totalDiscount,
+        approved: totalApprovedDiscounts,
         total: totalDiscounts,
       },
       netRevenue,
       expenses: {
-        supplies:
-          expensesByCategory.find((e: any) => e._id === "supplies")
-            ?.totalAmount || 0,
-        maintenance:
-          expensesByCategory.find((e: any) => e._id === "maintenance")
-            ?.totalAmount || 0,
-        utilities:
-          expensesByCategory.find((e: any) => e._id === "utilities")
-            ?.totalAmount || 0,
-        miscellaneous:
-          expensesByCategory.find((e: any) => e._id === "miscellaneous")
-            ?.totalAmount || 0,
-        food:
-          expensesByCategory.find((e: any) => e._id === "food")?.totalAmount ||
-          0,
-        transport:
-          expensesByCategory.find((e: any) => e._id === "transport")
-            ?.totalAmount || 0,
+        supplies: expensesByCategory.find((e) => e._id === "supplies")?.totalAmount || 0,
+        maintenance: expensesByCategory.find((e) => e._id === "maintenance")?.totalAmount || 0,
+        utilities: expensesByCategory.find((e) => e._id === "utilities")?.totalAmount || 0,
+        miscellaneous: expensesByCategory.find((e) => e._id === "miscellaneous")?.totalAmount || 0,
+        food: expensesByCategory.find((e) => e._id === "food")?.totalAmount || 0,
+        transport: expensesByCategory.find((e) => e._id === "transport")?.totalAmount || 0,
         total: totalExpenses,
       },
       netProfit,
@@ -272,236 +239,148 @@ export async function GET(req: NextRequest) {
     const profitByDepartment = [
       {
         department: "Consultation",
-        revenue: consultationRevenue[0]?.totalRevenue || 0,
-        expenses: 0, // Consultation has no direct expenses
-        discounts: consultationRevenue[0]?.totalDiscount || 0,
-        profit:
-          (consultationRevenue[0]?.totalRevenue || 0) -
-          (consultationRevenue[0]?.totalDiscount || 0),
+        revenue: consultationRevenue.totalRevenue,
+        expenses: 0,
+        discounts: consultationRevenue.totalDiscount,
+        profit: consultationRevenue.totalRevenue - consultationRevenue.totalDiscount,
         profitMargin:
-          consultationRevenue[0]?.totalRevenue > 0
-            ? (((consultationRevenue[0]?.totalRevenue || 0) -
-                (consultationRevenue[0]?.totalDiscount || 0)) /
-                (consultationRevenue[0]?.totalRevenue || 1)) *
+          consultationRevenue.totalRevenue > 0
+            ? ((consultationRevenue.totalRevenue - consultationRevenue.totalDiscount) /
+                consultationRevenue.totalRevenue) *
               100
             : 0,
       },
       {
         department: "Laboratory",
-        revenue: labRevenue[0]?.totalRevenue || 0,
-        expenses: 0, // Lab expenses would be tracked separately
-        discounts: labRevenue[0]?.totalDiscount || 0,
-        profit:
-          (labRevenue[0]?.totalRevenue || 0) -
-          (labRevenue[0]?.totalDiscount || 0),
+        revenue: labRevenue.totalRevenue,
+        expenses: 0,
+        discounts: labRevenue.totalDiscount,
+        profit: labRevenue.totalRevenue - labRevenue.totalDiscount,
         profitMargin:
-          labRevenue[0]?.totalRevenue > 0
-            ? (((labRevenue[0]?.totalRevenue || 0) -
-                (labRevenue[0]?.totalDiscount || 0)) /
-                (labRevenue[0]?.totalRevenue || 1)) *
+          labRevenue.totalRevenue > 0
+            ? ((labRevenue.totalRevenue - labRevenue.totalDiscount) / labRevenue.totalRevenue) *
               100
             : 0,
       },
       {
         department: "Radiology",
-        revenue: radiologyRevenue[0]?.totalRevenue || 0,
+        revenue: radiologyRevenue.totalRevenue,
         expenses: 0,
-        discounts: radiologyRevenue[0]?.totalDiscount || 0,
-        profit:
-          (radiologyRevenue[0]?.totalRevenue || 0) -
-          (radiologyRevenue[0]?.totalDiscount || 0),
+        discounts: radiologyRevenue.totalDiscount,
+        profit: radiologyRevenue.totalRevenue - radiologyRevenue.totalDiscount,
         profitMargin:
-          radiologyRevenue[0]?.totalRevenue > 0
-            ? (((radiologyRevenue[0]?.totalRevenue || 0) -
-                (radiologyRevenue[0]?.totalDiscount || 0)) /
-                (radiologyRevenue[0]?.totalRevenue || 1)) *
+          radiologyRevenue.totalRevenue > 0
+            ? ((radiologyRevenue.totalRevenue - radiologyRevenue.totalDiscount) /
+                radiologyRevenue.totalRevenue) *
               100
             : 0,
       },
       {
         department: "Pharmacy",
-        revenue: pharmacyRevenue[0]?.totalRevenue || 0,
-        expenses: 0, // Medicine costs would be tracked separately
+        revenue: pharmacyRevenue.totalRevenue,
+        expenses: 0,
         discounts: 0,
-        profit: pharmacyRevenue[0]?.totalRevenue || 0,
-        profitMargin: 100, // Pharmacy revenue is typically profit
+        profit: pharmacyRevenue.totalRevenue,
+        profitMargin: 100,
       },
       {
         department: "Admissions",
-        revenue: admissionsRevenue[0]?.totalRevenue || 0,
+        revenue: admissionsRevenue.totalRevenue,
         expenses: 0,
-        discounts: admissionsRevenue[0]?.totalDiscount || 0,
-        profit:
-          (admissionsRevenue[0]?.totalRevenue || 0) -
-          (admissionsRevenue[0]?.totalDiscount || 0),
+        discounts: admissionsRevenue.totalDiscount,
+        profit: admissionsRevenue.totalRevenue - admissionsRevenue.totalDiscount,
         profitMargin:
-          admissionsRevenue[0]?.totalRevenue > 0
-            ? (((admissionsRevenue[0]?.totalRevenue || 0) -
-                (admissionsRevenue[0]?.totalDiscount || 0)) /
-                (admissionsRevenue[0]?.totalRevenue || 1)) *
+          admissionsRevenue.totalRevenue > 0
+            ? ((admissionsRevenue.totalRevenue - admissionsRevenue.totalDiscount) /
+                admissionsRevenue.totalRevenue) *
               100
             : 0,
       },
       {
         department: "Discharge/Operations",
-        revenue: dischargeRevenue[0]?.totalRevenue || 0,
+        revenue: dischargeRevenue.totalRevenue,
         expenses: 0,
-        discounts: dischargeRevenue[0]?.totalDiscount || 0,
-        profit:
-          (dischargeRevenue[0]?.totalRevenue || 0) -
-          (dischargeRevenue[0]?.totalDiscount || 0),
+        discounts: dischargeRevenue.totalDiscount,
+        profit: dischargeRevenue.totalRevenue - dischargeRevenue.totalDiscount,
         profitMargin:
-          dischargeRevenue[0]?.totalRevenue > 0
-            ? (((dischargeRevenue[0]?.totalRevenue || 0) -
-                (dischargeRevenue[0]?.totalDiscount || 0)) /
-                (dischargeRevenue[0]?.totalRevenue || 1)) *
+          dischargeRevenue.totalRevenue > 0
+            ? ((dischargeRevenue.totalRevenue - dischargeRevenue.totalDiscount) /
+                dischargeRevenue.totalRevenue) *
               100
             : 0,
       },
     ];
 
     // Get daily profit trend
-    const dailyProfitTrend = await Payment.aggregate([
-      {
-        $match: {
-          paymentDate: { $gte: startDate, $lt: endDate },
-          status: "completed",
-        },
+    const allPayments = await prisma.payment.findMany({
+      where: {
+        paymentDate: { gte: startDate, lt: endDate },
+        status: "completed",
       },
-      {
-        $group: {
-          _id: {
-            $dateToString: { format: "%Y-%m-%d", date: "$paymentDate" },
-          },
-          revenue: { $sum: "$amount" },
-          discounts: { $sum: { $ifNull: ["$discountAmount", 0] } },
-        },
-      },
-    ]);
+    });
 
-    // Get daily expenses for trend
-    const dailyExpenseTrend = await AdminExpense.aggregate([
-      {
-        $match: {
-          date: { $gte: startDate, $lt: endDate },
-        },
-      },
-      {
-        $group: {
-          _id: {
-            $dateToString: { format: "%Y-%m-%d", date: "$date" },
-          },
-          expenses: { $sum: "$amount" },
-        },
-      },
-    ]);
-
-    // Merge daily trends
-    const dailyTrend = [];
-    const trendMap = new Map();
-
-    dailyProfitTrend.forEach((item: any) => {
-      trendMap.set(item._id, {
-        date: item._id,
-        revenue: item.revenue,
-        discounts: item.discounts,
-        expenses: 0,
-        profit: item.revenue - item.discounts,
+    const dailyRevenueMap = new Map<string, { revenue: number; discounts: number }>();
+    allPayments.forEach((p) => {
+      const dateStr = p.paymentDate.toISOString().split("T")[0];
+      const existing = dailyRevenueMap.get(dateStr) || { revenue: 0, discounts: 0 };
+      dailyRevenueMap.set(dateStr, {
+        revenue: existing.revenue + p.amount,
+        discounts: existing.discounts + (p.discountAmount || 0),
       });
     });
 
-    dailyExpenseTrend.forEach((item: any) => {
-      if (trendMap.has(item._id)) {
-        const existing = trendMap.get(item._id);
-        existing.expenses = item.expenses;
-        existing.profit = existing.revenue - existing.discounts - item.expenses;
-      } else {
-        trendMap.set(item._id, {
-          date: item._id,
-          revenue: 0,
-          discounts: 0,
-          expenses: item.expenses,
-          profit: -item.expenses,
-        });
-      }
+    const dailyExpenseMap = new Map<string, number>();
+    adminExpenses.forEach((e) => {
+      const dateStr = e.date.toISOString().split("T")[0];
+      dailyExpenseMap.set(dateStr, (dailyExpenseMap.get(dateStr) || 0) + e.amount);
     });
 
-    dailyTrend.push(
-      ...Array.from(trendMap.values()).sort((a, b) =>
-        a.date.localeCompare(b.date),
-      ),
-    );
+    const dailyTrend = Array.from(dailyRevenueMap.entries())
+      .map(([date, data]) => ({
+        date,
+        revenue: data.revenue,
+        discounts: data.discounts,
+        expenses: dailyExpenseMap.get(date) || 0,
+        profit: data.revenue - data.discounts - (dailyExpenseMap.get(date) || 0),
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date));
 
-    // Get previous period data for comparison
+    // Get previous period data
     let previousPeriodProfit = 0;
     let previousPeriodRevenue = 0;
     if (period === "today") {
       const yesterday = new Date(now);
       yesterday.setDate(now.getDate() - 1);
-      const yesterdayStart = new Date(
-        yesterday.getFullYear(),
-        yesterday.getMonth(),
-        yesterday.getDate(),
-      );
-      const yesterdayEnd = new Date(
-        yesterday.getFullYear(),
-        yesterday.getMonth(),
-        yesterday.getDate() + 1,
-      );
+      const yesterdayStart = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate());
+      const yesterdayEnd = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate() + 1);
 
-      const yesterdayPayments = await Payment.aggregate([
-        {
-          $match: {
-            paymentDate: { $gte: yesterdayStart, $lt: yesterdayEnd },
-            status: "completed",
-          },
+      const yesterdayPayments = await prisma.payment.findMany({
+        where: {
+          paymentDate: { gte: yesterdayStart, lt: yesterdayEnd },
+          status: "completed",
         },
-        {
-          $group: {
-            _id: null,
-            totalRevenue: { $sum: "$amount" },
-            totalDiscount: { $sum: { $ifNull: ["$discountAmount", 0] } },
-          },
-        },
-      ]);
+      });
 
-      const yesterdayExpenses = await AdminExpense.aggregate([
-        {
-          $match: {
-            date: { $gte: yesterdayStart, $lt: yesterdayEnd },
-          },
-        },
-        {
-          $group: {
-            _id: null,
-            totalAmount: { $sum: "$amount" },
-          },
-        },
-      ]);
+      const yesterdayExpenses = await prisma.adminExpense.findMany({
+        where: { date: { gte: yesterdayStart, lt: yesterdayEnd } },
+      });
 
-      previousPeriodRevenue = yesterdayPayments[0]?.totalRevenue || 0;
-      const yesterdayDiscounts = yesterdayPayments[0]?.totalDiscount || 0;
-      const yesterdayExpensesTotal = yesterdayExpenses[0]?.totalAmount || 0;
-      previousPeriodProfit =
-        previousPeriodRevenue - yesterdayDiscounts - yesterdayExpensesTotal;
+      previousPeriodRevenue = yesterdayPayments.reduce((sum, p) => sum + p.amount, 0);
+      const yesterdayDiscounts = yesterdayPayments.reduce((sum, p) => sum + (p.discountAmount || 0), 0);
+      const yesterdayExpensesTotal = yesterdayExpenses.reduce((sum, e) => sum + e.amount, 0);
+      previousPeriodProfit = previousPeriodRevenue - yesterdayDiscounts - yesterdayExpensesTotal;
     }
 
-    // Calculate growth percentage
     const profitGrowth =
       previousPeriodProfit !== 0
-        ? ((netProfit - previousPeriodProfit) /
-            Math.abs(previousPeriodProfit)) *
-          100
+        ? ((netProfit - previousPeriodProfit) / Math.abs(previousPeriodProfit)) * 100
         : 0;
 
     return NextResponse.json({
       success: true,
       data: {
         period,
-        dateRange: {
-          startDate,
-          endDate,
-        },
+        dateRange: { startDate, endDate },
         profitLossStatement,
         profitByDepartment,
         dailyTrend,
@@ -519,9 +398,6 @@ export async function GET(req: NextRequest) {
     });
   } catch (error) {
     console.error("Error fetching profit/loss data:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

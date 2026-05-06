@@ -1,7 +1,5 @@
-// app/api/pharmacy/stock/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { MedicineStock } from "@/lib/models/MedicineStock";
+import { prisma } from "@/lib/prisma";
 import { jwtVerify } from "jose";
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-this";
@@ -16,12 +14,8 @@ async function verifyToken(token: string) {
   }
 }
 
-// GET: Get medicine stock with search
 export async function GET(request: NextRequest) {
   try {
-    await dbConnect();
-
-    // Authentication
     const authHeader = request.headers.get("authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return NextResponse.json(
@@ -42,7 +36,6 @@ export async function GET(request: NextRequest) {
 
     const userRole = payload.role as string;
 
-    // Authorization
     if (!["admin", "pharmacist", "pharmacy_head", "receptionist"].includes(userRole)) {
       return NextResponse.json(
         {
@@ -58,17 +51,20 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get("search") || "";
     const limit = parseInt(searchParams.get("limit") || "100");
 
-    let query: any = {};
+    let where: any = {};
 
     if (search) {
-      const searchRegex = new RegExp(search, "i");
-      query.$or = [{ name: searchRegex }, { supplier: searchRegex }];
+      where.OR = [
+        { name: { contains: search } },
+        { supplier: { contains: search } },
+      ];
     }
 
-    const medicines = await MedicineStock.find(query)
-      .sort({ createdAt: -1 })
-      .limit(limit)
-      .lean();
+    const medicines = await prisma.medicineStock.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      take: limit,
+    });
 
     return NextResponse.json({
       success: true,
@@ -86,12 +82,8 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST: Add new medicine stock
 export async function POST(request: NextRequest) {
   try {
-    await dbConnect();
-
-    // Authentication
     const authHeader = request.headers.get("authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return NextResponse.json(
@@ -113,7 +105,6 @@ export async function POST(request: NextRequest) {
     const userId = payload.id as string;
     const userRole = payload.role as string;
 
-    // Authorization
     if (!["admin", "pharmacist", "pharmacy_head"].includes(userRole)) {
       return NextResponse.json(
         {
@@ -126,26 +117,25 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const {
-      name,
+      medicineId,
+      batchNo,
       expiryDate,
-      originalQuantity,
-      currentQuantity,
+      inwardQty,
       unitPrice,
-      sellingPrice,
+      sellPrice,
       supplier,
-      description,
       form,
       dosage,
+      frequency,
+      route,
     } = body;
 
-    // Validation
     if (
-      !name ||
+      !medicineId ||
+      !batchNo ||
       !expiryDate ||
-      !originalQuantity ||
-      !unitPrice ||
-      !sellingPrice ||
-      !supplier
+      !inwardQty ||
+      !unitPrice
     ) {
       return NextResponse.json(
         { success: false, error: "Missing required fields" },
@@ -153,23 +143,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create medicine stock
-    const medicineStock = new MedicineStock({
-      name: name.trim(),
-      expiryDate: new Date(expiryDate),
-      originalQuantity: parseInt(originalQuantity),
-      currentQuantity: currentQuantity
-        ? parseInt(currentQuantity)
-        : parseInt(originalQuantity),
-      unitPrice: parseFloat(unitPrice),
-      sellingPrice: parseFloat(sellingPrice),
-      supplier: supplier.trim(),
-      description: description?.trim(),
-      form: form?.trim(),
-      dosage: dosage?.trim(),
+    const medicineStock = await prisma.medicineStock.create({
+      data: {
+        medicineId,
+        batchNo,
+        expiryDate: new Date(expiryDate),
+        inwardQty: parseInt(inwardQty),
+        outwardQty: 0,
+        costPrice: unitPrice ? parseFloat(unitPrice) : null,
+        sellPrice: sellPrice ? parseFloat(sellPrice) : null,
+        totalQty: parseInt(inwardQty),
+        currentQty: parseInt(inwardQty),
+        supplier: supplier || null,
+        form: form || null,
+        dosage: dosage || null,
+        frequency: frequency || null,
+        route: route || null,
+      },
     });
-
-    await medicineStock.save();
 
     return NextResponse.json(
       {

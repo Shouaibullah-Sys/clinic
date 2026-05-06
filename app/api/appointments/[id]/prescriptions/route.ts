@@ -1,21 +1,7 @@
 // app/api/appointments/[id]/prescriptions/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { Prescription } from "@/lib/models/Prescription";
-import { jwtVerify } from "jose";
-import { buildMarkedOnlyQuery } from "@/lib/utils/markedTransactions";
-
-const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-this";
-
-async function verifyToken(token: string) {
-  try {
-    const secret = new TextEncoder().encode(JWT_SECRET);
-    const { payload } = await jwtVerify(token, secret);
-    return payload;
-  } catch {
-    return null;
-  }
-}
+import { prisma } from "@/lib/prisma";
+import { getTokenPayload } from "@/lib/auth/jwt";
 
 export async function GET(
   request: NextRequest,
@@ -24,53 +10,41 @@ export async function GET(
   try {
     const { id: appointmentId } = await params;
 
-    await dbConnect();
-
-    // Authentication
-    const authHeader = request.headers.get("authorization");
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    const payload = await getTokenPayload(request);
+    if (!payload) {
       return NextResponse.json(
         { success: false, error: "Unauthorized. No token provided." },
         { status: 401 },
       );
     }
 
-    const token = authHeader.split(" ")[1];
-    const payload = await verifyToken(token);
-
-    if (!payload) {
-      return NextResponse.json(
-        { success: false, error: "Invalid or expired token." },
-        { status: 401 },
-      );
-    }
-
-    const userId = payload.id as string;
-    const userRole = payload.role as string;
-
-    // Only receptionists, doctors, and admins can access
-    if (!["receptionist", "doctor", "admin"].includes(userRole)) {
+    if (!["receptionist", "doctor", "admin"].includes(payload.role)) {
       return NextResponse.json(
         { success: false, error: "Forbidden. Insufficient permissions." },
         { status: 403 },
       );
     }
 
-    const { query: finalQuery } = await buildMarkedOnlyQuery({
-      userId: payload.id as string,
-      module: "prescription",
-      baseQuery: { appointment: appointmentId },
+    const prescriptions = await prisma.prescription.findMany({
+      where: { appointmentId },
+      select: {
+        id: true,
+        prescriptionId: true,
+        date: true,
+        diagnosis: true,
+        medications: true,
+        instructions: true,
+        notes: true,
+        status: true,
+        expiryDate: true,
+        charges: true,
+        paymentStatus: true,
+        paymentVerified: true,
+        patient: { select: { name: true, patientId: true } },
+        doctor: { select: { name: true, specialization: true } },
+      },
+      orderBy: { date: "desc" },
     });
-
-    // Get prescriptions for this specific appointment
-    const prescriptions = await Prescription.find(finalQuery)
-      .populate("patient", "name patientId")
-      .populate("doctor", "name specialization")
-      .select(
-        "prescriptionId prescribedDate diagnosis medications instructions notes status expiryDate charges paymentStatus paymentVerified",
-      )
-      .sort({ prescribedDate: -1 })
-      .lean();
 
     return NextResponse.json({
       success: true,

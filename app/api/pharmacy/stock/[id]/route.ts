@@ -1,8 +1,7 @@
 // app/api/pharmacy/stock/[id]/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { MedicineStock } from "@/lib/models/MedicineStock";
+import { prisma } from "@/lib/prisma";
 import { jwtVerify } from "jose";
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-this";
@@ -23,8 +22,6 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await dbConnect();
-
     // Authentication
     const authHeader = request.headers.get("authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -61,7 +58,9 @@ export async function GET(
     // UNWRAP THE PARAMS PROMISE
     const { id: medicineId } = await params;
 
-    const medicine = await MedicineStock.findById(medicineId).lean();
+    const medicine = await prisma.medicineStock.findUnique({
+      where: { id: medicineId },
+    });
 
     if (!medicine) {
       return NextResponse.json(
@@ -89,8 +88,6 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await dbConnect();
-
     // Authentication
     const authHeader = request.headers.get("authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -145,31 +142,34 @@ export async function PUT(
     } = body;
 
     // Check if medicine exists
-    const medicine = await MedicineStock.findById(medicineId);
-    if (!medicine) {
+    const existingMedicine = await prisma.medicineStock.findUnique({
+      where: { id: medicineId },
+    });
+    if (!existingMedicine) {
       return NextResponse.json(
         { success: false, error: "Medicine not found" },
         { status: 404 },
       );
     }
 
-    // Update fields
-    if (name) medicine.name = name.trim();
-    if (expiryDate) medicine.expiryDate = new Date(expiryDate);
-    if (originalQuantity)
-      medicine.originalQuantity = parseInt(originalQuantity);
-    if (currentQuantity !== undefined)
-      medicine.currentQuantity = parseInt(currentQuantity);
-    if (unitPrice) medicine.unitPrice = parseFloat(unitPrice);
-    if (sellingPrice) medicine.sellingPrice = parseFloat(sellingPrice);
-    if (supplier) medicine.supplier = supplier.trim();
-    if (description !== undefined) medicine.description = description?.trim();
-    if (form !== undefined) medicine.form = form?.trim();
-    if (dosage !== undefined) medicine.dosage = dosage?.trim();
-    if (frequency !== undefined) medicine.frequency = frequency?.trim();
-    if (route !== undefined) medicine.route = route?.trim();
+    const updateData: any = {};
+    if (name) updateData.name = name.trim();
+    if (expiryDate) updateData.expiryDate = new Date(expiryDate);
+    if (originalQuantity) updateData.originalQuantity = parseInt(originalQuantity);
+    if (currentQuantity !== undefined) updateData.currentQuantity = parseInt(currentQuantity);
+    if (unitPrice) updateData.costPrice = parseFloat(unitPrice);
+    if (sellingPrice) updateData.sellPrice = parseFloat(sellingPrice);
+    if (supplier) updateData.supplier = supplier.trim();
+    if (description !== undefined) updateData.description = description?.trim();
+    if (form !== undefined) updateData.form = form?.trim();
+    if (dosage !== undefined) updateData.dosage = dosage?.trim();
+    if (frequency !== undefined) updateData.frequency = frequency?.trim();
+    if (route !== undefined) updateData.route = route?.trim();
 
-    await medicine.save();
+    const medicine = await prisma.medicineStock.update({
+      where: { id: medicineId },
+      data: updateData,
+    });
 
     return NextResponse.json({
       success: true,
@@ -191,8 +191,6 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await dbConnect();
-
     // Authentication
     const authHeader = request.headers.get("authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -229,7 +227,9 @@ export async function DELETE(
     // UNWRAP THE PARAMS PROMISE
     const { id: medicineId } = await params;
 
-    const medicine = await MedicineStock.findById(medicineId);
+    const medicine = await prisma.medicineStock.findUnique({
+      where: { id: medicineId },
+    });
 
     if (!medicine) {
       return NextResponse.json(
@@ -238,7 +238,9 @@ export async function DELETE(
       );
     }
 
-    await medicine.deleteOne();
+    await prisma.medicineStock.delete({
+      where: { id: medicineId },
+    });
 
     return NextResponse.json({
       success: true,

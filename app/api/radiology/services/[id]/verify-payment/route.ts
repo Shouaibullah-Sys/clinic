@@ -1,73 +1,56 @@
-// app/api/radiology/services/[id]/verify-payment/route.ts
-
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { RadiologyService } from "@/lib/models/RadiologyService";
-import { authenticateRequest, hasRequiredRole } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { getTokenPayload } from "@/lib/auth/jwt";
 
-// PUT: Verify payment for radiology service
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await dbConnect();
-    
-    // Authenticate request using centralized auth
-    const auth = await authenticateRequest(request);
-    if (!auth.success) {
+    const payload = await getTokenPayload(request);
+    if (!payload) {
       return NextResponse.json(
-        { success: false, error: auth.error },
-        { status: auth.status || 401 }
+        { success: false, error: "Unauthorized" },
+        { status: 401 }
       );
     }
 
-    // Check if user is receptionist, radiology staff, or admin
     const allowedRoles = ["receptionist", "radiologist", "technician", "admin"];
-    if (!hasRequiredRole(auth.userRole, allowedRoles)) {
+    if (!allowedRoles.includes(payload.role)) {
       return NextResponse.json(
         { 
           success: false, 
           error: "Forbidden. Only authorized staff can verify payments.",
-          userRole: auth.userRole,
+          userRole: payload.role,
           allowedRoles: allowedRoles
         },
         { status: 403 }
       );
     }
-    
+
     const { id: serviceId } = await params;
-    const userId = auth.userId;
+    const userId = payload.id;
     const body = await request.json();
     const { verify = true, notes } = body;
-    
-    // Ensure userId is defined
-    if (!userId) {
-      return NextResponse.json(
-        { success: false, error: "User ID not found in authentication token" },
-        { status: 401 }
-      );
-    }
-    
-    // Find radiology service
-    const radiologyService = await RadiologyService.findById(serviceId);
-    
+
+    const radiologyService = await prisma.radiologyRequest.findUnique({
+      where: { id: serviceId },
+    });
+
     if (!radiologyService) {
       return NextResponse.json(
         { success: false, error: "Radiology service not found" },
         { status: 404 }
       );
     }
-    
-    // Check if service is cancelled
+
     if (radiologyService.status === "cancelled") {
       return NextResponse.json(
         { success: false, error: "Cannot verify payment for cancelled service" },
         { status: 400 }
       );
     }
-    
-    // Check if payment is already verified
+
     if (radiologyService.paymentVerified && verify) {
       return NextResponse.json(
         { 
@@ -78,41 +61,48 @@ export async function PUT(
         { status: 400 }
       );
     }
-    
+
     let updatedService;
     let message;
-    
+
     if (verify) {
-      // Verify payment
-      updatedService = await RadiologyService.verifyPayment(serviceId, userId, notes);
+      updatedService = await prisma.radiologyRequest.update({
+        where: { id: serviceId },
+        data: {
+          paymentVerified: true,
+          paymentVerifiedBy: userId,
+          paymentVerifiedAt: new Date(),
+          billingStatus: "paid",
+        },
+      });
       message = "Payment verified successfully";
     } else {
-      // Unverify payment
-      updatedService = await RadiologyService.unverifyPayment(serviceId);
+      updatedService = await prisma.radiologyRequest.update({
+        where: { id: serviceId },
+        data: {
+          paymentVerified: false,
+          paymentVerifiedBy: null,
+          paymentVerifiedAt: null,
+          billingStatus: "pending",
+        },
+      });
       message = "Payment verification removed";
     }
-    
-    // Check if update was successful
-    if (!updatedService) {
-      return NextResponse.json(
-        { success: false, error: "Failed to update radiology service" },
-        { status: 500 }
-      );
-    }
-    
-    // Populate response
-    await updatedService.populate([
-      { path: "patient", select: "name patientId phone" },
-      { path: "referringDoctor", select: "name specialization" },
-      { path: "paymentVerifiedBy", select: "name role" },
-    ]);
-    
+
+    const populatedService = await prisma.radiologyRequest.findUnique({
+      where: { id: serviceId },
+      include: {
+        patient: { select: { name: true, patientId: true, phone: true } },
+        referringDoctor: { select: { name: true, specialization: true } },
+      },
+    });
+
     return NextResponse.json({
       success: true,
-      data: updatedService,
+      data: populatedService,
       message,
     });
-    
+
   } catch (error: any) {
     console.error("Error verifying payment:", error);
     return NextResponse.json(

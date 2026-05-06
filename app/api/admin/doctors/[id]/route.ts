@@ -1,11 +1,6 @@
-// app/api/admin/doctors/[id]/route.ts
-
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { User } from "@/lib/models/User";
+import { prisma } from "@/lib/prisma";
 import { jwtVerify } from "jose";
-import bcrypt from "bcryptjs";
-import mongoose from "mongoose";
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-this";
 
@@ -27,32 +22,28 @@ async function authenticateAdmin(request: NextRequest) {
 
   const token = authHeader.split(" ")[1];
   const payload = await verifyToken(token);
-  
+
   if (!payload) {
     return { error: "Invalid or expired token.", status: 401 };
   }
 
   const userRole = payload.role as string;
-  
-  // Only admin can access
+
   if (userRole !== "admin") {
     return { error: "Forbidden. Admin access required.", status: 403 };
   }
 
-  return { 
-    userId: payload.id as string, 
-    userRole 
+  return {
+    userId: payload.id as string,
+    userRole,
   };
 }
 
-// GET: Get single doctor
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await dbConnect();
-
     const auth = await authenticateAdmin(request);
     if ("error" in auth) {
       return NextResponse.json(
@@ -62,33 +53,24 @@ export async function GET(
     }
 
     const { id } = await params;
-    const doctorId = id;
-    
-    // Validate ObjectId
-    if (!mongoose.Types.ObjectId.isValid(doctorId)) {
-      return NextResponse.json(
-        { success: false, error: "Invalid doctor ID" },
-        { status: 400 }
-      );
-    }
-    
-    const doctor = await User.findOne({
-      _id: doctorId,
-      role: "doctor"
-    }).select("-password"); // Exclude password
-    
+
+    const doctor = await prisma.user.findFirst({
+      where: { id, role: "doctor" },
+      select: { id: true, name: true, email: true, phone: true, department: true, specialization: true, licenseNumber: true, qualifications: true, experience: true, consultationFee: true, availability: true, approved: true, active: true, createdAt: true },
+    });
+
     if (!doctor) {
       return NextResponse.json(
         { success: false, error: "Doctor not found" },
         { status: 404 }
       );
     }
-    
+
     return NextResponse.json({
       success: true,
       data: doctor,
     });
-    
+
   } catch (error) {
     console.error("Error fetching doctor:", error);
     return NextResponse.json(
@@ -98,14 +80,11 @@ export async function GET(
   }
 }
 
-// PUT: Update doctor
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await dbConnect();
-
     const auth = await authenticateAdmin(request);
     if ("error" in auth) {
       return NextResponse.json(
@@ -115,86 +94,64 @@ export async function PUT(
     }
 
     const { id } = await params;
-    const doctorId = id;
-    
-    // Validate ObjectId
-    if (!mongoose.Types.ObjectId.isValid(doctorId)) {
-      return NextResponse.json(
-        { success: false, error: "Invalid doctor ID" },
-        { status: 400 }
-      );
-    }
-    
-    // Check if doctor exists
-    const doctor = await User.findOne({
-      _id: doctorId,
-      role: "doctor"
+    const doctor = await prisma.user.findFirst({
+      where: { id, role: "doctor" },
     });
-    
+
     if (!doctor) {
       return NextResponse.json(
         { success: false, error: "Doctor not found" },
         { status: 404 }
       );
     }
-    
+
     const body = await request.json();
-    const updates: any = {};
-    
-    // Allowed fields to update
-    const allowedFields = [
+    const allowedFields: (keyof typeof body)[] = [
       "name", "email", "phone", "department", "specialization",
       "licenseNumber", "qualifications", "experience", "consultationFee",
       "availability", "biography", "active", "approved", "avatar"
     ];
-    
+
+    const updateData: any = {};
+
     allowedFields.forEach(field => {
       if (body[field] !== undefined) {
-        updates[field] = body[field];
+        updateData[field] = body[field];
       }
     });
-    
-    // Handle qualifications array
-    if (updates.qualifications && typeof updates.qualifications === 'string') {
-      updates.qualifications = updates.qualifications.split(',').map((q: string) => q.trim()).filter(Boolean);
+
+    if (updateData.qualifications && typeof updateData.qualifications === 'string') {
+      updateData.qualifications = updateData.qualifications.split(',').map((q: string) => q.trim()).filter(Boolean);
     }
-    
-    // Handle availability days
-    if (updates.availability?.days) {
-      if (typeof updates.availability.days === 'string') {
-        console.log('Original availability.days string:', updates.availability.days);
-        updates.availability.days = (updates.availability.days as string).split(',').map((day: string) => day.trim().toLowerCase()).filter((day: string) => day.length > 0);
-        console.log('Processed availability.days array:', updates.availability.days);
-      } else if (Array.isArray(updates.availability.days)) {
-        console.log('Original availability.days array:', updates.availability.days);
-        updates.availability.days = (updates.availability.days as string[]).map((day: string) => day.trim().toLowerCase()).filter((day: string) => day.length > 0);
-        console.log('Filtered availability.days array:', updates.availability.days);
+
+    if (updateData.availability && typeof updateData.availability === 'object') {
+      if (typeof updateData.availability.days === 'string') {
+        updateData.availability.days = updateData.availability.days.split(',').map((day: string) => day.trim().toLowerCase()).filter(Boolean);
+      } else if (Array.isArray(updateData.availability.days)) {
+        updateData.availability.days = updateData.availability.days.map((day: string) => day.trim().toLowerCase()).filter(Boolean);
       }
+      updateData.availability = JSON.stringify(updateData.availability);
     }
-    
-    // Check for email uniqueness if email is being updated
-    if (updates.email && updates.email !== doctor.email) {
-      const existingEmail = await User.findOne({ 
-        email: updates.email.toLowerCase(),
-        _id: { $ne: doctorId }
+
+    if (updateData.email && updateData.email !== doctor.email) {
+      const existingEmail = await prisma.user.findFirst({
+        where: { email: updateData.email.toLowerCase(), NOT: { id: doctor.id } },
       });
-      
+
       if (existingEmail) {
         return NextResponse.json(
           { success: false, error: "Email already exists" },
           { status: 409 }
         );
       }
-      updates.email = updates.email.toLowerCase();
+      updateData.email = updateData.email.toLowerCase();
     }
-    
-    // Check for license number uniqueness if being updated
-    if (updates.licenseNumber && updates.licenseNumber !== doctor.licenseNumber) {
-      const existingLicense = await User.findOne({ 
-        licenseNumber: updates.licenseNumber,
-        _id: { $ne: doctorId }
+
+    if (updateData.licenseNumber && updateData.licenseNumber !== doctor.licenseNumber) {
+      const existingLicense = await prisma.user.findFirst({
+        where: { licenseNumber: updateData.licenseNumber, NOT: { id: doctor.id } },
       });
-      
+
       if (existingLicense) {
         return NextResponse.json(
           { success: false, error: "License number already exists" },
@@ -202,36 +159,29 @@ export async function PUT(
         );
       }
     }
-    
-    // Apply updates
-    console.log('Updates object before saving:', JSON.stringify(updates, null, 2));
-    Object.assign(doctor, updates);
-    await doctor.save();
-    
-    // Remove password from response
-    const doctorResponse = doctor.toObject();
-    delete doctorResponse.password;
-    
+
+    const updatedDoctor = await prisma.user.update({
+      where: { id: doctor.id },
+      data: updateData,
+      select: { id: true, name: true, email: true, phone: true, department: true, specialization: true, licenseNumber: true, qualifications: true, experience: true, consultationFee: true, availability: true, approved: true, active: true },
+    });
+
     return NextResponse.json({
       success: true,
-      data: doctorResponse,
+      data: updatedDoctor,
       message: "Doctor updated successfully"
     });
-    
+
   } catch (error: any) {
     console.error("Error updating doctor:", error);
-    
-    if (error.code === 11000) {
-      const field = Object.keys(error.keyPattern)[0];
+
+    if (error.code === "P2002") {
       return NextResponse.json(
-        { 
-          success: false, 
-          error: `A doctor with this ${field} already exists` 
-        },
+        { success: false, error: "A doctor with this email or license number already exists" },
         { status: 409 }
       );
     }
-    
+
     return NextResponse.json(
       { success: false, error: error.message || "Failed to update doctor" },
       { status: 500 }
@@ -239,61 +189,44 @@ export async function PUT(
   }
 }
 
-// DELETE: Deactivate doctor (soft delete)
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await dbConnect();
-
     const auth = await authenticateAdmin(request);
     if ("error" in auth) {
       return NextResponse.json(
         { success: false, error: auth.error },
         { status: auth.status }
-
       );
     }
 
     const { id } = await params;
-    const doctorId = id;
-    
-    // Validate ObjectId
-    if (!mongoose.Types.ObjectId.isValid(doctorId)) {
-      return NextResponse.json(
-        { success: false, error: "Invalid doctor ID" },
-        { status: 400 }
-      );
-    }
-    
-    // Check if doctor exists
-    const doctor = await User.findOne({
-      _id: doctorId,
-      role: "doctor"
+
+    const doctor = await prisma.user.findFirst({
+      where: { id, role: "doctor" },
     });
-    
+
     if (!doctor) {
       return NextResponse.json(
         { success: false, error: "Doctor not found" },
         { status: 404 }
       );
     }
-    
-    // Soft delete: set active to false
-    doctor.active = false;
-    await doctor.save();
-    
-    // Remove password from response
-    const doctorResponse = doctor.toObject();
-    delete doctorResponse.password;
-    
+
+    const updatedDoctor = await prisma.user.update({
+      where: { id: doctor.id },
+      data: { active: false },
+      select: { id: true, name: true, email: true, phone: true, department: true, specialization: true, licenseNumber: true, qualifications: true, experience: true, consultationFee: true, availability: true, approved: true, active: true },
+    });
+
     return NextResponse.json({
       success: true,
-      data: doctorResponse,
+      data: updatedDoctor,
       message: "Doctor deactivated successfully"
     });
-    
+
   } catch (error: any) {
     console.error("Error deactivating doctor:", error);
     return NextResponse.json(

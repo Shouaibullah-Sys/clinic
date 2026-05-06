@@ -1,23 +1,22 @@
 // app/api/laboratory/tests/volume/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { LabTest } from "@/lib/models/LabTest";
-import { authenticateRequest, canAccessLaboratory } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { getTokenPayload } from "@/lib/auth/jwt";
 
 export async function GET(request: NextRequest) {
   try {
-    await dbConnect();
-
-    const auth = await authenticateRequest(request);
-    if (!auth.success) {
+    const payload = await getTokenPayload(request);
+    
+    if (!payload) {
       return NextResponse.json(
-        { success: false, error: auth.error },
-        { status: auth.status || 401 },
+        { success: false, error: "Unauthorized" },
+        { status: 401 },
       );
     }
 
-    if (!auth.userRole || !canAccessLaboratory(auth.userRole)) {
+    const allowedRoles = ["admin", "doctor", "lab_technician", "radiologist", "receptionist"];
+    if (!allowedRoles.includes(payload.role)) {
       return NextResponse.json(
         {
           success: false,
@@ -54,36 +53,39 @@ export async function GET(request: NextRequest) {
         startDate.setMonth(now.getMonth() - 1);
     }
 
-    const volume = await LabTest.aggregate([
-      {
-        $match: {
-          orderedAt: { $gte: startDate },
-        },
+    // Get lab tests and aggregate in JavaScript
+    const tests = await prisma.labTest.findMany({
+      where: {
+        createdAt: { gte: startDate },
       },
-      {
-        $group: {
-          _id: {
-            $dateToString: { format: "%Y-%m-%d", date: "$orderedAt" },
-          },
-          tests: { $sum: 1 },
-          completed: {
-            $sum: {
-              $cond: [{ $eq: ["$status", "completed"] }, 1, 0],
-            },
-          },
-        },
+      select: {
+        createdAt: true,
+        status: true,
       },
-      { $sort: { _id: 1 } },
-      { $limit: 30 },
-    ]);
+    });
+
+    // Group by date
+    const volumeMap = new Map<string, { tests: number; completed: number }>();
+    
+    tests.forEach(test => {
+      const date = test.createdAt.toISOString().split('T')[0];
+      const existing = volumeMap.get(date) || { tests: 0, completed: 0 };
+      existing.tests += 1;
+      if (test.status === 'completed') {
+        existing.completed += 1;
+      }
+      volumeMap.set(date, existing);
+    });
+
+    const volume = Array.from(volumeMap.entries()).map(([date, data]) => ({
+      date,
+      tests: data.tests,
+      completed: data.completed,
+    })).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 30);
 
     return NextResponse.json({
       success: true,
-      data: volume.map((item) => ({
-        date: item._id,
-        tests: item.tests,
-        completed: item.completed,
-      })),
+      data: volume,
     });
   } catch (error: any) {
     console.error("Error fetching test volume:", error);
@@ -91,7 +93,6 @@ export async function GET(request: NextRequest) {
       {
         success: false,
         error: error.message || "Failed to fetch test volume",
-        stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
       },
       { status: 500 },
     );

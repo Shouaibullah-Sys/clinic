@@ -1,9 +1,7 @@
 // app/api/appointments/[id]/medicines/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { Medicine } from "@/lib/models/Medicine";
-import { Appointment } from "@/lib/models/Appointment";
+import { prisma } from "@/lib/prisma";
 import { jwtVerify } from "jose";
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-this";
@@ -12,10 +10,18 @@ async function verifyToken(token: string) {
   try {
     const secret = new TextEncoder().encode(JWT_SECRET);
     const { payload } = await jwtVerify(token, secret);
-    return payload;
+    return payload as { id: string; role: string };
   } catch (error) {
     return null;
   }
+}
+
+function generateMedicineId(): string {
+  const date = new Date();
+  const year = date.getFullYear().toString().slice(-2);
+  const month = (date.getMonth() + 1).toString().padStart(2, "0");
+  const random = Math.floor(1000 + Math.random() * 9000);
+  return `MED${year}${month}${random}`;
 }
 
 // POST: Add medicine to appointment
@@ -24,8 +30,6 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await dbConnect();
-
     // Authentication
     const authHeader = request.headers.get("authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -84,7 +88,9 @@ export async function POST(
     }
 
     // Check if appointment exists
-    const appointment = await Appointment.findById(appointmentId);
+    const appointment = await prisma.appointment.findUnique({
+      where: { id: appointmentId },
+    });
     if (!appointment) {
       return NextResponse.json(
         { success: false, error: "Appointment not found" },
@@ -92,38 +98,37 @@ export async function POST(
       );
     }
 
-    // Generate medicine ID
-    const date = new Date();
-    const year = date.getFullYear().toString().slice(-2);
-    const month = (date.getMonth() + 1).toString().padStart(2, "0");
-    const random = Math.floor(1000 + Math.random() * 9000);
-    const medicineId = `MED${year}${month}${random}`;
+    const totalAmount = total || parseFloat(price) * parseInt(quantity);
 
     // Create medicine
-    const medicine = new Medicine({
-      medicineId,
-      appointment: appointmentId,
-      patient: appointment.patient,
-      name: name.trim(),
-      genericName: genericName?.trim(),
-      dosage: dosage.trim(),
-      frequency: frequency.trim(),
-      duration: duration.trim(),
-      quantity: parseInt(quantity),
-      price: parseFloat(price),
-      total: total || parseFloat(price) * parseInt(quantity),
-      status: "prescribed",
-      prescribedBy: userId,
-      prescribedAt: new Date(),
-      notes: notes?.trim(),
-      form: form.trim(),
-      route: route.trim(),
+    const medicine = await prisma.prescribedMedicine.create({
+      data: {
+        medicineId: generateMedicineId(),
+        appointmentId,
+        patientId: appointment.patientId,
+        name: name.trim(),
+        genericName: genericName?.trim(),
+        dosage: dosage.trim(),
+        frequency: frequency.trim(),
+        duration: duration.trim(),
+        quantity: parseInt(quantity),
+        price: parseFloat(price),
+        total: totalAmount,
+        status: "prescribed",
+        prescribedBy: userId,
+        notes: notes?.trim(),
+        form: form.trim(),
+        route: route.trim(),
+      },
+      include: {
+        patient: {
+          select: {
+            name: true,
+            patientId: true,
+          },
+        },
+      },
     });
-
-    await medicine.save();
-
-    // Populate response
-    await medicine.populate("patient", "name patientId");
 
     return NextResponse.json(
       {
@@ -148,8 +153,6 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await dbConnect();
-
     // Authentication
     const authHeader = request.headers.get("authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -171,10 +174,18 @@ export async function GET(
 
     const { id: appointmentId } = await params;
 
-    const medicines = await Medicine.find({ appointment: appointmentId })
-      .populate("patient", "name patientId")
-      .sort({ prescribedAt: -1 })
-      .lean();
+    const medicines = await prisma.prescribedMedicine.findMany({
+      where: { appointmentId },
+      include: {
+        patient: {
+          select: {
+            name: true,
+            patientId: true,
+          },
+        },
+      },
+      orderBy: { prescribedAt: "desc" },
+    });
 
     return NextResponse.json({
       success: true,

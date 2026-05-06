@@ -1,90 +1,9 @@
-// app/api/laboratory/tests/route.ts
-
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { LabTest } from "@/lib/models/LabTest";
-import { Patient } from "@/lib/models/Patient";
-import { User } from "@/lib/models/User";
+import { prisma } from "@/lib/prisma";
 import { authenticateRequest } from "@/lib/auth";
-import mongoose from "mongoose";
-
-// Ensure models are registered in the mongoose connection (avoid tree-shaking in route bundling)
-void Patient;
-void User;
-
-// Type definitions for populated data
-interface PopulatedPatient {
-  _id: mongoose.Types.ObjectId;
-  name: string;
-  patientId: string;
-  phone?: string;
-  guardian?: string;
-  dateOfBirth?: Date;
-  gender?: string;
-}
-
-interface PopulatedDoctor {
-  _id: mongoose.Types.ObjectId;
-  name: string;
-  specialization?: string;
-  department?: string;
-}
-
-interface PopulatedUser {
-  _id: mongoose.Types.ObjectId;
-  name: string;
-}
-
-interface LabTestWithPopulatedData {
-  _id: mongoose.Types.ObjectId;
-  testId: string;
-  testName: string;
-  category: string;
-  patient: PopulatedPatient | mongoose.Types.ObjectId;
-  doctor: PopulatedDoctor | mongoose.Types.ObjectId;
-  status: string;
-  collectionStatus: string;
-  processingStatus: string;
-  verificationStatus: string;
-  orderedAt: Date;
-  paymentVerified: boolean;
-  priority: string;
-  charges?: {
-    paymentStatus: string;
-    due: number;
-  };
-  labReferenceId?: string;
-  specimen?: {
-    type: string;
-    quantity?: string;
-  };
-  // Add other fields as needed
-}
-
-// Helper function to safely access patient properties
-function getPatientName(
-  patient: PopulatedPatient | mongoose.Types.ObjectId,
-): string {
-  if (patient instanceof mongoose.Types.ObjectId) {
-    return "Unknown Patient";
-  }
-  return patient.name || "Unknown Patient";
-}
-
-function getPatientId(
-  patient: PopulatedPatient | mongoose.Types.ObjectId,
-): string {
-  if (patient instanceof mongoose.Types.ObjectId) {
-    return "No ID";
-  }
-  return patient.patientId || "No ID";
-}
 
 export async function GET(request: NextRequest) {
   try {
-    await dbConnect();
-
-    // Authenticate the request
     const auth = await authenticateRequest(request);
     if (!auth.success) {
       return NextResponse.json(
@@ -97,18 +16,15 @@ export async function GET(request: NextRequest) {
     const userRole = auth.userRole!;
     const userName = auth.userName!;
 
-    if (process.env.NODE_ENV === "development") {
-      console.log(
-        `Lab tests requested by ${userRole}: ${userName} (${userId})`,
-      );
-    }
+    const { searchParams } = new URL(request.url);
+    const tab = searchParams.get("tab") || "all";
+    const status = searchParams.get("status");
+    const priority = searchParams.get("priority");
+    const limit = parseInt(searchParams.get("limit") || "100");
+    const sort = searchParams.get("sort") || "-createdAt";
 
-    // Check if user has access to laboratory
     const allowedRoles = ["lab_technician", "admin", "doctor"];
     if (!allowedRoles.includes(userRole)) {
-      if (process.env.NODE_ENV === "development") {
-        console.log(`Access denied for role: ${userRole}`);
-      }
       return NextResponse.json(
         {
           success: false,
@@ -120,181 +36,64 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const { searchParams } = new URL(request.url);
-    const tab = searchParams.get("tab") || "all";
-    const status = searchParams.get("status");
-    const priority = searchParams.get("priority");
-    const limit = parseInt(searchParams.get("limit") || "100");
-    const sort = searchParams.get("sort") || "-orderedAt";
-
-    if (process.env.NODE_ENV === "development") {
-      console.log(
-        `Fetching lab tests for tab: ${tab}, status: ${status}, priority: ${priority}`,
-      );
-    }
-
-    // Build query based on tab selection
-    const query: any = {
-      status: { $ne: "cancelled" }, // Exclude cancelled tests by default
+    let where: any = {
+      status: { not: "cancelled" },
     };
 
     switch (tab) {
       case "pending":
-        // Tests pending collection
-        query.collectionStatus = { $in: ["pending", "scheduled"] };
+        where.sampleCollected = false;
         break;
       case "collected":
-        // Tests collected but not yet processed
-        query.collectionStatus = "collected";
-        query.processingStatus = { $ne: "completed" };
+        where.sampleCollected = true;
+        where.status = { not: "reported" };
         break;
       case "processing":
-        // Tests currently being processed
-        query.processingStatus = "processing";
+        where.status = "processing";
         break;
       case "completed":
-        // Tests with completed processing
-        query.processingStatus = "completed";
-        query.status = { $ne: "reported" };
+        where.status = "completed";
         break;
       case "reported":
-        // Tests that have been reported
-        query.status = "reported";
+        where.status = "reported";
         break;
       case "all":
       default:
-        // All tests except cancelled
         break;
     }
 
-    // Add additional filters
     if (status && status !== "all") {
-      query.status = status;
+      where.status = status;
     }
 
     if (priority && priority !== "all") {
-      query.priority = priority;
+      where.priority = priority;
     }
 
-    // For laboratory technicians, show tests that are either:
-    // 1. Payment verified, OR
-    // 2. High priority (urgent/emergency) even if not paid
     if (userRole === "lab_technician") {
-      query.$or = [
-        { paymentVerified: true },
-        { priority: { $in: ["urgent", "emergency"] } },
-      ];
+      where.urgent = true;
     }
 
-    // If user is doctor, show only their tests
     if (userRole === "doctor") {
-      query.doctor = new mongoose.Types.ObjectId(userId);
+      where.doctorId = userId;
     }
 
-    if (process.env.NODE_ENV === "development") {
-      console.log("Lab tests query:", JSON.stringify(query, null, 2));
-    }
-
-    // Convert sort string to MongoDB sort object
-    const sortObj: any = {};
-    if (sort.startsWith("-")) {
-      sortObj[sort.substring(1)] = -1;
-    } else {
-      sortObj[sort] = 1;
-    }
-
-    // Fetch tests with proper population
-    const tests = await LabTest.find(query)
-      .populate<{
-        patient: PopulatedPatient;
-      }>("patient", "name patientId phone email dateOfBirth gender")
-      .populate<{
-        doctor: PopulatedDoctor;
-      }>("doctor", "name specialization department")
-      .populate<{ orderedBy: PopulatedUser }>("orderedBy", "name")
-      .populate<{
-        "collectionDetails.collectedBy": PopulatedUser;
-      }>("collectionDetails.collectedBy", "name")
-      .populate<{
-        "processingDetails.processedBy": PopulatedUser;
-      }>("processingDetails.processedBy", "name")
-      .sort(sortObj)
-      .limit(limit)
-      .lean();
-
-    if (process.env.NODE_ENV === "development") {
-      console.log(
-        `Found ${tests.length} lab tests for ${userRole} ${userName}`,
-      );
-    }
-
-    // Log some sample tests for debugging
-    if (process.env.NODE_ENV === "development") {
-      if (tests.length > 0) {
-        console.log("Sample tests:");
-        tests.slice(0, 3).forEach((test: any, index: number) => {
-          // Use type-safe accessor functions
-          const patientName = getPatientName(test.patient);
-          const patientId = getPatientId(test.patient);
-
-          console.log(`${index + 1}. ${test.testId}: ${test.testName}`);
-          console.log(`   Patient: ${patientName} (${patientId})`);
-          console.log(
-            `   Status: ${test.status}, Collection: ${test.collectionStatus}, Processing: ${test.processingStatus}`,
-          );
-          console.log(
-            `   Payment Verified: ${test.paymentVerified}, Priority: ${test.priority}`,
-          );
-          console.log(`   Ordered: ${test.orderedAt}`);
-        });
-      } else {
-        console.log(
-          "No tests found. Database may be empty or query too restrictive.",
-        );
-        console.log("Query was:", query);
-
-        // Check total count in database for debugging
-        const totalCount = await LabTest.countDocuments({});
-        console.log(`Total lab tests in database: ${totalCount}`);
-
-        const unverifiedCount = await LabTest.countDocuments({
-          paymentVerified: false,
-        });
-        const verifiedCount = await LabTest.countDocuments({
-          paymentVerified: true,
-        });
-        console.log(
-          `Verified: ${verifiedCount}, Unverified: ${unverifiedCount}`,
-        );
-      }
-    }
-
-    const normalizedTests = tests.map((test: any) => {
-      if (
-        test.collectionStatus === "collected" &&
-        test.processingStatus === "pending"
-      ) {
-        return {
-          ...test,
-          processingStatus: "completed",
-          status: test.status === "collected" ? "completed" : test.status,
-        };
-      }
-      return test;
+    const tests = await prisma.labTest.findMany({
+      where,
+      orderBy: sort.startsWith("-")
+        ? { [sort.substring(1)]: "desc" }
+        : { [sort]: "asc" },
+      take: limit,
     });
 
     return NextResponse.json({
       success: true,
-      data: normalizedTests,
-      count: normalizedTests.length,
+      data: tests,
+      count: tests.length,
       userRole: userRole,
-      query: query,
       tab: tab,
     });
   } catch (error: any) {
-    if (process.env.NODE_ENV === "development") {
-      console.error("Error fetching lab tests:", error);
-    }
     return NextResponse.json(
       {
         success: false,
@@ -306,12 +105,8 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST: Create a new lab test (for testing/debugging)
 export async function POST(request: NextRequest) {
   try {
-    await dbConnect();
-
-    // Authenticate the request
     const auth = await authenticateRequest(request);
     if (!auth.success) {
       return NextResponse.json(
@@ -322,7 +117,6 @@ export async function POST(request: NextRequest) {
 
     const userRole = auth.userRole!;
 
-    // Only admin can create test data via API
     if (userRole !== "admin") {
       return NextResponse.json(
         {
@@ -335,57 +129,31 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
 
-    // Create a test lab test for debugging
-    const labTestData = {
-      testId: `LABTEST${Date.now().toString().slice(-6)}`,
-      testName: "Complete Blood Count",
-      category: "hematology",
-      patient: new mongoose.Types.ObjectId(
-        body.patientId || "65f1a2b3c4d5e6f789012345",
-      ),
-      doctor: new mongoose.Types.ObjectId(
-        body.doctorId || "65f1a2b3c4d5e6f789012346",
-      ),
-      price: 150,
-      status: "ordered",
-      collectionStatus: "pending",
-      processingStatus: "pending",
-      priority: "routine",
-      paymentVerified: true,
-      orderedBy: new mongoose.Types.ObjectId(auth.userId!),
-      orderedAt: new Date(),
-      charges: {
-        basePrice: 150,
-        tax: 0,
-        discount: 0,
-        otherCharges: 0,
-        totalAmount: 150,
-        paid: 150,
-        due: 0,
-        paymentStatus: "paid",
-        paymentMethod: "cash",
+    const testId = `LABTEST${Date.now().toString().slice(-6)}`;
+
+    const labTest = await prisma.labTest.create({
+      data: {
+        testId,
+        tests: body.tests || "Complete Blood Count",
+        category: body.category || "hematology",
+        patientId: body.patientId,
+        doctorId: body.doctorId,
+        priority: body.priority || "routine",
+        status: "pending",
+        totalAmount: body.totalAmount || 150,
+        createdById: auth.userId!,
       },
-    };
-
-    const labTest = new LabTest(labTestData);
-    await labTest.save();
-
-    if (process.env.NODE_ENV === "development") {
-      console.log(`Created test lab test: ${labTest.testId}`);
-    }
+    });
 
     return NextResponse.json(
       {
         success: true,
         data: labTest,
-        message: "Test lab test created successfully",
+        message: "Lab test created successfully",
       },
       { status: 201 },
     );
   } catch (error: any) {
-    if (process.env.NODE_ENV === "development") {
-      console.error("Error creating lab test:", error);
-    }
     return NextResponse.json(
       { success: false, error: error.message || "Failed to create lab test" },
       { status: 500 },

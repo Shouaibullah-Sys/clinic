@@ -1,16 +1,11 @@
-// app/api/settings/direct-lab-payment/route.ts
-
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { AppSetting, IAppSetting } from "@/lib/models/AppSetting";
+import { prisma } from "@/lib/prisma";
 import { authenticateRequest } from "@/lib/auth";
 
 const SETTING_KEY = "directLabTestPaymentRequired";
 
 export async function GET(request: NextRequest) {
   try {
-    await dbConnect();
-
     const auth = await authenticateRequest(request);
     if (!auth.success) {
       return NextResponse.json(
@@ -19,14 +14,14 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const setting = (await AppSetting.findOne({
-      key: SETTING_KEY,
-    }).lean()) as IAppSetting | null;
-    const paymentRequired = setting?.value ?? true;
+    const setting = await prisma.appSetting.findUnique({
+      where: { key: SETTING_KEY },
+    });
+    const paymentRequired = setting?.value ?? "true";
 
     return NextResponse.json({
       success: true,
-      data: { paymentRequired },
+      data: { paymentRequired: paymentRequired === "true" },
     });
   } catch (error: any) {
     console.error("Error fetching direct lab payment setting:", error);

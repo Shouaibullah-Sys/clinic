@@ -1,25 +1,9 @@
 // app/api/appointments/[id]/medical-records/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { LabTest } from "@/lib/models/LabTest";
-import { Prescription } from "@/lib/models/Prescription";
-import { RadiologyService } from "@/lib/models/RadiologyService";
-import { Appointment } from "@/lib/models/Appointment";
-import { jwtVerify } from "jose";
+import { prisma } from "@/lib/prisma";
+import { getTokenPayload } from "@/lib/auth/jwt";
 import { buildMarkedOnlyQuery } from "@/lib/utils/markedTransactions";
-
-const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-this";
-
-async function verifyToken(token: string) {
-  try {
-    const secret = new TextEncoder().encode(JWT_SECRET);
-    const { payload } = await jwtVerify(token, secret);
-    return payload;
-  } catch {
-    return null;
-  }
-}
 
 export async function GET(
   request: NextRequest,
@@ -28,30 +12,16 @@ export async function GET(
   try {
     const { id: appointmentId } = await params;
 
-    await dbConnect();
-
-    // Authentication
-    const authHeader = request.headers.get("authorization");
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    const user = await getTokenPayload(request);
+    if (!user) {
       return NextResponse.json(
-        { success: false, error: "Unauthorized. No token provided." },
+        { success: false, error: "Unauthorized" },
         { status: 401 },
       );
     }
 
-    const token = authHeader.split(" ")[1];
-    const payload = await verifyToken(token);
+    const userRole = user.role;
 
-    if (!payload) {
-      return NextResponse.json(
-        { success: false, error: "Invalid or expired token." },
-        { status: 401 },
-      );
-    }
-
-    const userRole = payload.role as string;
-
-    // Only receptionists, doctors, and admins can access
     if (!["receptionist", "doctor", "admin"].includes(userRole)) {
       return NextResponse.json(
         { success: false, error: "Forbidden. Insufficient permissions." },
@@ -59,23 +29,42 @@ export async function GET(
       );
     }
 
-    const buildQuery = async (module: "lab" | "prescription" | "radiology", baseQuery: any) => {
+    const buildQuery = async (module: string, baseQuery: any) => {
       const { query: finalQuery } = await buildMarkedOnlyQuery({
-        userId: payload.id as string,
+        userId: user.id,
         module,
         baseQuery,
       });
       return finalQuery;
     };
 
-    // Get the appointment to access patient ID
-    const appointment = await Appointment.findById(appointmentId)
-      .select("-__v")
-      .populate(
-        "patient",
-        "_id name patientId phone email dateOfBirth gender address bloodGroup allergies",
-      )
-      .populate("doctor", "_id name specialization department");
+    const appointment = await prisma.appointment.findUnique({
+      where: { id: appointmentId },
+      include: {
+        patient: {
+          select: {
+            id: true,
+            name: true,
+            patientId: true,
+            phone: true,
+            email: true,
+            dateOfBirth: true,
+            gender: true,
+            address: true,
+            bloodGroup: true,
+            allergies: true,
+          },
+        },
+        doctor: {
+          select: {
+            id: true,
+            name: true,
+            specialization: true,
+            department: true,
+          },
+        },
+      },
+    });
 
     if (!appointment) {
       return NextResponse.json(
@@ -84,20 +73,29 @@ export async function GET(
       );
     }
 
-    const patientId = appointment.patient._id;
+    const patientId = appointment.patientId;
     const appointmentDate = new Date(appointment.date);
 
-    // Get appointment-specific lab tests
     const appointmentLabTestsQuery = await buildQuery("lab", {
-      appointment: appointmentId,
+      appointmentId,
     });
-    const appointmentLabTests = await LabTest.find(appointmentLabTestsQuery)
-      .select(
-        "_id testId testName category price discountedPrice status priority charges orderedAt",
-      )
-      .sort({ orderedAt: -1 });
+    const appointmentLabTests = await prisma.labTest.findMany({
+      where: appointmentLabTestsQuery,
+      select: {
+        id: true,
+        testId: true,
+        tests: true,
+        category: true,
+        price: true,
+        discountedPrice: true,
+        status: true,
+        priority: true,
+        charges: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: "desc" },
+    });
 
-    // Get patient-specific lab tests (from last 30 days if no appointment-specific tests)
     let patientLabTests = [];
     let labTestsSource: "appointment" | "patient" | "mixed" = "appointment";
 
@@ -106,162 +104,155 @@ export async function GET(
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
       const patientLabTestsQuery = await buildQuery("lab", {
-        patient: patientId,
-        orderedAt: { $gte: thirtyDaysAgo },
-        status: { $ne: "cancelled" },
+        patientId,
+        createdAt: { gte: thirtyDaysAgo },
+        status: { not: "cancelled" },
       });
-      patientLabTests = await LabTest.find(patientLabTestsQuery)
-        .select(
-          "_id testId testName category price discountedPrice status priority charges orderedAt",
-        )
-        .sort({ orderedAt: -1 })
-        .limit(20);
+      patientLabTests = await prisma.labTest.findMany({
+        where: patientLabTestsQuery,
+        select: {
+          id: true,
+          testId: true,
+          tests: true,
+          category: true,
+          price: true,
+          discountedPrice: true,
+          status: true,
+          priority: true,
+          charges: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: "desc" },
+        take: 20,
+      });
 
       if (patientLabTests.length > 0) {
         labTestsSource = "patient";
       }
     } else {
-      // If we have appointment-specific tests, still get recent patient tests for context
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
       const patientLabTestsQuery = await buildQuery("lab", {
-        patient: patientId,
-        appointment: { $ne: appointmentId }, // Exclude current appointment tests
-        orderedAt: { $gte: thirtyDaysAgo },
-        status: { $ne: "cancelled" },
+        patientId,
+        appointmentId: { not: appointmentId },
+        createdAt: { gte: thirtyDaysAgo },
+        status: { not: "cancelled" },
       });
-      patientLabTests = await LabTest.find(patientLabTestsQuery)
-        .select(
-          "_id testId testName category price discountedPrice status priority charges orderedAt",
-        )
-        .sort({ orderedAt: -1 })
-        .limit(10)
-        .lean();
+      patientLabTests = await prisma.labTest.findMany({
+        where: patientLabTestsQuery,
+        select: {
+          id: true,
+          testId: true,
+          tests: true,
+          category: true,
+          price: true,
+          discountedPrice: true,
+          status: true,
+          priority: true,
+          charges: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: "desc" },
+        take: 10,
+      });
 
       if (patientLabTests.length > 0) {
         labTestsSource = "mixed";
       }
     }
 
-    // Get appointment-specific prescriptions
     const appointmentPrescriptionsQuery = await buildQuery("prescription", {
-      appointment: appointmentId,
+      appointmentId,
     });
-    const appointmentPrescriptions = await Prescription.find(appointmentPrescriptionsQuery)
-      .select(
-        "_id prescriptionId prescribedDate medications diagnosis instructions notes status expiryDate charges paymentStatus paymentVerified",
-      )
-      .populate("patient", "_id name patientId")
-      .populate("doctor", "_id name specialization")
-      .sort({ prescribedDate: -1 });
+    const appointmentPrescriptions = await prisma.prescription.findMany({
+      where: appointmentPrescriptionsQuery,
+      include: {
+        patient: { select: { id: true, name: true, patientId: true } },
+        doctor: { select: { id: true, name: true, specialization: true } },
+      },
+      orderBy: { date: "desc" },
+    });
 
-    // Get patient-specific prescriptions
     let patientPrescriptions = [];
-    let prescriptionsSource: "appointment" | "patient" | "mixed" =
-      "appointment";
+    let prescriptionsSource: "appointment" | "patient" | "mixed" = "appointment";
 
     if (appointmentPrescriptions.length === 0) {
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
       const patientPrescriptionsQuery = await buildQuery("prescription", {
-        patient: patientId,
-        prescribedDate: { $gte: thirtyDaysAgo },
+        patientId,
+        date: { gte: thirtyDaysAgo },
         status: "active",
-        expiryDate: { $gt: new Date() },
+        expiryDate: { gt: new Date() },
       });
-      patientPrescriptions = await Prescription.find(patientPrescriptionsQuery)
-        .select(
-          "_id prescriptionId prescribedDate medications diagnosis instructions notes status expiryDate charges paymentStatus paymentVerified",
-        )
-        .populate("patient", "_id name patientId")
-        .populate("doctor", "_id name specialization")
-        .sort({ prescribedDate: -1 })
-        .limit(10);
+      patientPrescriptions = await prisma.prescription.findMany({
+        where: patientPrescriptionsQuery,
+        include: {
+          patient: { select: { id: true, name: true, patientId: true } },
+          doctor: { select: { id: true, name: true, specialization: true } },
+        },
+        orderBy: { date: "desc" },
+        take: 10,
+      });
 
       if (patientPrescriptions.length > 0) {
         prescriptionsSource = "patient";
       }
     } else {
-      // If we have appointment-specific prescriptions, still get recent patient prescriptions
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
       const patientPrescriptionsQuery = await buildQuery("prescription", {
-        patient: patientId,
-        appointment: { $ne: appointmentId }, // Exclude current appointment prescriptions
-        prescribedDate: { $gte: thirtyDaysAgo },
+        patientId,
+        appointmentId: { not: appointmentId },
+        date: { gte: thirtyDaysAgo },
         status: "active",
-        expiryDate: { $gt: new Date() },
+        expiryDate: { gt: new Date() },
       });
-      patientPrescriptions = await Prescription.find(patientPrescriptionsQuery)
-        .select(
-          "_id prescriptionId prescribedDate medications diagnosis instructions notes status expiryDate charges paymentStatus paymentVerified",
-        )
-        .populate("patient", "_id name patientId")
-        .populate("doctor", "_id name specialization")
-        .sort({ prescribedDate: -1 })
-        .limit(5);
+      patientPrescriptions = await prisma.prescription.findMany({
+        where: patientPrescriptionsQuery,
+        include: {
+          patient: { select: { id: true, name: true, patientId: true } },
+          doctor: { select: { id: true, name: true, specialization: true } },
+        },
+        orderBy: { date: "desc" },
+        take: 5,
+      });
 
       if (patientPrescriptions.length > 0) {
         prescriptionsSource = "mixed";
       }
     }
 
-    // Get appointment-specific imaging services
     const appointmentImagingQuery = await buildQuery("radiology", {
-      appointment: appointmentId,
+      appointmentId,
     });
-    const appointmentImagingServices = await RadiologyService.find(appointmentImagingQuery)
-      .select(
-        "_id serviceId serviceType bodyPart view status priority reportStatus billingStatus charges paymentVerified requestDate scheduledDate performedDate",
-      )
-      .populate("referringDoctor", "name")
-      .populate("radiologist", "name")
-      .populate("technician", "name")
-      .sort({ requestDate: -1 })
-      .lean();
-
-    console.log(
-      `📸 Found ${appointmentImagingServices.length} appointment-specific imaging services for appointment ${appointmentId}`,
-    );
-    appointmentImagingServices.forEach((service) => {
-      console.log(
-        `  - Service ${service.serviceId}: paymentStatus=${service.charges?.paymentStatus}, billingStatus=${service.billingStatus}, paymentVerified=${service.paymentVerified}, hasAppointment=${!!service.appointment}, charges=${JSON.stringify(service.charges)}`,
-      );
+    const appointmentImagingServices = await prisma.radiologyRequest.findMany({
+      where: appointmentImagingQuery,
+      include: {
+        referringDoctor: { select: { name: true } },
+        radiologist: { select: { name: true } },
+        technician: { select: { name: true } },
+      },
+      orderBy: { requestDate: "desc" },
     });
 
-    // Also check if there are any imaging services for this patient without appointment link
     const allPatientImagingQuery = await buildQuery("radiology", {
-      patient: patientId,
-      requestDate: { $gte: appointmentDate },
+      patientId,
+      requestDate: { gte: appointmentDate },
     });
-    const allPatientImagingServices = await RadiologyService.find(allPatientImagingQuery)
-      .select("_id serviceId appointment")
-      .sort({ requestDate: -1 })
-      .lean();
-
-    console.log(
-      `🔍 Total imaging services for patient since appointment date: ${allPatientImagingServices.length}`,
-    );
-    allPatientImagingServices.forEach((service) => {
-      console.log(
-        `  - Service ${service.serviceId}: appointment=${service.appointment}`,
-      );
+    const allPatientImagingServices = await prisma.radiologyRequest.findMany({
+      where: allPatientImagingQuery,
+      select: {
+        id: true,
+        serviceId: true,
+        appointmentId: true,
+      },
+      orderBy: { requestDate: "desc" },
     });
 
-    // If no appointment-specific imaging services found, check if there are any recent patient services
-    if (
-      appointmentImagingServices.length === 0 &&
-      allPatientImagingServices.length > 0
-    ) {
-      console.log(
-        `⚠️ No appointment-specific imaging services found, but ${allPatientImagingServices.length} patient services exist. This might indicate imaging service is not properly linked to appointment.`,
-      );
-    }
-
-    // Get patient-specific imaging services (from last 30 days if no appointment-specific services)
     let patientImagingServices = [];
     let imagingSource: "appointment" | "patient" | "mixed" = "appointment";
 
@@ -270,44 +261,44 @@ export async function GET(
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
       const patientImagingQuery = await buildQuery("radiology", {
-        patient: patientId,
-        requestDate: { $gte: thirtyDaysAgo },
-        status: { $ne: "cancelled" },
+        patientId,
+        requestDate: { gte: thirtyDaysAgo },
+        status: { not: "cancelled" },
       });
-      patientImagingServices = await RadiologyService.find(patientImagingQuery)
-        .select(
-          "_id serviceId serviceType bodyPart view status priority reportStatus billingStatus charges paymentVerified requestDate scheduledDate performedDate",
-        )
-        .populate("referringDoctor", "name")
-        .populate("radiologist", "name")
-        .populate("technician", "name")
-        .sort({ requestDate: -1 })
-        .limit(20);
+      patientImagingServices = await prisma.radiologyRequest.findMany({
+        where: patientImagingQuery,
+        include: {
+          referringDoctor: { select: { name: true } },
+          radiologist: { select: { name: true } },
+          technician: { select: { name: true } },
+        },
+        orderBy: { requestDate: "desc" },
+        take: 20,
+      });
 
       if (patientImagingServices.length > 0) {
         imagingSource = "patient";
       }
     } else {
-      // If we have appointment-specific services, still get recent patient services for context
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
       const patientImagingQuery = await buildQuery("radiology", {
-        patient: patientId,
-        appointment: { $ne: appointmentId }, // Exclude current appointment services
-        requestDate: { $gte: thirtyDaysAgo },
-        status: { $ne: "cancelled" },
+        patientId,
+        appointmentId: { not: appointmentId },
+        requestDate: { gte: thirtyDaysAgo },
+        status: { not: "cancelled" },
       });
-      patientImagingServices = await RadiologyService.find(patientImagingQuery)
-        .select(
-          "_id serviceId serviceType bodyPart view status priority reportStatus billingStatus charges paymentVerified requestDate scheduledDate performedDate",
-        )
-        .populate("referringDoctor", "name")
-        .populate("radiologist", "name")
-        .populate("technician", "name")
-        .sort({ requestDate: -1 })
-        .limit(10)
-        .lean();
+      patientImagingServices = await prisma.radiologyRequest.findMany({
+        where: patientImagingQuery,
+        include: {
+          referringDoctor: { select: { name: true } },
+          radiologist: { select: { name: true } },
+          technician: { select: { name: true } },
+        },
+        orderBy: { requestDate: "desc" },
+        take: 10,
+      });
 
       if (patientImagingServices.length > 0) {
         imagingSource = "mixed";

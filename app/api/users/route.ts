@@ -1,9 +1,8 @@
-// app/api/users/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import jwt, { JwtPayload } from "jsonwebtoken";
+import { jwtVerify } from "jose";
 import { cookies } from "next/headers";
-import dbConnect from "@/lib/dbConnect";
-import { User } from "@/lib/models/User";
+import { prisma } from "@/lib/prisma";
+import { hash } from "bcryptjs";
 
 export async function GET(req: NextRequest) {
   if (!process.env.JWT_SECRET) {
@@ -21,9 +20,11 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    let decoded: JwtPayload;
+    let decoded: any;
     try {
-      decoded = jwt.verify(accessToken, process.env.JWT_SECRET) as JwtPayload;
+      const secret = new TextEncoder().encode(process.env.JWT_SECRET);
+      const { payload } = await jwtVerify(accessToken, secret);
+      decoded = payload;
     } catch (error) {
       return NextResponse.json({ error: "Invalid token" }, { status: 401 });
     }
@@ -35,24 +36,31 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    await dbConnect();
-
-    // Get query parameters for filtering
     const { searchParams } = new URL(req.url);
     const role = searchParams.get("role");
     const approved = searchParams.get("approved");
     const active = searchParams.get("active");
 
-    // Build query
-    const query: any = {};
-    if (role) query.role = role;
-    if (approved !== null) query.approved = approved === "true";
-    if (active !== null) query.active = active === "true";
+    let where: any = {};
+    if (role) where.role = role;
+    if (approved !== null) where.approved = approved === "true";
+    if (active !== null) where.active = active === "true";
 
-    const users = await User.find(query)
-      .select("-password -refreshTokens")
-      .sort({ createdAt: -1 })
-      .lean();
+    const users = await prisma.user.findMany({
+      where,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        role: true,
+        approved: true,
+        active: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+      orderBy: { createdAt: "desc" },
+    });
 
     return NextResponse.json({
       users,
@@ -83,9 +91,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    let decoded: JwtPayload;
+    let decoded: any;
     try {
-      decoded = jwt.verify(accessToken, process.env.JWT_SECRET) as JwtPayload;
+      const secret = new TextEncoder().encode(process.env.JWT_SECRET);
+      const { payload } = await jwtVerify(accessToken, secret);
+      decoded = payload;
     } catch (error) {
       return NextResponse.json({ error: "Invalid token" }, { status: 401 });
     }
@@ -100,10 +110,9 @@ export async function POST(req: NextRequest) {
     const data = await req.json();
     const { name, email, password, phone, role = "staff" } = data;
 
-    await dbConnect();
-
-    // Check if user exists
-    const existingUser = await User.findOne({ email });
+    const existingUser = await prisma.user.findUnique({
+      where: { email },
+    });
     if (existingUser) {
       return NextResponse.json(
         { error: "Email already exists" },
@@ -111,31 +120,36 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const newUser = new User({
-      name,
-      email,
-      password,
-      phone,
-      role,
-      approved: role === "admin" ? true : false,
-      active: true,
-    });
+    const hashedPassword = await hash(password, 10);
 
-    await newUser.save();
+    const newUser = await prisma.user.create({
+      data: {
+        name,
+        email,
+        password: hashedPassword,
+        phone,
+        role,
+        approved: role === "admin",
+        active: true,
+        permissions: "[]",
+        refreshTokens: "[]",
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        phone: true,
+        approved: true,
+        active: true,
+      },
+    });
 
     return NextResponse.json(
       {
         success: true,
         message: "User created successfully",
-        user: {
-          _id: newUser._id,
-          name: newUser.name,
-          email: newUser.email,
-          role: newUser.role,
-          phone: newUser.phone,
-          approved: newUser.approved,
-          active: newUser.active,
-        },
+        user: newUser,
       },
       { status: 201 }
     );

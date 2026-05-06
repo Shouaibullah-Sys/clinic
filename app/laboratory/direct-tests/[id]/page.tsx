@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -47,14 +47,14 @@ import type {
 } from "@/lib/pdf-generator";
 
 interface DirectLabTest {
-  _id: string;
+  id: string;
   testId: string;
   testName: string;
   category: string;
   description?: string;
   directBatchId?: string;
   patient: {
-    _id: string;
+    id: string;
     name: string;
     patientId: string;
     phone?: string;
@@ -63,8 +63,6 @@ interface DirectLabTest {
     refPerson?: string;
     passTskNo?: string;
     registrationNo?: string;
-    dateOfBirth?: string;
-    gender?: string;
   };
   patientSnapshot?: {
     name?: string;
@@ -79,11 +77,11 @@ interface DirectLabTest {
     gender?: string;
   };
   createdBy?: {
-    _id: string;
+    id: string;
     name: string;
   };
   finalizedBy?: {
-    _id: string;
+    id: string;
     name: string;
   };
   status: string;
@@ -92,7 +90,7 @@ interface DirectLabTest {
   verificationStatus: string;
   paymentVerified: boolean;
   paymentVerifiedBy?: {
-    _id: string;
+    id: string;
     name: string;
   };
   priority: string;
@@ -110,7 +108,7 @@ interface DirectLabTest {
     paymentMethod?: string;
     paymentDate?: string;
     collectedBy?: {
-      _id: string;
+      id: string;
       name: string;
     };
   };
@@ -131,12 +129,12 @@ interface DirectLabTest {
     }>;
     interpretation?: string;
     reportedBy?: {
-      _id: string;
+      id: string;
       name: string;
     } | null;
     reportedAt?: string;
     verifiedBy?: {
-      _id: string;
+      id: string;
       name: string;
     } | null;
     verifiedAt?: string;
@@ -184,10 +182,21 @@ export default function DirectTestDetailPage() {
     if (!record) return fallback;
     const patientValue =
       record.patient?.[field as keyof DirectLabTest["patient"]];
-    const snapshotValue =
-      record.patientSnapshot && field in record.patientSnapshot
-        ? record.patientSnapshot[field as keyof PatientSnapshot]
-        : undefined;
+
+    let snapshotValue: string | undefined;
+    if (record.patientSnapshot) {
+      try {
+        const parsedSnapshot = typeof record.patientSnapshot === 'string'
+          ? JSON.parse(record.patientSnapshot)
+          : record.patientSnapshot;
+        snapshotValue = field in parsedSnapshot
+          ? parsedSnapshot[field as keyof PatientSnapshot]
+          : undefined;
+      } catch (error) {
+        console.warn("Failed to parse patientSnapshot:", error);
+      }
+    }
+
     const value = patientValue ?? snapshotValue;
     if (value === undefined || value === null) return fallback;
     if (typeof value === "string" && value.trim() === "") return fallback;
@@ -290,7 +299,7 @@ export default function DirectTestDetailPage() {
       : undefined;
 
     return {
-      ...(record as PdfDirectLabTest),
+      ...(record as unknown as PdfDirectLabTest),
       patientSnapshot: normalizedSnapshot,
     };
   };
@@ -299,12 +308,74 @@ export default function DirectTestDetailPage() {
   const [printing, setPrinting] = useState(false);
   const [paymentRequired, setPaymentRequired] = useState(true);
 
+  const fetchTestDetails = useCallback(async (testId: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      if (!testId) {
+        throw new Error("Invalid test ID");
+      }
+
+      const response = await fetch(
+        `/api/laboratory/direct-tests/${testId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        },
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          errorData.error || `HTTP error! status: ${response.status}`
+        );
+      }
+
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.error || "Failed to fetch test");
+      }
+
+      setTest(data.data);
+    } catch (error: unknown) {
+      console.error("Error fetching test:", error);
+      setError(
+        error instanceof Error ? error.message : "Failed to load test details",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [accessToken]);
+
   useEffect(() => {
-    fetchTestDetails();
-  }, [params.id]);
+    const id = params?.id;
+    if (!id || !accessToken) return;
+    fetchTestDetails(Array.isArray(id) ? id[0] : id);
+  }, [params?.id, accessToken, fetchTestDetails]);
+
+  const fetchPaymentSetting = async () => {
+    try {
+      const response = await fetch("/api/settings/direct-lab-payment", {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+      if (!response.ok) return;
+      const data = await response.json();
+      if (data?.success && typeof data.data?.paymentRequired === "boolean") {
+        setPaymentRequired(data.data.paymentRequired);
+      }
+    } catch (err) {
+      console.error("Failed to fetch payment setting:", err);
+    }
+  };
 
   useEffect(() => {
     fetchPaymentSetting();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -374,59 +445,8 @@ export default function DirectTestDetailPage() {
     return () => {
       isActive = false;
     };
-  }, [test?._id, accessToken]);
-
-  const fetchTestDetails = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const response = await fetch(
-        `/api/laboratory/direct-tests/${params.id}`,
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        },
-      );
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      if (!data.success) {
-        throw new Error(data.error || "Failed to fetch test");
-      }
-
-      setTest(data.data);
-    } catch (error: unknown) {
-      console.error("Error fetching test:", error);
-      setError(
-        error instanceof Error ? error.message : "Failed to load test details",
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchPaymentSetting = async () => {
-    try {
-      const response = await fetch("/api/settings/direct-lab-payment", {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      });
-      if (!response.ok) return;
-      const data = await response.json();
-      if (data?.success && typeof data.data?.paymentRequired === "boolean") {
-        setPaymentRequired(data.data.paymentRequired);
-      }
-    } catch (err) {
-      console.error("Failed to fetch payment setting:", err);
-    }
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [test?.id, accessToken]);
 
   const updateParameterField = (
     id: string,
@@ -514,7 +534,7 @@ export default function DirectTestDetailPage() {
     try {
       setSavingResults(true);
       const response = await fetch(
-        `/api/laboratory/direct-tests/${test._id}/results`,
+        `/api/laboratory/direct-tests/${test.id}/results`,
         {
           method: "PUT",
           headers: {
@@ -556,7 +576,7 @@ export default function DirectTestDetailPage() {
 
     try {
       const response = await fetch(
-        `/api/laboratory/direct-tests/${test._id}/print`,
+        `/api/laboratory/direct-tests/${test.id}/print`,
         {
           method: "GET",
           headers: {
@@ -608,7 +628,7 @@ export default function DirectTestDetailPage() {
 
       // Mark as printed only once after successful PDF generation
       if (!test.printedAt) {
-        await fetch(`/api/laboratory/direct-tests/${test._id}/print`, {
+        await fetch(`/api/laboratory/direct-tests/${test.id}/print`, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${accessToken}`,
@@ -617,9 +637,9 @@ export default function DirectTestDetailPage() {
         });
       }
 
-      // Refresh test details to update printed status
-      fetchTestDetails();
-    } catch (err) {
+// Refresh test details to update printed status
+       if (test?.id) fetchTestDetails(test.id);
+     } catch (err) {
       console.error("Error printing PDF:", err);
       toast.error(
         err instanceof Error ? err.message : "Failed to print report",
@@ -711,7 +731,7 @@ export default function DirectTestDetailPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={fetchTestDetails}>
+          <Button variant="outline" onClick={() => test?.id && fetchTestDetails(test.id)}>
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh
           </Button>

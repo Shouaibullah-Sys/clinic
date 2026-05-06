@@ -1,11 +1,9 @@
 // app/api/pharmacy/medicines/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { MedicineStock } from '@/lib/models/MedicineStock';
-import dbConnect from '@/lib/dbConnect';
+import { prisma } from '@/lib/prisma';
 import { getTokenPayload } from '@/lib/auth/jwt';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  await dbConnect();
   const payload = await getTokenPayload(req);
 
   if (!payload || !(payload.role === 'admin' || payload.role === 'pharmacist' || payload.role === 'pharmacy_head')) {
@@ -14,7 +12,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
   try {
     const { id } = await params;
-    const medicine = await MedicineStock.findById(id).lean();
+    const medicine = await prisma.medicineStock.findUnique({
+      where: { id },
+      include: {
+        medicine: true,
+      },
+    });
     if (!medicine) {
       return NextResponse.json(
         { error: 'Medicine not found' },

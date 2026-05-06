@@ -1,21 +1,14 @@
 // app/api/radiologist/requests/[id]/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { RadiologyService } from "@/lib/models/RadiologyService";
-import "@/lib/models/Patient";
-import "@/lib/models/User";
-import "@/lib/models/RadiologyTemplate";
+import { prisma } from "@/lib/prisma";
 import { authenticateRequest, hasRequiredRole } from "@/lib/auth";
 
-// GET: Get a single radiology request by ID
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await dbConnect();
-
     const auth = await authenticateRequest(request);
     if (!auth.success) {
       return NextResponse.json(
@@ -24,7 +17,6 @@ export async function GET(
       );
     }
 
-    // Check if user can access radiology requests
     const allowedRoles = ["radiologist", "admin", "doctor"];
     if (!hasRequiredRole(auth.userRole, allowedRoles)) {
       return NextResponse.json(
@@ -37,18 +29,16 @@ export async function GET(
 
     console.log(`Radiology request requested by ${auth.userRole} ${auth.userName}: ${requestId}`);
 
-    // Find the request by ID
-    const requestDoc = await RadiologyService.findById(requestId)
-      .populate("patient", "name patientId phone guardian dateOfBirth gender")
-      .populate("referringDoctor", "name specialization department licenseNumber")
-      .populate("radiologist", "name")
-      .populate("technician", "name")
-      .populate("appointment", "appointmentId date")
-      .populate("templateId", "templateCode examName findingsTemplate impressionTemplate recommendationTemplate clinicalIndicationTemplate techniqueTemplate comparisonTemplate criticalFindingsChecklist")
-      .populate("reportGeneratedBy", "name")
-      .populate("reviewedBy", "name")
-      .populate("approvedBy", "name")
-      .lean();
+    const requestDoc = await prisma.radiologyRequest.findUnique({
+      where: { id: requestId },
+      include: {
+        patient: { select: { name: true, patientId: true, phone: true, guardian: true, dateOfBirth: true, gender: true } },
+        referringDoctor: { select: { name: true, specialization: true, department: true, licenseNumber: true } },
+        radiologist: { select: { name: true } },
+        technician: { select: { name: true } },
+        department: { select: { name: true } },
+      },
+    });
 
     if (!requestDoc) {
       return NextResponse.json(
@@ -57,8 +47,7 @@ export async function GET(
       );
     }
 
-    // If user is doctor, check if they can access this request
-    if (auth.userRole === "doctor" && requestDoc.referringDoctor.toString() !== auth.userId) {
+    if (auth.userRole === "doctor" && requestDoc.referringDoctorId !== auth.userId) {
       return NextResponse.json(
         { success: false, error: "Forbidden. You can only access your own radiology requests." },
         { status: 403 }

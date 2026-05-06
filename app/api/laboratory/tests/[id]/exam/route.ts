@@ -1,27 +1,25 @@
-// app/api/laboratory/tests/[id]/exam/route.ts
-
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { LabTest } from "@/lib/models/LabTest";
-import { authenticateRequest, canAccessLaboratory } from "@/lib/auth";
-import mongoose from "mongoose";
+import { prisma } from "@/lib/prisma";
+import { getTokenPayload } from "@/lib/auth/jwt";
+
+const canAccessLaboratory = (role: string | undefined) => {
+  return ["admin", "doctor", "lab_technician", "receptionist"].includes(role || "");
+};
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await dbConnect();
-
-    const auth = await authenticateRequest(request);
-    if (!auth.success) {
+    const payload = await getTokenPayload(request);
+    if (!payload) {
       return NextResponse.json(
-        { success: false, error: auth.error },
-        { status: auth.status || 401 }
+        { success: false, error: "Unauthorized" },
+        { status: 401 }
       );
     }
 
-    if (!canAccessLaboratory(auth.userRole)) {
+    if (!canAccessLaboratory(payload.role)) {
       return NextResponse.json(
         { success: false, error: "Forbidden. You don't have permission to enter exam results." },
         { status: 403 }
@@ -31,9 +29,8 @@ export async function POST(
     const { id: testId } = await params;
     const body = await request.json();
     
-    const { parameters, interpretation, technicianNotes } = body;
+    const { parameters, interpretation } = body;
 
-    // Validate required fields
     if (!parameters || !Array.isArray(parameters) || parameters.length === 0) {
       return NextResponse.json(
         { success: false, error: "At least one test parameter is required" },
@@ -41,8 +38,9 @@ export async function POST(
       );
     }
 
-    // Find the test
-    const test = await LabTest.findById(testId);
+    const test = await prisma.labTest.findUnique({
+      where: { id: testId },
+    });
     if (!test) {
       return NextResponse.json(
         { success: false, error: "Lab test not found" },
@@ -50,7 +48,6 @@ export async function POST(
       );
     }
 
-    // Check if exam can be entered
     if (test.collectionStatus !== "collected") {
       return NextResponse.json(
         { success: false, error: "Sample must be collected before entering exam results" },
@@ -65,10 +62,7 @@ export async function POST(
       );
     }
 
-    // Update test with exam results
-    test.processingStatus = "completed";
-    test.status = "completed";
-    test.results = {
+    const results = {
       parameters: parameters.map((param: any) => ({
         name: param.name,
         value: param.value,
@@ -78,16 +72,22 @@ export async function POST(
         remarks: param.remarks || "",
       })),
       interpretation: interpretation || "",
-      reportedBy: new mongoose.Types.ObjectId(auth.userId),
-      reportedAt: new Date(),
     };
 
-    await test.save();
+    const updatedTest = await prisma.labTest.update({
+      where: { id: testId },
+      data: {
+        processingStatus: "completed",
+        status: "completed",
+        results: JSON.stringify(results),
+        reportedDate: new Date(),
+      },
+    });
 
     return NextResponse.json({
       success: true,
       message: "Exam results saved successfully",
-      data: test,
+      data: updatedTest,
     });
 
   } catch (error: any) {

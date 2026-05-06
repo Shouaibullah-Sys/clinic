@@ -1,8 +1,5 @@
-// app/api/doctors/route.ts
-
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { User } from "@/lib/models/User";
+import { prisma } from "@/lib/prisma";
 import { jwtVerify } from "jose";
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-this";
@@ -19,9 +16,6 @@ async function verifyToken(token: string) {
 
 export async function GET(request: NextRequest) {
   try {
-    await dbConnect();
-    
-    // Authentication
     const authHeader = request.headers.get("authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return NextResponse.json(
@@ -29,44 +23,66 @@ export async function GET(request: NextRequest) {
         { status: 401 }
       );
     }
-    
+
     const token = authHeader.split(" ")[1];
     const payload = await verifyToken(token);
-    
+
     if (!payload) {
       return NextResponse.json(
         { success: false, error: "Invalid or expired token." },
         { status: 401 }
       );
     }
-    
+
     const { searchParams } = new URL(request.url);
     const activeOnly = searchParams.get("active") !== "false";
     const department = searchParams.get("department");
-    
-    // Build query
-    let query: any = { role: "doctor", active: activeOnly };
-    
-    if (department && department !== "all") {
-      query.department = department;
+
+    let where: any = { role: "doctor" };
+
+    if (activeOnly) {
+      where.active = true;
     }
-    
-    // Get doctors
-    const doctors = await User.find(query)
-      .select("_id name email phone specialization department availability active approved consultationFee")
-      .sort({ name: 1 })
-      .lean();
-    
-    // Get unique departments
-    const departments = await User.distinct("department", { role: "doctor", active: true });
-    
+
+    if (department && department !== "all") {
+      where.department = department;
+    }
+
+    const doctors = await prisma.user.findMany({
+      where,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        specialization: true,
+        department: true,
+        availability: true,
+        active: true,
+        approved: true,
+        consultationFee: true,
+      },
+      orderBy: { name: "asc" },
+    });
+
+    const departments = await prisma.user.findMany({
+      where: { role: "doctor", active: true },
+      select: { department: true },
+      distinct: ["department"],
+    });
+
+    const departmentList = departments
+      .map((d) => d.department)
+      .filter((d): d is string => !!d)
+      .sort();
+
     return NextResponse.json({
       success: true,
       data: doctors,
-      departments: departments.filter(Boolean).sort(),
+      departments: departmentList,
       total: doctors.length,
     });
-    
+
   } catch (error) {
     console.error("Error fetching doctors:", error);
     return NextResponse.json(

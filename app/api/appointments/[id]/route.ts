@@ -1,74 +1,63 @@
 // app/api/appointments/[id]/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { Appointment } from "@/lib/models/Appointment";
-import { LabTest } from "@/lib/models/LabTest";
-import { Prescription } from "@/lib/models/Prescription";
-import { jwtVerify } from "jose";
-import mongoose from "mongoose";
+import { prisma } from "@/lib/prisma";
+import { getTokenPayload } from "@/lib/auth/jwt";
 
-const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-this";
-
-async function verifyToken(token: string) {
-  try {
-    const secret = new TextEncoder().encode(JWT_SECRET);
-    const { payload } = await jwtVerify(token, secret);
-    return payload;
-  } catch (error) {
-    return null;
-  }
-}
-
-// GET: Get single appointment details with ALL related data
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await dbConnect();
-
-    // Authentication
-    const authHeader = request.headers.get("authorization");
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    const user = await getTokenPayload(request);
+    if (!user) {
       return NextResponse.json(
-        { success: false, error: "Unauthorized. No token provided." },
+        { success: false, error: "Unauthorized" },
         { status: 401 },
       );
     }
 
-    const token = authHeader.split(" ")[1];
-    const payload = await verifyToken(token);
-
-    if (!payload) {
-      return NextResponse.json(
-        { success: false, error: "Invalid or expired token." },
-        { status: 401 },
-      );
-    }
-
-    const userId = payload.id as string;
-    const userRole = payload.role as string;
-
-    // UNWRAP THE PARAMS PROMISE
     const { id: appointmentId } = await params;
 
     console.log(
-      `Fetching appointment ${appointmentId} for user ${userId} (${userRole})`,
+      `Fetching appointment ${appointmentId} for user ${user.id} (${user.role})`,
     );
 
-    // Get appointment with basic info
-    const appointment = await Appointment.findById(appointmentId)
-      .populate(
-        "patient",
-        "name phone email patientId dateOfBirth gender address bloodGroup",
-      )
-      .populate(
-        "doctor",
-        "name specialization department licenseNumber phone email",
-      )
-      .populate("createdBy", "name role")
-      .lean();
+    const appointment = await prisma.appointment.findUnique({
+      where: { id: appointmentId },
+      include: {
+        patient: {
+          select: {
+            id: true,
+            name: true,
+            phone: true,
+            email: true,
+            patientId: true,
+            dateOfBirth: true,
+            gender: true,
+            address: true,
+            bloodGroup: true,
+          },
+        },
+        doctor: {
+          select: {
+            id: true,
+            name: true,
+            specialization: true,
+            department: true,
+            licenseNumber: true,
+            phone: true,
+            email: true,
+          },
+        },
+        createdBy: {
+          select: {
+            name: true,
+            role: true,
+          },
+        },
+      },
+    });
 
     if (!appointment) {
       return NextResponse.json(
@@ -77,70 +66,63 @@ export async function GET(
       );
     }
 
-    // Check permissions
     const isDoctorOwner =
-      userRole === "doctor" && appointment.doctor?._id?.toString() === userId;
-    const isReceptionistOrAdmin = ["receptionist", "admin"].includes(userRole);
+      user.role === "doctor" && appointment.doctorId === user.id;
+    const isReceptionistOrAdmin = ["receptionist", "admin"].includes(user.role);
 
     if (!isDoctorOwner && !isReceptionistOrAdmin) {
       return NextResponse.json(
         {
           success: false,
-          error:
-            "Forbidden. You don't have permission to view this appointment.",
+          error: "Forbidden. You don't have permission to view this appointment.",
         },
         { status: 403 },
       );
     }
 
-    // IMPORTANT: Fetch ALL lab tests for this appointment
-    const labTests = await LabTest.find({
-      appointment: new mongoose.Types.ObjectId(appointmentId),
-    })
-      .populate("patient", "name patientId")
-      .populate("doctor", "name")
-      .populate("orderedBy", "name")
-      .select(
-        "testId testName category price discountedPrice status priority specimen charges orderedAt collectedAt completedAt reportedAt notes",
-      )
-      .sort({ orderedAt: -1 })
-      .lean();
+    const labTests = await prisma.labTest.findMany({
+      where: { appointmentId },
+      include: {
+        patient: { select: { name: true, patientId: true } },
+        doctor: { select: { name: true } },
+        createdBy: { select: { name: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    });
 
     console.log(
       `Found ${labTests.length} lab tests for appointment ${appointmentId}`,
     );
 
-    // Fetch ALL prescriptions for this appointment
-    const prescriptions = await Prescription.find({
-      appointment: new mongoose.Types.ObjectId(appointmentId),
-    })
-      .populate("patient", "name patientId")
-      .populate("doctor", "name specialization")
-      .select(
-        "prescriptionId prescribedDate diagnosis medications instructions notes status expiryDate",
-      )
-      .sort({ prescribedDate: -1 })
-      .lean();
+    const prescriptions = await prisma.prescription.findMany({
+      where: { appointmentId },
+      include: {
+        patient: { select: { name: true, patientId: true } },
+        doctor: { select: { name: true, specialization: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    });
 
     console.log(
       `Found ${prescriptions.length} prescriptions for appointment ${appointmentId}`,
     );
 
-    // Calculate totals for billing
     const labTestsTotal = labTests.reduce((sum, test) => {
+      const charges = JSON.parse(test.charges || "{}") as { tax?: number; otherCharges?: number; discount?: number };
       const basePrice = test.discountedPrice || test.price || 0;
-      const tax = test.charges?.tax || 0;
-      const otherCharges = test.charges?.otherCharges || 0;
-      const discount = test.charges?.discount || 0;
+      const tax = charges?.tax || 0;
+      const otherCharges = charges?.otherCharges || 0;
+      const discount = charges?.discount || 0;
       return sum + basePrice + tax + otherCharges - discount;
     }, 0);
 
     const prescriptionsTotal = prescriptions.reduce((sum, prescription) => {
-      if (prescription.medications && Array.isArray(prescription.medications)) {
+      const medications = JSON.parse(prescription.medications || "[]") as Array<{ quantity?: number; price?: number }>;
+      if (medications && Array.isArray(medications)) {
         return (
           sum +
-          prescription.medications.reduce(
-            (medSum: number, med: any) =>
+          medications.reduce(
+            (medSum, med) =>
               medSum + (med.quantity || 1) * (med.price || 0),
             0,
           )
@@ -150,8 +132,8 @@ export async function GET(
     }, 0);
 
     const consultationFee =
-      (appointment as any).consultationFee ??
-      (appointment as any).doctorFee ??
+      appointment.consultationFee ??
+      appointment.doctorFee ??
       (appointment.appointmentType === "emergency"
         ? 150
         : appointment.appointmentType === "procedure"
@@ -160,14 +142,19 @@ export async function GET(
 
     const totalAmount = labTestsTotal + prescriptionsTotal + consultationFee;
 
-    // Calculate payment summary
     const paidAmount = labTests.reduce(
-      (sum, test) => sum + (test.charges?.paid || 0),
+      (sum, test) => {
+        const charges = JSON.parse(test.charges || "{}") as { paid?: number };
+        return sum + (charges?.paid || 0);
+      },
       0,
     );
 
     const dueAmount = labTests.reduce(
-      (sum, test) => sum + (test.charges?.due || 0),
+      (sum, test) => {
+        const charges = JSON.parse(test.charges || "{}") as { due?: number };
+        return sum + (charges?.due || 0);
+      },
       0,
     );
 
@@ -175,8 +162,8 @@ export async function GET(
       success: true,
       data: {
         ...appointment,
-        labTests, // Make sure this is included
-        prescriptions, // Make sure this is included
+        labTests,
+        prescriptions,
         billingSummary: {
           consultationFee,
           labTestsTotal,

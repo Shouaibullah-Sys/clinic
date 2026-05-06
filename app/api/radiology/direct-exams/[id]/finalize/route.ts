@@ -1,50 +1,27 @@
-// app/api/radiology/direct-exams/[id]/finalize/route.ts
-
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { RadiologyExam } from "@/lib/models/RadiologyExam";
-import { authenticateRequest } from "@/lib/auth";
-import mongoose from "mongoose";
+import { prisma } from "@/lib/prisma";
+import { getTokenPayload } from "@/lib/auth/jwt";
 
-// POST: Finalize a direct radiology exam
+const allowedRoles = ["radiology_technician", "radiologist", "doctor", "admin"];
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await dbConnect();
-
-    // Authenticate the request
-    const auth = await authenticateRequest(request);
-    if (!auth.success) {
+    const payload = await getTokenPayload(request);
+    if (!payload || !allowedRoles.includes(payload.role)) {
       return NextResponse.json(
-        { success: false, error: auth.error },
-        { status: auth.status || 401 },
-      );
-    }
-
-    // Only radiology staff and admin can finalize exams
-    const allowedRoles = [
-      "radiology_technician",
-      "radiologist",
-      "doctor",
-      "admin",
-    ];
-    if (!auth.userRole || !allowedRoles.includes(auth.userRole)) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Forbidden. Only radiology staff can finalize exams.",
-        },
+        { success: false, error: "Forbidden. Only radiology staff can finalize exams." },
         { status: 403 },
       );
     }
 
-    // Unwrap the params promise
     const { id: examId } = await params;
 
-    // Find the radiology exam
-    const radiologyExam = await RadiologyExam.findById(examId);
+    const radiologyExam = await prisma.radiologyExam.findUnique({
+      where: { id: examId },
+    });
     if (!radiologyExam) {
       return NextResponse.json(
         { success: false, error: "Radiology exam not found" },
@@ -52,25 +29,15 @@ export async function POST(
       );
     }
 
-    // Debug logging
+    const charges = JSON.parse(radiologyExam.charges || "{}");
+
     console.log(`[DEBUG] Finalize attempt for exam ${radiologyExam.examId}:`, {
       isDirectExam: radiologyExam.isDirectExam,
       paymentVerified: radiologyExam.paymentVerified,
       finalized: radiologyExam.finalized,
       status: radiologyExam.status,
-      hasResults: !!(
-        radiologyExam.results &&
-        radiologyExam.results.findings &&
-        radiologyExam.results.findings.length > 0
-      ),
-      resultsCount: radiologyExam.results?.findings?.length || 0,
-      paymentStatus: radiologyExam.charges.paymentStatus,
-      paid: radiologyExam.charges.paid,
-      due: radiologyExam.charges.due,
-      totalAmount: radiologyExam.charges.totalAmount,
     });
 
-    // Verify this is a direct exam
     if (!radiologyExam.isDirectExam) {
       console.log(`[DEBUG] Finalization failed: Not a direct exam`);
       return NextResponse.json(
@@ -79,10 +46,9 @@ export async function POST(
       );
     }
 
-    // Check if payment is verified
     if (!radiologyExam.paymentVerified) {
       console.log(
-        `[DEBUG] Finalization failed: Payment not verified. Payment status: ${radiologyExam.charges.paymentStatus}, Paid: ${radiologyExam.charges.paid}, Due: ${radiologyExam.charges.due}`,
+        `[DEBUG] Finalization failed: Payment not verified. Payment status: ${charges.paymentStatus}, Paid: ${charges.paid}, Due: ${charges.due}`,
       );
       return NextResponse.json(
         {
@@ -93,7 +59,6 @@ export async function POST(
       );
     }
 
-    // Check if exam is already finalized
     if (radiologyExam.finalized) {
       console.log(`[DEBUG] Finalization failed: Exam already finalized`);
       return NextResponse.json(
@@ -102,31 +67,28 @@ export async function POST(
       );
     }
 
-    // Finalize the exam - simplified flow: just verify payment and finalize
-    radiologyExam.finalized = true;
-    radiologyExam.finalizedAt = new Date();
-    radiologyExam.finalizedBy = new mongoose.Types.ObjectId(auth.userId!);
-    radiologyExam.readyForPrint = true;
-    radiologyExam.status = "completed";
-
-    await radiologyExam.save();
-
-    // Populate the response
-    const populatedExam = await RadiologyExam.findById(radiologyExam._id)
-      .populate("patient", "name patientId phone")
-      .populate("createdBy", "name")
-      .populate("finalizedBy", "name")
-      .populate("results.reportedBy", "name")
-      .populate("results.verifiedBy", "name")
-      .lean();
+    const updatedExam = await prisma.radiologyExam.update({
+      where: { id: examId },
+      data: {
+        finalized: true,
+        readyForPrint: true,
+        status: "completed",
+      },
+      include: {
+        patient: { select: { name: true, patientId: true, phone: true } },
+        createdBy: { select: { name: true } },
+        printedBy: { select: { name: true } },
+        reportedBy: { select: { name: true } },
+      },
+    });
 
     console.log(
-      `Direct radiology exam ${radiologyExam.examId} finalized by ${auth.userName}`,
+      `Direct radiology exam ${radiologyExam.examId} finalized by ${payload.name}`,
     );
 
     return NextResponse.json({
       success: true,
-      data: populatedExam,
+      data: updatedExam,
       message: "Direct radiology exam finalized successfully",
     });
   } catch (error: any) {

@@ -1,14 +1,11 @@
 // app/api/pharmacy/medicine-issues/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { MedicineIssue } from "@/lib/models/MedicineIssue";
-import { MedicineStock } from "@/lib/models/MedicineStock";
+import { prisma } from "@/lib/prisma";
 import { getTokenPayload } from "@/lib/auth/jwt";
 
 export async function POST(req: NextRequest) {
   try {
-    await dbConnect();
     const payload = await getTokenPayload(req);
 
     if (
@@ -28,18 +25,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Create issue records
     const issuePromises = items.map(async (item: any) => {
-      const issue = new MedicineIssue({
-        medicineId: item.medicineId,
-        quantity: item.quantity,
-        issueDate: new Date(),
-        issuedTo: item.issuedTo,
-        issuedBy: item.issuedBy,
-        prescriptionId: prescriptionId,
+      return await (prisma as any).medicineIssue.create({
+        data: {
+          medicineId: item.medicineId,
+          quantity: item.quantity,
+          issueDate: new Date(),
+          issuedTo: item.issuedTo,
+          issuedById: item.issuedBy,
+          prescriptionId: prescriptionId,
+        },
       });
-
-      return await issue.save();
     });
 
     const issues = await Promise.all(issuePromises);
@@ -60,7 +56,6 @@ export async function POST(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   try {
-    await dbConnect();
     const payload = await getTokenPayload(req);
 
     if (
@@ -75,13 +70,16 @@ export async function GET(req: NextRequest) {
     const limit = parseInt(searchParams.get("limit") || "20");
     const skip = (page - 1) * limit;
 
-    const issues = await MedicineIssue.find({})
-      .populate("medicineId", "name form dosage frequency route")
-      .sort({ issueDate: -1 })
-      .skip(skip)
-      .limit(limit);
+    const issues = await (prisma as any).medicineIssue.findMany({
+      skip,
+      take: limit,
+      orderBy: { issueDate: "desc" },
+      include: {
+        medicine: { select: { name: true, form: true, dosage: true, frequency: true, route: true } },
+      },
+    });
 
-    const total = await MedicineIssue.countDocuments();
+    const total = await (prisma as any).medicineIssue.count();
 
     return NextResponse.json({
       success: true,

@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { MedicineStock } from "@/lib/models/MedicineStock";
+import { prisma } from "@/lib/prisma";
 import { getTokenPayload } from "@/lib/auth/jwt";
 
 export async function GET(req: NextRequest) {
   try {
-    await dbConnect();
     const payload = await getTokenPayload(req);
 
     if (
@@ -23,44 +21,22 @@ export async function GET(req: NextRequest) {
     const search = searchParams.get("q") || "";
     const limit = Math.min(parseInt(searchParams.get("limit") || "20"), 100);
 
-    if (!search.trim()) {
-      // Return all active medicines if no search query
-      const medicines = await MedicineStock.find({
-        currentQuantity: { $gt: 0 },
-        expiryDate: { $gt: new Date() },
-      })
-        .select(
-          "name form dosage frequency route currentQuantity originalQuantity unitPrice sellingPrice expiryDate supplier",
-        )
-        .sort({ name: 1 })
-        .limit(limit)
-        .lean();
+    const now = new Date();
 
-      return NextResponse.json({
-        success: true,
-        data: medicines.map((m) => enhanceMedicineData(m)),
-        total: medicines.length,
-      });
-    }
+    const medicines = await prisma.medicineStock.findMany({
+      where: {
+        AND: [
+          search.trim()
+            ? { name: { contains: search } }
+            : {},
+          { currentQty: { gt: 0 } },
+          { expiryDate: { gt: now } },
+        ],
+      },
+      orderBy: [{ name: "asc" }, { currentQty: "desc" }],
+      take: limit,
+    });
 
-    // Build search query
-    const searchRegex = new RegExp(search, "i");
-    const query = {
-      $or: [{ name: searchRegex }, { supplier: searchRegex }],
-      currentQuantity: { $gt: 0 },
-      expiryDate: { $gt: new Date() },
-    };
-
-    // Search medicines
-    const medicines = await MedicineStock.find(query)
-      .select(
-        "name form dosage frequency route currentQuantity originalQuantity unitPrice sellingPrice expiryDate supplier",
-      )
-      .sort({ name: 1, currentQuantity: -1 })
-      .limit(limit)
-      .lean();
-
-    // Enhance medicine data
     const enhancedMedicines = medicines.map((medicine) =>
       enhanceMedicineData(medicine),
     );
@@ -83,19 +59,20 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// Helper function to enhance medicine data
 function enhanceMedicineData(medicine: any) {
   const today = new Date();
-  const expiryDate = new Date(medicine.expiryDate);
+  const expiryDate = medicine.expiryDate ? new Date(medicine.expiryDate) : null;
   const remainingPercentage =
-    (medicine.currentQuantity / medicine.originalQuantity) * 100;
-  const isLowStock = medicine.currentQuantity <= 20;
+    medicine.totalQty > 0
+      ? (medicine.currentQty / medicine.totalQty) * 100
+      : 0;
+  const isLowStock = medicine.currentQty <= 20;
   const isExpiringSoon =
-    expiryDate.getTime() - today.getTime() <= 30 * 24 * 60 * 60 * 1000; // 30 days
+    expiryDate && expiryDate.getTime() - today.getTime() <= 30 * 24 * 60 * 60 * 1000;
 
   return {
     ...medicine,
-    _id: medicine._id.toString(),
+    id: medicine.id,
     remainingPercentage: Math.round(remainingPercentage),
     isLowStock,
     isExpiringSoon,
@@ -104,8 +81,8 @@ function enhanceMedicineData(medicine: any) {
       : isExpiringSoon
         ? "expiring-soon"
         : "available",
-    daysToExpiry: Math.ceil(
-      (expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
-    ),
+    daysToExpiry: expiryDate
+      ? Math.ceil((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+      : null,
   };
 }

@@ -28,7 +28,7 @@ import { AlertCircle, ArrowLeft, Search } from "lucide-react";
 import { Patient } from "@/lib/models/Patient";
 
 interface PatientSearchResult {
-  _id: string;
+  id: string;
   name: string;
   phone: string;
   guardian?: string;
@@ -56,27 +56,49 @@ export default function NewDiscountRequestPage() {
   const handlePatientSearch = async () => {
     if (!searchQuery.trim()) return;
 
+    if (!accessToken) {
+      setError("Authentication required. Please log in again.");
+      return;
+    }
+
+    setError(null);
+
     try {
       const response = await fetch(
         `/api/patients/search?q=${encodeURIComponent(searchQuery)}`,
         {
           headers: {
             "Content-Type": "application/json",
-            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+            Authorization: `Bearer ${accessToken}`,
           },
         },
       );
 
+      if (!response.ok) {
+        if (response.status === 401) {
+          setError("Session expired. Please log in again.");
+          return;
+        }
+        throw new Error(`HTTP ${response.status}`);
+      }
+
       const data = await response.json();
 
       if (data.success) {
-        setSearchResults(data.data);
+        setSearchResults(data.data || []);
+        if (data.data && data.data.length === 0) {
+          setError("No patients found matching your search.");
+        } else {
+          setError(null);
+        }
       } else {
         setError(data.error || "Failed to search patients");
+        setSearchResults([]);
       }
     } catch (error) {
       console.error("Error searching patients:", error);
-      setError("Failed to search patients");
+      setError("Failed to search patients. Please check your connection.");
+      setSearchResults([]);
     }
   };
 
@@ -201,6 +223,11 @@ export default function NewDiscountRequestPage() {
                   placeholder="Search by name, phone, or patient ID"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter') {
+                      handlePatientSearch();
+                    }
+                  }}
                   className="flex-1"
                 />
                 <Button
@@ -221,9 +248,9 @@ export default function NewDiscountRequestPage() {
                   <div className="space-y-2">
                     {searchResults.map((patient) => (
                       <div
-                        key={patient._id}
+                        key={patient.id}
                         className={`p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors ${
-                          selectedPatient?._id === patient._id
+                          selectedPatient?.id === patient.id
                             ? "bg-blue-50 border-blue-200"
                             : ""
                         }`}
@@ -273,7 +300,7 @@ export default function NewDiscountRequestPage() {
                   <input
                     type="hidden"
                     name="patientId"
-                    value={selectedPatient._id}
+                    value={selectedPatient.id}
                   />
                 </div>
               )}

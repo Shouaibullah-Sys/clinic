@@ -1,29 +1,39 @@
-// api/laboratory/tests/[id]/collect/info/route.ts
-
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { LabTest } from "@/lib/models/LabTest";
-import { Appointment } from "@/lib/models/Appointment";
-import { Patient } from "@/lib/models/Patient";
-import { User } from "@/lib/models/User";
-import { authenticateRequest, canAccessLaboratory } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { getTokenPayload } from "@/lib/auth/jwt";
+
+const canAccessLaboratory = (role: string | undefined) => {
+  return ["admin", "doctor", "lab_technician", "receptionist"].includes(role || "");
+};
+
+const calculateAge = (dateOfBirth: Date | null): number => {
+  if (!dateOfBirth) return 0;
+  const dob = new Date(dateOfBirth);
+  const today = new Date();
+  let age = today.getFullYear() - dob.getFullYear();
+  const monthDiff = today.getMonth() - dob.getMonth();
+  
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
+    age--;
+  }
+  
+  return age;
+};
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await dbConnect();
-
-    const auth = await authenticateRequest(request);
-    if (!auth.success) {
+    const payload = await getTokenPayload(request);
+    if (!payload) {
       return NextResponse.json(
-        { success: false, error: auth.error },
-        { status: auth.status || 401 }
+        { success: false, error: "Unauthorized" },
+        { status: 401 }
       );
     }
 
-    if (!canAccessLaboratory(auth.userRole)) {
+    if (!canAccessLaboratory(payload.role)) {
       return NextResponse.json(
         { success: false, error: "Forbidden. You don't have permission to access lab tests." },
         { status: 403 }
@@ -34,27 +44,15 @@ export async function GET(
 
     console.log(`Fetching lab test info for ID: ${testId}`);
 
-    // Calculate age function
-    const calculateAge = (dateOfBirth: Date): number => {
-      if (!dateOfBirth) return 0;
-      const dob = new Date(dateOfBirth);
-      const today = new Date();
-      let age = today.getFullYear() - dob.getFullYear();
-      const monthDiff = today.getMonth() - dob.getMonth();
-      
-      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
-        age--;
-      }
-      
-      return age;
-    };
-
-    // First, get the test with basic population
-    const test = await LabTest.findById(testId)
-      .populate("patient", "name patientId phone dateOfBirth gender")
-      .populate("orderedBy", "name role")
-      .populate("doctor", "name")
-      .lean();
+    const test = await prisma.labTest.findUnique({
+      where: { id: testId },
+      include: {
+        patient: true,
+        orderedBy: true,
+        doctor: true,
+        appointment: true,
+      },
+    });
 
     if (!test) {
       return NextResponse.json(
@@ -63,89 +61,50 @@ export async function GET(
       );
     }
 
-    console.log("Initial populated test:", {
-      testId: test.testId,
-      patient: test.patient,
-      doctor: test.doctor,
-      orderedBy: test.orderedBy
-    });
-
-    // Get doctor information - try multiple strategies
     let doctorInfo = { name: "Doctor Not Assigned" };
     
-    // Strategy 1: Check if doctor field is populated
-    if (test.doctor && typeof test.doctor === 'object' && 'name' in test.doctor) {
-      doctorInfo = { name: (test.doctor as any).name };
-      console.log("Found doctor from test.doctor field:", doctorInfo);
-    }
-    // Strategy 2: Check if orderedBy is a doctor
-    else if (test.orderedBy && typeof test.orderedBy === 'object') {
-      const orderedByUser = test.orderedBy as any;
-      if (orderedByUser.role === 'doctor') {
-        doctorInfo = { name: orderedByUser.name };
-        console.log("Found doctor from orderedBy (who is a doctor):", doctorInfo);
-      } else {
-        console.log("OrderedBy is not a doctor, role:", orderedByUser.role);
-      }
-    }
-    // Strategy 3: Try to get doctor from appointment
-    else if (test.appointment) {
-      try {
-        const appointment = await Appointment.findById(test.appointment)
-          .populate("doctor", "name")
-          .lean();
-        
-        if (appointment && appointment.doctor && typeof appointment.doctor === 'object') {
-          doctorInfo = { name: (appointment.doctor as any).name };
-          console.log("Found doctor from appointment:", doctorInfo);
-        }
-      } catch (err) {
-        console.error("Error fetching appointment:", err);
+    if (test.doctor?.name) {
+      doctorInfo = { name: test.doctor.name };
+    } else if (test.orderedBy?.role === "doctor") {
+      doctorInfo = { name: test.orderedBy.name };
+    } else if (test.appointment?.id) {
+      const appointment = await prisma.appointment.findUnique({
+        where: { id: test.appointmentId! },
+        include: { doctor: true },
+      });
+      if (appointment?.doctor?.name) {
+        doctorInfo = { name: appointment.doctor.name };
       }
     }
 
-    // Calculate age for patient
     let patientAge = null;
-    let patientDateOfBirth = null;
-    let patientGender = null;
-    
-    if (test.patient && typeof test.patient === 'object') {
-      const patient = test.patient as any;
-      patientDateOfBirth = patient.dateOfBirth || null;
-      patientGender = patient.gender || null;
-      
-      if (patientDateOfBirth) {
-        try {
-          patientAge = calculateAge(new Date(patientDateOfBirth));
-          console.log("Calculated patient age:", patientAge, "from DOB:", patientDateOfBirth);
-        } catch (err) {
-          console.error("Error calculating age:", err);
-        }
-      }
+    if (test.patient?.dateOfBirth) {
+      patientAge = calculateAge(test.patient.dateOfBirth);
     }
 
-    // Prepare response data
-    const responseData: any = {
+    const charges = JSON.parse(test.charges || "{}");
+
+    const responseData = {
       ...test,
-      _id: test._id.toString(),
+      id: test.id,
       doctor: doctorInfo,
       patient: {
-        _id: (test.patient as any)?._id?.toString() || null,
-        name: (test.patient as any)?.name || "Unknown Patient",
-        patientId: (test.patient as any)?.patientId || "N/A",
-        phone: (test.patient as any)?.phone || null,
-        dateOfBirth: patientDateOfBirth,
+        id: test.patient?.id,
+        name: test.patient?.name || "Unknown Patient",
+        patientId: test.patient?.patientId || "N/A",
+        phone: test.patient?.phone,
+        dateOfBirth: test.patient?.dateOfBirth || null,
         age: patientAge,
-        gender: patientGender
+        gender: test.patient?.gender,
       },
       collectionStatus: test.collectionStatus || "pending",
-      charges: test.charges || {
+      charges: charges || {
         paymentStatus: "pending",
         paid: 0,
-        due: 0
+        due: 0,
       },
       priority: test.priority || "routine",
-      status: test.status || "pending"
+      status: test.status || "pending",
     };
 
     console.log("Final response data:", {
@@ -167,8 +126,7 @@ export async function GET(
     return NextResponse.json(
       { 
         success: false, 
-        error: error.message || "Failed to fetch test information",
-        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        error: error.message || "Failed to fetch test information"
       },
       { status: 500 }
     );

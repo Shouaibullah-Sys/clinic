@@ -1,171 +1,122 @@
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { Payment } from "@/lib/models/Payment";
-import { LabTest } from "@/lib/models/LabTest";
-import { RadiologyExam } from "@/lib/models/RadiologyExam";
-import { DiscountRequest } from "@/lib/models/DiscountRequest";
-import { ReceptionExpense } from "@/lib/models/ReceptionExpense";
+import { prisma } from "@/lib/prisma";
+import { getTokenPayload } from "@/lib/auth/jwt";
 
-// GET: Get comprehensive Today's Collection data
 export async function GET(request: NextRequest) {
   try {
-    await dbConnect();
-
-    const userId = request.headers.get("x-user-id");
-    const userRole = request.headers.get("x-user-role");
-
-    if (!userId || !userRole) {
+    const payload = await getTokenPayload(request);
+    if (!payload) {
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
         { status: 401 },
       );
     }
 
-    if (!["admin", "receptionist"].includes(userRole)) {
+    if (!["admin", "receptionist"].includes(payload.role)) {
       return NextResponse.json(
         { success: false, error: "Forbidden" },
         { status: 403 },
       );
     }
 
-    // Get today's date range
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    // 1. Get Appointment Payments (consultation department)
-    const appointmentPayments = await Payment.aggregate([
-      {
-        $match: {
-          paymentDate: { $gte: today, $lt: tomorrow },
-          status: "completed",
-          department: "consultation",
-        },
+    // 1. Get Appointment Payments
+    const appointmentPayments = await prisma.payment.findMany({
+      where: {
+        paymentDate: { gte: today, lt: tomorrow },
+        status: "completed",
+        department: "consultation",
       },
-      {
-        $group: {
-          _id: null,
-          totalAmount: { $sum: "$amount" },
-          totalNetAmount: { $sum: "$netAmount" },
-          totalDiscount: { $sum: { $ifNull: ["$discountAmount", 0] } },
-          count: { $sum: 1 },
-        },
+    });
+
+    const appointmentData = appointmentPayments.reduce(
+      (acc, p) => ({
+        totalAmount: acc.totalAmount + p.amount,
+        totalNetAmount: acc.totalNetAmount + (p.netAmount || 0),
+        totalDiscount: acc.totalDiscount + (p.discountAmount || 0),
+        count: acc.count + 1,
+      }),
+      { totalAmount: 0, totalNetAmount: 0, totalDiscount: 0, count: 0 },
+    );
+
+    // 2. Get Lab Tests
+    const labTests = await prisma.labTest.findMany({
+      where: {
+        createdAt: { gte: today, lt: tomorrow },
+        status: { not: "cancelled" },
       },
-    ]);
+    });
 
-    const appointmentData = appointmentPayments[0] || {
-      totalAmount: 0,
-      totalNetAmount: 0,
-      totalDiscount: 0,
-      count: 0,
-    };
+    const labData = labTests.reduce((acc, t) => {
+      const charges = typeof t.charges === "string" ? JSON.parse(t.charges) : t.charges;
+      if (charges?.paymentStatus && ["paid", "partial"].includes(charges.paymentStatus)) {
+        return {
+          totalPaid: acc.totalPaid + (charges.paid || 0),
+          totalAmount: acc.totalAmount + (charges.totalAmount || 0),
+          totalDiscount: acc.totalDiscount + (charges.discount || 0),
+          count: acc.count + 1,
+        };
+      }
+      return acc;
+    }, { totalPaid: 0, totalAmount: 0, totalDiscount: 0, count: 0 });
 
-    // 2. Get Lab Payments (from LabTest charges.paid)
-    const labPayments = await LabTest.aggregate([
-      {
-        $match: {
-          "charges.paymentDate": { $gte: today, $lt: tomorrow },
-          "charges.paymentStatus": { $in: ["paid", "partial"] },
-          status: { $ne: "cancelled" },
-        },
+    // 3. Get Radiology Exams
+    const radiologyExams = await prisma.radiologyExam.findMany({
+      where: {
+        createdAt: { gte: today, lt: tomorrow },
+        status: { not: "cancelled" },
       },
-      {
-        $group: {
-          _id: null,
-          totalPaid: { $sum: "$charges.paid" },
-          totalAmount: { $sum: "$charges.totalAmount" },
-          totalDiscount: { $sum: "$charges.discount" },
-          count: { $sum: 1 },
-        },
+    });
+
+    const radiologyData = radiologyExams.reduce((acc, e) => {
+      const charges = typeof e.charges === "string" ? JSON.parse(e.charges) : e.charges;
+      if (charges?.paymentStatus && ["paid", "partial"].includes(charges.paymentStatus)) {
+        return {
+          totalPaid: acc.totalPaid + (charges.paid || 0),
+          totalAmount: acc.totalAmount + (charges.totalAmount || 0),
+          totalDiscount: acc.totalDiscount + (charges.discount || 0),
+          count: acc.count + 1,
+        };
+      }
+      return acc;
+    }, { totalPaid: 0, totalAmount: 0, totalDiscount: 0, count: 0 });
+
+    // 4. Get Approved Discounts
+    const approvedDiscounts = await prisma.discountRequest.findMany({
+      where: {
+        status: "approved",
+        approvedAt: { gte: today, lt: tomorrow },
       },
-    ]);
+    });
 
-    const labData = labPayments[0] || {
-      totalPaid: 0,
-      totalAmount: 0,
-      totalDiscount: 0,
-      count: 0,
-    };
+    const discountData = approvedDiscounts.reduce(
+      (acc, d) => ({
+        totalDiscountAmount: acc.totalDiscountAmount + (d.amount || 0),
+        count: acc.count + 1,
+      }),
+      { totalDiscountAmount: 0, count: 0 },
+    );
 
-    // 3. Get Radiology Payments (from RadiologyExam charges.paid)
-    const radiologyPayments = await RadiologyExam.aggregate([
-      {
-        $match: {
-          "charges.paymentDate": { $gte: today, $lt: tomorrow },
-          "charges.paymentStatus": { $in: ["paid", "partial"] },
-          status: { $ne: "cancelled" },
-        },
+    // 5. Get Expenses
+    const expenses = await prisma.receptionExpense.findMany({
+      where: {
+        date: { gte: today, lt: tomorrow },
       },
-      {
-        $group: {
-          _id: null,
-          totalPaid: { $sum: "$charges.paid" },
-          totalAmount: { $sum: "$charges.totalAmount" },
-          totalDiscount: { $sum: "$charges.discount" },
-          count: { $sum: 1 },
-        },
-      },
-    ]);
+    });
 
-    const radiologyData = radiologyPayments[0] || {
-      totalPaid: 0,
-      totalAmount: 0,
-      totalDiscount: 0,
-      count: 0,
-    };
+    const expenseData = expenses.reduce(
+      (acc, e) => ({
+        totalExpenses: acc.totalExpenses + e.amount,
+        count: acc.count + 1,
+        byCategory: [...acc.byCategory, { category: e.category, amount: e.amount }],
+      }),
+      { totalExpenses: 0, count: 0, byCategory: [] as { category: string | null; amount: number }[] },
+    );
 
-    // 4. Get Approved Discounts (today)
-    const approvedDiscounts = await DiscountRequest.aggregate([
-      {
-        $match: {
-          status: "approved",
-          approvedAt: { $gte: today, $lt: tomorrow },
-        },
-      },
-      {
-        $group: {
-          _id: null,
-          totalDiscountAmount: { $sum: "$requestedAmount" },
-          count: { $sum: 1 },
-        },
-      },
-    ]);
-
-    const discountData = approvedDiscounts[0] || {
-      totalDiscountAmount: 0,
-      count: 0,
-    };
-
-    // 5. Get Expenses (today)
-    const expenses = await ReceptionExpense.aggregate([
-      {
-        $match: {
-          date: { $gte: today, $lt: tomorrow },
-        },
-      },
-      {
-        $group: {
-          _id: null,
-          totalExpenses: { $sum: "$amount" },
-          count: { $sum: 1 },
-          byCategory: {
-            $push: {
-              category: "$category",
-              amount: "$amount",
-            },
-          },
-        },
-      },
-    ]);
-
-    const expenseData = expenses[0] || {
-      totalExpenses: 0,
-      count: 0,
-      byCategory: [],
-    };
-
-    // Group expenses by category
     const expensesByCategory: Record<string, number> = {
       supplies: 0,
       maintenance: 0,
@@ -175,66 +126,49 @@ export async function GET(request: NextRequest) {
       transport: 0,
     };
 
-    expenseData.byCategory.forEach((item: any) => {
-      if (expensesByCategory[item.category] !== undefined) {
+    expenseData.byCategory.forEach((item) => {
+      if (item.category && expensesByCategory[item.category] !== undefined) {
         expensesByCategory[item.category] += item.amount;
       }
     });
 
-    // Calculate totals
     const totalCollection =
-      appointmentData.totalNetAmount +
-      labData.totalPaid +
-      radiologyData.totalPaid;
+      appointmentData.totalNetAmount + labData.totalPaid + radiologyData.totalPaid;
 
     const totalDiscounts =
-      appointmentData.totalDiscount +
-      labData.totalDiscount +
-      radiologyData.totalDiscount +
-      discountData.totalDiscountAmount;
+      appointmentData.totalDiscount + labData.totalDiscount + radiologyData.totalDiscount + discountData.totalDiscountAmount;
 
     const netCollection = totalCollection - totalDiscounts;
     const netAfterExpenses = netCollection - expenseData.totalExpenses;
 
     const todaysCollection = {
-      // Appointment Payments
       appointments: {
         totalAmount: appointmentData.totalAmount,
         netAmount: appointmentData.totalNetAmount,
         discount: appointmentData.totalDiscount,
         count: appointmentData.count,
       },
-
-      // Lab Payments
       lab: {
         totalPaid: labData.totalPaid,
         totalAmount: labData.totalAmount,
         discount: labData.totalDiscount,
         count: labData.count,
       },
-
-      // Radiology Payments
       radiology: {
         totalPaid: radiologyData.totalPaid,
         totalAmount: radiologyData.totalAmount,
         discount: radiologyData.totalDiscount,
         count: radiologyData.count,
       },
-
-      // Approved Discounts
       discounts: {
         totalDiscountAmount: discountData.totalDiscountAmount,
         count: discountData.count,
       },
-
-      // Expenses
       expenses: {
         totalExpenses: expenseData.totalExpenses,
         count: expenseData.count,
         byCategory: expensesByCategory,
       },
-
-      // Summary
       summary: {
         totalCollection,
         totalDiscounts,
@@ -242,8 +176,6 @@ export async function GET(request: NextRequest) {
         totalExpenses: expenseData.totalExpenses,
         netAfterExpenses,
       },
-
-      // Date info
       date: today.toISOString(),
     };
 

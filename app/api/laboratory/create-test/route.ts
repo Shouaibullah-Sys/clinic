@@ -1,29 +1,23 @@
 // app/api/laboratory/create-test/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { LabTest } from "@/lib/models/LabTest";
-import { authenticateRequest } from "@/lib/auth";
-import mongoose from "mongoose";
+import { prisma } from "@/lib/prisma";
+import { getTokenPayload } from "@/lib/auth/jwt";
 
 export async function POST(request: NextRequest) {
   try {
-    await dbConnect();
-
-    // Authenticate the request
-    const auth = await authenticateRequest(request);
-    if (!auth.success) {
+    const payload = await getTokenPayload(request);
+    if (!payload) {
       return NextResponse.json(
-        { success: false, error: auth.error },
-        { status: auth.status || 401 },
+        { success: false, error: "Unauthorized" },
+        { status: 401 },
       );
     }
 
-    const userId = auth.userId!;
-    const userRole = auth.userRole!;
-    const userName = auth.userName!;
+    const userId = payload.id;
+    const userRole = payload.role;
+    const userName = payload.name || "System";
 
-    // Only admin and lab technicians can create test data
     if (!["admin", "lab_technician"].includes(userRole)) {
       return NextResponse.json(
         {
@@ -51,7 +45,6 @@ export async function POST(request: NextRequest) {
       notes = "Test data created for laboratory testing",
     } = body;
 
-    // Validation
     if (!patientId || !doctorId || !testName || !category || !price) {
       return NextResponse.json(
         {
@@ -63,7 +56,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate unique test ID
     const date = new Date();
     const year = date.getFullYear().toString().slice(-2);
     const month = (date.getMonth() + 1).toString().padStart(2, "0");
@@ -71,103 +63,73 @@ export async function POST(request: NextRequest) {
     const random = Math.floor(100 + Math.random() * 900);
     const testId = `TEST${year}${month}${day}${random}`;
 
-    // Create lab test data
+    const priceNum = parseFloat(price);
+    const charges = {
+      basePrice: priceNum,
+      tax: 0,
+      discount: 0,
+      otherCharges: 0,
+      totalAmount: priceNum,
+      paid: paymentVerified ? priceNum : 0,
+      due: paymentVerified ? 0 : priceNum,
+      paymentStatus: paymentVerified ? "paid" : "pending",
+      paymentMethod: paymentVerified ? "cash" : undefined,
+    };
+
     const labTestData: any = {
       testId,
       testName,
       category,
-      patient: new mongoose.Types.ObjectId(patientId),
-      doctor: new mongoose.Types.ObjectId(doctorId),
-      price: parseFloat(price),
-      status,
+      patientId,
+      doctorId,
+      price: priceNum,
+      priority,
+      notes: `${notes} - Created by ${userName} (${userRole})`,
+      orderedById: userId,
       collectionStatus,
       processingStatus,
-      priority,
       paymentVerified,
-      notes: `${notes} - Created by ${userName} (${userRole})`,
-      orderedBy: new mongoose.Types.ObjectId(userId),
-      orderedAt: new Date(),
-      charges: {
-        basePrice: parseFloat(price),
-        tax: 0,
-        discount: 0,
-        otherCharges: 0,
-        totalAmount: parseFloat(price),
-        paid: paymentVerified ? parseFloat(price) : 0,
-        due: paymentVerified ? 0 : parseFloat(price),
-        paymentStatus: paymentVerified ? "paid" : "pending",
-        paymentMethod: paymentVerified ? "cash" : undefined,
-      },
+      charges: JSON.stringify(charges),
+      testParameters: JSON.stringify([]),
     };
 
-    // Add collection details if collected
     if (collectionStatus === "collected") {
-      labTestData.collectionDetails = {
-        collectionTime: new Date(),
-        collectedBy: new mongoose.Types.ObjectId(userId),
+      const collectionDetails = {
+        collectionTime: new Date().toISOString(),
+        collectedBy: userId,
         collectionNotes: "Sample collected for testing",
         sampleId: `SMP${year}${month}${day}${Math.floor(100 + Math.random() * 900)}`,
         sampleCondition: "satisfactory",
       };
-      labTestData.collectedAt = new Date();
-
-      // Generate lab reference ID
-      labTestData.labReferenceId = `LREF${year}${month}${day}${Math.floor(100 + Math.random() * 900)}`;
+      labTestData.collectionStatus = "collected";
+      labTestData.specimenType = "blood";
     }
 
-    // Add processing details if processing
-    if (processingStatus === "processing") {
-      labTestData.processingDetails = {
-        processingStartTime: new Date(),
-        processedBy: new mongoose.Types.ObjectId(userId),
-        equipmentUsed: "Automated Analyzer",
-        reagentsUsed: ["Standard reagents"],
-        processingNotes: "Test currently being processed",
-      };
-    }
-
-    // Add results if completed
     if (processingStatus === "completed") {
-      labTestData.results = {
-        parameters: [
-          {
-            name: "Test Parameter",
-            value: "Normal",
-            unit: "Qualitative",
-            normalRange: "Normal",
-            flag: "normal",
-            remarks: "Test completed successfully",
-          },
-        ],
-        interpretation: "Test results within normal range",
-        reportedBy: new mongoose.Types.ObjectId(userId),
-        reportedAt: new Date(),
-      };
-      labTestData.completedAt = new Date();
+      labTestData.testParameters = JSON.stringify([
+        {
+          name: "Test Parameter",
+          value: "Normal",
+          unit: "Qualitative",
+          normalRange: "Normal",
+          flag: "normal",
+          remarks: "Test completed successfully",
+        },
+      ]);
     }
 
-    // Add payment verification details if verified
-    if (paymentVerified) {
-      labTestData.paymentVerifiedBy = new mongoose.Types.ObjectId(userId);
-      labTestData.paymentVerifiedAt = new Date();
-    }
-
-    // Create and save lab test
-    const labTest = new LabTest(labTestData);
-    await labTest.save();
+    const labTest = await prisma.labTest.create({ data: labTestData });
 
     console.log(`Created test lab test: ${testId} - ${testName}`);
-    console.log(
-      `Status: ${status}, Collection: ${collectionStatus}, Processing: ${processingStatus}`,
-    );
-    console.log(`Payment Verified: ${paymentVerified}, Priority: ${priority}`);
 
-    // Populate the response
-    const populatedTest = await LabTest.findById(labTest._id)
-      .populate("patient", "name patientId phone")
-      .populate("doctor", "name specialization")
-      .populate("orderedBy", "name")
-      .lean();
+    const populatedTest = await prisma.labTest.findUnique({
+      where: { id: labTest.id },
+      include: {
+        patient: { select: { name: true, patientId: true, phone: true } },
+        doctor: { select: { name: true, specialization: true } },
+        orderedBy: { select: { name: true } },
+      },
+    });
 
     return NextResponse.json(
       {
@@ -183,7 +145,7 @@ export async function POST(request: NextRequest) {
       {
         success: false,
         error: error.message || "Failed to create test lab test",
-        details: error.errors || {},
+        details: {},
       },
       { status: 500 },
     );

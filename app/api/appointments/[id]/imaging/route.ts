@@ -1,12 +1,9 @@
 // app/api/appointments/[id]/imaging/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { RadiologyService } from "@/lib/models/RadiologyService";
-import { Appointment } from "@/lib/models/Appointment";
+import { prisma } from "@/lib/prisma";
 import { authenticateRequest, hasRequiredRole } from "@/lib/auth";
 import { buildMarkedOnlyQuery } from "@/lib/utils/markedTransactions";
-import mongoose from "mongoose";
 
 // GET: Get imaging studies for an appointment
 export async function GET(
@@ -14,8 +11,6 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await dbConnect();
-
     // Authenticate request using centralized auth
     const auth = await authenticateRequest(request);
     if (!auth.success) {
@@ -48,7 +43,9 @@ export async function GET(
     const { id: appointmentId } = await params;
 
     // Verify appointment exists
-    const appointment = await Appointment.findById(appointmentId);
+    const appointment = await prisma.appointment.findUnique({
+      where: { id: appointmentId },
+    });
     if (!appointment) {
       return NextResponse.json(
         { success: false, error: "Appointment not found" },
@@ -59,22 +56,38 @@ export async function GET(
     const { query: finalQuery } = await buildMarkedOnlyQuery({
       userId: auth.userId!,
       module: "radiology",
-      baseQuery: { appointment: appointmentId },
+      baseQuery: { appointmentId },
     });
 
     // Get imaging studies for this appointment
-    const imagingStudies = await RadiologyService.find(finalQuery)
-      .select(
-        "_id serviceId serviceType bodyPart view requestDate scheduledDate performedDate status priority reportStatus findings impression billingStatus charges paymentVerified",
-      )
-      .populate("patient", "name patientId")
-      .populate("referringDoctor", "name")
-      .populate("radiologist", "name")
-      .populate("technician", "name")
-      .populate("charges.collectedBy", "name")
-      .populate("paymentVerifiedBy", "name")
-      .sort({ requestDate: -1 })
-      .lean();
+    const imagingStudies = await prisma.radiologyExam.findMany({
+      where: finalQuery,
+      select: {
+        id: true,
+        examId: true,
+        serviceId: true,
+        category: true,
+        date: true,
+        status: true,
+        reportDate: true,
+        findings: true,
+        impression: true,
+        charges: true,
+        paymentVerified: true,
+        patient: {
+          select: {
+            name: true,
+            patientId: true,
+          },
+        },
+        doctor: {
+          select: {
+            name: true,
+          },
+        },
+      },
+      orderBy: { date: "desc" },
+    });
 
     return NextResponse.json(
       {

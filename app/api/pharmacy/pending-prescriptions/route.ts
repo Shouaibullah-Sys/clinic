@@ -1,13 +1,9 @@
 // app/api/pharmacy/pending-prescriptions/route.ts - ENHANCED
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import "@/lib/models"; // Import all models to ensure they are registered
-import { Prescription } from "@/lib/models/Prescription";
-import { Patient } from "@/lib/models/Patient";
+import { prisma } from "@/lib/prisma";
 import { getTokenPayload } from "@/lib/auth/jwt";
 
 export async function GET(req: NextRequest) {
-  await dbConnect();
   const payload = await getTokenPayload(req);
 
   if (
@@ -26,61 +22,37 @@ export async function GET(req: NextRequest) {
     const skip = (page - 1) * limit;
 
     // Build query for pending prescriptions
-    let query: any = {
-      status: { $in: ["active", "pending"] }, // Include both active and pending statuses
+    let where: any = {
+      status: { in: ["active", "pending"] }, // Include both active and pending statuses
       dispensingStatus: status, // pending, partial, etc.
       paymentVerified: true, // Only return prescriptions with verified payment
     };
 
     // Optional search with multiple fields
     if (search) {
-      query.$or = [
-        { prescriptionId: { $regex: search, $options: "i" } },
-        { diagnosis: { $regex: search, $options: "i" } },
+      where.OR = [
+        { prescriptionId: { contains: search, mode: "insensitive" } },
+        { diagnosis: { contains: search, mode: "insensitive" } },
       ];
     }
 
-    const prescriptions = await Prescription.find(query)
-      .populate({
-        path: "patient",
-        select: "name patientId phone",
-        match: search
-          ? {
-              $or: [
-                { name: { $regex: search, $options: "i" } },
-                { patientId: { $regex: search, $options: "i" } },
-              ],
-            }
-          : {},
-      })
-      .populate({
-        path: "doctor",
-        select: "name specialization",
-        match: search ? { name: { $regex: search, $options: "i" } } : {},
-      })
-      .populate({
-        path: "medications.medicine",
-        select:
-          "name form dosage frequency route currentQuantity sellingPrice unitPrice",
-        model: "MedicineStock",
-      })
-      .select(
-        "prescriptionId patient doctor medications diagnosis notes instructions prescribedDate expiryDate status dispensingStatus",
-      )
-      .sort({ prescribedDate: -1 })
-      .skip(skip)
-      .limit(limit);
-
-    // Filter out prescriptions where patient wasn't found (if searching)
-    const filteredPrescriptions = search
-      ? prescriptions.filter((p) => p.patient && p.doctor)
-      : prescriptions;
-
-    const total = await Prescription.countDocuments(query);
+    const [prescriptions, total] = await Promise.all([
+      prisma.prescription.findMany({
+        where,
+        include: {
+          patient: { select: { name: true, patientId: true, phone: true } },
+          doctor: { select: { name: true, specialization: true } },
+        },
+        orderBy: { date: "desc" },
+        skip,
+        take: limit,
+      }),
+      prisma.prescription.count({ where }),
+    ]);
 
     return NextResponse.json({
       success: true,
-      data: filteredPrescriptions,
+      data: prescriptions,
       pagination: {
         page,
         limit,

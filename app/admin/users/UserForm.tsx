@@ -167,6 +167,13 @@ export default function UserForm({ user, onSuccess, accessToken }: UserFormProps
       // Prepare payload
       const payload: any = { ...data };
 
+      // For new users: require password
+      if (!isEditMode && (!payload.password || payload.password.trim() === "")) {
+        setFormError("Password is required for new users");
+        setIsSubmitting(false);
+        return;
+      }
+
       // For updates: remove password if empty
       if (isEditMode && (!payload.password || payload.password.trim() === "")) {
         delete payload.password;
@@ -186,13 +193,16 @@ export default function UserForm({ user, onSuccess, accessToken }: UserFormProps
         body: JSON.stringify(payload),
       });
 
-      const responseData = await response.json();
+      let responseData: any = {};
+      try {
+        responseData = await response.json();
+      } catch {}
 
       if (!response.ok) {
+        const errorDetails = responseData?.details || responseData?.error || "";
+        const detailsStr = typeof errorDetails === "object" ? JSON.stringify(errorDetails, null, 2) : errorDetails;
         throw new Error(
-          responseData.error || 
-          responseData.message || 
-          `Failed to ${isEditMode ? "update" : "create"} user`
+          `Failed to ${isEditMode ? "update" : "create"} user: ${detailsStr}`
         );
       }
 

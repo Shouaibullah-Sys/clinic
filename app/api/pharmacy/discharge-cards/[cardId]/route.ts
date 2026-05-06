@@ -1,8 +1,7 @@
 // app/api/pharmacy/discharge-cards/[cardId]/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { DischargeCard } from "@/lib/models/DischargeCard";
+import { prisma } from "@/lib/prisma";
 import { getTokenPayload } from "@/lib/auth/jwt";
 
 export async function GET(
@@ -10,7 +9,6 @@ export async function GET(
   { params }: { params: Promise<{ cardId: string }> },
 ) {
   try {
-    await dbConnect();
     const payload = await getTokenPayload(req);
 
     if (
@@ -24,22 +22,13 @@ export async function GET(
 
     console.log("Fetching discharge card:", cardId);
 
-    // Find discharge card with patient and doctor populated
-    const dischargeCard = await DischargeCard.findById(cardId)
-      .populate("patient", "name patientId phone guardian dateOfBirth gender")
-      .populate("doctor", "name specialization")
-      .populate(
-        "preOpMedicines.medicine",
-        "name form dosage frequency route currentQuantity sellingPrice expiryDate",
-      )
-      .populate(
-        "postOpMedicines.medicine",
-        "name form dosage frequency route currentQuantity sellingPrice expiryDate",
-      )
-      .populate(
-        "dischargeMedicines.medicine",
-        "name form dosage frequency route currentQuantity sellingPrice expiryDate",
-      );
+    const dischargeCard = await (prisma as any).dischargeCard.findUnique({
+      where: { id: cardId },
+      include: {
+        patient: { select: { id: true, name: true, patientId: true, phone: true, guardian: true, dateOfBirth: true, gender: true } },
+        doctor: { select: { id: true, name: true, specialization: true } },
+      },
+    });
 
     if (!dischargeCard) {
       return NextResponse.json(
@@ -48,57 +37,34 @@ export async function GET(
       );
     }
 
-    // Calculate totals
-    const preOpTotal =
-      dischargeCard.preOpMedicines?.reduce(
-        (sum: number, med: any) => sum + (med.totalPrice || 0),
-        0,
-      ) || 0;
-    const postOpTotal =
-      dischargeCard.postOpMedicines?.reduce(
-        (sum: number, med: any) => sum + (med.totalPrice || 0),
-        0,
-      ) || 0;
-    const dischargeTotal =
-      dischargeCard.dischargeMedicines?.reduce(
-        (sum: number, med: any) => sum + (med.totalPrice || 0),
-        0,
-      ) || 0;
+    const preOpMedicines = JSON.parse(dischargeCard.preOpMedicines || "[]");
+    const postOpMedicines = JSON.parse(dischargeCard.postOpMedicines || "[]");
+    const dischargeMedicines = JSON.parse(dischargeCard.dischargeMedicines || "[]");
+    const billing = JSON.parse(dischargeCard.billing || "{}");
+
+    const preOpTotal = preOpMedicines.reduce((sum: number, med: any) => sum + (med.totalPrice || 0), 0) || 0;
+    const postOpTotal = postOpMedicines.reduce((sum: number, med: any) => sum + (med.totalPrice || 0), 0) || 0;
+    const dischargeTotal = dischargeMedicines.reduce((sum: number, med: any) => sum + (med.totalPrice || 0), 0) || 0;
 
     const totalMedicineCost = preOpTotal + postOpTotal + dischargeTotal;
-    const totalMedicines =
-      (dischargeCard.preOpMedicines?.length || 0) +
-      (dischargeCard.postOpMedicines?.length || 0) +
-      (dischargeCard.dischargeMedicines?.length || 0);
+    const totalMedicines = preOpMedicines.length + postOpMedicines.length + dischargeMedicines.length;
 
-    // Count dispensed medicines
-    const preOpDispensed =
-      dischargeCard.preOpMedicines?.filter((m: any) => m.dispensed).length || 0;
-    const postOpDispensed =
-      dischargeCard.postOpMedicines?.filter((m: any) => m.dispensed).length ||
-      0;
-    const dischargeDispensed =
-      dischargeCard.dischargeMedicines?.filter((m: any) => m.dispensed)
-        .length || 0;
-    const totalDispensed =
-      preOpDispensed + postOpDispensed + dischargeDispensed;
+    const preOpDispensed = preOpMedicines.filter((m: any) => m.dispensed).length || 0;
+    const postOpDispensed = postOpMedicines.filter((m: any) => m.dispensed).length || 0;
+    const dischargeDispensed = dischargeMedicines.filter((m: any) => m.dispensed).length || 0;
+    const totalDispensed = preOpDispensed + postOpDispensed + dischargeDispensed;
 
-    // Format the response
     const formattedCard = {
-      _id: dischargeCard._id,
+      id: dischargeCard.id,
       dischargeId: dischargeCard.dischargeId,
       patient: dischargeCard.patient,
       doctor: dischargeCard.doctor,
       operationName: dischargeCard.operationName,
       operationDate: dischargeCard.operationDate,
-      operationType: dischargeCard.operationType,
       diagnosis: dischargeCard.diagnosis,
-      admissionDate: dischargeCard.admissionDate,
-      dischargeDate: dischargeCard.dischargeDate,
-      totalDays: dischargeCard.totalDays,
-      preOpMedicines: dischargeCard.preOpMedicines || [],
-      postOpMedicines: dischargeCard.postOpMedicines || [],
-      dischargeMedicines: dischargeCard.dischargeMedicines || [],
+      preOpMedicines,
+      postOpMedicines,
+      dischargeMedicines,
       preOpTotal,
       postOpTotal,
       dischargeTotal,
@@ -109,13 +75,9 @@ export async function GET(
       preOpDispensed,
       postOpDispensed,
       dischargeDispensed,
-      pharmacyDispensingStatus:
-        dischargeCard.pharmacyDispensingStatus || "pending",
-      billing: dischargeCard.billing,
+      pharmacyDispensingStatus: dischargeCard.pharmacyDispensingStatus || "pending",
+      billing,
       status: dischargeCard.status,
-      dischargeInstructions: dischargeCard.dischargeInstructions,
-      followUpDate: dischargeCard.followUpDate,
-      followUpInstructions: dischargeCard.followUpInstructions,
       createdAt: dischargeCard.createdAt,
     };
 

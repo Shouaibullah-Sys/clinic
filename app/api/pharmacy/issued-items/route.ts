@@ -1,14 +1,11 @@
 // app/api/pharmacy/issued-items/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { MedicineIssue } from "@/lib/models/MedicineIssue";
-import { MedicineStock } from "@/lib/models/MedicineStock";
+import { prisma } from "@/lib/prisma";
 import { getTokenPayload } from "@/lib/auth/jwt";
 
 export async function GET(req: NextRequest) {
   try {
-    await dbConnect();
     const payload = await getTokenPayload(req);
 
     if (
@@ -21,8 +18,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const dateParam = searchParams.get("date");
 
-    // Build date filter for the start of the day
-    let dateFilter = {};
+    let dateFilter: any = {};
     if (dateParam) {
       const filterDate = new Date(dateParam);
       const startOfDay = new Date(filterDate);
@@ -32,37 +28,35 @@ export async function GET(req: NextRequest) {
 
       dateFilter = {
         issueDate: {
-          $gte: startOfDay,
-          $lte: endOfDay,
+          gte: startOfDay,
+          lte: endOfDay,
         },
       };
     }
 
-    // Fetch issued items with medicine details
-    const issues = await MedicineIssue.find(dateFilter)
-      .populate(
-        "medicineId",
-        "name form dosage currentStock originalStock unitPrice",
-      )
-      .sort({ issueDate: -1 })
-      .lean();
+    const issues = await (prisma as any).medicineIssue.findMany({
+      where: dateFilter,
+      orderBy: { issueDate: "desc" },
+      include: {
+        medicine: { select: { name: true, form: true, dosage: true, currentQty: true, totalQty: true, costPrice: true } },
+      },
+    });
 
-    // Transform data to match DailyIssuedItem interface
     const issuedItems = issues.map((issue: any) => {
-      const medicine = issue.medicineId || {};
-      const unitPrice = medicine.unitPrice || 0;
+      const medicine = issue.medicine || {};
+      const unitPrice = medicine.costPrice || 0;
       const quantity = issue.quantity || 0;
       const totalPrice = unitPrice * quantity;
 
       return {
-        _id: issue._id.toString(),
-        medicineId: medicine._id?.toString() || "",
+        id: issue.id,
+        medicineId: medicine.id || "",
         name: medicine.name || "Unknown Medicine",
         form: medicine.form || "N/A",
         dosage: medicine.dosage || "N/A",
         quantityIssued: quantity,
-        currentStock: medicine.currentStock || 0,
-        originalStock: medicine.originalStock || 0,
+        currentStock: medicine.currentQty || 0,
+        originalStock: medicine.totalQty || 0,
         issueDate: issue.issueDate,
         issuedTo: issue.issuedTo || "Unknown",
         issuedBy: issue.issuedBy || "Unknown",

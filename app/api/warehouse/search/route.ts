@@ -1,14 +1,9 @@
-// app/api/warehouse/search/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { WarehouseBatch } from "@/lib/models/WarehouseBatch";
-import { Warehouse } from "@/lib/models/Warehouse";
+import { prisma } from "@/lib/prisma";
 import { getTokenPayload } from "@/lib/auth/jwt";
 
-// GET: Search warehouse medicines with available batches for transfer
 export async function GET(request: NextRequest) {
   try {
-    await dbConnect();
     const payload = await getTokenPayload(request);
 
     if (!payload || !["admin", "pharmacy_head"].includes(payload.role)) {
@@ -30,20 +25,18 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const searchRegex = new RegExp(query, "i");
-
-    // Find warehouse medicines matching the search
-    const warehouseMedicines = await Warehouse.find({
-      $or: [
-        { name: searchRegex },
-        { genericName: searchRegex },
-        { manufacturer: searchRegex },
-      ],
-      isActive: true,
-    })
-      .select("_id name genericName category manufacturer")
-      .limit(limit)
-      .lean();
+    const warehouseMedicines = await prisma.warehouse.findMany({
+      where: {
+        OR: [
+          { name: { contains: query } },
+          { genericName: { contains: query } },
+          { manufacturer: { contains: query } },
+        ],
+        isActive: true,
+      },
+      select: { id: true, name: true, genericName: true, category: true, manufacturer: true },
+      take: limit,
+    });
 
     if (warehouseMedicines.length === 0) {
       return NextResponse.json({
@@ -53,26 +46,27 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Get available batches for each warehouse medicine
-    const warehouseIds = warehouseMedicines.map((w) => w._id);
-    const batches = await WarehouseBatch.find({
-      warehouse: { $in: warehouseIds },
-      status: { $in: ["available", "partial"] },
-    })
-      .populate("warehouse", "name genericName category manufacturer")
-      .sort({ expiryDate: 1 })
-      .lean();
+    const warehouseIds = warehouseMedicines.map((w) => w.id);
+    const batches = await prisma.warehouseBatch.findMany({
+      where: {
+        warehouseId: { in: warehouseIds },
+        status: { in: ["available", "partial"] },
+      },
+      include: {
+        warehouse: { select: { id: true, name: true, genericName: true, category: true, manufacturer: true } },
+      },
+      orderBy: { expiryDate: "asc" },
+    });
 
-    // Group batches by warehouse medicine
-    const result = warehouseMedicines.map((medicine: any) => {
+    const result = warehouseMedicines.map((medicine) => {
       const medicineBatches = batches.filter(
-        (b) => b.warehouse._id.toString() === medicine._id.toString(),
+        (b) => b.warehouseId === medicine.id,
       );
 
       return {
         ...medicine,
         availableBatches: medicineBatches.map((batch) => ({
-          _id: batch._id,
+          id: batch.id,
           batchId: batch.batchId,
           batchNumber: batch.batchNumber,
           lotNumber: batch.lotNumber,
@@ -86,7 +80,7 @@ export async function GET(request: NextRequest) {
           unitCost: batch.unitCost,
           supplier: batch.supplier,
           status: batch.status,
-          remainingPercentage: (batch.quantity / batch.originalQuantity) * 100,
+          remainingPercentage: batch.originalQuantity ? (batch.quantity / batch.originalQuantity) * 100 : 0,
         })),
         totalAvailableQuantity: medicineBatches.reduce(
           (sum, b) => sum + b.quantity,
@@ -95,7 +89,6 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    // Filter out medicines with no available batches
     const availableMedicines = result.filter(
       (m) => m.availableBatches.length > 0,
     );

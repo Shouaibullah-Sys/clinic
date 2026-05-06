@@ -12,11 +12,11 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Users,
   Calendar,
   Clock,
-  Plus,
   DollarSign,
   AlertCircle,
   Wallet,
@@ -25,11 +25,19 @@ import {
   FileText,
   UserCheck,
   Activity,
+  TrendingUp,
+  UserPlus,
+  CreditCard,
+  CheckCircle,
+  Settings,
+  Bell,
+  Timer,
+  Stethoscope,
 } from "lucide-react";
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Skeleton } from "@/components/ui/skeleton";
-import { format, parseISO, isToday } from "date-fns";
+import { format, parseISO, isToday, formatDistanceToNow } from "date-fns";
 import {
   Tooltip,
   TooltipContent,
@@ -39,6 +47,7 @@ import {
 import { toast } from "sonner";
 
 interface ReceptionStats {
+  // Core metrics
   dailyVisitors: number;
   appointments: number;
   waitingPatients: number;
@@ -47,8 +56,18 @@ interface ReceptionStats {
   todayRevenue: number;
   pendingDiscounts: number;
   dailyCashBalance: number;
-  systemCashTotal: number;
-  cashDifference?: number;
+
+  // Performance metrics
+  avgWaitTime: number;
+  patientSatisfaction?: number;
+  completedAppointments: number;
+  cancelledAppointments: number;
+
+  // Financial metrics
+  totalCollections: number;
+  totalDiscounts: number;
+  netRevenue: number;
+  pendingPayments: number;
 }
 
 interface DiscountRequest {
@@ -60,6 +79,39 @@ interface DiscountRequest {
   requestedAt: string;
   status: "pending" | "approved" | "rejected" | "cancelled";
   patientId?: string;
+}
+
+interface PatientQueueItem {
+  id: string;
+  patientName: string;
+  patientId: string;
+  checkInTime: string;
+  estimatedWaitTime: number;
+  priority: "normal" | "urgent" | "emergency";
+  status: "waiting" | "with_doctor" | "completed";
+  appointmentType: string;
+  doctorName?: string;
+}
+
+interface TodaysAppointment {
+  id: string;
+  patientName: string;
+  patientId: string;
+  time: string;
+  doctorName: string;
+  type: string;
+  status: "scheduled" | "confirmed" | "in_progress" | "completed" | "cancelled";
+  phone?: string;
+}
+
+interface NotificationItem {
+  id: string;
+  type: "info" | "warning" | "error" | "success";
+  title: string;
+  message: string;
+  timestamp: string;
+  actionUrl?: string;
+  actionText?: string;
 }
 
 interface RecentActivity {
@@ -114,6 +166,8 @@ interface TodaysCollection {
 export default function ReceptionDashboardPage() {
   const { user, isAuthenticated, isLoading, accessToken } = useAuthStore();
   const router = useRouter();
+
+  // Main stats
   const [stats, setStats] = useState<ReceptionStats>({
     dailyVisitors: 0,
     appointments: 0,
@@ -123,17 +177,30 @@ export default function ReceptionDashboardPage() {
     todayRevenue: 0,
     pendingDiscounts: 0,
     dailyCashBalance: 0,
-    systemCashTotal: 0,
-    cashDifference: 0,
+    avgWaitTime: 0,
+    completedAppointments: 0,
+    cancelledAppointments: 0,
+    totalCollections: 0,
+    totalDiscounts: 0,
+    netRevenue: 0,
+    pendingPayments: 0,
   });
+
+  // Data for various sections
   const [discountRequests, setDiscountRequests] = useState<DiscountRequest[]>(
     [],
   );
   const [recentActivities, setRecentActivities] = useState<RecentActivity[]>(
     [],
   );
+  const [patientQueue, setPatientQueue] = useState<PatientQueueItem[]>([]);
+  const [todaysAppointments, setTodaysAppointments] = useState<
+    TodaysAppointment[]
+  >([]);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [todaysCollection, setTodaysCollection] =
     useState<TodaysCollection | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -160,19 +227,38 @@ export default function ReceptionDashboardPage() {
       }
 
       // Fetch all data in parallel for better performance
-      const [statsResponse, discountsResponse, activitiesResponse] =
-        await Promise.all([
-          fetch("/api/dashboard/reception/stats", { headers }),
-          fetch("/api/dashboard/reception/discounts?status=pending&limit=5", {
-            headers,
-          }),
-          fetch("/api/dashboard/reception/activities?limit=5", { headers }),
-        ]);
+      const [
+        statsResponse,
+        discountsResponse,
+        activitiesResponse,
+        queueResponse,
+        appointmentsResponse,
+        notificationsResponse,
+      ] = await Promise.all([
+        fetch("/api/dashboard/reception/stats", { headers }),
+        fetch("/api/dashboard/reception/discounts?status=pending&limit=5", {
+          headers,
+        }),
+        fetch("/api/dashboard/reception/activities?limit=5", { headers }),
+        fetch("/api/dashboard/reception/queue", { headers }),
+        fetch("/api/dashboard/reception/appointments/today", { headers }),
+        fetch("/api/dashboard/reception/notifications", { headers }),
+      ]);
 
-      const [statsData, discountsData, activitiesData] = await Promise.all([
+      const [
+        statsData,
+        discountsData,
+        activitiesData,
+        queueData,
+        appointmentsData,
+        notificationsData,
+      ] = await Promise.all([
         statsResponse.json(),
         discountsResponse.json(),
         activitiesResponse.json(),
+        queueResponse.json(),
+        appointmentsResponse.json(),
+        notificationsResponse.json(),
       ]);
 
       if (statsData.success) {
@@ -191,9 +277,18 @@ export default function ReceptionDashboardPage() {
 
       if (activitiesData.success) {
         setRecentActivities(activitiesData.data);
-      } else {
-        console.error("Error fetching activities:", activitiesData.error);
-        // Don't show toast for activities as it's secondary data
+      }
+
+      if (queueData.success) {
+        setPatientQueue(queueData.data);
+      }
+
+      if (appointmentsData.success) {
+        setTodaysAppointments(appointmentsData.data);
+      }
+
+      if (notificationsData.success) {
+        setNotifications(notificationsData.data);
       }
     } catch (error) {
       console.error("Error fetching reception data:", error);
@@ -227,10 +322,6 @@ export default function ReceptionDashboardPage() {
     if (patientId) {
       router.push(`/patients/${patientId}`);
     }
-  };
-
-  const handleProcessPayment = () => {
-    router.push("/reception/payments");
   };
 
   const getStatusColor = (status: string) => {
@@ -336,9 +427,9 @@ export default function ReceptionDashboardPage() {
   return (
     <TooltipProvider>
       <div className="space-y-6 p-4 md:p-6">
-        {/* Header with Refresh */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
+        {/* Header */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="flex-1">
             <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
               Reception Dashboard
             </h1>
@@ -347,16 +438,10 @@ export default function ReceptionDashboardPage() {
               <span className="font-semibold text-gray-700 dark:text-gray-300">
                 {user?.name}
               </span>
-              !
-              {stats.waitingPatients > 0 && (
-                <span className="ml-2 text-amber-600 dark:text-amber-500 font-medium">
-                  {stats.waitingPatients} patient
-                  {stats.waitingPatients > 1 ? "s" : ""} waiting
-                </span>
-              )}
+              ! Here's what's happening today.
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <Badge variant="outline" className="text-xs">
               {user?.role === "admin" ? "Admin Mode" : "Receptionist"}
             </Badge>
@@ -365,7 +450,6 @@ export default function ReceptionDashboardPage() {
               size="sm"
               onClick={handleRefresh}
               disabled={refreshing}
-              className="w-full sm:w-auto"
             >
               <RefreshCw
                 className={`h-4 w-4 mr-2 ${refreshing ? "animate-spin" : ""}`}
@@ -375,163 +459,179 @@ export default function ReceptionDashboardPage() {
           </div>
         </div>
 
-        {/* Compact Stats Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
-          {/* Daily Visitors */}
-          <Card className="hover:shadow-md transition-shadow duration-200">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 pb-1">
-              <CardTitle className="text-xs font-medium">
-                Daily Visitors
-              </CardTitle>
-              <div className="p-1.5 bg-blue-50 dark:bg-blue-900/30 rounded-lg">
-                <Users className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
-              </div>
-            </CardHeader>
-            <CardContent className="p-3 pt-1">
-              <div className="text-xl font-bold">{stats.dailyVisitors}</div>
-              <p className="text-[10px] text-gray-500 dark:text-gray-400">
-                Today
-              </p>
-            </CardContent>
-          </Card>
+        {/* Critical Alerts */}
+        {stats.waitingPatients > 5 && (
+          <Alert className="border-amber-200 bg-amber-50 dark:bg-amber-900/20">
+            <AlertCircle className="h-4 w-4 text-amber-600" />
+            <AlertDescription className="text-amber-800 dark:text-amber-200">
+              <strong>High patient volume:</strong> {stats.waitingPatients}{" "}
+              patients waiting. Average wait time: {stats.avgWaitTime} minutes.
+            </AlertDescription>
+          </Alert>
+        )}
 
-          {/* Appointments */}
-          <Card className="hover:shadow-md transition-shadow duration-200">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 pb-1">
-              <CardTitle className="text-xs font-medium">
-                Appointments
+        {/* Key Metrics Overview */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Today's Performance */}
+          <Card className="border-l-4 border-l-blue-500">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">
+                Today's Performance
               </CardTitle>
-              <div className="p-1.5 bg-purple-50 dark:bg-purple-900/30 rounded-lg">
-                <Calendar className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
+              <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                <TrendingUp className="h-4 w-4 text-blue-600 dark:text-blue-400" />
               </div>
             </CardHeader>
-            <CardContent className="p-3 pt-1">
-              <div className="text-xl font-bold">{stats.appointments}</div>
-              <p className="text-[10px] text-gray-500 dark:text-gray-400">
-                <span className="text-amber-500">
-                  {stats.pendingAppointments} pending
+            <CardContent>
+              <div className="text-2xl font-bold text-blue-600">
+                {stats.completedAppointments}
+              </div>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                of {stats.appointments} appointments completed
+              </p>
+              <div className="flex items-center mt-2">
+                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                  <div
+                    className="bg-blue-600 h-2 rounded-full"
+                    style={{
+                      width: `${stats.appointments > 0 ? (stats.completedAppointments / stats.appointments) * 100 : 0}%`,
+                    }}
+                  ></div>
+                </div>
+                <span className="text-xs ml-2 text-gray-500">
+                  {stats.appointments > 0
+                    ? Math.round(
+                        (stats.completedAppointments / stats.appointments) *
+                          100,
+                      )
+                    : 0}
+                  %
                 </span>
-              </p>
+              </div>
             </CardContent>
           </Card>
 
-          {/* Waiting Patients */}
-          <Card className="hover:shadow-md transition-shadow duration-200">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 pb-1">
-              <CardTitle className="text-xs font-medium">Waiting</CardTitle>
-              <div className="p-1.5 bg-amber-50 dark:bg-amber-900/30 rounded-lg">
-                <Clock className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+          {/* Patient Flow */}
+          <Card className="border-l-4 border-l-green-500">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">
+                Patient Flow
+              </CardTitle>
+              <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                <Users className="h-4 w-4 text-green-600 dark:text-green-400" />
               </div>
             </CardHeader>
-            <CardContent className="p-3 pt-1">
-              <div className="text-xl font-bold text-amber-600 dark:text-amber-500">
-                {stats.waitingPatients}
+            <CardContent>
+              <div className="text-2xl font-bold text-green-600">
+                {stats.checkIns}
               </div>
-              <p className="text-[10px] text-gray-500 dark:text-gray-400">
-                In waiting area
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                patients checked in
               </p>
+              <div className="flex items-center justify-between mt-2 text-xs">
+                <div className="flex items-center">
+                  <Clock className="h-3 w-3 mr-1 text-amber-500" />
+                  <span className="text-amber-600">
+                    {stats.waitingPatients} waiting
+                  </span>
+                </div>
+                <div className="flex items-center">
+                  <Timer className="h-3 w-3 mr-1 text-blue-500" />
+                  <span className="text-blue-600">
+                    {stats.avgWaitTime}m avg
+                  </span>
+                </div>
+              </div>
             </CardContent>
           </Card>
 
-          {/* Check-ins */}
-          <Card className="hover:shadow-md transition-shadow duration-200">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 pb-1">
-              <CardTitle className="text-xs font-medium">Check-ins</CardTitle>
-              <div className="p-1.5 bg-green-50 dark:bg-green-900/30 rounded-lg">
-                <UserCheck className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
+          {/* Revenue Summary */}
+          <Card className="border-l-4 border-l-emerald-500">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">
+                Revenue Today
+              </CardTitle>
+              <div className="p-2 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg">
+                <DollarSign className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
               </div>
             </CardHeader>
-            <CardContent className="p-3 pt-1">
-              <div className="text-xl font-bold">{stats.checkIns}</div>
-              <p className="text-[10px] text-gray-500 dark:text-gray-400">
-                Completed
-              </p>
-            </CardContent>
-          </Card>
-
-          {/* Today's Revenue */}
-          <Card className="hover:shadow-md transition-shadow duration-200">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 pb-1">
-              <CardTitle className="text-xs font-medium">Revenue</CardTitle>
-              <div className="p-1.5 bg-emerald-50 dark:bg-emerald-900/30 rounded-lg">
-                <DollarSign className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-              </div>
-            </CardHeader>
-            <CardContent className="p-3 pt-1">
-              <div className="text-xl font-bold">
+            <CardContent>
+              <div className="text-2xl font-bold text-emerald-600">
                 {formatCurrency(stats.todayRevenue)}
               </div>
-              <p className="text-[10px] text-gray-500 dark:text-gray-400">
-                Today
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                {formatCurrency(stats.netRevenue)} net revenue
               </p>
+              <div className="flex items-center mt-2 text-xs">
+                <span className="text-red-600 dark:text-red-400">
+                  -{formatCurrency(stats.totalDiscounts)} discounts
+                </span>
+              </div>
             </CardContent>
           </Card>
 
-          {/* Pending Discounts */}
-          <Card className="hover:shadow-md transition-shadow duration-200">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 pb-1">
-              <CardTitle className="text-xs font-medium">
-                Pending Discounts
+          {/* Pending Tasks */}
+          <Card className="border-l-4 border-l-amber-500">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">
+                Pending Tasks
               </CardTitle>
-              <div className="p-1.5 bg-yellow-50 dark:bg-yellow-900/30 rounded-lg">
-                <AlertCircle className="h-3.5 w-3.5 text-yellow-600 dark:text-yellow-400" />
+              <div className="p-2 bg-amber-100 dark:bg-amber-900/30 rounded-lg">
+                <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
               </div>
             </CardHeader>
-            <CardContent className="p-3 pt-1">
-              <div className="text-xl font-bold">{stats.pendingDiscounts}</div>
-              <p className="text-[10px] text-gray-500 dark:text-gray-400">
-                Awaiting approval
+            <CardContent>
+              <div className="text-2xl font-bold text-amber-600">
+                {stats.pendingDiscounts + stats.pendingPayments}
+              </div>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                {stats.pendingDiscounts} discounts, {stats.pendingPayments}{" "}
+                payments
               </p>
-            </CardContent>
-          </Card>
-
-          {/* Daily Cash Balance */}
-          <Card className="hover:shadow-md transition-shadow duration-200">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 pb-1">
-              <CardTitle className="text-xs font-medium">
-                Cash Balance
-              </CardTitle>
-              <div className="p-1.5 bg-indigo-50 dark:bg-indigo-900/30 rounded-lg">
-                <Wallet className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+              <div className="flex items-center mt-2 text-xs">
+                <Wallet className="h-3 w-3 mr-1 text-indigo-500" />
+                <span className="text-indigo-600">
+                  {formatCurrency(stats.dailyCashBalance)} cash
+                </span>
               </div>
-            </CardHeader>
-            <CardContent className="p-3 pt-1">
-              <div className="text-xl font-bold">
-                {formatCurrency(stats.dailyCashBalance)}
-              </div>
-              <p className="text-[10px] text-gray-500 dark:text-gray-400">
-                Daily
-              </p>
-            </CardContent>
-          </Card>
-
-          {/* System Cash Total */}
-          <Card className="hover:shadow-md transition-shadow duration-200">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 pb-1">
-              <CardTitle className="text-xs font-medium">System Cash</CardTitle>
-              <div className="p-1.5 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                <DollarSign className="h-3.5 w-3.5 text-gray-600 dark:text-gray-400" />
-              </div>
-            </CardHeader>
-            <CardContent className="p-3 pt-1">
-              <div className="text-xl font-bold">
-                {formatCurrency(stats.systemCashTotal)}
-              </div>
-              <p className="text-[10px] text-gray-500 dark:text-gray-400">
-                Total
-              </p>
             </CardContent>
           </Card>
         </div>
 
-        {/* Full-width Quick Actions */}
-        <Card className="hover:shadow-md transition-shadow duration-200">
+        {/* Quick Actions */}
+        <Card>
           <CardHeader>
-            <CardTitle>Quick Actions</CardTitle>
-            <CardDescription>Common reception tasks</CardDescription>
+            <CardTitle className="flex items-center gap-2">
+              <Settings className="h-5 w-5" />
+              Quick Actions
+            </CardTitle>
+            <CardDescription>Most common reception tasks</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+              {/* Patient Management */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    className="justify-start h-auto py-3 px-4 w-full"
+                    onClick={() => router.push("/reception/patients/new")}
+                  >
+                    <div className="flex items-center space-x-3">
+                      <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                        <UserPlus className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                      </div>
+                      <div className="text-left">
+                        <p className="font-medium text-sm">New Patient</p>
+                        <p className="text-xs">Register</p>
+                      </div>
+                    </div>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Register a new patient</p>
+                </TooltipContent>
+              </Tooltip>
+
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -539,8 +639,8 @@ export default function ReceptionDashboardPage() {
                     onClick={() => router.push("/reception/appointments/new")}
                   >
                     <div className="flex items-center space-x-3">
-                      <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                        <Plus className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                      <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                        <Calendar className="h-4 w-4 text-green-600 dark:text-green-400" />
                       </div>
                       <div className="text-left">
                         <p className="font-medium text-sm">New Appointment</p>
@@ -554,56 +654,82 @@ export default function ReceptionDashboardPage() {
                 </TooltipContent>
               </Tooltip>
 
+              {/* Check-in/out */}
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
-                    variant="outline"
                     className="justify-start h-auto py-3 px-4 w-full"
-                    onClick={handleProcessPayment}
-                  >
-                    <div className="flex items-center space-x-3">
-                      <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                        <DollarSign className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                      </div>
-                      <div className="text-left">
-                        <p className="font-medium text-sm">Lab Payments</p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">
-                          Process
-                        </p>
-                      </div>
-                    </div>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Process payments for lab tests</p>
-                </TooltipContent>
-              </Tooltip>
-
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="justify-start h-auto py-3 px-4 w-full"
-                    onClick={handleProcessPayment}
+                    onClick={() => router.push("/reception/checkin")}
                   >
                     <div className="flex items-center space-x-3">
                       <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
-                        <DollarSign className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                        <UserCheck className="h-4 w-4 text-purple-600 dark:text-purple-400" />
                       </div>
                       <div className="text-left">
-                        <p className="font-medium text-sm">Radiology</p>
+                        <p className="font-medium text-sm">Patient Check-in</p>
+                        <p className="text-xs">Arrival</p>
+                      </div>
+                    </div>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Check in arriving patients</p>
+                </TooltipContent>
+              </Tooltip>
+
+              {/* Payments */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="justify-start h-auto py-3 px-4 w-full"
+                    onClick={() => router.push("/reception/payments")}
+                  >
+                    <div className="flex items-center space-x-3">
+                      <div className="p-2 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg">
+                        <CreditCard className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                      </div>
+                      <div className="text-left">
+                        <p className="font-medium text-sm">Process Payment</p>
                         <p className="text-xs text-gray-500 dark:text-gray-400">
-                          Payments
+                          Billing
                         </p>
                       </div>
                     </div>
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>Process radiology payments</p>
+                  <p>Process payments and billing</p>
                 </TooltipContent>
               </Tooltip>
 
+              {/* Lab & Radiology */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="justify-start h-auto py-3 px-4 w-full"
+                    onClick={() => router.push("/reception/lab-orders")}
+                  >
+                    <div className="flex items-center space-x-3">
+                      <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">
+                        <Stethoscope className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                      </div>
+                      <div className="text-left">
+                        <p className="font-medium text-sm">Lab Orders</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          Tests
+                        </p>
+                      </div>
+                    </div>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Order laboratory tests</p>
+                </TooltipContent>
+              </Tooltip>
+
+              {/* Administrative */}
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -612,405 +738,388 @@ export default function ReceptionDashboardPage() {
                     onClick={() => router.push("/reception/discounts/new")}
                   >
                     <div className="flex items-center space-x-3">
-                      <div className="p-2 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg">
-                        <AlertCircle className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
+                      <div className="p-2 bg-amber-100 dark:bg-amber-900/30 rounded-lg">
+                        <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                       </div>
                       <div className="text-left">
-                        <p className="font-medium text-sm">Discount</p>
+                        <p className="font-medium text-sm">Discount Request</p>
                         <p className="text-xs text-gray-500 dark:text-gray-400">
-                          Request
+                          Approval
                         </p>
                       </div>
                     </div>
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>Submit a discount request</p>
-                </TooltipContent>
-              </Tooltip>
-
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="justify-start h-auto py-3 px-4 w-full"
-                    onClick={() => router.push("/reception/cash")}
-                  >
-                    <div className="flex items-center space-x-3">
-                      <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">
-                        <Wallet className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-                      </div>
-                      <div className="text-left">
-                        <p className="font-medium text-sm">Cash</p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">
-                          Reconcile
-                        </p>
-                      </div>
-                    </div>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Reconcile daily cash balance</p>
-                </TooltipContent>
-              </Tooltip>
-
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="justify-start h-auto py-3 px-4 w-full"
-                    onClick={() => router.push("/reception/appointments")}
-                  >
-                    <div className="flex items-center space-x-3">
-                      <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
-                        <Calendar className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                      </div>
-                      <div className="text-left">
-                        <p className="font-medium text-sm">Schedule</p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">
-                          View
-                        </p>
-                      </div>
-                    </div>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>View today's appointment schedule</p>
+                  <p>Submit discount request</p>
                 </TooltipContent>
               </Tooltip>
             </div>
           </CardContent>
         </Card>
 
-        {/* Today's Collection Summary */}
-        <Card className="hover:shadow-md transition-shadow duration-200">
-          <CardHeader>
-            <CardTitle>Today's Collection</CardTitle>
-            <CardDescription>
-              Complete breakdown of today's payments and expenses
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {todaysCollection ? (
-              <div className="space-y-6">
-                {/* Collection Breakdown */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {/* Appointments */}
-                  <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
-                        Appointments
-                      </span>
-                      <Badge variant="outline" className="text-xs">
-                        {todaysCollection.appointments.count}
-                      </Badge>
-                    </div>
-                    <div className="space-y-1">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600 dark:text-gray-400">
-                          Total:
-                        </span>
-                        <span className="font-semibold">
-                          {formatCurrency(
-                            todaysCollection.appointments.totalAmount,
-                          )}
-                        </span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600 dark:text-gray-400">
-                          Discount:
-                        </span>
-                        <span className="text-red-600 dark:text-red-400">
-                          -
-                          {formatCurrency(
-                            todaysCollection.appointments.discount,
-                          )}
-                        </span>
-                      </div>
-                      <div className="flex justify-between text-sm font-semibold">
-                        <span className="text-gray-700 dark:text-gray-300">
-                          Net:
-                        </span>
-                        <span className="text-blue-600 dark:text-blue-400">
-                          {formatCurrency(
-                            todaysCollection.appointments.netAmount,
-                          )}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Lab Payments */}
-                  <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-purple-700 dark:text-purple-300">
-                        Lab Payments
-                      </span>
-                      <Badge variant="outline" className="text-xs">
-                        {todaysCollection.lab.count}
-                      </Badge>
-                    </div>
-                    <div className="space-y-1">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600 dark:text-gray-400">
-                          Total Paid:
-                        </span>
-                        <span className="font-semibold">
-                          {formatCurrency(todaysCollection.lab.totalPaid)}
-                        </span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600 dark:text-gray-400">
-                          Discount:
-                        </span>
-                        <span className="text-red-600 dark:text-red-400">
-                          -{formatCurrency(todaysCollection.lab.discount)}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Radiology Payments */}
-                  <div className="p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-indigo-700 dark:text-indigo-300">
-                        Radiology Payments
-                      </span>
-                      <Badge variant="outline" className="text-xs">
-                        {todaysCollection.radiology.count}
-                      </Badge>
-                    </div>
-                    <div className="space-y-1">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600 dark:text-gray-400">
-                          Total Paid:
-                        </span>
-                        <span className="font-semibold">
-                          {formatCurrency(todaysCollection.radiology.totalPaid)}
-                        </span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600 dark:text-gray-400">
-                          Discount:
-                        </span>
-                        <span className="text-red-600 dark:text-red-400">
-                          -{formatCurrency(todaysCollection.radiology.discount)}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
+        {/* Main Content Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Left Column - Patient Queue & Appointments */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* Patient Queue */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Clock className="h-5 w-5 text-amber-500" />
+                    Patient Queue
+                  </CardTitle>
+                  <CardDescription>
+                    {patientQueue.length} patients currently waiting
+                  </CardDescription>
                 </div>
-
-                {/* Discounts and Expenses */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Approved Discounts */}
-                  <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-yellow-700 dark:text-yellow-300">
-                        Approved Discounts
-                      </span>
-                      <Badge variant="outline" className="text-xs">
-                        {todaysCollection.discounts.count}
-                      </Badge>
-                    </div>
-                    <div className="flex justify-between text-sm font-semibold">
-                      <span className="text-gray-700 dark:text-gray-300">
-                        Total:
-                      </span>
-                      <span className="text-yellow-600 dark:text-yellow-400">
-                        -
-                        {formatCurrency(
-                          todaysCollection.discounts.totalDiscountAmount,
-                        )}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Expenses */}
-                  <div className="p-4 bg-red-50 dark:bg-red-900/20 rounded-lg">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-red-700 dark:text-red-300">
-                        Expenses
-                      </span>
-                      <Badge variant="outline" className="text-xs">
-                        {todaysCollection.expenses.count}
-                      </Badge>
-                    </div>
-                    <div className="flex justify-between text-sm font-semibold">
-                      <span className="text-gray-700 dark:text-gray-300">
-                        Total:
-                      </span>
-                      <span className="text-red-600 dark:text-red-400">
-                        -
-                        {formatCurrency(
-                          todaysCollection.expenses.totalExpenses,
-                        )}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Summary */}
-                <div className="p-4 bg-linear-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 rounded-lg border-2 border-emerald-200 dark:border-emerald-800">
-                  <h3 className="text-lg font-bold text-emerald-800 dark:text-emerald-200 mb-4">
-                    Collection Summary
-                  </h3>
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600 dark:text-gray-400">
-                        Total Collection:
-                      </span>
-                      <span className="font-semibold text-emerald-700 dark:text-emerald-300">
-                        {formatCurrency(
-                          todaysCollection.summary.totalCollection,
-                        )}
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600 dark:text-gray-400">
-                        Total Discounts:
-                      </span>
-                      <span className="font-semibold text-yellow-600 dark:text-yellow-400">
-                        -
-                        {formatCurrency(
-                          todaysCollection.summary.totalDiscounts,
-                        )}
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-base font-bold border-t border-emerald-200 dark:border-emerald-800 pt-2">
-                      <span className="text-gray-700 dark:text-gray-300">
-                        Net Collection:
-                      </span>
-                      <span className="text-emerald-600 dark:text-emerald-400">
-                        {formatCurrency(todaysCollection.summary.netCollection)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600 dark:text-gray-400">
-                        Total Expenses:
-                      </span>
-                      <span className="font-semibold text-red-600 dark:text-red-400">
-                        -
-                        {formatCurrency(todaysCollection.summary.totalExpenses)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-lg font-bold border-t border-emerald-200 dark:border-emerald-800 pt-2">
-                      <span className="text-gray-800 dark:text-gray-200">
-                        Net After Expenses:
-                      </span>
-                      <span className="text-2xl text-emerald-600 dark:text-emerald-400">
-                        {formatCurrency(
-                          todaysCollection.summary.netAfterExpenses,
-                        )}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="text-center py-8">
-                <RefreshCw className="h-12 w-12 text-gray-300 dark:text-gray-600 mx-auto animate-spin" />
-                <p className="text-gray-500 dark:text-gray-400 mt-2">
-                  Loading collection data...
-                </p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Combined Section: Pending Discounts & Recent Activities */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Pending Discount Requests */}
-          <Card className="hover:shadow-md transition-shadow duration-200">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle>Pending Discount Requests</CardTitle>
-                <CardDescription>
-                  Requests awaiting admin approval
-                </CardDescription>
-              </div>
-              {discountRequests.length > 0 && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleViewAllDiscounts}
-                  className="gap-1"
-                >
-                  View All
-                  <ArrowRight className="h-4 w-4" />
-                </Button>
-              )}
-            </CardHeader>
-            <CardContent>
-              {discountRequests.length > 0 ? (
-                <div className="space-y-3">
-                  {discountRequests.slice(0, 3).map((request) => (
-                    <div
-                      key={request.id}
-                      className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer"
-                      onClick={() => handleViewAllDiscounts()}
-                    >
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <p className="font-medium truncate">
-                            {request.patientName}
-                          </p>
-                          <Badge
-                            variant="outline"
-                            className={`text-xs ${getStatusColor(request.status)}`}
+                <Badge variant="outline" className="text-xs">
+                  {stats.avgWaitTime}min avg wait
+                </Badge>
+              </CardHeader>
+              <CardContent>
+                {patientQueue.length > 0 ? (
+                  <div className="space-y-3">
+                    {patientQueue.slice(0, 5).map((patient) => (
+                      <div
+                        key={patient.id}
+                        className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                      >
+                        <div className="flex items-center space-x-3">
+                          <div
+                            className={`p-2 rounded-lg ${
+                              patient.priority === "emergency"
+                                ? "bg-red-100 dark:bg-red-900/30 text-red-600"
+                                : patient.priority === "urgent"
+                                  ? "bg-orange-100 dark:bg-orange-900/30 text-orange-600"
+                                  : "bg-blue-100 dark:bg-blue-900/30 text-blue-600"
+                            }`}
                           >
-                            {request.status}
-                          </Badge>
+                            <Users className="h-4 w-4" />
+                          </div>
+                          <div>
+                            <p className="font-medium">{patient.patientName}</p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                              {patient.appointmentType} • Dr.{" "}
+                              {patient.doctorName}
+                            </p>
+                          </div>
                         </div>
-                        <p className="text-sm text-gray-600 dark:text-gray-400 truncate">
-                          {request.reason}
-                        </p>
-                        <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mt-2">
-                          <span>By: {request.requestedBy}</span>
-                          <span>{formatTime(request.requestedAt)}</span>
+                        <div className="text-right">
+                          <p className="text-sm font-medium">
+                            {formatTime(patient.checkInTime)}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {patient.estimatedWaitTime}min wait
+                          </p>
                         </div>
                       </div>
-                      <div className="text-right ml-4">
-                        <p className="font-bold text-lg">
-                          {formatCurrency(request.requestedAmount)}
-                        </p>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="mt-1 text-xs"
+                    ))}
+                    {patientQueue.length > 5 && (
+                      <Button variant="outline" className="w-full" size="sm">
+                        View All {patientQueue.length} Patients
+                      </Button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <Users className="h-12 w-12 text-gray-300 dark:text-gray-600 mx-auto mb-2" />
+                    <p className="text-gray-500 dark:text-gray-400">
+                      No patients in queue
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Today's Appointments */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Calendar className="h-5 w-5 text-blue-500" />
+                  Today's Appointments
+                </CardTitle>
+                <CardDescription>
+                  {
+                    todaysAppointments.filter((a) => a.status === "scheduled")
+                      .length
+                  }{" "}
+                  upcoming appointments
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {todaysAppointments.length > 0 ? (
+                  <div className="space-y-2">
+                    {todaysAppointments.slice(0, 6).map((appointment) => (
+                      <div
+                        key={appointment.id}
+                        className="flex items-center justify-between p-3 border rounded-lg"
+                      >
+                        <div className="flex items-center space-x-3">
+                          <div
+                            className={`p-2 rounded-lg ${
+                              appointment.status === "confirmed"
+                                ? "bg-green-100 dark:bg-green-900/30 text-green-600"
+                                : appointment.status === "in_progress"
+                                  ? "bg-blue-100 dark:bg-blue-900/30 text-blue-600"
+                                  : "bg-gray-100 dark:bg-gray-800 text-gray-600"
+                            }`}
+                          >
+                            <Calendar className="h-4 w-4" />
+                          </div>
+                          <div>
+                            <p className="font-medium">
+                              {appointment.patientName}
+                            </p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                              {appointment.time} • Dr. {appointment.doctorName}
+                            </p>
+                          </div>
+                        </div>
+                        <Badge
+                          variant="outline"
+                          className={`text-xs ${
+                            appointment.status === "confirmed"
+                              ? "border-green-200 text-green-700"
+                              : appointment.status === "in_progress"
+                                ? "border-blue-200 text-blue-700"
+                                : "border-gray-200 text-gray-700"
+                          }`}
                         >
-                          Review
-                        </Button>
+                          {appointment.status.replace("_", " ")}
+                        </Badge>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <Calendar className="h-12 w-12 text-gray-300 dark:text-gray-600 mx-auto mb-2" />
+                    <p className="text-gray-500 dark:text-gray-400">
+                      No appointments scheduled for today
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Right Column - Notifications & Pending Tasks */}
+          <div className="space-y-6">
+            {/* Notifications */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Bell className="h-5 w-5 text-indigo-500" />
+                  Notifications
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {notifications.length > 0 ? (
+                  <div className="space-y-3">
+                    {notifications.slice(0, 4).map((notification) => (
+                      <Alert
+                        key={notification.id}
+                        className={`${
+                          notification.type === "error"
+                            ? "border-red-200 bg-red-50 dark:bg-red-900/20"
+                            : notification.type === "warning"
+                              ? "border-amber-200 bg-amber-50 dark:bg-amber-900/20"
+                              : notification.type === "success"
+                                ? "border-green-200 bg-green-50 dark:bg-green-900/20"
+                                : "border-blue-200 bg-blue-50 dark:bg-blue-900/20"
+                        }`}
+                      >
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertDescription className="text-sm">
+                          <p className="font-medium">{notification.title}</p>
+                          <p className="text-xs mt-1">{notification.message}</p>
+                          <p className="text-xs text-gray-500 mt-1">
+                            {formatDistanceToNow(
+                              parseISO(notification.timestamp),
+                              { addSuffix: true },
+                            )}
+                          </p>
+                        </AlertDescription>
+                      </Alert>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <Bell className="h-12 w-12 text-gray-300 dark:text-gray-600 mx-auto mb-2" />
+                    <p className="text-gray-500 dark:text-gray-400 text-sm">
+                      No new notifications
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Pending Tasks Summary */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <AlertCircle className="h-5 w-5 text-amber-500" />
+                  Pending Tasks
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-amber-500" />
+                    <span className="text-sm">Discount Requests</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-xs">
+                      {stats.pendingDiscounts}
+                    </Badge>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleViewAllDiscounts}
+                      className="text-xs"
+                    >
+                      View
+                    </Button>
+                  </div>
                 </div>
-              ) : (
-                <div className="text-center py-8 space-y-2">
-                  <FileText className="h-12 w-12 text-gray-300 dark:text-gray-600 mx-auto" />
-                  <p className="text-gray-500 dark:text-gray-400">
-                    No pending discount requests
-                  </p>
+
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CreditCard className="h-4 w-4 text-blue-500" />
+                    <span className="text-sm">Pending Payments</span>
+                  </div>
+                  <Badge variant="outline" className="text-xs">
+                    {stats.pendingPayments}
+                  </Badge>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-purple-500" />
+                    <span className="text-sm">Unconfirmed Appointments</span>
+                  </div>
+                  <Badge variant="outline" className="text-xs">
+                    {stats.pendingAppointments}
+                  </Badge>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+
+        {/* Bottom Section - Action Items & Activities */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Action Items */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <CheckCircle className="h-5 w-5 text-green-500" />
+                Action Items
+              </CardTitle>
+              <CardDescription>Tasks requiring your attention</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Pending Discounts */}
+              {stats.pendingDiscounts > 0 && (
+                <div className="flex items-center justify-between p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
+                  <div className="flex items-center gap-3">
+                    <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                    <div>
+                      <p className="font-medium text-amber-800 dark:text-amber-200">
+                        {stats.pendingDiscounts} Pending Discount
+                        {stats.pendingDiscounts > 1 ? "s" : ""}
+                      </p>
+                      <p className="text-sm text-amber-600 dark:text-amber-400">
+                        Awaiting admin approval
+                      </p>
+                    </div>
+                  </div>
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => router.push("/reception/discounts/new")}
+                    onClick={handleViewAllDiscounts}
+                    className="border-amber-300 text-amber-700 hover:bg-amber-100"
                   >
-                    Create New Request
+                    Review
                   </Button>
                 </div>
               )}
+
+              {/* Pending Payments */}
+              {stats.pendingPayments > 0 && (
+                <div className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                  <div className="flex items-center gap-3">
+                    <CreditCard className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                    <div>
+                      <p className="font-medium text-blue-800 dark:text-blue-200">
+                        {stats.pendingPayments} Pending Payment
+                        {stats.pendingPayments > 1 ? "s" : ""}
+                      </p>
+                      <p className="text-sm text-blue-600 dark:text-blue-400">
+                        Outstanding balances
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => router.push("/reception/payments")}
+                    className="border-blue-300 text-blue-700 hover:bg-blue-100"
+                  >
+                    Process
+                  </Button>
+                </div>
+              )}
+
+              {/* High Patient Queue */}
+              {stats.waitingPatients > 3 && (
+                <div className="flex items-center justify-between p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
+                  <div className="flex items-center gap-3">
+                    <Users className="h-5 w-5 text-red-600 dark:text-red-400" />
+                    <div>
+                      <p className="font-medium text-red-800 dark:text-red-200">
+                        Patient Queue Alert
+                      </p>
+                      <p className="text-sm text-red-600 dark:text-red-400">
+                        {stats.waitingPatients} patients waiting (
+                        {stats.avgWaitTime}min avg)
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => router.push("/reception/checkin")}
+                    className="border-red-300 text-red-700 hover:bg-red-100"
+                  >
+                    Manage
+                  </Button>
+                </div>
+              )}
+
+              {/* No action items */}
+              {stats.pendingDiscounts === 0 &&
+                stats.pendingPayments === 0 &&
+                stats.waitingPatients <= 3 && (
+                  <div className="text-center py-8">
+                    <CheckCircle className="h-12 w-12 text-green-400 mx-auto mb-2" />
+                    <p className="text-gray-500 dark:text-gray-400">
+                      All caught up! No pending tasks.
+                    </p>
+                  </div>
+                )}
             </CardContent>
           </Card>
 
           {/* Recent Activities */}
-          <Card className="hover:shadow-md transition-shadow duration-200">
+          <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Recent Activities</CardTitle>
-                <Activity className="h-5 w-5 text-gray-400" />
-              </div>
-              <CardDescription>Latest updates</CardDescription>
+              <CardTitle className="flex items-center gap-2">
+                <Activity className="h-5 w-5 text-purple-500" />
+                Recent Activities
+              </CardTitle>
+              <CardDescription>Latest system activities</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
@@ -1025,13 +1134,13 @@ export default function ReceptionDashboardPage() {
                       }
                     >
                       <div
-                        className={`p-2 rounded-lg ${
+                        className={`p-2 rounded-lg flex-shrink-0 ${
                           activity.type === "checkin"
                             ? "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
                             : activity.type === "payment"
                               ? "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400"
                               : activity.type === "discount"
-                                ? "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400"
+                                ? "bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400"
                                 : "bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400"
                         }`}
                       >
@@ -1060,7 +1169,7 @@ export default function ReceptionDashboardPage() {
                             {formatTime(activity.timestamp)}
                           </p>
                           {activity.amount && (
-                            <span className="text-xs font-medium">
+                            <span className="text-xs font-medium text-green-600 dark:text-green-400">
                               {formatCurrency(activity.amount)}
                             </span>
                           )}
@@ -1069,8 +1178,8 @@ export default function ReceptionDashboardPage() {
                     </div>
                   ))
                 ) : (
-                  <div className="text-center py-8 space-y-2">
-                    <Activity className="h-12 w-12 text-gray-300 dark:text-gray-600 mx-auto" />
+                  <div className="text-center py-8">
+                    <Activity className="h-12 w-12 text-gray-300 dark:text-gray-600 mx-auto mb-2" />
                     <p className="text-gray-500 dark:text-gray-400">
                       No recent activities
                     </p>

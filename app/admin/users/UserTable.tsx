@@ -54,11 +54,11 @@ export default function UserTable({
   const [isDeleting, setIsDeleting] = useState(false);
 
   const handleDelete = async () => {
-    if (!userToDelete || !accessToken) return;
+    if (!userToDelete || !userToDelete._id || !accessToken) return;
 
     setIsDeleting(true);
     try {
-      const response = await fetch(`/api/admin/users/${userToDelete._id}`, {
+      const response = await fetch(`/api/admin/users/${userToDelete._id.toString()}`, {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -164,8 +164,8 @@ export default function UserTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {users.map((user) => (
-              <TableRow key={user._id.toString()} className="hover:bg-muted/50">
+            {users.map((user, index) => (
+              <TableRow key={user._id?.toString() || `user-${index}`} className="hover:bg-muted/50">
                 <TableCell>
                   <div className="flex items-center gap-3">
                     <div className="shrink-0">

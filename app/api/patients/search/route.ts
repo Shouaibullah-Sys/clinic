@@ -1,15 +1,11 @@
 // app/api/patients/search/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { Patient } from "@/lib/models/Patient";
+import { prisma } from "@/lib/prisma";
 import { authenticateRequest } from "@/lib/auth";
 
 export async function GET(request: NextRequest) {
   try {
-    await dbConnect();
-
-    // Authenticate the request
     const auth = await authenticateRequest(request);
     if (!auth.success) {
       return NextResponse.json(
@@ -20,8 +16,6 @@ export async function GET(request: NextRequest) {
 
     const userRole = auth.userRole!;
 
-    // Allow laboratory staff and other medical staff to search patients
-    // Laboratory users need this to create direct lab tests
     const allowedRoles = [
       "admin",
       "receptionist",
@@ -50,26 +44,36 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const searchRegex = new RegExp(query, "i");
-
-    const patients = await Patient.find({
-      $or: [
-        { name: searchRegex },
-        { phone: searchRegex },
-        { email: searchRegex },
-        { guardian: searchRegex },
-        { refPerson: searchRegex },
-        { passTskNo: searchRegex },
-        { registrationNo: searchRegex },
-        { patientId: searchRegex },
-      ],
-      active: true,
-    })
-      .select(
-        "name phone email guardian refPerson passTskNo registrationNo patientId address gender dateOfBirth",
-      )
-      .limit(limit)
-      .lean();
+    const patients = await prisma.patient.findMany({
+      where: {
+        active: true,
+        OR: [
+          { name: { contains: query } },
+          { phone: { contains: query } },
+          { email: { contains: query } },
+          { guardian: { contains: query } },
+          { refPerson: { contains: query } },
+          { passTskNo: { contains: query } },
+          { registrationNo: { contains: query } },
+          { patientId: { contains: query } },
+        ],
+      },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        email: true,
+        guardian: true,
+        refPerson: true,
+        passTskNo: true,
+        registrationNo: true,
+        patientId: true,
+        address: true,
+        gender: true,
+        dateOfBirth: true,
+      },
+      take: limit,
+    });
 
     return NextResponse.json({
       success: true,

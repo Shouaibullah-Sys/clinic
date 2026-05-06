@@ -1,54 +1,14 @@
 //app/api/pharmacy/prescriptions/[id]/dispense/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { Prescription } from "@/lib/models/Prescription";
-import { MedicineStock } from "@/lib/models/MedicineStock";
-import { MedicineIssue } from "@/lib/models/MedicineIssue";
+import { prisma } from "@/lib/prisma";
 import { getTokenPayload } from "@/lib/auth/jwt";
-import mongoose from "mongoose";
-
-// Type for populated patient
-interface PopulatedPatient {
-  _id: string;
-  name: string;
-  patientId: string;
-}
-
-// Type for populated doctor
-interface PopulatedDoctor {
-  _id: string;
-  name: string;
-}
-
-// Type for populated prescription
-interface PopulatedPrescription {
-  _id: any;
-  prescriptionId: string;
-  patient: PopulatedPatient | null;
-  doctor: PopulatedDoctor | null;
-  medications: any[];
-  status: string;
-  dispensingStatus: string;
-  dispensedBy?: any;
-  dispensedDate?: Date;
-  pharmacyNotes?: string;
-  instructions?: string;
-  paymentVerified: boolean;
-  paymentStatus: string;
-  charges: any;
-  prescribedDate: Date;
-  expiryDate: Date;
-  createdAt: Date;
-  updatedAt: Date;
-}
 
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await dbConnect();
     const payload = await getTokenPayload(req);
 
     if (
@@ -69,7 +29,6 @@ export async function POST(
       patientInstructions,
     } = body;
 
-    // Validate required fields
     if (!dispensedBy) {
       return NextResponse.json(
         { error: "dispensedBy is required" },
@@ -84,7 +43,6 @@ export async function POST(
       );
     }
 
-    // Validate each item
     for (const item of items) {
       if (!item.medicine) {
         return NextResponse.json(
@@ -106,7 +64,6 @@ export async function POST(
       }
     }
 
-    // Validate totalAmount
     if (totalAmount === undefined || totalAmount === null || totalAmount < 0) {
       return NextResponse.json(
         { error: "totalAmount is required and must be non-negative" },
@@ -114,7 +71,6 @@ export async function POST(
       );
     }
 
-    // Validate paymentMethod
     const validPaymentMethods = ["cash", "card", "insurance", "other"];
     if (paymentMethod && !validPaymentMethods.includes(paymentMethod)) {
       return NextResponse.json(
@@ -128,7 +84,6 @@ export async function POST(
     console.log("🔄 Dispensing prescription:", prescriptionId);
     console.log("Items to dispense:", items);
 
-    // Verify totalAmount matches calculated total from items
     const calculatedTotal = items.reduce(
       (sum: number, item: any) => sum + item.dispensedQuantity * item.unitPrice,
       0,
@@ -144,10 +99,12 @@ export async function POST(
       );
     }
 
-    // Find prescription with patient populated
-    const prescription = (await Prescription.findById(prescriptionId)
-      .populate("patient", "name patientId") // Populate patient
-      .populate("doctor", "name")) as PopulatedPrescription | null;
+    const prescription = await (prisma as any).prescription.findUnique({
+      where: { id: prescriptionId },
+      include: {
+        patient: { select: { name: true } },
+      },
+    });
 
     if (!prescription) {
       return NextResponse.json(
@@ -156,24 +113,22 @@ export async function POST(
       );
     }
 
-    // Check if prescription has been paid/verified
+    const charges = JSON.parse(prescription.charges || "{}");
     if (!prescription.paymentVerified) {
       return NextResponse.json(
         {
           error:
             "Payment not verified. Please ask reception to verify payment before dispensing.",
-          paymentStatus: prescription.paymentStatus,
+          paymentStatus: charges.paymentStatus,
           requiresPaymentVerification: true,
         },
         { status: 403 },
       );
     }
 
-    // Get patient name from prescription
     const patientName = prescription.patient?.name || "Unknown Patient";
     console.log("Patient name:", patientName);
 
-    // Check if already dispensed
     if (prescription.dispensingStatus === "full") {
       return NextResponse.json(
         { error: "Prescription already dispensed" },
@@ -181,12 +136,12 @@ export async function POST(
       );
     }
 
-    // Process each medicine
     const processedItems = [];
 
     for (const item of items) {
-      // Find medicine in stock
-      const medicine = await MedicineStock.findById(item.medicine);
+      const medicine = await (prisma as any).medicineStock.findUnique({
+        where: { id: item.medicine },
+      });
       if (!medicine) {
         return NextResponse.json(
           {
@@ -196,39 +151,35 @@ export async function POST(
         );
       }
 
-      // Validate stock
-      if (medicine.currentQuantity < item.dispensedQuantity) {
+      if (medicine.currentQty < item.dispensedQuantity) {
         return NextResponse.json(
           {
-            error: `Insufficient stock for ${medicine.name}. Available: ${medicine.currentQuantity}, Requested: ${item.dispensedQuantity}`,
+            error: `Insufficient stock for ${medicine.name}. Available: ${medicine.currentQty}, Requested: ${item.dispensedQuantity}`,
           },
           { status: 400 },
         );
       }
 
-      // Update stock quantity
-      const oldQuantity = medicine.currentQuantity;
-      medicine.currentQuantity -= item.dispensedQuantity;
-      await medicine.save();
-
-      console.log(
-        `📉 Updated ${medicine.name} stock: ${oldQuantity} → ${medicine.currentQuantity}`,
-      );
-
-      // Create medicine issue record with all required fields
-      const medicineIssue = new MedicineIssue({
-        medicineId: medicine._id,
-        quantity: item.dispensedQuantity,
-        issueDate: new Date(),
-        issuedTo: patientName, // Use patient name from prescription
-        issuedBy:
-          typeof dispensedBy === "string"
-            ? dispensedBy
-            : dispensedBy.toString(), // Convert to string
-        prescriptionId: prescription.prescriptionId,
+      const oldQuantity = medicine.currentQty;
+      await (prisma as any).medicineStock.update({
+        where: { id: item.medicine },
+        data: { currentQty: medicine.currentQty - item.dispensedQuantity },
       });
 
-      await medicineIssue.save();
+      console.log(
+        `📉 Updated ${medicine.name} stock: ${oldQuantity} → ${medicine.currentQty - item.dispensedQuantity}`,
+      );
+
+      await (prisma as any).medicineIssue.create({
+        data: {
+          medicineId: medicine.id,
+          quantity: item.dispensedQuantity,
+          issueDate: new Date(),
+          issuedTo: patientName,
+          issuedById: typeof dispensedBy === "string" ? dispensedBy : dispensedBy,
+          prescriptionId: prescription.prescriptionId,
+        },
+      });
       console.log(`📝 Created MedicineIssue record for ${medicine.name}`);
 
       processedItems.push({
@@ -243,42 +194,39 @@ export async function POST(
       });
     }
 
-    // Update prescription status
+    const medications = JSON.parse(prescription.medications || "[]");
     const totalDispensed = items.reduce(
       (sum: number, item: any) => sum + item.dispensedQuantity,
       0,
     );
-    const totalPrescribed = prescription.medications.reduce(
-      (sum: number, med: any) => {
-        // Check if medicine exists before accessing
-        return sum + (med.quantity || 0);
-      },
+    const totalPrescribed = medications.reduce(
+      (sum: number, med: any) => sum + (med.quantity || 0),
       0,
     );
 
-    // Convert dispensedBy to ObjectId for the prescription
-    prescription.dispensedBy =
-      typeof dispensedBy === "string"
-        ? new mongoose.Types.ObjectId(dispensedBy)
-        : dispensedBy;
-    prescription.dispensedDate = new Date();
-    prescription.pharmacyNotes = pharmacyNotes;
-    prescription.instructions =
-      patientInstructions || prescription.instructions;
-
-    // Determine dispensing status
+    let dispensingStatus = "pending";
+    let status = prescription.status;
     if (totalDispensed === 0) {
-      prescription.dispensingStatus = "pending";
+      dispensingStatus = "pending";
     } else if (totalDispensed < totalPrescribed) {
-      prescription.dispensingStatus = "partial";
-      prescription.status = "active";
+      dispensingStatus = "partial";
+      status = "active";
     } else {
-      prescription.dispensingStatus = "full";
-      prescription.status = "completed";
+      dispensingStatus = "full";
+      status = "completed";
     }
 
-    // Cast to IPrescription to access Mongoose document methods
-    await (prescription as any).save({ validateBeforeSave: false });
+    await (prisma as any).prescription.update({
+      where: { id: prescriptionId },
+      data: {
+        dispensedById: typeof dispensedBy === "string" ? dispensedBy : dispensedBy,
+        dispensedDate: new Date(),
+        pharmacyNotes,
+        instructions: patientInstructions || prescription.instructions,
+        dispensingStatus,
+        status,
+      },
+    });
 
     console.log("✅ Dispensing completed successfully");
 
@@ -286,12 +234,12 @@ export async function POST(
       success: true,
       data: {
         prescription: {
-          _id: prescription._id,
+          id: prescription.id,
           prescriptionId: prescription.prescriptionId,
           patient: prescription.patient,
-          status: prescription.status,
-          dispensingStatus: prescription.dispensingStatus,
-          dispensedDate: prescription.dispensedDate,
+          status,
+          dispensingStatus,
+          dispensedDate: new Date(),
         },
         processedItems,
         summary: {
@@ -305,7 +253,6 @@ export async function POST(
   } catch (error: any) {
     console.error("❌ Error dispensing medicines:", error);
 
-    // More detailed error logging
     if (error.errors) {
       console.error("Validation errors:", error.errors);
     }

@@ -1,11 +1,8 @@
-// app/api/pharmacy/inventory/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { MedicineStock } from "@/lib/models/MedicineStock";
-import dbConnect from "@/lib/dbConnect";
+import { prisma } from "@/lib/prisma";
 import { getTokenPayload } from "@/lib/auth/jwt";
 
 export async function GET(req: NextRequest) {
-  await dbConnect();
   const payload = await getTokenPayload(req);
 
   if (
@@ -16,22 +13,24 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const inventory = await MedicineStock.find().sort({ name: 1 }).lean();
+    const inventory = await prisma.medicineStock.findMany({
+      orderBy: { medicineId: "asc" },
+    });
 
-    // Calculate remaining percentage and expiry status
     const now = new Date();
     const thirtyDaysFromNow = new Date();
     thirtyDaysFromNow.setDate(now.getDate() + 30);
 
     const enhancedInventory = inventory.map((item) => {
-      const remainingPercentage =
-        (item.currentQuantity / item.originalQuantity) * 100;
-      const expiryDate = new Date(item.expiryDate);
+      const remainingPercentage = item.totalQty > 0
+        ? (item.currentQty / item.totalQty) * 100
+        : 0;
+      const expiryDate = item.expiryDate ? new Date(item.expiryDate) : null;
 
       let expiryStatus: "valid" | "expiring-soon" | "expired" = "valid";
-      if (expiryDate < now) {
+      if (expiryDate && expiryDate < now) {
         expiryStatus = "expired";
-      } else if (expiryDate <= thirtyDaysFromNow) {
+      } else if (expiryDate && expiryDate <= thirtyDaysFromNow) {
         expiryStatus = "expiring-soon";
       }
 
@@ -53,7 +52,6 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  await dbConnect();
   const payload = await getTokenPayload(req);
 
   if (
@@ -66,7 +64,28 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
 
-    const newItem = await MedicineStock.create(body);
+    const newItem = await prisma.medicineStock.create({
+      data: {
+        medicineId: body.medicineId,
+        batchNo: body.batchNo,
+        warehouseBatchId: body.warehouseBatchId,
+        expiryDate: body.expiryDate ? new Date(body.expiryDate) : null,
+        inwardQty: body.inwardQty,
+        outwardQty: body.outwardQty || 0,
+        returnQty: body.returnQty || 0,
+        damageQty: body.damageQty || 0,
+        costPrice: body.costPrice,
+        sellPrice: body.sellPrice,
+        MRP: body.MRP,
+        totalQty: body.totalQty || body.inwardQty,
+        currentQty: body.currentQty || body.inwardQty,
+        name: body.name,
+        form: body.form,
+        dosage: body.dosage,
+        frequency: body.frequency,
+        route: body.route,
+      },
+    });
     return NextResponse.json(newItem, { status: 201 });
   } catch (error) {
     console.error("Error creating inventory item:", error);

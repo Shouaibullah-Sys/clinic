@@ -1,45 +1,29 @@
 // app/api/laboratory/direct-tests/[id]/finalize/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { LabTest } from "@/lib/models/LabTest";
-import { authenticateRequest } from "@/lib/auth";
-import mongoose from "mongoose";
+import { prisma } from "@/lib/prisma";
+import { getTokenPayload } from "@/lib/auth/jwt";
 
-// POST: Finalize a direct lab test
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await dbConnect();
+    const payload = await getTokenPayload(request);
 
-    // Authenticate the request
-    const auth = await authenticateRequest(request);
-    if (!auth.success) {
+    if (!payload || !["lab_technician", "admin"].includes(payload.role)) {
       return NextResponse.json(
-        { success: false, error: auth.error },
-        { status: auth.status || 401 },
-      );
-    }
-
-    // Only laboratory staff and admin can finalize tests
-    const allowedRoles = ["lab_technician", "admin"];
-    if (!auth.userRole || !allowedRoles.includes(auth.userRole)) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Forbidden. Only laboratory staff can finalize tests.",
-        },
+        { success: false, error: "Forbidden. Only laboratory staff can finalize tests." },
         { status: 403 },
       );
     }
 
-    // Unwrap the params promise
     const { id: testId } = await params;
 
-    // Find the lab test
-    const labTest = await LabTest.findById(testId);
+    const labTest = await (prisma as any).labTest.findUnique({
+      where: { id: testId },
+    });
+
     if (!labTest) {
       return NextResponse.json(
         { success: false, error: "Lab test not found" },
@@ -47,37 +31,24 @@ export async function POST(
       );
     }
 
-    // Debug logging
     console.log(`[DEBUG] Finalize attempt for test ${labTest.testId}:`, {
       isDirectTest: labTest.isDirectTest,
       paymentVerified: labTest.paymentVerified,
       finalized: labTest.finalized,
       status: labTest.status,
-      hasResults: !!(
-        labTest.results &&
-        labTest.results.parameters &&
-        labTest.results.parameters.length > 0
-      ),
-      resultsCount: labTest.results?.parameters?.length || 0,
-      paymentStatus: labTest.charges.paymentStatus,
-      paid: labTest.charges.paid,
-      due: labTest.charges.due,
-      totalAmount: labTest.charges.totalAmount,
     });
 
-    // Verify this is a direct test
     if (!labTest.isDirectTest) {
-      console.log(`[DEBUG] Finalization failed: Not a direct test`);
+      console.log("[DEBUG] Finalization failed: Not a direct test");
       return NextResponse.json(
         { success: false, error: "This is not a direct lab test" },
         { status: 400 },
       );
     }
 
-    // Check if payment is verified
     if (!labTest.paymentVerified) {
       console.log(
-        `[DEBUG] Finalization failed: Payment not verified. Payment status: ${labTest.charges.paymentStatus}, Paid: ${labTest.charges.paid}, Due: ${labTest.charges.due}`,
+        `[DEBUG] Finalization failed: Payment not verified.`,
       );
       return NextResponse.json(
         {
@@ -88,40 +59,35 @@ export async function POST(
       );
     }
 
-    // Check if test is already finalized
     if (labTest.finalized) {
-      console.log(`[DEBUG] Finalization failed: Test already finalized`);
+      console.log("[DEBUG] Finalization failed: Test already finalized");
       return NextResponse.json(
         { success: false, error: "Test has already been finalized" },
         { status: 400 },
       );
     }
 
-    // Finalize the test - simplified flow: just verify payment and finalize
-    labTest.finalized = true;
-    labTest.finalizedAt = new Date();
-    labTest.finalizedBy = new mongoose.Types.ObjectId(auth.userId!);
-    labTest.readyForPrint = true;
-    labTest.status = "completed";
+    const updatedTest = await (prisma as any).labTest.update({
+      where: { id: testId },
+      data: {
+        finalized: true,
+        finalizedAt: new Date(),
+        finalizedById: payload.id,
+        readyForPrint: true,
+        status: "completed",
+      },
+      include: {
+        patient: { select: { name: true, patientId: true, phone: true } },
+        createdBy: { select: { name: true } },
+        finalizedBy: { select: { name: true } },
+      },
+    });
 
-    await labTest.save();
-
-    // Populate the response
-    const populatedTest = await LabTest.findById(labTest._id)
-      .populate("patient", "name patientId phone")
-      .populate("createdBy", "name")
-      .populate("finalizedBy", "name")
-      .populate("results.reportedBy", "name")
-      .populate("results.verifiedBy", "name")
-      .lean();
-
-    console.log(
-      `Direct lab test ${labTest.testId} finalized by ${auth.userName}`,
-    );
+    console.log(`Direct lab test ${labTest.testId} finalized by ${payload.name}`);
 
     return NextResponse.json({
       success: true,
-      data: populatedTest,
+      data: updatedTest,
       message: "Direct lab test finalized successfully",
     });
   } catch (error: any) {

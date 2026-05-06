@@ -1,11 +1,9 @@
 // app/api/pharmacy/sales/today/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { Prescription } from "@/lib/models/Prescription";
-import dbConnect from "@/lib/dbConnect";
+import { prisma } from "@/lib/prisma";
 import { getTokenPayload } from "@/lib/auth/jwt";
 
 export async function GET(req: NextRequest) {
-  await dbConnect();
   const payload = await getTokenPayload(req);
 
   if (
@@ -23,22 +21,25 @@ export async function GET(req: NextRequest) {
     tomorrow.setDate(tomorrow.getDate() + 1);
 
     // Get today's prescriptions
-    const prescriptions = await Prescription.find({
-      date: { $gte: today, $lt: tomorrow },
-      status: "completed",
-    }).lean();
+    const prescriptions = await prisma.prescription.findMany({
+      where: {
+        date: { gte: today, lt: tomorrow },
+        status: "completed",
+      },
+    });
 
     // Calculate sales by payment method
     const salesData = prescriptions.reduce(
       (acc, prescription) => {
-        acc.totalSales += prescription.charges.totalAmount;
+        const charges = JSON.parse(prescription.charges || "{}");
+        acc.totalSales += charges.totalAmount || 0;
 
-        if (prescription.charges.paymentMethod === "cash") {
-          acc.cashSales += prescription.charges.totalAmount;
-        } else if (prescription.charges.paymentMethod === "card") {
-          acc.cardSales += prescription.charges.totalAmount;
-        } else if (prescription.charges.paymentMethod === "insurance") {
-          acc.insuranceSales += prescription.charges.totalAmount;
+        if (charges.paymentMethod === "cash") {
+          acc.cashSales += charges.totalAmount || 0;
+        } else if (charges.paymentMethod === "card") {
+          acc.cardSales += charges.totalAmount || 0;
+        } else if (charges.paymentMethod === "insurance") {
+          acc.insuranceSales += charges.totalAmount || 0;
         }
 
         return acc;

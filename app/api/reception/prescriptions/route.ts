@@ -1,17 +1,9 @@
-// app/api/reception/prescriptions/route.ts
-
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { Prescription } from "@/lib/models/Prescription";
+import { prisma } from "@/lib/prisma";
 import { authenticateRequest } from "@/lib/auth";
-import { buildMarkedOnlyQuery } from "@/lib/utils/markedTransactions";
 
-// GET: Receptionist views all prescriptions with filters
 export async function GET(request: NextRequest) {
   try {
-    await dbConnect();
-
-    // Authenticate the request
     const auth = await authenticateRequest(request);
     if (!auth.success) {
       return NextResponse.json(
@@ -20,7 +12,6 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Only receptionist and admin can view all prescriptions
     const allowedRoles = ["receptionist", "admin"];
     if (!auth.userRole || !allowedRoles.includes(auth.userRole)) {
       return NextResponse.json(
@@ -40,80 +31,58 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get("limit") || "50");
     const skip = (page - 1) * limit;
 
-    let query: any = {};
+    let where: any = {};
 
-    // Filter by patient
     if (patientId) {
-      query.patient = patientId;
+      where.patientId = patientId;
     }
 
-    // Filter by appointment
     if (appointmentId) {
-      query.appointment = appointmentId;
+      where.appointmentId = appointmentId;
     }
 
-    // Filter by status
     if (status) {
-      query.status = status;
+      where.status = status;
     }
 
-    // Filter by payment status
     if (paymentStatus) {
-      query["charges.paymentStatus"] = paymentStatus;
+      where.paymentStatus = paymentStatus;
     }
 
-    // Filter by date range
     if (dateFrom || dateTo) {
-      query.prescribedDate = {};
-      if (dateFrom) {
-        query.prescribedDate.$gte = new Date(dateFrom);
-      }
-      if (dateTo) {
-        query.prescribedDate.$lte = new Date(dateTo);
-      }
+      where.date = {};
+      if (dateFrom) where.date.gte = new Date(dateFrom);
+      if (dateTo) where.date.lte = new Date(dateTo);
     }
 
-    const { query: finalQuery } = await buildMarkedOnlyQuery({
-      userId: auth.userId!,
-      module: "prescription",
-      baseQuery: query,
-    });
-
-    // Get prescriptions
     const [prescriptions, total] = await Promise.all([
-      Prescription.find(finalQuery)
-        .populate("patient", "name patientId phone")
-        .populate("appointment", "appointmentId date")
-        .populate("doctor", "name specialization")
-        .populate("charges.collectedBy", "name")
-        .populate("paymentVerifiedBy", "name")
-        .sort({ prescribedDate: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-      Prescription.countDocuments(finalQuery),
+      prisma.prescription.findMany({
+        where,
+        include: {
+          patient: { select: { name: true, patientId: true, phone: true } },
+          appointment: { select: { appointmentId: true, date: true } },
+          doctor: { select: { name: true, specialization: true } },
+        },
+        orderBy: { date: "desc" },
+        skip,
+        take: limit,
+      }),
+      prisma.prescription.count({ where }),
     ]);
 
-    // Calculate summary statistics
-    const unpaidPrescriptions = await Prescription.countDocuments({
-      ...finalQuery,
-      "charges.paymentStatus": { $in: ["unpaid", "partial"] },
+    const unpaidPrescriptions = await prisma.prescription.count({
+      where: { ...where, paymentStatus: { in: ["unpaid", "partial"] } },
     });
 
-    const totalRevenue = await Prescription.aggregate([
-      { $match: { ...finalQuery, "charges.paymentStatus": "paid" } },
-      { $group: { _id: null, total: { $sum: "$charges.totalAmount" } } },
-    ]);
+    const paidPrescriptions = await prisma.prescription.aggregate({
+      where: { ...where, paymentStatus: "paid" },
+      _sum: { amountPaid: true },
+    });
 
-    const pendingCollection = await Prescription.aggregate([
-      {
-        $match: {
-          ...finalQuery,
-          "charges.paymentStatus": { $in: ["unpaid", "partial"] },
-        },
-      },
-      { $group: { _id: null, total: { $sum: "$charges.due" } } },
-    ]);
+    const pendingPrescriptions = await prisma.prescription.aggregate({
+      where: { ...where, paymentStatus: { in: ["unpaid", "partial"] } },
+      _sum: { amountPaid: true },
+    });
 
     return NextResponse.json({
       success: true,
@@ -121,8 +90,8 @@ export async function GET(request: NextRequest) {
       summary: {
         totalPrescriptions: total,
         unpaidPrescriptions,
-        totalRevenue: totalRevenue[0]?.total || 0,
-        pendingCollection: pendingCollection[0]?.total || 0,
+        totalRevenue: paidPrescriptions._sum.amountPaid || 0,
+        pendingCollection: pendingPrescriptions._sum.amountPaid || 0,
       },
       pagination: {
         page,

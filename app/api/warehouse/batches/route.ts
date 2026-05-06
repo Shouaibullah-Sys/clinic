@@ -1,14 +1,9 @@
-// app/api/warehouse/batches/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { WarehouseBatch } from "@/lib/models/WarehouseBatch";
-import { Warehouse } from "@/lib/models/Warehouse";
+import { prisma } from "@/lib/prisma";
 import { getTokenPayload } from "@/lib/auth/jwt";
 
-// GET: Get all warehouse batches with search and filters
 export async function GET(request: NextRequest) {
   try {
-    await dbConnect();
     const payload = await getTokenPayload(request);
 
     if (!payload || !["admin", "pharmacy_head"].includes(payload.role)) {
@@ -24,30 +19,32 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get("status") || "";
     const limit = parseInt(searchParams.get("limit") || "100");
 
-    let query: any = {};
+    let where: any = {};
 
     if (search) {
-      const searchRegex = new RegExp(search, "i");
-      query.$or = [
-        { batchNumber: searchRegex },
-        { lotNumber: searchRegex },
-        { supplier: searchRegex },
+      where.OR = [
+        { batchNumber: { contains: search } },
+        { lotNumber: { contains: search } },
+        { supplier: { contains: search } },
       ];
     }
 
     if (warehouseId) {
-      query.warehouse = warehouseId;
+      where.warehouseId = warehouseId;
     }
 
     if (status) {
-      query.status = status;
+      where.status = status;
     }
 
-    const batches = await WarehouseBatch.find(query)
-      .populate("warehouse", "name genericName category manufacturer")
-      .sort({ createdAt: -1 })
-      .limit(limit)
-      .lean();
+    const batches = await prisma.warehouseBatch.findMany({
+      where,
+      include: {
+        warehouse: { select: { id: true, name: true, genericName: true, category: true, manufacturer: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: limit,
+    });
 
     return NextResponse.json({
       success: true,
@@ -66,10 +63,8 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST: Create new warehouse batch
 export async function POST(request: NextRequest) {
   try {
-    await dbConnect();
     const payload = await getTokenPayload(request);
 
     if (!payload || !["admin", "pharmacy_head"].includes(payload.role)) {
@@ -94,7 +89,6 @@ export async function POST(request: NextRequest) {
       notes,
     } = body;
 
-    // Validation
     if (
       !warehouse ||
       !batchNumber ||
@@ -115,8 +109,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if warehouse exists
-    const warehouseDoc = await Warehouse.findById(warehouse);
+    const warehouseDoc = await prisma.warehouse.findUnique({
+      where: { id: warehouse },
+    });
     if (!warehouseDoc) {
       return NextResponse.json(
         { success: false, error: "Warehouse medicine not found" },
@@ -124,9 +119,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if batch number already exists
-    const existingBatch = await WarehouseBatch.findOne({
-      batchNumber: batchNumber.trim(),
+    const existingBatch = await prisma.warehouseBatch.findFirst({
+      where: { batchNumber: batchNumber.trim() },
     });
     if (existingBatch) {
       return NextResponse.json(
@@ -135,22 +129,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const batch = new WarehouseBatch({
-      warehouse,
-      batchNumber: batchNumber.trim(),
-      lotNumber: lotNumber.trim(),
-      form,
-      dosage,
-      expiryDate: new Date(expiryDate),
-      quantity: parseInt(quantity),
-      originalQuantity: parseInt(quantity),
-      unitCost: parseFloat(unitCost),
-      supplier: supplier.trim(),
-      location: location?.trim(),
-      notes: notes?.trim(),
+    const batch = await prisma.warehouseBatch.create({
+      data: {
+        batchId: `WB${Date.now()}`,
+        warehouseId: warehouse,
+        batchNumber: batchNumber.trim(),
+        lotNumber: lotNumber.trim(),
+        form,
+        dosage,
+        expiryDate: new Date(expiryDate),
+        quantity: parseInt(quantity),
+        originalQuantity: parseInt(quantity),
+        unitCost: parseFloat(unitCost),
+        supplier: supplier.trim(),
+        location: location?.trim(),
+        notes: notes?.trim(),
+      },
     });
-
-    await batch.save();
 
     return NextResponse.json(
       {

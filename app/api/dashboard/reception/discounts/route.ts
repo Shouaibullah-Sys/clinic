@@ -1,10 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { DiscountRequest } from "@/lib/models/DiscountRequest";
-import { Patient } from "@/lib/models/Patient";
-import { User } from "@/lib/models/User";
+import { prisma } from "@/lib/prisma";
 import { jwtVerify } from "jose";
-import mongoose from "mongoose";
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-this";
 
@@ -13,17 +9,23 @@ async function verifyToken(token: string) {
   try {
     const secret = new TextEncoder().encode(JWT_SECRET);
     const { payload } = await jwtVerify(token, secret);
-    return payload;
+    return payload as { id: string; role: string };
   } catch (error) {
     return null;
   }
 }
 
+function generateDiscountId(): string {
+  const date = new Date();
+  const year = date.getFullYear().toString().slice(-2);
+  const month = (date.getMonth() + 1).toString().padStart(2, "0");
+  const random = Math.floor(1000 + Math.random() * 9000);
+  return `DIS${year}${month}${random}`;
+}
+
 // GET: Fetch discount requests
 export async function GET(request: NextRequest) {
   try {
-    await dbConnect();
-
     // Get token from Authorization header
     const authHeader = request.headers.get("authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -59,36 +61,44 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get("status") || "pending";
     const limit = parseInt(searchParams.get("limit") || "10");
 
-    let query: any = {};
+    const where: any = {};
 
     if (status !== "all") {
-      query.status = status;
+      where.status = status;
     }
 
     // If user is receptionist, only show requests they created
     if (userRole === "receptionist") {
-      const user = await User.findById(userId);
-      if (user) {
-        query.requestedBy = userId;
-      }
+      where.requestedById = userId;
     }
 
-    const discountRequests = await DiscountRequest.find(query)
-      .populate("patient", "name phone")
-      .populate("requestedBy", "name role")
-      .sort({ requestedAt: -1 })
-      .limit(limit)
-      .lean();
+    const discountRequests = await prisma.discountRequest.findMany({
+      where,
+      include: {
+        patient: {
+          select: {
+            name: true,
+            phone: true,
+          },
+        },
+      },
+      orderBy: { requestedAt: "desc" },
+      take: limit,
+    });
 
     const formattedRequests = discountRequests.map((request) => ({
-      id: (request._id as mongoose.Types.ObjectId).toString(),
-      patientName: (request.patient as any)?.name || "Unknown Patient",
-      requestedAmount: request.requestedAmount,
+      id: request.id,
+      discountId: request.requestId,
+      patientName: request.patient?.name || "Unknown Patient",
+      requestedAmount: request.amount,
       reason: request.reason,
-      requestedBy: (request.requestedBy as any)?.name || "Unknown",
+      requestedBy: request.requestedById || "Unknown",
       requestedAt: request.requestedAt.toISOString(),
       status: request.status,
-      patientId: (request.patient as any)?._id.toString(),
+      patientId: request.patientId,
+      discountPercentage: request.discountPercentage,
+      originalAmount: request.originalAmount,
+      requestCategory: request.requestCategory,
     }));
 
     return NextResponse.json({
@@ -107,8 +117,6 @@ export async function GET(request: NextRequest) {
 // POST: Create new discount request
 export async function POST(request: NextRequest) {
   try {
-    await dbConnect();
-
     // Get token from Authorization header
     const authHeader = request.headers.get("authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -166,7 +174,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate amount
+    // Validate and parse amounts
     const amount = parseFloat(requestedAmount);
     if (isNaN(amount) || amount <= 0) {
       return NextResponse.json(
@@ -175,8 +183,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Parse originalAmount if provided
+    let parsedOriginalAmount: number | undefined;
+    if (originalAmount !== undefined && originalAmount !== null && originalAmount !== "") {
+      parsedOriginalAmount = parseFloat(originalAmount);
+      if (isNaN(parsedOriginalAmount) || parsedOriginalAmount <= 0) {
+        return NextResponse.json(
+          { success: false, error: "Invalid original amount" },
+          { status: 400 },
+        );
+      }
+    }
+
     // Check if patient exists
-    const patient = await Patient.findById(patientId);
+    const patient = await prisma.patient.findUnique({
+      where: { id: patientId },
+    });
     if (!patient) {
       return NextResponse.json(
         { success: false, error: "Patient not found" },
@@ -184,56 +206,32 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if user exists
-    const user = await User.findById(userId);
-    if (!user) {
-      return NextResponse.json(
-        { success: false, error: "User not found" },
-        { status: 404 },
-      );
-    }
-
-    // Generate discount ID
-    const date = new Date();
-    const year = date.getFullYear().toString().slice(-2);
-    const month = (date.getMonth() + 1).toString().padStart(2, "0");
-    const random = Math.floor(1000 + Math.random() * 9000);
-    const discountId = `DIS${year}${month}${random}`;
+    const discountPercentage = parsedOriginalAmount
+      ? (amount / parsedOriginalAmount) * 100
+      : undefined;
 
     // Create discount request using the DiscountRequest model
-    const discountRequest = new DiscountRequest({
-      discountId,
-      patient: patientId,
-      requestedAmount: amount,
-      discountPercentage: originalAmount
-        ? (amount / originalAmount) * 100
-        : undefined,
-      originalAmount: originalAmount || amount,
-      reason: reason.trim(),
-      requestCategory,
-      requestedBy: userId,
-      requestedAt: new Date(),
-      status: "pending",
-      invoice: invoiceId,
-      appointment: appointmentId,
+    const discountRequest = await prisma.discountRequest.create({
+      data: {
+        requestId: generateDiscountId(),
+        patientId,
+        amount,
+        discountPercentage,
+        originalAmount: parsedOriginalAmount || amount,
+        reason: reason.trim(),
+        requestCategory,
+        requestedById: userId,
+        status: "pending",
+      },
     });
-
-    await discountRequest.save();
-
-    // Populate the response
-    await discountRequest.populate([
-      { path: "patient", select: "name phone email" },
-      { path: "requestedBy", select: "name role" },
-    ]);
 
     return NextResponse.json({
       success: true,
       data: {
-        id: discountRequest._id.toString(),
-        discountId: discountRequest.discountId,
-        patientName:
-          (discountRequest.patient as any)?.name || "Unknown Patient",
-        requestedAmount: discountRequest.requestedAmount,
+        id: discountRequest.id,
+        discountId: discountRequest.requestId,
+        patientId: discountRequest.patientId,
+        requestedAmount: discountRequest.amount,
         reason: discountRequest.reason,
         requestCategory: discountRequest.requestCategory,
         status: discountRequest.status,
@@ -245,7 +243,7 @@ export async function POST(request: NextRequest) {
     console.error("Error creating discount request:", error);
 
     // Handle duplicate discount ID or other errors
-    if (error.code === 11000) {
+    if (error.code === "P2002") {
       return NextResponse.json(
         {
           success: false,
@@ -268,8 +266,6 @@ export async function POST(request: NextRequest) {
 // PUT: Update a discount request
 export async function PUT(request: NextRequest) {
   try {
-    await dbConnect();
-
     // Get token from Authorization header
     const authHeader = request.headers.get("authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -315,7 +311,9 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    const discountRequest = await DiscountRequest.findById(id);
+    const discountRequest = await prisma.discountRequest.findUnique({
+      where: { id },
+    });
 
     if (!discountRequest) {
       return NextResponse.json(
@@ -336,15 +334,14 @@ export async function PUT(request: NextRequest) {
     }
 
     // Non-admin users can only update their own requests
-    const requestedById =
-      discountRequest.requestedBy?._id?.toString() ||
-      discountRequest.requestedBy?.toString();
-    if (userRole !== "admin" && requestedById !== userId) {
+    if (userRole !== "admin" && discountRequest.requestedById !== userId) {
       return NextResponse.json(
         { success: false, error: "Forbidden" },
         { status: 403 },
       );
     }
+
+    const updateData: any = {};
 
     // Update fields
     if (requestedAmount) {
@@ -355,37 +352,49 @@ export async function PUT(request: NextRequest) {
           { status: 400 },
         );
       }
-      discountRequest.requestedAmount = amount;
-      if (originalAmount) {
-        discountRequest.originalAmount = originalAmount;
-        discountRequest.discountPercentage = (amount / originalAmount) * 100;
+      updateData.amount = amount;
+      if (originalAmount !== undefined && originalAmount !== null && originalAmount !== "") {
+        const parsedOriginalAmount = parseFloat(originalAmount);
+        if (isNaN(parsedOriginalAmount) || parsedOriginalAmount <= 0) {
+          return NextResponse.json(
+            { success: false, error: "Invalid original amount" },
+            { status: 400 },
+          );
+        }
+        updateData.originalAmount = parsedOriginalAmount;
+        updateData.discountPercentage = (amount / parsedOriginalAmount) * 100;
       }
     }
 
-    if (reason) discountRequest.reason = reason.trim();
-    if (requestCategory) discountRequest.requestCategory = requestCategory;
+    if (reason) updateData.reason = reason.trim();
+    if (requestCategory) updateData.requestCategory = requestCategory;
 
-    await discountRequest.save();
-
-    await discountRequest.populate([
-      { path: "patient", select: "name phone email" },
-      { path: "requestedBy", select: "name role" },
-    ]);
+    const updated = await prisma.discountRequest.update({
+      where: { id },
+      data: updateData,
+      include: {
+        patient: {
+          select: {
+            name: true,
+            phone: true,
+          },
+        },
+      },
+    });
 
     return NextResponse.json({
       success: true,
       data: {
-        id: discountRequest._id.toString(),
-        discountId: discountRequest.discountId,
-        patientName:
-          (discountRequest.patient as any)?.name || "Unknown Patient",
-        requestedAmount: discountRequest.requestedAmount,
-        originalAmount: discountRequest.originalAmount,
-        discountPercentage: discountRequest.discountPercentage,
-        reason: discountRequest.reason,
-        requestCategory: discountRequest.requestCategory,
-        status: discountRequest.status,
-        requestedAt: discountRequest.requestedAt.toISOString(),
+        id: updated.id,
+        discountId: updated.discountId,
+        patientName: updated.patient?.name || "Unknown Patient",
+        requestedAmount: updated.amount,
+        originalAmount: updated.originalAmount,
+        discountPercentage: updated.discountPercentage,
+        reason: updated.reason,
+        requestCategory: updated.requestCategory,
+        status: updated.status,
+        requestedAt: updated.requestedAt.toISOString(),
       },
       message: "Discount request updated successfully",
     });
@@ -404,8 +413,6 @@ export async function PUT(request: NextRequest) {
 // DELETE: Delete a discount request
 export async function DELETE(request: NextRequest) {
   try {
-    await dbConnect();
-
     // Get token from Authorization header
     const authHeader = request.headers.get("authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -446,7 +453,9 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const discountRequest = await DiscountRequest.findById(id);
+    const discountRequest = await prisma.discountRequest.findUnique({
+      where: { id },
+    });
 
     if (!discountRequest) {
       return NextResponse.json(
@@ -455,7 +464,9 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    await DiscountRequest.findByIdAndDelete(id);
+    await prisma.discountRequest.delete({
+      where: { id },
+    });
 
     return NextResponse.json({
       success: true,

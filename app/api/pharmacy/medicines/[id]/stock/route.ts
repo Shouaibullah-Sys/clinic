@@ -1,9 +1,7 @@
-// app/api/pharmacy/medicines/[id]/route.ts
+// app/api/pharmacy/medicines/[id]/stock/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import mongoose from "mongoose";
-import dbConnect from "@/lib/dbConnect";
-import { MedicineStock } from "@/lib/models/MedicineStock";
+import { prisma } from "@/lib/prisma";
 import { getTokenPayload } from "@/lib/auth/jwt";
 
 export async function GET(
@@ -11,8 +9,6 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await dbConnect();
-
     const payload = await getTokenPayload(req);
     if (
       !payload ||
@@ -27,21 +23,14 @@ export async function GET(
 
     const { id } = await params;
 
-    // Check if it's an ObjectId or a medicine name
-    let medicine;
+    let medicine = await (prisma as any).medicineStock.findUnique({
+      where: { id },
+    });
 
-    if (mongoose.Types.ObjectId.isValid(id)) {
-      // Search by ID
-      medicine = await MedicineStock.findById(id).select(
-        "name form dosage frequency route currentQuantity originalQuantity unitPrice sellingPrice expiryDate supplier description",
-      );
-    } else {
-      // Search by name (fallback)
-      medicine = await MedicineStock.findOne({
-        name: { $regex: new RegExp(`^${id}$`, "i") },
-      }).select(
-        "name form dosage frequency route currentQuantity originalQuantity unitPrice sellingPrice expiryDate supplier description",
-      );
+    if (!medicine) {
+      medicine = await (prisma as any).medicineStock.findFirst({
+        where: { name: { equals: id, mode: "insensitive" } },
+      });
     }
 
     if (!medicine) {
@@ -54,26 +43,22 @@ export async function GET(
     return NextResponse.json({
       success: true,
       data: {
-        _id: medicine._id,
+        id: medicine.id,
         name: medicine.name,
         form: medicine.form,
         dosage: medicine.dosage,
         frequency: medicine.frequency,
         route: medicine.route,
-        currentQuantity: medicine.currentQuantity,
-        originalQuantity: medicine.originalQuantity,
-        unitPrice: medicine.unitPrice,
-        sellingPrice: medicine.sellingPrice,
+        currentQuantity: medicine.currentQty,
+        originalQuantity: medicine.totalQty,
+        unitPrice: medicine.costPrice,
+        sellingPrice: medicine.sellPrice,
         expiryDate: medicine.expiryDate,
         supplier: medicine.supplier,
         description: medicine.description,
-        remainingPercentage: Math.round(
-          (medicine.currentQuantity / medicine.originalQuantity) * 100,
-        ),
-        isLowStock: medicine.currentQuantity <= 10,
-        isExpiringSoon:
-          new Date(medicine.expiryDate).getTime() - Date.now() <=
-          30 * 24 * 60 * 60 * 1000,
+        remainingPercentage: medicine.totalQty > 0 ? Math.round((medicine.currentQty / medicine.totalQty) * 100) : 0,
+        isLowStock: medicine.currentQty <= 10,
+        isExpiringSoon: medicine.expiryDate && new Date(medicine.expiryDate).getTime() - Date.now() <= 30 * 24 * 60 * 60 * 1000,
       },
     });
   } catch (error: any) {

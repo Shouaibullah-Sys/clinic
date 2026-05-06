@@ -1,8 +1,5 @@
-// app/api/laboratory/direct-tests/[id]/route.ts
-
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { LabTest } from "@/lib/models/LabTest";
+import { prisma } from "@/lib/prisma";
 import { authenticateRequest } from "@/lib/auth";
 
 const normalizeDirectTestWorkflow = (test: any) => {
@@ -24,15 +21,11 @@ const normalizeDirectTestWorkflow = (test: any) => {
   };
 };
 
-// GET: Get a single direct lab test by ID
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await dbConnect();
-
-    // Authenticate the request
     const auth = await authenticateRequest(request);
     if (!auth.success) {
       return NextResponse.json(
@@ -41,7 +34,6 @@ export async function GET(
       );
     }
 
-    // Check if user has access to laboratory
     const allowedRoles = ["lab_technician", "admin", "receptionist", "doctor"];
     if (!auth.userRole || !allowedRoles.includes(auth.userRole)) {
       return NextResponse.json(
@@ -54,24 +46,29 @@ export async function GET(
       );
     }
 
-    // Unwrap the params promise
     const { id: testId } = await params;
 
-    // Find the lab test
-    const labTest = await LabTest.findById(testId)
-      .populate(
-        "patient",
-        "name patientId phone guardian dateOfBirth gender address refPerson passTskNo registrationNo",
-      )
-      .populate("doctor", "name specialization")
-      .populate("createdBy", "name")
-      .populate("finalizedBy", "name")
-      .populate("printedBy", "name")
-      .populate("charges.collectedBy", "name")
-      .populate("paymentVerifiedBy", "name")
-      .populate("results.reportedBy", "name")
-      .populate("results.verifiedBy", "name")
-      .lean();
+    const labTest = await prisma.labTest.findUnique({
+      where: { id: testId },
+      include: {
+        patient: {
+          select: {
+            name: true,
+            patientId: true,
+            phone: true,
+            guardian: true,
+            dateOfBirth: true,
+            gender: true,
+            address: true,
+            refPerson: true,
+            passTskNo: true,
+            registrationNo: true,
+          },
+        },
+        doctor: { select: { name: true, specialization: true } },
+        createdBy: { select: { name: true } },
+      },
+    });
 
     if (!labTest) {
       return NextResponse.json(
@@ -80,7 +77,6 @@ export async function GET(
       );
     }
 
-    // Verify this is a direct test
     if (!labTest.isDirectTest) {
       return NextResponse.json(
         { success: false, error: "This is not a direct lab test" },

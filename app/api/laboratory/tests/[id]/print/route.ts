@@ -1,8 +1,8 @@
 // app/api/laboratory/tests/[id]/print/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import { LabTest } from "@/lib/models/LabTest";
-import { authenticateRequest, canAccessLaboratory } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { getTokenPayload } from "@/lib/auth/jwt";
+import { canAccessLaboratory } from "@/lib/auth";
 
 /**
  * GET /api/laboratory/tests/[id]/print
@@ -18,19 +18,15 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await dbConnect();
-
-    // Authenticate the request
-    const auth = await authenticateRequest(request);
-    if (!auth.success) {
+    const payload = await getTokenPayload(request);
+    if (!payload) {
       return NextResponse.json(
-        { success: false, error: auth.error },
-        { status: auth.status || 401 },
+        { success: false, error: "Unauthorized" },
+        { status: 401 },
       );
     }
 
-    // Check if user can access laboratory
-    if (!canAccessLaboratory(auth.userRole)) {
+    if (!canAccessLaboratory(payload.role)) {
       return NextResponse.json(
         {
           success: false,
@@ -40,26 +36,36 @@ export async function GET(
       );
     }
 
-    // Unwrap the params promise
     const { id: testId } = await params;
 
     console.log(
-      `Lab test print requested by ${auth.userRole} ${auth.userName}: ${testId}`,
+      `Lab test print requested by ${payload.role} ${payload.name}: ${testId}`,
     );
 
-    // Find the test by ID with all necessary populated fields
-    const test = await LabTest.findById(testId)
-      .populate("patient", "name patientId phone guardian dateOfBirth gender")
-      .populate("doctor", "name specialization department licenseNumber")
-      .populate("orderedBy", "name")
-      .populate("charges.collectedBy", "name")
-      .populate("collectionDetails.collectedBy", "name")
-      .populate("processingDetails.processedBy", "name")
-      .populate("verificationDetails.verifiedBy", "name")
-      .populate("paymentVerifiedBy", "name")
-      .populate("results.reportedBy", "name")
-      .populate("results.verifiedBy", "name")
-      .lean();
+    const test = await prisma.labTest.findUnique({
+      where: { id: testId },
+      include: {
+        patient: {
+          select: {
+            name: true,
+            patientId: true,
+            phone: true,
+            guardian: true,
+            dateOfBirth: true,
+            gender: true,
+          },
+        },
+        doctor: {
+          select: {
+            name: true,
+            specialization: true,
+            department: true,
+            licenseNumber: true,
+          },
+        },
+        orderedBy: { select: { name: true } },
+      },
+    });
 
     if (!test) {
       return NextResponse.json(
@@ -68,8 +74,7 @@ export async function GET(
       );
     }
 
-    // If user is doctor, check if they can access this test
-    if (auth.userRole === "doctor" && test.doctor?.toString() !== auth.userId) {
+    if (payload.role === "doctor" && test.doctorId !== payload.id) {
       return NextResponse.json(
         {
           success: false,
@@ -79,12 +84,11 @@ export async function GET(
       );
     }
 
-    // Check if test has results (required for printing)
-    if (
-      !test.results ||
-      !test.results.parameters ||
-      test.results.parameters.length === 0
-    ) {
+    const results = typeof test.testParameters === "string"
+      ? JSON.parse(test.testParameters)
+      : test.testParameters;
+
+    if (!results || !Array.isArray(results) || results.length === 0) {
       return NextResponse.json(
         {
           success: false,
@@ -94,10 +98,14 @@ export async function GET(
       );
     }
 
+    const charges = typeof test.charges === "string"
+      ? JSON.parse(test.charges)
+      : test.charges;
+
     return NextResponse.json({
       success: true,
-      data: test,
-      userRole: auth.userRole,
+      data: { ...test, results: { parameters: results }, charges },
+      userRole: payload.role,
     });
   } catch (error: any) {
     console.error("Error fetching lab test for print:", error);
